@@ -1,0 +1,211 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Primary Admin Superuser access - grant full access bypasses helper pre-fetches
+    match /{document=**} {
+      allow read, write: if request.auth != null && 
+                            request.auth.token.email != null && 
+                            request.auth.token.email == 'thaonguyendkbike@gmail.com';
+    }
+
+    // Allow anyone to read the connection check document to verify connection status
+    match /test-connection-placeholder/{docId} {
+      allow read: if true;
+    }
+
+    // Security Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isStaffMember() {
+      return isSignedIn();
+    }
+
+    function isStaffEditor() {
+      return isSignedIn();
+    }
+
+    function isUserVerified() {
+      return isStaffMember();
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'thaonguyendkbike@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-+%]+$');
+    }
+
+    // 1. QMS Tasks Rules
+    match /dk_tasks/{taskId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    // 2. KPIs Rules
+    match /dk_kpis/{kpiId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    // 3. Staff Directory Rules
+    match /dk_staff/{staffId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 4. CAPAs Rules
+    match /dk_capas/{capaId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    // 5. Suppliers Rules
+    match /dk_suppliers/{supplierId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    // 6. Projects & Plans & Quality Audits Rules
+    match /dk_projects/{projectId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_ptsp_tasks/{taskId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_defects/{defectId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_ecos/{ecoId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_copqs/{copqId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_fmea/{fmeaId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_custom_forms/{formId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_models/{modelId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_dealers/{dealerId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_daily_logs/{logId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_equipments/{equipId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_maintenance_logs/{maintId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_equipment_incidents/{incId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_iqc_records/{recId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_pqc_records/{recId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_oqc_records/{recId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_qc_detailed_tasks/{tid} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_weekly_plans/{planId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_monthly_plans/{planId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_supplier_production_audits/{auditId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_qms_capas/{capaId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    // 7. Chat Channel Rules
+    match /qms_chat_messages/{msgId} {
+      allow read: if isStaffMember();
+      allow create: if isStaffEditor();
+    }
+
+    match /qms_thao_chat_messages/{msgId} {
+      allow read: if isStaffMember();
+      allow create: if isStaffEditor();
+    }
+
+    match /qms_chat_notes/{noteId} {
+      allow read: if isStaffMember();
+      allow create, update, delete: if isStaffEditor();
+    }
+
+    match /dk_db_sync/{key} {
+      allow read: if true;
+      allow write: if isStaffEditor();
+
+      match /records/{recId} {
+        allow read: if true;
+        allow write: if isStaffEditor();
+      }
+    }
+  }
+}

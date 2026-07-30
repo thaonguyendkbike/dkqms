@@ -1,0 +1,6 @@
+{
+  "name": "DK Quality Director",
+  "description": "Hệ thống Quản lý và Phân tích Chất lượng tự động cho Công ty Xe điện DK Việt Nhật",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

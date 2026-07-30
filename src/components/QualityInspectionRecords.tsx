@@ -1,0 +1,10042 @@
+import React, { useState, FormEvent, useMemo, useCallback } from 'react';
+import XLSXStyle from 'xlsx-js-style';
+import { 
+  Wrench, 
+  Plus, 
+  Download, 
+  Building2, 
+  Clock, 
+  ShieldCheck, 
+  Sparkles, 
+  Search, 
+  Target,
+  AlertTriangle, 
+  Sliders, 
+  AlertOctagon,
+  Calendar,
+  Upload,
+  FileText,
+  FileSpreadsheet,
+  Printer,
+  Check,
+  Pencil,
+  Trash2,
+  Eye,
+  Camera,
+  CheckSquare,
+  XCircle,
+  AlertCircle,
+  Users,
+  Settings,
+  RefreshCw,
+  Truck,
+  MoreVertical,
+  Filter,
+  LayoutGrid,
+  List,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal
+} from 'lucide-react';
+import { IQCRecord, PQCRecord, OQCRecord } from '../qualityTestData';
+import { compressImageFile } from '../imageCompressor';
+import { Supplier, PTSPTask, MarketDefect, CAPA, SupplierProductionAudit, MonthlyPlan } from '../types';
+import { DailyLogRecord } from '../dailyLogsData';
+import { db, auth } from '../firebase';
+import { doc, setDoc, getDocFromServer } from 'firebase/firestore';
+import { sanitizeFirestorePayload } from '../safeStorage';
+import { calculateAQLSample, AQLLevel, InspectionLevel, getAQLCodeLetter, CODE_LETTER_SAMPLE_SIZE, AQL_AC_RE_TABLE } from '../utils/aqlUtils';
+
+export interface EcountRow {
+  date: string;
+  supplierCode: string;
+  supplierName: string;
+  content: string;
+  quantity: number;
+  amountText: string;
+  locationCode: string;
+  locationName: string;
+  picName: string;
+  itemSummary?: string;
+  checked?: boolean;
+  sampleQty?: number;
+  failedQty?: number;
+  defectDetail?: string;
+}
+
+export const ECOUNT_PRELOADED_DATA: EcountRow[] = [
+  {
+    date: "04/06/2026",
+    supplierCode: "NCC00912",
+    supplierName: "Zhejiang Miheng Technology Co., Ltd. (Thiên Bình)",
+    content: "PNK 06001 Thiên Bình nhập tay ga, tay phanh",
+    quantity: 60,
+    amountText: "760.00",
+    locationCode: "Kbhdk",
+    locationName: "BH - Kho Phụ tùng bảo hành công ty",
+    picName: "Hà Phương Th...",
+    checked: true,
+    sampleQty: 6,
+    failedQty: 0,
+    defectDetail: ""
+  },
+  {
+    date: "04/06/2026",
+    supplierCode: "DLDL00019",
+    supplierName: "ĐL XANH XANH - HỘ KINH DOANH XE ĐIỆN XANH",
+    content: "4/6 Nhập AQBH",
+    quantity: 1,
+    amountText: "",
+    locationCode: "Kbhl1",
+    locationName: "BH - Kho Phụ tùng lỗi Đại lý chuyển về",
+    picName: "Lăng Văn Trườn...",
+    checked: false,
+    sampleQty: 1,
+    failedQty: 0,
+    defectDetail: ""
+  },
+  {
+    date: "03/06/2026",
+    supplierCode: "NV049",
+    supplierName: "Đinh Văn Long",
+    content: "PNK 06005 Đinh Văn Long _ đổi trạng thái sạc",
+    quantity: -40,
+    amountText: "",
+    locationCode: "Klksx",
+    locationName: "Kho Phụ tùng sản xuất",
+    picName: "Bùi Quang Đạo...",
+    checked: false,
+    sampleQty: 0,
+    failedQty: 0,
+    defectDetail: ""
+  },
+  {
+    date: "03/06/2026",
+    supplierCode: "NCC00781",
+    supplierName: "Công ty TNHH TM và SX Thành Đạt",
+    content: "PNK 0276 Thành Đạt _ lốp NOVA",
+    quantity: 271,
+    amountText: "71,502,799.00",
+    locationCode: "Klksx",
+    locationName: "Kho Phụ tùng sản xuất",
+    picName: "Hoàng Văn Xuy...",
+    checked: true,
+    sampleQty: 27,
+    failedQty: 0,
+    defectDetail: ""
+  },
+  {
+    date: "03/06/2026",
+    supplierCode: "NV194",
+    supplierName: "Hoàng Thị Thủy",
+    content: "5/5 Phiếu nhập kiểm kê kho bán 5/5->9/5 kiểm Lite 23",
+    quantity: -215,
+    amountText: "",
+    locationCode: "Kbhdk",
+    locationName: "BH - Kho Phụ tùng bảo hành công ty",
+    picName: "Hoàng Thị Thủy",
+    checked: false,
+    sampleQty: 0,
+    failedQty: 0,
+    defectDetail: ""
+  },
+  {
+    date: "03/06/2026",
+    supplierCode: "NCC02193",
+    supplierName: "Công ty TNHH LICHUANG VIỆT NAM",
+    content: "PNK 0275 LICHUANG _khung GO",
+    quantity: 1201,
+    amountText: "239,750,000.00",
+    locationCode: "Klksx",
+    locationName: "Kho Phụ tùng sản xuất",
+    picName: "Hoàng Văn Xuy...",
+    checked: true,
+    sampleQty: 120,
+    failedQty: 1,
+    defectDetail: "Xước sơn nhẹ ở sườn máy xe"
+  },
+  {
+    date: "02/06/2026",
+    supplierCode: "NCC00194",
+    supplierName: "CÔNG TY LIN HA (NHU BÌNH)",
+    content: "PNK 0277 NHU BÌNH _ căn bạc",
+    quantity: 6920,
+    amountText: "21,100,000.00",
+    locationCode: "Klksx",
+    locationName: "Kho Phụ tùng sản xuất",
+    picName: "Hoàng Văn Xuy...",
+    checked: true,
+    sampleQty: 200,
+    failedQty: 0,
+    defectDetail: ""
+  },
+  {
+    date: "02/06/2026",
+    supplierCode: "NCC00912",
+    supplierName: "Zhejiang Miheng Technology Co., Ltd. (Thiên Bình)",
+    content: "PNK 05033 Thiên Bình điều chỉnh hàng về thiếu Nova PNK 05033",
+    quantity: -19,
+    amountText: "-355.50",
+    locationCode: "Klksx",
+    locationName: "Kho Phụ tùng sản xuất",
+    picName: "Hà Phương Th...",
+    checked: false,
+    sampleQty: 0,
+    failedQty: 0,
+    defectDetail: ""
+  },
+  {
+    date: "02/06/2026",
+    supplierCode: "NV049",
+    supplierName: "Đinh Văn Long",
+    content: "PNK 06004 Đinh Văn Long _ nhập tem chữ Nova do sai đơn vị tính (Mến)",
+    quantity: 740,
+    amountText: "3,330.00",
+    locationCode: "Klksx",
+    locationName: "Kho Phụ tùng sản xuất",
+    picName: "Bùi Quang Đạo...",
+    checked: true,
+    sampleQty: 74,
+    failedQty: 0,
+    defectDetail: ""
+  },
+  {
+    date: "02/06/2026",
+    supplierCode: "NCC00176",
+    supplierName: "Công ty CP UNITED MOTOR Việt Nam (UMV)",
+    content: "PNK 0274 UMV _khung EZ5",
+    quantity: 2052,
+    amountText: "206,568,000.00",
+    locationCode: "Klksx",
+    locationName: "Kho Phụ tùng sản xuất",
+    picName: "Hoàng Văn Xuy...",
+    checked: true,
+    sampleQty: 125,
+    failedQty: 2,
+    defectDetail: "Sai lệch dung sai lỗ gá ắc quy"
+  },
+  {
+    date: "02/06/2026",
+    supplierCode: "DLLS00071",
+    supplierName: "Cửa hàng xe điện 21 Phái Vệ",
+    content: "2/6 Nhập LKBH, LKTL (VC)",
+    quantity: 6,
+    amountText: "",
+    locationCode: "Kbhl1",
+    locationName: "BH - Kho Phụ tùng lỗi Đại lý chuyển về",
+    picName: "Lăng Văn Trườn...",
+    checked: false,
+    sampleQty: 1,
+    failedQty: 0,
+    defectDetail: ""
+  },
+  {
+    date: "02/06/2026",
+    supplierCode: "DLTH00065",
+    supplierName: "ĐL BẰNG HƯƠNG - DOANH NGHIỆP TƯ NHÂN DỊCH VỤ THƯƠNG MẠI BẰNG HƯƠNG K&M",
+    content: "2/6 Nhập LKBH (XH)",
+    quantity: 1,
+    amountText: "",
+    locationCode: "Kbhl1",
+    locationName: "BH - Kho Phụ tùng lỗi Đại lý chuyển về",
+    picName: "Lăng Văn Trườn...",
+    checked: false,
+    sampleQty: 1,
+    failedQty: 0,
+    defectDetail: ""
+  },
+  {
+    date: "01/06/2026",
+    supplierCode: "DLHT00021",
+    supplierName: "HKD Nguyễn Văn Giang (Liêu Giang - Hà Tĩnh)",
+    content: "2/6 Nhập LKBH, LKTL (XH)",
+    quantity: 50,
+    amountText: "",
+    locationCode: "Kbhl1",
+    locationName: "BH - Kho Phụ tùng lỗi Đại lý chuyển về",
+    picName: "Lăng Văn Trườn...",
+    checked: false,
+    sampleQty: 5,
+    failedQty: 0,
+    defectDetail: ""
+  },
+  {
+    date: "02/06/2026",
+    supplierCode: "DLđN10004.11",
+    supplierName: "Trường Hiền giao Quang Luân - Đồng Nai",
+    content: "2/6 Nhập LKBH, LKTL (BĐ)",
+    quantity: 5,
+    amountText: "",
+    locationCode: "Kbhl1",
+    locationName: "BH - Kho Phụ tùng lỗi Đại lý chuyển về",
+    picName: "Lăng Văn Trườn...",
+    checked: false,
+    sampleQty: 1,
+    failedQty: 0,
+    defectDetail: ""
+  },
+  {
+    date: "02/06/2026",
+    supplierCode: "DLQB00002",
+    supplierName: "Cty TNHH Thương Mại Hùng Hồng (Hồng Quảng Bình)",
+    content: "2/6 Nhập LKBH (BĐ)",
+    quantity: 4,
+    amountText: "",
+    locationCode: "Kbhl1",
+    locationName: "BH - Kho Phụ tùng lỗi Đại lý chuyển về",
+    picName: "Lăng Văn Trườn...",
+    checked: false,
+    sampleQty: 1,
+    failedQty: 0,
+    defectDetail: ""
+  },
+  {
+    date: "02/06/2026",
+    supplierCode: "DLNA00029",
+    supplierName: "Công ty TNHH ML Đức Cường (Thảo Cửa Lò)",
+    content: "2/6 Nhập LKBH, LKTL (XH)",
+    quantity: 125,
+    amountText: "",
+    locationCode: "Kbhl1",
+    locationName: "BH - Kho Phụ tùng lỗi Đại lý chuyển về",
+    picName: "Lăng Văn Trườn...",
+    checked: false,
+    sampleQty: 12,
+    failedQty: 0,
+    defectDetail: ""
+  }
+];
+
+interface GroupedOqcRow {
+  id: string;
+  model: string;
+  status: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra';
+  isPassed: boolean;
+  defectDetail: string;
+  rootCause: string;
+  totalLlr: number;
+  count: number;
+  evaluation?: string;
+  treatment?: string;
+  ids: string[];
+  originalRecord: OQCRecord;
+}
+
+interface QualityInspectionRecordsProps {
+  iqcRecords: IQCRecord[];
+  setIqcRecords: (recs: IQCRecord[]) => void;
+  pqcRecords: PQCRecord[];
+  setPqcRecords: (recs: PQCRecord[]) => void;
+  oqcRecords: OQCRecord[];
+  setOqcRecords: (recs: OQCRecord[]) => void;
+  supplierProductionAudits?: SupplierProductionAudit[];
+  setSupplierProductionAudits?: (recs: SupplierProductionAudit[]) => void;
+  suppliers: Supplier[];
+  dailyLogs?: DailyLogRecord[];
+  ptspTasks?: PTSPTask[];
+  defects?: MarketDefect[];
+  capas?: CAPA[];
+  setViewDetailModal?: (modal: { type: string; data: any } | null) => void;
+  models?: any[];
+  monthlyPlans?: MonthlyPlan[];
+  weeklyPlans?: any[];
+  setWeeklyPlans?: (plans: any[]) => void;
+  setMonthlyPlans?: (plans: any[]) => void;
+  initialSubTab?: 'iqc' | 'pqc' | 'oqc' | 'supplier_monitoring' | 'reports';
+  initialOqcSearch?: string;
+  initialPqcSearch?: string;
+  onClearInitialValues?: () => void;
+}
+
+/* ==================== SUB-COMPONENTS FOR KCS/OQC SCREENSHOT-PERFECT DASHBOARD ==================== */
+
+interface PieChartProps {
+  datPercentage: number;
+  loiPercentage: number;
+  datCount: number;
+  loiCount: number;
+}
+
+function PieChartComponent({ datPercentage, loiPercentage, datCount, loiCount }: PieChartProps) {
+  const radius = 55;
+  const circumference = 2 * Math.PI * radius;
+  // Let's compute stroke offset for Dat (Green) slice starting at the end of Loi (Red) slice
+  const datStroke = (datPercentage / 100) * circumference;
+  const loiStroke = (loiPercentage / 100) * circumference;
+  const datOffset = circumference - datStroke;
+
+  return (
+    <div className="relative flex items-center justify-center p-3 h-[240px]">
+      <svg width="220" height="220" viewBox="0 0 160 160" className="transform -rotate-90">
+        {/* Background track */}
+        <circle cx="80" cy="80" r={radius} fill="none" stroke="#f1f5f9" strokeWidth="20" />
+        
+        {/* Lỗi (Red) slice */}
+        <circle
+          cx="80"
+          cy="80"
+          r={radius}
+          fill="none"
+          stroke="#ff4d4d"
+          strokeWidth="20"
+          strokeDasharray={circumference}
+          strokeDashoffset={0}
+          className="transition-all duration-500"
+        />
+
+        {/* Đạt (Green) slice */}
+        <circle
+          cx="80"
+          cy="80"
+          r={radius}
+          fill="none"
+          stroke="#10b981"
+          strokeWidth="20"
+          strokeDasharray={circumference}
+          strokeDashoffset={loiStroke}
+          className="transition-all duration-500"
+        />
+      </svg>
+
+      {/* Embedded central summary */}
+      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center pointer-events-none select-none">
+        <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block">Tổng xe lắp ráp</span>
+        <strong className="text-xl font-black text-slate-800 font-mono block">{(datCount + loiCount).toLocaleString()}</strong>
+        <span className="text-[10.5px] text-emerald-600 font-extrabold">{datPercentage}% Đạt</span>
+      </div>
+
+      {/* Floating indicators */}
+      <div className="absolute top-[16%] left-[4%] text-xs bg-white/95 border border-slate-200/80 shadow-md p-1.5 rounded-lg flex flex-col items-start select-none">
+        <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Đạt lần 1
+        </span>
+        <strong className="text-emerald-600 text-xs font-black font-mono mt-0.5">{datCount.toLocaleString()} ({datPercentage}%)</strong>
+      </div>
+      <div className="absolute bottom-[16%] right-[4%] text-xs bg-white/95 border border-slate-200/80 shadow-md p-1.5 rounded-lg flex flex-col items-end select-none">
+        <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" /> Nhóm Lỗi xe
+        </span>
+        <strong className="text-red-500 text-xs font-black font-mono mt-0.5">{loiCount.toLocaleString()} ({loiPercentage}%)</strong>
+      </div>
+    </div>
+  );
+}
+
+interface BarChartProps {
+  data: { name: string; count: number }[];
+  onBarClick?: (modelName: string) => void;
+}
+
+function BarChartComponent({ data, onBarClick }: BarChartProps) {
+  const peakVal = Math.max(...data.map(item => item.count), 0);
+  // Guarantee a minimum of 100 on the scale or dynamically increase to match maximum model counts
+  const maxVal = peakVal > 0 ? Math.ceil(peakVal / 20) * 20 : 100;
+  
+  const tickStep = maxVal / 4;
+  const yTicks = [
+    Math.round(tickStep * 4),
+    Math.round(tickStep * 3),
+    Math.round(tickStep * 2),
+    Math.round(tickStep * 1),
+    0
+  ];
+
+  return (
+    <div className="flex flex-col h-[260px] w-full pt-4 relative select-none font-sans">
+      <div className="flex-1 relative">
+        {/* Horizontal Gridlines */}
+        <div className="absolute inset-0 flex flex-col justify-between">
+          {yTicks.map((tick) => (
+            <div key={tick} className="flex items-center w-full relative h-0">
+              <span className="text-[10px] text-slate-400 font-bold font-mono w-8 shrink-0 pb-1 select-none text-right pr-2">{tick}</span>
+              <div className="flex-1 border-t border-dashed border-slate-200/80" />
+            </div>
+          ))}
+        </div>
+
+        {/* Vertical Bars Container */}
+        <div className="absolute inset-y-0 left-10 right-0 flex justify-around items-end z-10 bottom-[1px]">
+          {data.map((item, idx) => {
+            const heightPerc = `${Math.min(100, Math.max(4, (item.count / maxVal) * 100))}%`;
+            return (
+              <div 
+                key={item.name} 
+                onClick={() => onBarClick?.(item.name)}
+                className="flex flex-col items-center h-full justify-end group cursor-pointer relative" 
+                style={{ width: '15%' }}
+              >
+                
+                {/* Visual Blue Bar standing vertically */}
+                <div 
+                  className="w-full bg-[#02a6ff] hover:bg-sky-400 rounded-t-lg transition-all duration-500 flex flex-col justify-start items-center pt-2.5 relative shadow-xs group-hover:scale-105 active:scale-95 group-hover:shadow-md"
+                  style={{ height: heightPerc }}
+                >
+                  {/* Floating count box inside top part of the bar */}
+                  <div className="bg-white/95 text-sky-655 font-black text-[10.5px] px-1.5 py-0.5 rounded shadow-sm scale-90 sm:scale-100 select-none font-mono tracking-tighter">
+                    {item.count}
+                  </div>
+                </div>
+
+                {/* Micro-interacting Tooltip */}
+                <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-all bg-slate-900 text-white text-[10px] font-bold p-2 rounded-xl shadow-lg pointer-events-none whitespace-nowrap z-50">
+                  <span className="block font-black text-slate-300 uppercase tracking-widest text-[8px]">Dòng xe (Model) - Click xem chi tiết</span>
+                  <span className="block text-[11px] text-white font-extrabold mt-0.5">{item.name}</span>
+                  <span className="text-sky-305 block font-mono mt-0.5 border-t border-slate-800 pt-0.5">Sản lượng: {item.count} xe (Bấm để xem danh sách)</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* X-Axis Labels */}
+      <div className="flex justify-around items-center pl-10 pt-2 border-t border-slate-200 mt-1 select-none">
+        {data.map((item) => (
+          <div 
+            key={item.name} 
+            onClick={() => onBarClick?.(item.name)}
+            className="text-[10px] font-black text-slate-500 uppercase truncate text-center leading-tight tracking-tight scale-90 cursor-pointer hover:text-[#02a6ff]" 
+            style={{ width: '15%' }} 
+            title={item.name}
+          >
+            {item.name.replace('DK ', '')}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface ModelDefectCardProps {
+  key?: string | React.Key;
+  modelName: string;
+  defects: { name: string; count: number }[];
+  onDefectClick?: (defectName: string, count: number) => void;
+}
+
+function ModelDefectCard({ modelName, defects, onDefectClick }: ModelDefectCardProps) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 hover:shadow-md transition-all duration-300 flex flex-col h-full bg-cover">
+      <div className="flex justify-between items-center border-b border-rose-50 pb-2.5 mb-3 select-none">
+        <h4 className="font-extrabold text-xs text-rose-500 font-mono tracking-tight uppercase flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+          {modelName}
+        </h4>
+        <button type="button" className="text-slate-300 hover:text-slate-500 rounded p-1 transition cursor-pointer">
+          <MoreVertical className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="space-y-1.5 flex-1 flex flex-col justify-start">
+        {defects.length === 0 ? (
+          <div className="py-12 text-center text-[11.5px] text-slate-400 italic font-medium my-auto select-none">
+            ✓ Không ghi nhận lỗi KCS
+          </div>
+        ) : (
+          defects.map((defect, idx) => (
+            <div 
+              key={defect.name} 
+              onClick={() => onDefectClick?.(defect.name, defect.count)}
+              className="flex justify-between items-center px-2.5 py-2 rounded-xl bg-slate-50/60 border border-slate-100 hover:bg-rose-50/50 hover:border-rose-200 hover:text-rose-950 transition-all font-sans text-xs cursor-pointer active:scale-98 select-none"
+              title="Nhấp để xem biện pháp khắc phục & đánh giá"
+            >
+              <div className="flex items-center gap-2 min-w-0 pr-1.5">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full text-white text-[10px] font-black bg-amber-500 shrink-0 font-mono shadow-xs select-none">
+                  {idx + 1}
+                </span>
+                <span className="text-slate-705 font-bold truncate tracking-wide text-[10.5px] uppercase group-hover:text-rose-900" title={defect.name}>
+                  {defect.name}
+                </span>
+              </div>
+              <span className="text-red-500 font-black font-mono text-xs shadow-3xs px-2 py-0.5 rounded bg-red-50/50 border border-red-100/30 shrink-0">
+                {defect.count}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+const getDefectAnalysisAndCorrection = (name: string, model: string) => {
+  const n = name.toLowerCase();
+  
+  if (n.includes('khung') || n.includes('xước') || n.includes('trầy') || n.includes('sườn') || n.includes('sơn')) {
+    return {
+      severity: 'Trung bình (Major - Ngoại quan)',
+      severityColor: 'text-amber-600 bg-amber-50 border-amber-200/50',
+      category: 'Khung sườn & Thẩm mỹ vỏ ngoài',
+      impact: 'Suy giảm nghiêm trọng cảm quan thẩm mỹ xe cao cấp DKBike; phát sinh nguy cơ rỉ sét sớm tại các mối dập hàn kim loại.',
+      rootCause: 'Sự va đập, ma sát cơ học giữa các tấm khung sắt trong khâu lưu kho hoặc do bọc mút xốp góc sườn mỏng khi tải trên băng truyền lắp ráp.',
+      emergency: [
+        'Trạm kiểm tra KCS lập tức dập sơn/xịt phủ bù khuyết điểm xước bằng bút sơn sấy nhiệt dẻo.',
+        'Yêu cầu công nhân quấn thêm mút xốp EVA bảo vệ dày 10mm tại các điểm góc nhọn sườn xe trên băng chuyền.'
+      ],
+      preventative: [
+        'Làm việc chính thức với nhà cung ứng khuôn sườn sắt để chuẩn hóa quy trình bọc gói màng xốp chống sốc riêng biệt từng chi tiết trước khi hạ xe tải.',
+        'Cân chỉnh lại tay robot gá sườn và thiết kế rãnh đệm cao su tại xe đẩy pallet trượt.'
+      ],
+      owner: 'Tổ trưởng Ca lắp ráp & Giám sát KCS ngoại sườn',
+      due: 'Trong vòng 48 giờ'
+    };
+  }
+  
+  if (n.includes('yên')) {
+    return {
+      severity: 'Nghiêm trọng (Critical - Chức năng)',
+      severityColor: 'text-red-600 bg-red-50 border-red-200/50',
+      category: 'Cơ cấu Khóa & Bản lề cơ học',
+      impact: 'Khách hàng không thể sập khóa cốp để bảo vệ mũ bảo hành/vật dụng cá nhân hoặc cực kỳ khó khăn khi kéo lẫy tiếp nhiên liệu.',
+      rootCause: 'Dung sai khoan dập tai khóa và bản lề cản yên trên thân xe bị lệch 1.5mm so với hướng đối xứng tâm ổ khóa sườn.',
+      emergency: [
+        'Sử dụng dưỡng căn chỉnh nhanh (Jig định vị ổ khóa) làm chuẩn cố định trước khi thợ súng búa hơi bắt lực siết dứt điểm.',
+        'Nới lỏng vít định vị bản lề dầm yên và bôi trơn bổ sung mỡ bò bôi trơn kỹ thuật cho lò xo kéo khoá.'
+      ],
+      preventative: [
+        'Yêu cầu tổ sản xuất hàn sườn điều chỉnh lại định biên dưỡng ráp ổ khóa yên trên dưỡng chính.',
+        'Nhập bổ sung dưỡng kiểm nhanh Go/No-Go tại khâu phụ thô sườn xe trước khi chuyển sang phòng sơn.'
+      ],
+      owner: 'Kỹ sư cơ cấu gá ráp tĩnh & Trưởng ca QC Hoàn thiện',
+      due: 'Trong vòng 24 giờ'
+    };
+  }
+  
+  if (n.includes('điện') || n.includes('nguồn') || n.includes('giắc')) {
+    return {
+      severity: 'Nguy hại (Critical - Hệ thống điện)',
+      severityColor: 'text-rose-600 bg-rose-50 border-rose-200/50',
+      category: 'Hệ thống Mạch điện & Giắc sạc nguồn',
+      impact: 'Xe mất nguồn điều khiển DC-DC hoàn toàn, hệ thống SMARTKEY không phản hồi, xe không thể cuộn ga khởi động trên bàn thử Dyno.',
+      rootCause: 'Lẫy khoá ngạnh giắc cắm sườn xe bị bẻ cong nhẹ hoặc thợ gắn tì bóp ép quá góc làm gãy lẫy nhựa ôm giắc nguồn ắc-quy.',
+      emergency: [
+        'Dùng đồng hồ vạn năng VOM đo thông mạch và độ sụt áp 72V tại từng ngách cầu chì tổng chính.',
+        'Rút hẳn giắc lỏng ra và giũ sạch bavia nhựa bụi, dập ôm chặt nghe đủ tiếp "tạch" kịch khóa ngàm.'
+      ],
+      preventative: [
+        'Thực hiện đào tạo trực quan hệ thống dây điện (Poka-Yoke) định kỳ cho công nhân lắp ráp trạm sườn xe.',
+        'Tăng độ khít của bao nhựa giắc chống thấm sương muối để tăng độ bền oxy hóa dây.'
+      ],
+      owner: 'Kỹ sư trưởng Điện tử điều khiển & Trạm kiểm tra KCS Điện',
+      due: 'Lập tức xử lý trong ca'
+    };
+  }
+  
+  if (n.includes('kẹt') || n.includes('bánh')) {
+    return {
+      severity: 'Nguy hại (Critical - An toàn vận hành)',
+      severityColor: 'text-rose-600 bg-rose-50 border-rose-200/50',
+      category: 'Hệ thống phanh dầm & Truyền động lực',
+      impact: 'Bánh trước sượng cứng, cản lực quay cực lớn gây nguy cơ bó kẹt bất ngờ khi đi thử đường thử thực tế, gây mất kiểm soát lái xe.',
+      rootCause: 'Dầu phanh thủy lực dồn nén có bọt khí bị kẹt hoặc đĩa phanh bị uốn cong do kích siết ốc trục trước vượt vạch dải súng hơi (>40Nm).',
+      emergency: [
+        'Điều chỉnh lực siết dứt khoát của ốc trục bằng súng kiểm soát moment giới hạn ở dải tiêu chuẩn 30-35Nm.',
+        'Thực hiện xả gió, hút chân không dầu dầm phanh đĩa để cân bằng hành trình piston phanh.'
+      ],
+      preventative: [
+        'Chuẩn hóa hướng dẫn công việc tiêu chuẩn tại trạm bánh-phanh trước với sơ đồ súng lực định vị lực hơi.',
+        'Mở phiếu theo dõi định kỳ độ biến dạng của moay-ơ đĩa thắng từ nhà cung ứng.'
+      ],
+      owner: 'Kỹ sư Ráp máy gầm & Giám sát KCS Bàn lăn',
+      due: 'Trong vòng 12 giờ'
+    };
+  }
+  
+  if (n.includes('gương') || n.includes('kính')) {
+    return {
+      severity: 'Nhẹ (Minor - Thẩm mỹ phụ trợ)',
+      severityColor: 'text-blue-600 bg-blue-50 border-blue-200/50',
+      category: 'Phụ kiện ngoại thất & Căn chỉnh ráp gương',
+      impact: 'Góc nhìn chiếu hậu bị lệch xéo, ren ốc lỏng lẻo gây rung lắc mạnh khi sục tải làm xoay vặn mất kiểm soát gương chiếu hậu.',
+      rootCause: 'Thợ dùng súng gác siết ren nghiêng trực tiếp làm mòn bước ren dầm răng đồng trên cụm tay tì ghi đông lái.',
+      emergency: [
+        'Tháo bỏ ốc răng bị giập bể mòn ren, gá bằng dụng cụ dưỡng taro lại bước ren nhuyễn lỗ ghi đông.',
+        'Quy định công nhân bắt bu-lông gá tay bằng tay sạch sâu nhất 3 vòng mới đưa súng hơi vào ép nhẹ.'
+      ],
+      preventative: [
+        'Chế tạo đồ gá ôm bảo vệ chân gương khi nén lực, tránh sứt đầu mạ crom màu bạc.',
+        'Thực hiện hệ thống tem nhận diện màu dán (Color-Coding) cho tai trái/phải để tránh bắt ngược ren xoắn.'
+      ],
+      owner: 'Tổ trưởng tổ phụ kiện ngoài & KCS Trạm Đóng thùng',
+      due: 'Trong ngày làm việc'
+    };
+  }
+  
+  if (n.includes('hở') || n.includes('đầu') || n.includes('ngàm') || n.includes('ốp') || n.includes('nhựa')) {
+    return {
+      severity: 'Trung bình (Major - Thẩm mỹ lắp ráp)',
+      severityColor: 'text-amber-600 bg-amber-50 border-amber-200/50',
+      category: 'Vỏ nhựa Thân xe & Bộ ốp mũ nhựa',
+      impact: 'Tạo khe hở lớn mất mỹ quan, dễ lọt nước rửa xe trực tiếp vào cuộn sạc trong; phát ra âm thanh rè rè từ vỏ nhựa khi đi tốc độ cao.',
+      rootCause: 'Các búp ngàm ép dẻo bị sứt mẻ góc ăn khớp, hoặc thợ lắp đè vỏ nhựa không đúng trình tự gá ráp, ép chặt ốc trước khi sập ngàm nhựa sườn.',
+      emergency: [
+        'Lập tức dỡ bọc tháo nhẹ các ốc kẹp vỏ sườn quanh phạm vi hở để định vị lại khớp ngàm ôm cho khít khịt.',
+        'Ép sát mí vỏ nghe kịch âm thanh khớp sau đó mới siết dải vít nhựa với lực tay bóp nhỏ đạt chuẩn.'
+      ],
+      preventative: [
+        'Đặt màng ép xốp EVA mỏng 1mm tại các rãnh khớp ngàm nhựa tiếp xúc của vỏ trước để triệt tiêu tiếng rung rè rè.',
+        'Làm việc cùng nhà cung ứng nhựa dập sườn nâng cao kiểm duyệt độ dày thành vách nhựa sườn từ 2.2mm lên 2.5mm.'
+      ],
+      owner: 'Tổ trưởng Ca ráp vỏ sườn & Nhân viên QA kiểm tra ngoại quan nhựa',
+      due: 'Trong vòng 24 giờ'
+    };
+  }
+
+  // Fallback
+  return {
+    severity: 'Trung bình (Major - Nghi ngờ dung sai)',
+    severityColor: 'text-amber-600 bg-amber-50 border-amber-200/50',
+    category: 'Tổng bộ gá ráp & Quy trình vận hành dây chuyền',
+    impact: 'Làm suy giảm chỉ số vượt KCS đạt lần đầu của dây chuyền lắp ráp máy DKBike.',
+    rootCause: 'Sai số tích lũy của kích thước gá ép linh kiện nhập ngoại kết hợp lực siết búa công nhân chưa đều tay.',
+    emergency: [
+      'Cách ly hoặc chuyển xe lỗi về khu chế xuất vá khuyết phẩm để chuyên viên giàu kinh nghiệm rà soát.',
+      'Sử dụng dầu taro, dung dịch tẩy bụi mạt tẩy rửa mịn màng chi tiết bị lỗi.'
+    ],
+    preventative: [
+      'Gửi văn bản cảnh báo chất lượng CAPA khẩn cấp lên Group chỉ đạo sản xuất của Nhà máy.',
+      'Tăng tần suất kiểm tra mẫu đầu ca lắp ráp đạt chuẩn tối thiểu.'
+    ],
+    owner: 'Trưởng bộ phận Quản lý chất lượng QA/QC DKBike',
+    due: 'Trong vòng 48 giờ'
+  };
+};
+
+function standardizeDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const trimmed = dateStr.trim();
+  if (!trimmed) return '';
+
+  let day = 1;
+  let month = 7;
+  let year = 2026;
+  const today = new Date();
+  const currentYear = today.getFullYear() || 2026;
+  const currentMonth = today.getMonth() + 1;
+
+  if (trimmed.includes('-')) {
+    const parts = trimmed.split('-');
+    if (parts[0].length === 4) {
+      // YYYY-MM-DD
+      year = Number(parts[0]) || currentYear;
+      month = Number(parts[1]) || currentMonth;
+      day = Number(parts[2]) || 1;
+    } else {
+      // DD-MM-YYYY or DD-MM
+      day = Number(parts[0]) || 1;
+      month = Number(parts[1]) || currentMonth;
+      year = parts[2] ? (Number(parts[2]) || currentYear) : currentYear;
+    }
+  } else if (trimmed.includes('/')) {
+    const parts = trimmed.split('/');
+    if (parts[0].length === 4) {
+      // YYYY/MM/DD
+      year = Number(parts[0]) || currentYear;
+      month = Number(parts[1]) || currentMonth;
+      day = Number(parts[2]) || 1;
+    } else {
+      // DD/MM/YYYY or DD/MM
+      day = Number(parts[0]) || 1;
+      month = Number(parts[1]) || currentMonth;
+      const yrPart = parts[2] ? parts[2].trim() : '';
+      year = yrPart ? (yrPart.length === 2 ? 2000 + Number(yrPart) : Number(yrPart)) : currentYear;
+    }
+  } else {
+    const num = Number(trimmed);
+    if (!isNaN(num) && num > 0 && num <= 31) {
+      day = num;
+      month = currentMonth;
+      year = currentYear;
+    } else {
+      return trimmed;
+    }
+  }
+
+  const dd = String(day).padStart(2, '0');
+  const mm = String(month).padStart(2, '0');
+  return `${dd}/${mm}/${year}`;
+}
+
+function getWeekAndMonthFromDate(dateStr: string): { week: string; month: number; year: number } {
+  const today = new Date();
+  const currentMonth = today.getMonth() + 1;
+  const currentYear = today.getFullYear();
+  const currentDay = today.getDate();
+
+  const getCalendarWeekForDay = (d: number, m: number, y: number): number => {
+    const firstDayOfMonth = new Date(y, m - 1, 1);
+    const firstDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const firstSundayDay = firstDayOfWeek === 0 ? 1 : 8 - firstDayOfWeek;
+
+    if (d < firstSundayDay) {
+      return 1;
+    } else {
+      const diff = d - firstSundayDay;
+      return 2 + Math.floor(diff / 7);
+    }
+  };
+
+  const getDefaultWeek = () => {
+    const weekNum = getCalendarWeekForDay(currentDay, currentMonth, currentYear);
+    return `T${Math.min(5, weekNum)}`;
+  };
+
+  if (!dateStr) return { week: getDefaultWeek(), month: currentMonth, year: currentYear };
+  
+  let day = 1;
+  let month = currentMonth;
+  let year = currentYear;
+  
+  if (dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    year = Number(parts[0]) || currentYear;
+    month = Number(parts[1]) || currentMonth;
+    day = Number(parts[2]) || 1;
+  } else if (dateStr.includes('/')) {
+    const parts = dateStr.split('/');
+    day = Number(parts[0]) || 1;
+    month = Number(parts[1]) || currentMonth;
+    const yrPart = parts[2] ? parts[2].trim() : '';
+    year = yrPart ? (yrPart.length === 2 ? 2000 + Number(yrPart) : Number(yrPart)) : currentYear;
+  } else {
+    return { week: 'T1', month, year };
+  }
+  
+  const weekNum = getCalendarWeekForDay(day, month, year);
+  const weekStr = `T${Math.min(5, weekNum)}`;
+  return { week: weekStr, month, year };
+}
+
+function getWeekDatesForReporting(year: number, month: number, weekNum: number): string {
+  const firstDayOfMonth = new Date(year, month - 1, 1);
+  const firstDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const firstSundayDay = firstDayOfWeek === 0 ? 1 : 8 - firstDayOfWeek;
+
+  const totalDays = new Date(year, month, 0).getDate();
+  
+  let startDay = 1;
+  let endDay = 1;
+
+  if (weekNum === 1) {
+    startDay = 1;
+    endDay = Math.min(totalDays, firstSundayDay - 1);
+    if (endDay < 1) {
+      startDay = 1;
+      endDay = 7;
+    }
+  } else {
+    if (firstSundayDay === 1) {
+      startDay = (weekNum - 1) * 7 + 1;
+      endDay = Math.min(totalDays, startDay + 6);
+    } else {
+      startDay = firstSundayDay + (weekNum - 2) * 7;
+      endDay = Math.min(totalDays, startDay + 6);
+    }
+  }
+
+  if (startDay > totalDays) {
+    return "N/A";
+  }
+
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${pad(startDay)}-${pad(endDay)}/${pad(month)}`;
+}
+
+export default function QualityInspectionRecords({
+  iqcRecords,
+  setIqcRecords,
+  pqcRecords,
+  setPqcRecords,
+  oqcRecords,
+  setOqcRecords,
+  supplierProductionAudits = [],
+  setSupplierProductionAudits = () => {},
+  suppliers,
+  dailyLogs = [],
+  ptspTasks = [],
+  defects = [],
+  capas = [],
+  setViewDetailModal,
+  models = [],
+  monthlyPlans = [],
+  weeklyPlans = [],
+  setWeeklyPlans,
+  setMonthlyPlans,
+  initialSubTab,
+  initialOqcSearch,
+  initialPqcSearch,
+  onClearInitialValues
+}: QualityInspectionRecordsProps) {
+  const [qcMainSubTab, setQcMainSubTab] = useState<'iqc' | 'pqc' | 'oqc' | 'supplier_monitoring' | 'reports'>('iqc');
+  const [oqcTabMode, setOqcTabMode] = useState<'dashboard' | 'history'>('dashboard');
+  const [selectedDashboardDefect, setSelectedDashboardDefect] = useState<{ name: string; count: number; modelName: string } | null>(null);
+  const [oqcDetailModalModel, setOqcDetailModalModel] = useState<string | null>(null);
+  const [localZoomImage, setLocalZoomImage] = useState<string | null>(null);
+  const [stackedMode, setStackedMode] = useState<'rate' | 'volume'>('volume');
+
+  const [planLinkMonth, setPlanLinkMonth] = useState<number>(new Date().getMonth() + 1);
+  const [planLinkWeek, setPlanLinkWeek] = useState<string>('T1');
+
+  const [isIqcFilterExpanded, setIsIqcFilterExpanded] = useState<boolean>(false);
+  const [isPqcFilterExpanded, setIsPqcFilterExpanded] = useState<boolean>(false);
+  const [isOqcFilterExpanded, setIsOqcFilterExpanded] = useState<boolean>(false);
+
+  // Check if there is an active IQC plan in Lập kế hoạch (weeklyPlans)
+  const hasIqcPlanInSystem = useMemo(() => {
+    return (weeklyPlans || []).some(plan => 
+      (plan.targets || []).some((t: any) => 
+        t.category === 'IQC' || 
+        t.category?.toUpperCase() === 'IQC' || 
+        (t.content || '').toUpperCase().includes('IQC')
+      )
+    );
+  }, [weeklyPlans]);
+
+  // Check if any error/defect exists in inspection databases (IQC, PQC, OQC)
+  const hasQualityErrorInSystem = useMemo(() => {
+    const hasIqcError = iqcRecords.some(r => r.result === 'Lỗi' || (r.failedQty !== undefined && r.failedQty > 0));
+    const hasPqcError = pqcRecords.some(r => r.status === 'Đang cải tiến' || (r.findings && r.findings.toLowerCase().includes('lỗi')));
+    const hasOqcError = oqcRecords.some(r => r.status === 'Lỗi' || (r.failedCount !== undefined && r.failedCount > 0));
+    return hasIqcError || hasPqcError || hasOqcError;
+  }, [iqcRecords, pqcRecords, oqcRecords]);
+
+  const filterDailyLogsForSqc = useCallback((log: any) => {
+    const content = (log.content || '').toLowerCase();
+    const note = (log.note || '').toLowerCase();
+    const basicMatches = log.category === 'IQC' || log.category === 'SQC/QA' || 
+                         content.includes('ncc') || content.includes('nhà cung cấp') || 
+                         content.includes('đối tác') || content.includes('việt nhật') || 
+                         content.includes('gia công') || note.includes('ncc') || note.includes('đối tác');
+    return basicMatches;
+  }, []);
+
+  // Bidirectional automated linkage: Update weekly plans based on real-time IQC/PQC/OQC/SQC records
+  React.useEffect(() => {
+    if (!weeklyPlans || !setWeeklyPlans || weeklyPlans.length === 0) return;
+
+    let planChanged = false;
+    const updatedWeeklyPlans = weeklyPlans.map(plan => {
+      let targetsChanged = false;
+      const updatedTargets = plan.targets.map(target => {
+        const isIqc = target.category === 'IQC' || target.content.includes('[IQC]');
+        const isPqc = target.category === 'PQC' || target.content.includes('[PQC]');
+        const isOqc = target.category === 'OQC' || target.content.includes('[OQC]');
+        const isSqc = target.category === 'SQC/QA' || target.content.includes('[SQC]');
+
+        let newActual = target.actualValue;
+        let newAchieved = target.achieved;
+
+        if (isIqc) {
+          const supCandidate = suppliers.find(s => 
+            target.content.toLowerCase().includes(s.name.toLowerCase()) || 
+            target.explanation.toLowerCase().includes(s.name.toLowerCase())
+          );
+          
+          if (supCandidate) {
+            const matchedRecords = iqcRecords.filter(r => {
+              if (!r.date) return false;
+              const info = getWeekAndMonthFromDate(r.date);
+              return info.week === plan.week && info.month === plan.month && info.year === plan.year && 
+                     (r.supplierId === supCandidate.id || r.supplierName.toLowerCase().includes(supCandidate.name.toLowerCase()));
+            });
+
+            if (matchedRecords.length > 0) {
+              const totalLotes = matchedRecords.length;
+              const failedLotes = matchedRecords.filter(r => r.result === 'Lỗi' || (r.failedQty !== undefined && r.failedQty > 0)).length;
+              const passedLotes = totalLotes - failedLotes;
+              const autoActual = `${passedLotes}/${totalLotes} lô Đạt`;
+              const autoAchieved = failedLotes === 0;
+
+              if (newActual !== autoActual || newAchieved !== autoAchieved) {
+                newActual = autoActual;
+                newAchieved = autoAchieved;
+                targetsChanged = true;
+              }
+            }
+          }
+        } else if (isPqc) {
+          const modelCandidate = models.find(m => 
+            target.content.toLowerCase().includes(m.name.toLowerCase()) ||
+            target.explanation.toLowerCase().includes(m.name.toLowerCase())
+          );
+          
+          if (modelCandidate) {
+            const matchedRecords = pqcRecords.filter(r => {
+              if (!r.date) return false;
+              const info = getWeekAndMonthFromDate(r.date);
+              return info.week === plan.week && info.month === plan.month && info.year === plan.year && 
+                     (r.model === modelCandidate.name || (r.model && r.model.toLowerCase().includes(modelCandidate.name.toLowerCase())));
+            });
+
+            if (matchedRecords.length > 0) {
+              const totalChecks = matchedRecords.length;
+              const passedChecks = matchedRecords.filter(r => r.status === 'Đạt hoàn toàn').length;
+              const autoActual = `${passedChecks}/${totalChecks} ca Đạt`;
+              const autoAchieved = passedChecks === totalChecks;
+
+              if (newActual !== autoActual || newAchieved !== autoAchieved) {
+                newActual = autoActual;
+                newAchieved = autoAchieved;
+                targetsChanged = true;
+              }
+            }
+          }
+        } else if (isOqc) {
+          const modelCandidate = models.find(m => 
+            target.content.toLowerCase().includes(m.name.toLowerCase())
+          );
+
+          if (modelCandidate) {
+            const matchedRecords = oqcRecords.filter(r => {
+              if (!r.date) return false;
+              const info = getWeekAndMonthFromDate(r.date);
+              return info.week === plan.week && info.month === plan.month && info.year === plan.year && 
+                     (r.model === modelCandidate.name);
+            });
+
+            if (matchedRecords.length > 0) {
+              const totalQty = matchedRecords.length;
+              const failedQty = matchedRecords.filter(r => r.status === 'Lỗi').length;
+              const passedQty = totalQty - failedQty;
+              const rate = totalQty > 0 ? ((passedQty / totalQty) * 100).toFixed(1) : '100';
+              const autoActual = `FPY: ${rate}% (${passedQty}/${totalQty} xe)`;
+              const autoAchieved = Number(rate) >= 95.0;
+
+              if (newActual !== autoActual || newAchieved !== autoAchieved) {
+                newActual = autoActual;
+                newAchieved = autoAchieved;
+                targetsChanged = true;
+              }
+            }
+          }
+        } else if (isSqc) {
+          const supCandidate = suppliers.find(s => 
+            target.content.toLowerCase().includes(s.name.toLowerCase()) || 
+            target.explanation.toLowerCase().includes(s.name.toLowerCase())
+          );
+
+          if (supCandidate && supplierProductionAudits && supplierProductionAudits.length > 0) {
+            const matchedAudits = supplierProductionAudits.filter(r => {
+              if (!r.requestDate) return false;
+              const info = getWeekAndMonthFromDate(r.requestDate);
+              return info.week === plan.week && info.month === plan.month && info.year === plan.year && 
+                     (r.supplierName.toLowerCase().includes(supCandidate.name.toLowerCase()));
+            });
+
+            if (matchedAudits.length > 0) {
+              const auditCount = matchedAudits.length;
+              const closedCount = matchedAudits.filter(a => a.status === 'approved').length;
+              const autoActual = `Đã kiểm: ${auditCount} lần (${closedCount} hoàn thành)`;
+              const autoAchieved = closedCount === auditCount;
+
+              if (newActual !== autoActual || newAchieved !== autoAchieved) {
+                newActual = autoActual;
+                newAchieved = autoAchieved;
+                targetsChanged = true;
+              }
+            }
+          }
+        }
+
+        if (targetsChanged) {
+          return { ...target, actualValue: newActual, achieved: newAchieved };
+        }
+        return target;
+      });
+
+      if (targetsChanged) {
+        planChanged = true;
+        return { ...plan, targets: updatedTargets };
+      }
+      return plan;
+    });
+
+    if (planChanged) {
+      setWeeklyPlans(updatedWeeklyPlans);
+    }
+  }, [iqcRecords, pqcRecords, oqcRecords, supplierProductionAudits, weeklyPlans, setWeeklyPlans, suppliers, models]);
+
+  // Automated linkage for monthly plans
+  React.useEffect(() => {
+    if (!monthlyPlans || !setMonthlyPlans || monthlyPlans.length === 0) return;
+
+    let planChanged = false;
+    const updatedMonthlyPlans = monthlyPlans.map(plan => {
+      let targetsChanged = false;
+      const updatedTargets = plan.targets.map(target => {
+        const isIqc = target.category === 'IQC' || target.content.includes('[IQC]');
+        const isPqc = target.category === 'PQC' || target.content.includes('[PQC]');
+        const isOqc = target.category === 'OQC' || target.content.includes('[OQC]');
+        const isSqc = target.category === 'SQC/QA' || target.content.includes('[SQC]');
+
+        let newActual = target.actualValue;
+        let newAchieved = target.achieved;
+
+        if (isIqc) {
+          const supCandidate = suppliers.find(s => 
+            target.content.toLowerCase().includes(s.name.toLowerCase()) || 
+            target.explanation.toLowerCase().includes(s.name.toLowerCase())
+          );
+          
+          if (supCandidate) {
+            const matchedRecords = iqcRecords.filter(r => {
+              if (!r.date) return false;
+              const info = getWeekAndMonthFromDate(r.date);
+              return info.month === plan.month && info.year === plan.year && 
+                     (r.supplierId === supCandidate.id || r.supplierName.toLowerCase().includes(supCandidate.name.toLowerCase()));
+            });
+
+            if (matchedRecords.length > 0) {
+              const totalLotes = matchedRecords.length;
+              const failedLotes = matchedRecords.filter(r => r.result === 'Lỗi' || (r.failedQty !== undefined && r.failedQty > 0)).length;
+              const passedLotes = totalLotes - failedLotes;
+              const autoActual = `${passedLotes}/${totalLotes} lô Đạt`;
+              const autoAchieved = failedLotes === 0;
+
+              if (newActual !== autoActual || newAchieved !== autoAchieved) {
+                newActual = autoActual;
+                newAchieved = autoAchieved;
+                targetsChanged = true;
+              }
+            }
+          }
+        } else if (isPqc) {
+          const modelCandidate = models.find(m => 
+            target.content.toLowerCase().includes(m.name.toLowerCase()) ||
+            target.explanation.toLowerCase().includes(m.name.toLowerCase())
+          );
+          
+          if (modelCandidate) {
+            const matchedRecords = pqcRecords.filter(r => {
+              if (!r.date) return false;
+              const info = getWeekAndMonthFromDate(r.date);
+              return info.month === plan.month && info.year === plan.year && 
+                     (r.model === modelCandidate.name || (r.model && r.model.toLowerCase().includes(modelCandidate.name.toLowerCase())));
+            });
+
+            if (matchedRecords.length > 0) {
+              const totalChecks = matchedRecords.length;
+              const passedChecks = matchedRecords.filter(r => r.status === 'Đạt hoàn toàn').length;
+              const autoActual = `${passedChecks}/${totalChecks} lần Đạt`;
+              const autoAchieved = passedChecks === totalChecks;
+
+              if (newActual !== autoActual || newAchieved !== autoAchieved) {
+                newActual = autoActual;
+                newAchieved = autoAchieved;
+                targetsChanged = true;
+              }
+            }
+          }
+        } else if (isOqc) {
+          const modelCandidate = models.find(m => 
+            target.content.toLowerCase().includes(m.name.toLowerCase())
+          );
+
+          if (modelCandidate) {
+            const matchedRecords = oqcRecords.filter(r => {
+              if (!r.date) return false;
+              const info = getWeekAndMonthFromDate(r.date);
+              return info.month === plan.month && info.year === plan.year && 
+                     (r.model === modelCandidate.name);
+            });
+
+            if (matchedRecords.length > 0) {
+              const totalQty = matchedRecords.length;
+              const failedQty = matchedRecords.filter(r => r.status === 'Lỗi').length;
+              const passedQty = totalQty - failedQty;
+              const rate = totalQty > 0 ? ((passedQty / totalQty) * 100).toFixed(1) : '100';
+              const autoActual = `FPY: ${rate}% (${passedQty}/${totalQty} xe)`;
+              const autoAchieved = Number(rate) >= 95.0;
+
+              if (newActual !== autoActual || newAchieved !== autoAchieved) {
+                newActual = autoActual;
+                newAchieved = autoAchieved;
+                targetsChanged = true;
+              }
+            }
+          }
+        } else if (isSqc) {
+          const supCandidate = suppliers.find(s => 
+            target.content.toLowerCase().includes(s.name.toLowerCase()) || 
+            target.explanation.toLowerCase().includes(s.name.toLowerCase())
+          );
+
+          if (supCandidate && supplierProductionAudits && supplierProductionAudits.length > 0) {
+            const matchedAudits = supplierProductionAudits.filter(r => {
+              if (!r.requestDate) return false;
+              const info = getWeekAndMonthFromDate(r.requestDate);
+              return info.month === plan.month && info.year === plan.year && 
+                     (r.supplierName.toLowerCase().includes(supCandidate.name.toLowerCase()));
+            });
+
+            if (matchedAudits.length > 0) {
+              const auditCount = matchedAudits.length;
+              const closedCount = matchedAudits.filter(a => a.status === 'approved').length;
+              const autoActual = `Đã kiểm: ${auditCount} lần (${closedCount} hoàn thành)`;
+              const autoAchieved = closedCount === auditCount;
+
+              if (newActual !== autoActual || newAchieved !== autoAchieved) {
+                newActual = autoActual;
+                newAchieved = autoAchieved;
+                targetsChanged = true;
+              }
+            }
+          }
+        }
+
+        if (targetsChanged) {
+          return { ...target, actualValue: newActual, achieved: newAchieved };
+        }
+        return target;
+      });
+
+      if (targetsChanged) {
+        planChanged = true;
+        return { ...plan, targets: updatedTargets };
+      }
+      return plan;
+    });
+
+    if (planChanged) {
+      setMonthlyPlans(updatedMonthlyPlans);
+    }
+  }, [iqcRecords, pqcRecords, oqcRecords, supplierProductionAudits, monthlyPlans, setMonthlyPlans, suppliers, models]);
+
+  // States for defect analyses custom additions & editing
+  const [customDefectAnalyses, setCustomDefectAnalyses] = useState<Record<string, {
+    severity: string;
+    severityColor: string;
+    category: string;
+    impact: string;
+    rootCause: string;
+    emergency: string[];
+    preventative: string[];
+    owner: string;
+    due: string;
+  }>>(() => {
+    try {
+      const saved = localStorage.getItem('dk_custom_defect_analyses');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  React.useEffect(() => {
+    const docRef = doc(db, 'dk_db_sync', 'dk_custom_defect_analyses');
+    getDocFromServer(docRef)
+      .then((snap) => {
+        if (snap.exists()) {
+          const remoteData = snap.data()?.data;
+          if (remoteData) {
+            setCustomDefectAnalyses(remoteData);
+            localStorage.setItem('dk_custom_defect_analyses', JSON.stringify(remoteData));
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn("[Firestore Warning] Lỗi tải phân tích lỗi tùy chỉnh từ Cloud Firestore:", err);
+      });
+  }, []);
+
+  const [draftSeverity, setDraftSeverity] = useState('');
+  const [draftCategory, setDraftCategory] = useState('');
+  const [draftImpact, setDraftImpact] = useState('');
+  const [draftRootCause, setDraftRootCause] = useState('');
+  const [draftEmergency, setDraftEmergency] = useState('');
+  const [draftPreventative, setDraftPreventative] = useState('');
+  const [draftOwner, setDraftOwner] = useState('');
+  const [draftDue, setDraftDue] = useState('');
+
+  React.useEffect(() => {
+    if (selectedDashboardDefect) {
+      const key = `${selectedDashboardDefect.modelName}_#_${selectedDashboardDefect.name}`.toLowerCase();
+      const currentAnalysis = customDefectAnalyses[key] || getDefectAnalysisAndCorrection(selectedDashboardDefect.name, selectedDashboardDefect.modelName);
+      
+      setDraftSeverity(currentAnalysis.severity || 'Trung bình (Major - Nghi ngờ dung sai)');
+      setDraftCategory(currentAnalysis.category || 'Chưa phân nhóm');
+      setDraftImpact(currentAnalysis.impact || '');
+      setDraftRootCause(currentAnalysis.rootCause || '');
+      setDraftEmergency(Array.isArray(currentAnalysis.emergency) ? currentAnalysis.emergency.join('\n') : String(currentAnalysis.emergency || ''));
+      setDraftPreventative(Array.isArray(currentAnalysis.preventative) ? currentAnalysis.preventative.join('\n') : String(currentAnalysis.preventative || ''));
+      setDraftOwner(currentAnalysis.owner || 'Tổ trưởng QA/QC');
+      setDraftDue(currentAnalysis.due || 'Lập tức xử lý');
+    }
+  }, [selectedDashboardDefect, customDefectAnalyses]);
+
+  const handleSaveCustomAnalysis = () => {
+    if (!selectedDashboardDefect) return;
+    
+    let color = 'text-amber-600 bg-amber-50 border-amber-200/50';
+    const s = draftSeverity.toLowerCase();
+    if (s.includes('nhẹ') || s.includes('minor')) {
+      color = 'text-blue-600 bg-blue-50 border-blue-200/50';
+    } else if (s.includes('nghiêm trọng') || s.includes('nguy hại') || s.includes('critical') || s.includes('fatal')) {
+      color = 'text-rose-600 bg-rose-50 border-rose-200/50';
+    }
+
+    const key = `${selectedDashboardDefect.modelName}_#_${selectedDashboardDefect.name}`.toLowerCase();
+    const updated = {
+      ...customDefectAnalyses,
+      [key]: {
+        severity: draftSeverity,
+        severityColor: color,
+        category: draftCategory,
+        impact: draftImpact,
+        rootCause: draftRootCause,
+        emergency: draftEmergency.split('\n').map(l => l.trim()).filter(Boolean),
+        preventative: draftPreventative.split('\n').map(l => l.trim()).filter(Boolean),
+        owner: draftOwner,
+        due: draftDue
+      }
+    };
+    
+    setCustomDefectAnalyses(updated);
+    localStorage.setItem('dk_custom_defect_analyses', JSON.stringify(updated));
+
+    // Async server side backup - only sync to Firestore if there is a real Google Firebase login session
+    if (auth.currentUser) {
+      const docRef = doc(db, 'dk_db_sync', 'dk_custom_defect_analyses');
+      setDoc(docRef, sanitizeFirestorePayload({
+        data: updated,
+        updatedBy: auth.currentUser?.email || 'System Public Session',
+        updatedAt: new Date().toISOString()
+      }))
+      .catch((err: any) => {
+        console.error("Lỗi đồng bộ phân tích lỗi tùy chỉnh lên Cloud Firestore:", err);
+      });
+    } else {
+      console.log("[Local Storage Sync]: Phiên làm việc offline/chuyển quyền hoạt động. Đã lưu phân tích lỗi cục bộ.");
+    }
+
+    alert(`Đã lưu Đánh giá và Ban hành Chỉ thị Khắc phục Lỗi (CAPA) khẩn cấp thành công!\nHệ thống QMS DKBike đã đồng bộ và thông báo tới: "${draftOwner}".`);
+    setSelectedDashboardDefect(null);
+  };
+  const [iqcSearch, setIqcSearch] = useState('');
+  const [pqcSearch, setPqcSearch] = useState('');
+  const [oqcSearch, setOqcSearch] = useState('');
+  const [reportTimeFilter, setReportTimeFilter] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
+  const [reportPeriod, setReportPeriod] = useState('All');
+
+  // New Filters state
+  const [iqcFilterResult, setIqcFilterResult] = useState<string>('All');
+  const [iqcFilterSupplier, setIqcFilterSupplier] = useState<string>('All');
+  const [pqcFilterStatus, setPqcFilterStatus] = useState<string>('All');
+  const [pqcFilterModel, setPqcFilterModel] = useState<string>('All');
+  const [oqcFilterStatus, setOqcFilterStatus] = useState<string>('All');
+  const [oqcFilterModel, setOqcFilterModel] = useState<string>('All');
+  const [oqcFilterColor, setOqcFilterColor] = useState<string>('All');
+  const [oqcFilterDate, setOqcFilterDate] = useState<string>('All');
+  const [oqcFilterMonth, setOqcFilterMonth] = useState<string>('All');
+  const [iqcFilterMonth, setIqcFilterMonth] = useState<string>('All');
+  const [pqcFilterMonth, setPqcFilterMonth] = useState<string>('All');
+  const [oqcFilterYear, setOqcFilterYear] = useState<string>('All');
+  const [oqcListFilter, setOqcListFilter] = useState<'all' | 'fail'>('fail');
+  const [iqcFilterWeek, setIqcFilterWeek] = useState<string>('All');
+  const [pqcFilterWeek, setPqcFilterWeek] = useState<string>('All');
+  const [oqcFilterWeek, setOqcFilterWeek] = useState<string>('All');
+
+  // Supplier Production Audits state
+  const [supplierAuditSearch, setSupplierAuditSearch] = useState('');
+  const [supplierAuditFilterStatus, setSupplierAuditFilterStatus] = useState<string>('All');
+  const [supplierAuditFilterSupplier, setSupplierAuditFilterSupplier] = useState<string>('All');
+
+  // Local state for ignored daily logs in supplier monitoring
+  const [ignoredDailyLogStts, setIgnoredDailyLogStts] = useState<number[]>(() => {
+    try {
+      const saved = localStorage.getItem('dk_ignored_daily_log_stts');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [hideIgnoredLogs, setHideIgnoredLogs] = useState<boolean>(false);
+
+  const lastSyncSubTabRef = React.useRef<string | undefined>(undefined);
+
+  // Sync parent jump values to local states
+  React.useEffect(() => {
+    let changed = false;
+    if (initialSubTab && initialSubTab !== lastSyncSubTabRef.current) {
+      setQcMainSubTab(initialSubTab);
+      lastSyncSubTabRef.current = initialSubTab;
+      changed = true;
+    }
+    if (initialOqcSearch) {
+      setOqcSearch(initialOqcSearch);
+      setOqcTabMode('history');
+      setOqcListFilter('all');
+      changed = true;
+    }
+    if (initialPqcSearch) {
+      setPqcSearch(initialPqcSearch);
+      changed = true;
+    }
+    if (changed && onClearInitialValues) {
+      onClearInitialValues();
+    }
+  }, [initialSubTab, initialOqcSearch, initialPqcSearch, onClearInitialValues, qcMainSubTab]);
+
+  const handleIgnoreDailyLog = (stt: number) => {
+    const updated = [...ignoredDailyLogStts, stt];
+    setIgnoredDailyLogStts(updated);
+    localStorage.setItem('dk_ignored_daily_log_stts', JSON.stringify(updated));
+  };
+
+  const handleUndoIgnoreDailyLog = (stt: number) => {
+    const updated = ignoredDailyLogStts.filter(id => id !== stt);
+    setIgnoredDailyLogStts(updated);
+    localStorage.setItem('dk_ignored_daily_log_stts', JSON.stringify(updated));
+  };
+
+  const renderActivePlanTargetsBanner = (_category: string) => {
+    return null;
+  };
+
+  // Modal to add a request
+  const [showAddSupplierAuditModal, setShowAddSupplierAuditModal] = useState(false);
+  const [newAuditSupplierName, setNewAuditSupplierName] = useState(() => suppliers[0]?.name || suppliers[0]?.SupplierName || 'Công ty Việt Nhật Precision');
+  const [newAuditComponentName, setNewAuditComponentName] = useState('');
+  const [newAuditSpec, setNewAuditSpec] = useState('');
+  const [newAuditReqType, setNewAuditReqType] = useState<'image_only' | 'spec_only' | 'both'>('both');
+  const [newAuditNote, setNewAuditNote] = useState('');
+  const [newAuditLinkedDailyLogStt, setNewAuditLinkedDailyLogStt] = useState<number | undefined>(undefined);
+
+  // Local state to simulate supplier responses (submitting images and values)
+  const [supplierResponseAudit, setSupplierResponseAudit] = useState<SupplierProductionAudit | null>(null);
+  const [responseValueStr, setResponseValueStr] = useState('');
+  const [responseImageUrl, setResponseImageUrl] = useState('');
+  const [responseSupplierNote, setResponseSupplierNote] = useState('');
+
+  // Local state to evaluate/approve/reject as DKBike QMS
+  const [evaluateAudit, setEvaluateAudit] = useState<SupplierProductionAudit | null>(null);
+  const [evalDkNote, setEvalDkNote] = useState('');
+  const [evalStatus, setEvalStatus] = useState<'approved' | 'rejected'>('approved');
+
+  // Editing state for Supplier Production Audits
+  const [editingSupplierAudit, setEditingSupplierAudit] = useState<SupplierProductionAudit | null>(null);
+  const [editAuditSupplierName, setEditAuditSupplierName] = useState('');
+  const [editAuditComponentName, setEditAuditComponentName] = useState('');
+  const [editAuditSpec, setEditAuditSpec] = useState('');
+  const [editAuditNote, setEditAuditNote] = useState('');
+  const [editAuditReqType, setEditAuditReqType] = useState<'image_only' | 'spec_only' | 'both'>('both');
+  const [editAuditStatus, setEditAuditStatus] = useState<'pending' | 'updated' | 'approved' | 'rejected'>('pending');
+  const [editAuditActualValue, setEditAuditActualValue] = useState('');
+  const [editAuditDkNote, setEditAuditDkNote] = useState('');
+  const [editAuditImageUrl, setEditAuditImageUrl] = useState('');
+  const [editAuditDragOver, setEditAuditDragOver] = useState(false);
+
+  const [supplierAuditViewMode, setSupplierAuditViewMode] = useState<'grid' | 'list'>('grid');
+  const [selectedSupplierAuditForDetail, setSelectedSupplierAuditForDetail] = useState<SupplierProductionAudit | null>(null);
+
+  const handleOpenEditSupplierAuditModal = (aud: SupplierProductionAudit) => {
+    setEditingSupplierAudit(aud);
+    setEditAuditSupplierName(aud.supplierName);
+    setEditAuditComponentName(aud.componentName);
+    setEditAuditSpec(aud.targetSpecification);
+    setEditAuditNote(aud.supplierNote || '');
+    setEditAuditReqType(aud.requirementType);
+    setEditAuditStatus(aud.status);
+    setEditAuditActualValue(aud.actualValueStr || '');
+    setEditAuditDkNote(aud.dkNote || '');
+    setEditAuditImageUrl(aud.imageUrl || '');
+  };
+
+  const handleUpdateSupplierAudit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingSupplierAudit) return;
+
+    const updated = supplierProductionAudits.map(aud => {
+      if (aud.id === editingSupplierAudit.id) {
+        const item = {
+          ...aud,
+          supplierName: editAuditSupplierName,
+          componentName: editAuditComponentName,
+          targetSpecification: editAuditSpec,
+          supplierNote: editAuditNote,
+          requirementType: editAuditReqType,
+          status: editAuditStatus,
+          actualValueStr: editAuditActualValue,
+          dkNote: editAuditDkNote,
+          imageUrl: editAuditImageUrl
+        };
+        return item;
+      }
+      return aud;
+    });
+
+    setSupplierProductionAudits(updated);
+    setEditingSupplierAudit(null);
+    alert('Đã cập nhật chỉ thị giám sát thành công!');
+
+    const found = updated.find(a => a.id === editingSupplierAudit.id);
+    if (found && selectedSupplierAuditForDetail?.id === editingSupplierAudit.id) {
+      setSelectedSupplierAuditForDetail(found);
+    }
+  };
+
+  const handleDeleteSupplierAudit = (id: string) => {
+    if (window.confirm(`Xác nhận xóa bỏ vĩnh viễn chỉ thị giám sát [${id}] này?`)) {
+      const updated = supplierProductionAudits.filter(a => a.id !== id);
+      setSupplierProductionAudits(updated);
+      if (selectedSupplierAuditForDetail?.id === id) {
+        setSelectedSupplierAuditForDetail(null);
+      }
+    }
+  };
+
+  const handleQuickApproveAudit = (id: string) => {
+    if (window.confirm("Xác nhận Đạt yêu cầu & Hoàn thành chỉ thị giám sát này ngay lập tức?")) {
+      const updated = supplierProductionAudits.map(aud => {
+        if (aud.id === id) {
+          return {
+            ...aud,
+            status: 'approved' as const,
+            dkNote: 'Báo cáo chất lượng hoàn thành & đạt kiểm tra mẫu trên dây chuyền.',
+            actualValueStr: aud.actualValueStr || 'Đạt chuẩn mẫu',
+            imageUrl: aud.imageUrl || ''
+          };
+        }
+        return aud;
+      });
+      setSupplierProductionAudits(updated);
+
+      const found = updated.find(a => a.id === id);
+      if (found && selectedSupplierAuditForDetail?.id === id) {
+        setSelectedSupplierAuditForDetail(found);
+      }
+    }
+  };
+
+  const handleQuickRejectAudit = (id: string) => {
+    if (window.confirm("Bác có chắc chắn muốn báo lỗi/Từ chối chỉ thị giám sát này không?")) {
+      const updated = supplierProductionAudits.map(aud => {
+        if (aud.id === id) {
+          return {
+            ...aud,
+            status: 'rejected' as const,
+            dkNote: 'Hệ thống báo cáo phát hiện dung sai không đạt chuẩn dập mẫu. Yêu cầu NCC dừng gia công xưởng và sửa khuôn ngay.',
+            actualValueStr: aud.actualValueStr || 'Không đạt chuẩn kỹ thuật'
+          };
+        }
+        return aud;
+      });
+      setSupplierProductionAudits(updated);
+
+      const found = updated.find(a => a.id === id);
+      if (found && selectedSupplierAuditForDetail?.id === id) {
+        setSelectedSupplierAuditForDetail(found);
+      }
+    }
+  };
+
+  const handleSelectLinkedDailyLogForAudit = (stt: number) => {
+    setNewAuditLinkedDailyLogStt(stt);
+    const log = dailyLogs.find(l => l.stt === stt);
+    if (log) {
+      // Set values based on log content
+      let comp = '';
+      let spec = '';
+      let supp = newAuditSupplierName;
+
+      const lowerCont = log.content.toLowerCase();
+      if (lowerCont.includes('rắc sạc') || lowerCont.includes('sạc')) {
+        comp = 'Rắc sạc nhanh Shin-Etsu';
+        spec = 'Chỉ số cách điện Megohm sấy lò đạt chuẩn 65 độ C';
+      } else if (lowerCont.includes('khung') || lowerCont.includes('chén bi') || lowerCont.includes('bavia')) {
+        comp = 'Khung sườn mộc model DK Roma V2';
+        spec = 'Đo độ bavia dập cơ khí và lực ép chén bi, độ rơ cổ phuốc < 0.03mm';
+      } else if (lowerCont.includes('chạy thử') || lowerCont.includes('sát hạch') || lowerCont.includes('roman')) {
+        comp = 'Thành phẩm xe điện DK Roman SX v2';
+        spec = 'Sát hạch chạy thử thực tế trước xuất xưởng, phanh dốc & đèn còi';
+      } else if (lowerCont.includes('lốp') || lowerCont.includes('săm lốp') || lowerCont.includes('kenda')) {
+        comp = 'Lốp săm xe điện KENDA cao cấp';
+        spec = 'Đường kính ngoài lò lưu hóa cao su và độ mòn ép lực';
+      } else if (lowerCont.includes('nhựa') || lowerCont.includes('sơn tĩnh điện')) {
+        comp = 'Mặt nạ nhựa (ABS) Gogo Cross';
+        spec = 'Bề mặt sơn tĩnh điện láng bóng đồng đều màu nhẵn, không gai sần';
+      } else if (lowerCont.includes('đối tác việt nhật') || lowerCont.includes('việt nhật') || lowerCont.includes('dăm móng') || lowerCont.includes('khuôn dập')) {
+        comp = 'Khuôn dập bán thành phẩm sườn xe (Việt Nhật Precision)';
+        spec = 'Độ dốc móng cơ khí khuôn dập, tinh chỉnh bavia dập loạt';
+      } else {
+        comp = log.content.length > 50 ? log.content.substring(0, 50) + "..." : log.content;
+        spec = log.note || 'Sát sao chỉ tiêu kỹ thuật chất lượng đạt 100%.';
+      }
+
+      const lowerSuppName = log.content.toLowerCase() + " " + log.note.toLowerCase();
+      if (lowerSuppName.includes('việt nhật')) {
+        supp = 'Công ty Việt Nhật Precision';
+      } else if (lowerSuppName.includes('kenda')) {
+        supp = 'Công ty Cao Su KENDA Việt Nam';
+      } else if (lowerSuppName.includes('tia sáng')) {
+        supp = 'Công ty Ắc quy Tia Sáng';
+      } else if (lowerSuppName.includes('shin-etsu') || lowerSuppName.includes('shinets') || lowerSuppName.includes('bàn giao ca sáng')) {
+        supp = 'Công ty Việt Nhật Precision';
+      }
+
+      setNewAuditComponentName(comp);
+      setNewAuditSpec(spec);
+      setNewAuditSupplierName(supp);
+    }
+  };
+
+  // Compute unique dynamic values for selects
+  const uniqueIqcSuppliers = Array.from(new Set(iqcRecords.map(r => r.supplierName ? r.supplierName.trim() : ''))).filter(Boolean);
+  const uniquePqcModels = Array.from(new Set(pqcRecords.map(r => r.model ? r.model.trim() : ''))).filter(Boolean);
+  const uniqueOqcModels = Array.from(new Set(oqcRecords.map(r => r.model ? r.model.trim() : ''))).filter(Boolean);
+  const uniqueOqcColors = Array.from(new Set(oqcRecords.map(r => r.color ? r.color.trim() : ''))).filter(Boolean);
+  const uniqueOqcDates = Array.from(
+    new Set(
+      oqcRecords
+        .filter(r => {
+          if (!r.date) return false;
+          const info = getWeekAndMonthFromDate(r.date);
+          const matchesMonth = oqcFilterMonth === 'All' || String(info.month) === oqcFilterMonth;
+          const matchesYear = oqcFilterYear === 'All' || String(info.year) === oqcFilterYear;
+          return matchesMonth && matchesYear;
+        })
+        .map(r => r.date ? standardizeDate(r.date) : '')
+    )
+  ).filter(Boolean).sort((a, b) => {
+    const partsA = a.split('/');
+    const partsB = b.split('/');
+    const da = parseInt(partsA[0], 10) || 1;
+    const ma = parseInt(partsA[1], 10) || 7;
+    const ya = parseInt(partsA[2], 10) || 2026;
+    const db = parseInt(partsB[0], 10) || 1;
+    const mb = parseInt(partsB[1], 10) || 7;
+    const yb = parseInt(partsB[2], 10) || 2026;
+    if (ya !== yb) return ya - yb;
+    if (ma !== mb) return ma - mb;
+    return da - db;
+  });
+  const uniqueOqcMonths = Array.from(new Set(oqcRecords.map(r => r.month))).filter(Boolean).sort((a, b) => Number(a) - Number(b));
+  const uniqueOqcYears = Array.from(new Set(oqcRecords.map(r => r.year))).filter(Boolean).sort((a, b) => Number(a) - Number(b));
+
+  // Helper to compare dates of IQC records
+  const parseDateToNumber = (dateStr: string): number => {
+    if (!dateStr) return 0;
+    let year = 2026;
+    let month = 1;
+    let day = 1;
+    if (dateStr.includes('-')) {
+      const parts = dateStr.split('-');
+      year = Number(parts[0]) || 2026;
+      month = Number(parts[1]) || 1;
+      day = Number(parts[2]) || 1;
+    } else if (dateStr.includes('/')) {
+      const parts = dateStr.split('/');
+      day = Number(parts[0]) || 1;
+      month = Number(parts[1]) || 1;
+      year = Number(parts[2]) || 2026;
+    }
+    return year * 10000 + month * 100 + day;
+  };
+
+  // Filtered lists (automatically sorted from newest to oldest)
+  const filteredIqc = iqcRecords.filter(r => {
+    const matchesSearch = iqcSearch === '' || 
+      (r.supplierName || '').toLowerCase().includes(iqcSearch.toLowerCase()) ||
+      (r.content || '').toLowerCase().includes(iqcSearch.toLowerCase()) ||
+      (r.checkedBy || '').toLowerCase().includes(iqcSearch.toLowerCase()) ||
+      (r.id || '').toLowerCase().includes(iqcSearch.toLowerCase());
+      
+    const matchesSupplier = iqcFilterSupplier === 'All' || r.supplierName === iqcFilterSupplier;
+    const matchesResult = iqcFilterResult === 'All' || r.result === iqcFilterResult;
+    
+    // Week filter
+    const recordWeek = r.date ? getWeekAndMonthFromDate(r.date).week : 'T1';
+    const matchesWeek = iqcFilterWeek === 'All' || recordWeek === iqcFilterWeek;
+
+    // Month filter
+    const recordMonth = r.date ? getWeekAndMonthFromDate(r.date).month : 1;
+    const matchesMonth = iqcFilterMonth === 'All' || String(recordMonth) === iqcFilterMonth;
+    
+    return matchesSearch && matchesSupplier && matchesResult && matchesWeek && matchesMonth;
+  }).sort((a, b) => {
+    const dateA = parseDateToNumber(a.date);
+    const dateB = parseDateToNumber(b.date);
+    if (dateA !== dateB) {
+      return dateB - dateA;
+    }
+    return (b.id || '').localeCompare(a.id || '');
+  });
+
+  const filteredPqc = pqcRecords.filter(r => {
+    const matchesSearch = pqcSearch === '' || 
+      (r.lsx || '').toLowerCase().includes(pqcSearch.toLowerCase()) ||
+      (r.model || '').toLowerCase().includes(pqcSearch.toLowerCase()) ||
+      (r.findings || '').toLowerCase().includes(pqcSearch.toLowerCase()) ||
+      (r.checkedBy || '').toLowerCase().includes(pqcSearch.toLowerCase());
+      
+    const matchesStatus = pqcFilterStatus === 'All' || r.status === pqcFilterStatus;
+    const matchesModel = pqcFilterModel === 'All' || r.model === pqcFilterModel;
+    
+    // Week filter
+    const recordWeek = r.date ? getWeekAndMonthFromDate(r.date).week : 'T1';
+    const matchesWeek = pqcFilterWeek === 'All' || recordWeek === pqcFilterWeek;
+
+    // Month filter
+    const recordMonth = r.date ? getWeekAndMonthFromDate(r.date).month : 1;
+    const matchesMonth = pqcFilterMonth === 'All' || String(recordMonth) === pqcFilterMonth;
+    
+    return matchesSearch && matchesStatus && matchesModel && matchesWeek && matchesMonth;
+  });
+
+  const filteredOqc = oqcRecords.filter(r => {
+    const matchesSearch = oqcSearch === '' || 
+      (r.serialNo || '').toLowerCase().includes(oqcSearch.toLowerCase()) ||
+      (r.partCode || '').toLowerCase().includes(oqcSearch.toLowerCase()) ||
+      (r.model || '').toLowerCase().includes(oqcSearch.toLowerCase()) ||
+      (r.color || '').toLowerCase().includes(oqcSearch.toLowerCase()) ||
+      (r.defectDetail || '').toLowerCase().includes(oqcSearch.toLowerCase());
+      
+    const matchesModel = oqcFilterModel === 'All' || r.model === oqcFilterModel;
+    const matchesColor = oqcFilterColor === 'All' || r.color === oqcFilterColor;
+    const matchesDate = oqcFilterDate === 'All' || r.date === oqcFilterDate;
+    const matchesMonth = oqcFilterMonth === 'All' || String(r.month) === oqcFilterMonth;
+    const matchesYear = oqcFilterYear === 'All' || String(r.year) === oqcFilterYear;
+    
+    // Week filter
+    const recordWeek = r.date ? getWeekAndMonthFromDate(r.date).week : 'T1';
+    const matchesWeek = oqcFilterWeek === 'All' || recordWeek === oqcFilterWeek;
+    
+    return matchesSearch && matchesModel && matchesColor && matchesDate && matchesMonth && matchesYear && matchesWeek;
+  });
+
+  const isOqcRecordPassed = useCallback((r: OQCRecord) => {
+    if (r.status === 'Đạt') return true;
+    const text = ((r.defectDetail || '') + ' ' + (r.rootCause || '')).toLowerCase();
+    return (
+      text.includes('xước') ||
+      text.includes('xuoc') ||
+      text.includes('thiếu') ||
+      text.includes('thieu')
+    );
+  }, []);
+
+  const getRowCapaData = useCallback((defectDetail: string | undefined, evaluation: string | undefined, rootCause: string | undefined, treatment: string | undefined) => {
+    const txt = (defectDetail || '').toLowerCase();
+    let defaultImpact = evaluation || 'Suy giảm chất lượng ngoại quan hoặc hiệu suất vận hành lắp ráp.';
+    let defaultRoot = rootCause || 'Công nhân thao tác chưa đúng dải lực thiết lập tiêu chuẩn.';
+    let defaultTreatment = treatment || 'Yêu cầu hiệu chuẩn gá định vị định kỳ và đào tạo kỹ năng SOP.';
+    
+    if (txt.includes('bms') || txt.includes('sụt áp') || txt.includes('nguồn')) {
+      defaultImpact = evaluation || 'Nguy cơ sụt áp đột ngột gây tắt máy giữa hành trình lên dốc, đe dọa an toàn tính mạng nghiêm trọng.';
+      defaultRoot = rootCause || 'Cơ cấu chân giắc lỏng lẻo phát sinh hồ quang điện, hoặc bong mối hàn bảo vệ rơ-le BMS do buồng sấy nhiệt vượt quá 65°C.';
+      defaultTreatment = treatment || 'Gia tăng lực kẹp chốt bảo vệ đầu giắc, khống chế nhiệt độ lò sấy dán tem tối đa 60°C và áp dụng keo bảo vệ chuyên dụng.';
+    } else if (txt.includes('tem') || txt.includes('lệch')) {
+      defaultImpact = evaluation || 'Mất mỹ quan bề mặt thành phẩm cao cấp, ảnh hưởng trực tiếp đến hình ảnh dán tem chính hãng dán của DKBike.';
+      defaultRoot = rootCause || 'Cữ gá dán tem định vị thủ công bị rơ lỏng mài mòn dải chặn căn mép.';
+      defaultTreatment = treatment || 'Chấn chỉnh và thay thế cữ định vị chặn dán cơ khí mới, bổ sung thước laser định hướng dán tem chuẩn chỉ.';
+    } else if (txt.includes('phanh') || txt.includes('bó cứng') || txt.includes('bó')) {
+      defaultImpact = evaluation || 'Kẹt phanh bó đĩa tăng sinh nhiệt ma sát cao, làm mòn má đĩa phanh nhanh và tiêu hao năng lượng pin lớn.';
+      defaultRoot = rootCause || 'Hành trình tay bóp phanh xiết quá mức dải tự do hành trình tay, pittông xilanh kẹt bẩn dầu thủy lực hồi trễ.';
+      defaultTreatment = treatment || 'Căn chỉnh khe hở má phanh và dải bóp phanh tự do đạt 10-15mm tiêu chuẩn, xả gió bọt khí đường ống phanh dầu.';
+    }
+    return {
+      evaluation: defaultImpact,
+      rootCause: defaultRoot,
+      treatment: defaultTreatment
+    };
+  }, []);
+
+  const defectModelTokenCounts = useMemo(() => {
+    const counts: { [model: string]: { [token: string]: number } } = {};
+    oqcRecords.forEach(r => {
+      if (r.status === 'Lỗi' && !isOqcRecordPassed(r) && r.defectDetail) {
+        const m = r.model || 'Chưa phân loại';
+        if (!counts[m]) {
+          counts[m] = {};
+        }
+        const parts = r.defectDetail.split(/[,;+\n]/).map(x => x.trim().toLowerCase()).filter(Boolean);
+        parts.forEach(p => {
+          counts[m][p] = (counts[m][p] || 0) + 1;
+        });
+      }
+    });
+    return counts;
+  }, [oqcRecords, isOqcRecordPassed]);
+
+  const getRecordMaxDefectCount = useCallback((r: OQCRecord) => {
+    if (r.status !== 'Lỗi' || isOqcRecordPassed(r) || !r.defectDetail) return 0;
+    const m = r.model || 'Chưa phân loại';
+    const modelCounts = defectModelTokenCounts[m];
+    if (!modelCounts) return 0;
+    
+    const parts = r.defectDetail.split(/[,;+\n]/).map(x => x.trim().toLowerCase()).filter(Boolean);
+    let maxCount = 0;
+    parts.forEach(p => {
+      const pCount = modelCounts[p] || 0;
+      if (pCount > maxCount) {
+        maxCount = pCount;
+      }
+    });
+    return maxCount;
+  }, [defectModelTokenCounts, isOqcRecordPassed]);
+
+  const oqcPivotReport = useMemo(() => {
+    const groups: {
+      [model: string]: {
+        model: string;
+        total: number;
+        passed: number;
+        failed: number;
+        errors: { [error: string]: number };
+      }
+    } = {};
+
+    filteredOqc.forEach(r => {
+      const m = r.model || 'Chưa phân loại';
+      if (!groups[m]) {
+        groups[m] = {
+          model: m,
+          total: 0,
+          passed: 0,
+          failed: 0,
+          errors: {}
+        };
+      }
+      
+      const g = groups[m];
+      g.total += 1;
+      if (r.status === 'Đạt' || isOqcRecordPassed(r)) {
+        g.passed += 1;
+      } else if (r.status === 'Lỗi') {
+        g.failed += 1;
+        
+        // Phân tách lỗi
+        if (r.defectDetail) {
+          const parts = r.defectDetail.split(/[,;+]/).map(x => x.trim()).filter(Boolean);
+          parts.forEach(p => {
+            const formattedName = p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+            g.errors[formattedName] = (g.errors[formattedName] || 0) + 1;
+          });
+        }
+      }
+    });
+
+    return Object.values(groups).map(g => {
+      const sortedErrors = Object.entries(g.errors)
+        .filter(([_, count]) => count > 10)
+        .sort((a, b) => b[1] - a[1])
+        .map(([err, count]) => `${err} (x${count})`);
+
+      return {
+        model: g.model,
+        total: g.total,
+        passed: g.passed,
+        failed: g.failed,
+        topErrors: sortedErrors.length > 0 ? sortedErrors.join(', ') : '✓ Không có lỗi > 10 lần'
+      };
+    });
+  }, [filteredOqc, isOqcRecordPassed]);
+
+  const oqcErrorsByModelReport = useMemo(() => {
+    // Group failure details by model
+    const groups: {
+      [model: string]: {
+        model: string;
+        errorDetails: { [errorText: string]: number };
+        totalErrorCount: number;
+      }
+    } = {};
+
+    filteredOqc.forEach(r => {
+      if (r.status === 'Lỗi' && !isOqcRecordPassed(r) && r.defectDetail) {
+        const m = r.model || 'Chưa phân loại';
+        if (!groups[m]) {
+          groups[m] = {
+            model: m,
+            errorDetails: {},
+            totalErrorCount: 0
+          };
+        }
+        const g = groups[m];
+        
+        // Split defectDetail by comma, semicolon, plus or newline
+        const parts = r.defectDetail.split(/[,;+\n]/).map(x => x.trim()).filter(Boolean);
+        parts.forEach(p => {
+          const formattedName = p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+          g.errorDetails[formattedName] = (g.errorDetails[formattedName] || 0) + 1;
+          g.totalErrorCount += 1;
+        });
+      }
+    });
+
+    // Flatten to an array
+    const result: {
+      model: string;
+      errors: { text: string; count: number }[];
+      totalCount: number;
+    }[] = [];
+
+    Object.values(groups).forEach(g => {
+      // Sort errors by count descending and take up to top 5 errors
+      const sortedErrors = Object.entries(g.errorDetails)
+        .map(([text, count]) => ({ text, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+
+      if (sortedErrors.length > 0) {
+        const filteredTotalCount = sortedErrors.reduce((sum, item) => sum + item.count, 0);
+        result.push({
+          model: g.model,
+          errors: sortedErrors,
+          totalCount: filteredTotalCount
+        });
+      }
+    });
+
+    // Sort models by total error count descending
+    return result.sort((a, b) => b.totalCount - a.totalCount);
+  }, [filteredOqc, isOqcRecordPassed]);
+
+  const topOqcErrorsOverall = useMemo(() => {
+    const counts: { [error: string]: number } = {};
+    filteredOqc.forEach(r => {
+      if (r.status === 'Lỗi' && !isOqcRecordPassed(r) && r.defectDetail) {
+        const parts = r.defectDetail.split(/[,;+\n]/).map(x => x.trim()).filter(Boolean);
+        parts.forEach(p => {
+          const formattedName = p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+          counts[formattedName] = (counts[formattedName] || 0) + 1;
+        });
+      }
+    });
+
+    return Object.entries(counts)
+      .map(([text, count]) => ({ text, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [filteredOqc, isOqcRecordPassed]);
+
+  const displayOqcList = useMemo(() => {
+    if (oqcListFilter === 'fail') {
+      return filteredOqc.filter(r => r.status === 'Lỗi' && !isOqcRecordPassed(r));
+    }
+    if (oqcListFilter === 'heavy_fail') {
+      return filteredOqc.filter(r => r.status === 'Lỗi' && !isOqcRecordPassed(r) && getRecordMaxDefectCount(r) > 10);
+    }
+    return filteredOqc;
+  }, [filteredOqc, oqcListFilter, getRecordMaxDefectCount, isOqcRecordPassed]);
+
+  const groupedOqcList = useMemo(() => {
+    const groups: { [key: string]: GroupedOqcRow } = {};
+    
+    displayOqcList.forEach(r => {
+      const isPassed = isOqcRecordPassed(r);
+      const isLoi = r.status === 'Lỗi' && !isPassed;
+      
+      if (!isLoi) {
+        // For passed rows, display as a single unified entry
+        const label = isPassed 
+          ? (r.defectDetail?.trim() || 'Lỗi xước/thiếu tự loại trừ')
+          : '✓ Hoàn hảo';
+        
+        const key = `${r.model || 'Chưa phân loại'}||Pass||${label.toLowerCase()}`;
+        if (!groups[key]) {
+          groups[key] = {
+            id: r.id,
+            model: r.model || 'Chưa phân loại',
+            status: 'Đạt',
+            isPassed: true,
+            defectDetail: label,
+            rootCause: r.rootCause || '',
+            totalLlr: r.totalLlr || 1,
+            count: 1,
+            evaluation: r.evaluation || '',
+            treatment: r.treatment || '',
+            ids: [r.id],
+            originalRecord: r
+          };
+        } else {
+          const g = groups[key];
+          if (!g.ids.includes(r.id)) {
+            g.ids.push(r.id);
+            g.count += 1;
+            g.totalLlr += (r.totalLlr || 1);
+          }
+        }
+      } else {
+        // Splitting actual hard defects into separate rows by separators (comma, semicolon, plus, or newline)
+        const parts = (r.defectDetail || 'Chưa mô tả lỗi')
+          .split(/[,;+\n]/)
+          .map(x => x.trim())
+          .filter(Boolean);
+        
+        const errorParts = parts.length > 0 ? parts : ['Chưa mô tả lỗi'];
+        
+        errorParts.forEach(part => {
+          const partLower = part.toLowerCase();
+          const partIsPassed = partLower.includes('xước') || partLower.includes('xuoc') || partLower.includes('thiếu') || partLower.includes('thieu');
+          
+          const key = `${r.model || 'Chưa phân loại'}||${partIsPassed ? 'Pass' : 'Fail'}||${partLower}`;
+          
+          if (!groups[key]) {
+            groups[key] = {
+              id: `${r.id}-${part}`,
+              model: r.model || 'Chưa phân loại',
+              status: partIsPassed ? 'Đạt' : 'Lỗi',
+              isPassed: partIsPassed,
+              defectDetail: part,
+              rootCause: r.rootCause || '',
+              totalLlr: r.totalLlr || 1,
+              count: 1,
+              evaluation: r.evaluation || '',
+              treatment: r.treatment || '',
+              ids: [r.id],
+              originalRecord: r
+            };
+          } else {
+            const g = groups[key];
+            if (!g.ids.includes(r.id)) {
+              g.ids.push(r.id);
+              g.count += 1;
+              g.totalLlr += (r.totalLlr || 1);
+            }
+            if (!g.evaluation && r.evaluation) {
+              g.evaluation = r.evaluation;
+            }
+            if (!g.treatment && r.treatment) {
+              g.treatment = r.treatment;
+            }
+            if (!g.rootCause && r.rootCause) {
+              g.rootCause = r.rootCause;
+            }
+          }
+        });
+      }
+    });
+    
+    return Object.values(groups);
+  }, [displayOqcList, isOqcRecordPassed]);
+
+  const uniqueAuditSuppliers = Array.from(new Set(supplierProductionAudits.map(r => r.supplierName))).filter(Boolean);
+
+  const filteredSupplierAudits = supplierProductionAudits.filter(r => {
+    const matchesSearch = supplierAuditSearch === '' || 
+      (r.supplierName || '').toLowerCase().includes(supplierAuditSearch.toLowerCase()) ||
+      (r.componentName || '').toLowerCase().includes(supplierAuditSearch.toLowerCase()) ||
+      (r.targetSpecification || '').toLowerCase().includes(supplierAuditSearch.toLowerCase()) ||
+      (r.id || '').toLowerCase().includes(supplierAuditSearch.toLowerCase());
+      
+    const matchesSupplier = supplierAuditFilterSupplier === 'All' || r.supplierName === supplierAuditFilterSupplier;
+    const matchesStatus = supplierAuditFilterStatus === 'All' || r.status === supplierAuditFilterStatus;
+    
+    return matchesSearch && matchesSupplier && matchesStatus;
+  });
+
+  // Modals visibility
+  const [showAddIqcModal, setShowAddIqcModal] = useState(false);
+  const [showAddPqcModal, setShowAddPqcModal] = useState(false);
+  const [showAddOqcModal, setShowAddOqcModal] = useState(false);
+  const [showImportOqcModal, setShowImportOqcModal] = useState(false);
+  const [oqcImportText, setOqcImportText] = useState('');
+  const [oqcImportError, setOqcImportError] = useState('');
+
+  // IQC Import & Edit states
+  const [showImportIqcModal, setShowImportIqcModal] = useState(false);
+  const [iqcImportText, setIqcImportText] = useState('');
+  const [iqcImportError, setIqcImportError] = useState('');
+  
+  const [editingIqcRecord, setEditingIqcRecord] = useState<IQCRecord | null>(null);
+  const [showEditIqcModal, setShowEditIqcModal] = useState(false);
+
+  const [editingPqcRecord, setEditingPqcRecord] = useState<PQCRecord | null>(null);
+  const [showEditPqcModal, setShowEditPqcModal] = useState(false);
+
+  const [editingOqcRecord, setEditingOqcRecord] = useState<OQCRecord | null>(null);
+  const [editingOqcGroupIds, setEditingOqcGroupIds] = useState<string[]>([]);
+  const [showEditOqcModal, setShowEditOqcModal] = useState(false);
+  const [editOqcStatus, setEditOqcStatus] = useState<'Đạt' | 'Lỗi' | 'Chưa kiểm tra'>('Lỗi');
+  const [editOqcDefectDetail, setEditOqcDefectDetail] = useState('');
+  const [editOqcRootCause, setEditOqcRootCause] = useState('');
+  const [editOqcEvaluation, setEditOqcEvaluation] = useState('');
+  const [editOqcTreatment, setEditOqcTreatment] = useState('');
+
+  // Ecount integration states
+  const [showEcountSyncModal, setShowEcountSyncModal] = useState(false);
+  const [ecountDataList, setEcountDataList] = useState<EcountRow[]>(() => 
+    ECOUNT_PRELOADED_DATA.map(item => ({ ...item }))
+  );
+  const [ecountPasteText, setEcountPasteText] = useState('');
+  const [ecountPasteRows, setEcountPasteRows] = useState<EcountRow[]>([]);
+  const [ecountSyncTab, setEcountSyncTab] = useState<'snapshot' | 'paste'>('snapshot');
+  const [ecountSearchQuery, setEcountSearchQuery] = useState('');
+  const [ecountConfig, setEcountConfig] = useState({
+    enabled: true,
+    comCode: "DKBIKE_CORP",
+    userId: "thaonguyen_qc",
+    apiKey: "ecount_demo_key_951f496d0acb",
+    zoneCode: "ia",
+    isSimulation: true,
+    syncInterval: "30",
+    lastSyncTime: ""
+  });
+  const [isSyncingEngine, setIsSyncingEngine] = useState(false);
+  const [syncHistory, setSyncHistory] = useState<{time: string, count: number, source: string}[]>([]);
+  const [selectedIqcIds, setSelectedIqcIds] = useState<string[]>([]);
+  const [selectedOqcIds, setSelectedOqcIds] = useState<string[]>([]);
+
+  // Export KCS Report states
+  const [showExportKcsReportModal, setShowExportKcsReportModal] = useState(false);
+  const [exportKcsPeriod, setExportKcsPeriod] = useState<'weekly' | 'monthly'>('weekly');
+  const [exportKcsMonth, setExportKcsMonth] = useState<number>(new Date().getMonth() + 1);
+  const [exportKcsWeek, setExportKcsWeek] = useState<string>('T1');
+  const [exportKcsYear, setExportKcsYear] = useState<number>(2026);
+  const [exportKcsModel, setExportKcsModel] = useState<string>('All');
+
+  const handleExportKcsReportCSV = (
+    type: 'weekly' | 'monthly',
+    month: number,
+    week: string,
+    year: number,
+    modelFilter: string
+  ) => {
+    // 1. Filter OQC records for the selected period & model
+    const filtered = oqcRecords.filter(r => {
+      if (!r.date) return false;
+      const info = getWeekAndMonthFromDate(r.date);
+      const mMatches = info.month === month;
+      const yMatches = info.year === year;
+      const wMatches = type === 'weekly' ? info.week === week : true;
+      const modelMatches = modelFilter === 'All' || r.model === modelFilter;
+      return mMatches && yMatches && wMatches && modelMatches;
+    });
+
+    const isWeekly = type === 'weekly';
+    const periodLabelText = isWeekly ? `Tuần ${week} - Tháng ${month}/${year}` : `Tháng ${month}/${year}`;
+    const filename = `Bao_Cao_KCS_OQC_${isWeekly ? `Tuan_${week}_Thang_${month}` : `Thang_${month}`}_${year}.xlsx`;
+
+    const total = filtered.length;
+    const passed = filtered.filter(isOqcRecordPassed).length;
+    const failed = total - passed;
+    const yieldRate = total > 0 ? Math.round((passed / total) * 100) : 100;
+
+    // Compile model summary
+    const modelsMap: Record<string, { total: number; passed: number; failed: number }> = {};
+    filtered.forEach(r => {
+      const m = r.model || 'Dòng khác';
+      if (!modelsMap[m]) modelsMap[m] = { total: 0, passed: 0, failed: 0 };
+      modelsMap[m].total += 1;
+      if (isOqcRecordPassed(r)) {
+        modelsMap[m].passed += 1;
+      } else {
+        modelsMap[m].failed += 1;
+      }
+    });
+
+    const aoaData: any[] = [];
+    const rowTracker: { type: string }[] = [];
+    const merges: any[] = [];
+
+    const addRow = (cells: any[], rType: string) => {
+      const row = [...cells];
+      while (row.length < 7) {
+        row.push("");
+      }
+      aoaData.push(row);
+      rowTracker.push({ type: rType });
+      return aoaData.length - 1;
+    };
+
+    // Header company & dept
+    const r0 = addRow(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT"], 'header-company');
+    merges.push({ s: { r: r0, c: 0 }, e: { r: r0, c: 6 } });
+
+    const r1 = addRow(["PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL) - DK QMS"], 'header-department');
+    merges.push({ s: { r: r1, c: 0 }, e: { r: r1, c: 6 } });
+
+    addRow([], 'spacer');
+
+    // Title
+    const r3 = addRow(["BÁO CÁO KIỂM SOÁT CHẤT LƯỢNG THÀNH PHẨM (KCS / OQC)"], 'header-title');
+    merges.push({ s: { r: r3, c: 0 }, e: { r: r3, c: 6 } });
+
+    const r4 = addRow([`Chu kỳ: ${periodLabelText}`], 'header-subtitle');
+    merges.push({ s: { r: r4, c: 0 }, e: { r: r4, c: 6 } });
+
+    const r5 = addRow([`Ngày lập báo cáo: ${new Date().toLocaleDateString('vi-VN')}`], 'header-date');
+    merges.push({ s: { r: r5, c: 0 }, e: { r: r5, c: 6 } });
+
+    addRow([], 'spacer');
+
+    // Section I
+    const rI = addRow(["I. SỐ LIỆU CHẤT LƯỢNG TỔNG QUAN"], 'section-header');
+    merges.push({ s: { r: rI, c: 0 }, e: { r: rI, c: 6 } });
+
+    addRow(["Chỉ số", "Số lượng", "Tỷ lệ (%)"], 'column-header');
+    addRow(["Tổng số xe kiểm tra", total, "100%"], 'data-row');
+    addRow(["Số xe Đạt tiêu chuẩn lần 1", passed, `${yieldRate}%`], 'data-row-success');
+    addRow(["Số xe phát sinh lỗi (Khuyết tật)", failed, `${100 - yieldRate}%`], 'data-row-danger');
+
+    addRow([], 'spacer');
+
+    // Section II
+    const rII = addRow(["II. BÁO CÁO CHẤT LƯỢNG CHI TIẾT THEO DÒNG XE (MODEL)"], 'section-header');
+    merges.push({ s: { r: rII, c: 0 }, e: { r: rII, c: 6 } });
+
+    addRow(["Tên dòng xe", "Tổng kiểm tra", "Số xe đạt", "Số xe lỗi", "Tỷ lệ FTR (%)"], 'column-header');
+    Object.entries(modelsMap).forEach(([name, stats]) => {
+      const rate = stats.total > 0 ? Math.round((stats.passed / stats.total) * 100) : 100;
+      addRow([name, stats.total, stats.passed, stats.failed, `${rate}%`], 'data-row');
+    });
+
+    addRow([], 'spacer');
+
+    // Section III
+    const rIII = addRow(["III. PHÂN TÍCH CHUYÊN SÂU TOP 3 LỖI PHỔ BIẾN NHẤT & BIỆN PHÁP CAPA THEO TỪNG DÒNG XE (MODEL)"], 'section-header');
+    merges.push({ s: { r: rIII, c: 0 }, e: { r: rIII, c: 6 } });
+
+    addRow([
+      "Dòng Xe",
+      "Hạng Lỗi",
+      "Khuyết Tật / Lỗi",
+      "Tần Suất (SL)",
+      "Đánh Giá Ảnh Hưởng Chất Lượng",
+      "Nhận Định Nguyên Nhân Cốt Lõi",
+      "Phương Án Xử Lý Kỹ Thuật & CAPA"
+    ], 'column-header');
+
+    const uniqueModels = Array.from(new Set(filtered.map(r => r.model).filter(Boolean))).sort();
+    uniqueModels.forEach(mName => {
+      const modelRecords = filtered.filter(r => r.model === mName);
+      const defectCounts: Record<string, { count: number; rawRecords: any[] }> = {};
+
+      modelRecords.forEach(r => {
+        if (r.status === 'Lỗi' && !isOqcRecordPassed(r) && r.defectDetail) {
+          const parts = r.defectDetail.split(/[,;+\n]/).map(x => x.trim()).filter(Boolean);
+          parts.forEach(p => {
+            const formattedName = p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+            if (!defectCounts[formattedName]) {
+              defectCounts[formattedName] = { count: 0, rawRecords: [] };
+            }
+            defectCounts[formattedName].count += (r.failedCount || 1);
+            defectCounts[formattedName].rawRecords.push(r);
+          });
+        }
+      });
+
+      const top3ForModel = Object.entries(defectCounts)
+        .map(([text, data]) => {
+          const firstWithDetails = data.rawRecords.find(x => x.evaluation || x.rootCause || x.treatment);
+          const cleanText = text.toLowerCase();
+          
+          let defaultImpact = 'Suy giảm chất lượng ngoại quan hoặc hiệu suất vận hành lắp ráp.';
+          let defaultRoot = 'Công nhân thao tác chưa đúng dải lực thiết lập tiêu chuẩn.';
+          let defaultTreatment = 'Yêu cầu hiệu chuẩn gá định vị định kỳ và đào tạo kỹ năng SOP.';
+          
+          if (cleanText.includes('bms') || cleanText.includes('sụt áp') || cleanText.includes('nguồn')) {
+            defaultImpact = 'Nguy cơ sụt áp đột ngột gây tắt máy giữa hành trình lên dốc, đe dọa an toàn tính mạng nghiêm trọng.';
+            defaultRoot = 'Cơ cấu chân giắc lỏng lẻo phát sinh hồ quang điện, hoặc bong mối hàn bảo vệ rơ-le BMS do buồng sấy nhiệt vượt quá 65°C.';
+            defaultTreatment = 'Gia tăng lực kẹp chốt bảo vệ đầu giắc, khống chế nhiệt độ lò sấy dán tem tối đa 60°C và áp dụng keo bảo vệ chuyên dụng.';
+          } else if (cleanText.includes('tem') || cleanText.includes('lệch')) {
+            defaultImpact = 'Mất mỹ quan bề mặt thành phẩm cao cấp, ảnh hưởng trực tiếp đến hình ảnh dán tem chính hãng dán của DKBike.';
+            defaultRoot = 'Cữ gá dán tem định vị thủ công bị rơ lỏng mài mòn dải chặn căn mép.';
+            defaultTreatment = 'Chấn chỉnh và thay thế cữ định vị chặn dán cơ khí mới, bổ sung thước laser định hướng dán tem chuẩn chỉ.';
+          } else if (cleanText.includes('phanh') || cleanText.includes('bó cứng') || cleanText.includes('bó')) {
+            defaultImpact = 'Kẹt phanh bó đĩa tăng sinh nhiệt ma sát cao, làm mòn má đĩa phanh nhanh và tiêu hao năng lượng pin lớn.';
+            defaultRoot = 'Hành trình tay bóp phanh xiết quá mức dải tự do hành trình tay, pittông xilanh kẹt bẩn dầu thủy lực hồi trễ.';
+            defaultTreatment = 'Căn chỉnh khe hở má phanh và dải bóp phanh tự do đạt 10-15mm tiêu chuẩn, xả gió bọt khí đường ống phanh dầu.';
+          }
+
+          return {
+            text,
+            count: data.count,
+            evaluation: firstWithDetails?.evaluation || defaultImpact,
+            rootCause: firstWithDetails?.rootCause || defaultRoot,
+            treatment: firstWithDetails?.treatment || defaultTreatment
+          };
+        })
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+
+      if (top3ForModel.length > 0) {
+        top3ForModel.forEach((item, idx) => {
+          addRow([
+            mName,
+            `#${idx + 1}`,
+            item.text,
+            `${item.count} xe`,
+            item.evaluation,
+            item.rootCause,
+            item.treatment
+          ], 'data-row');
+        });
+      } else {
+        addRow([mName, "-", "Không có lỗi ghi nhận", "0 xe", "-", "-", "-"], 'data-row');
+      }
+    });
+
+    const wb = XLSXStyle.utils.book_new();
+    const ws = XLSXStyle.utils.aoa_to_sheet(aoaData);
+
+    const styleSheet = (wsTarget: any, trackerList: any[]) => {
+      const decodedRange = XLSXStyle.utils.decode_range(wsTarget['!ref'] || 'A1:A1');
+      const totalRows = decodedRange.e.r + 1;
+      const totalCols = decodedRange.e.c + 1;
+
+      const borderThinGray = { style: "thin", color: { rgb: "E2E8F0" } };
+      const borderMediumGray = { style: "medium", color: { rgb: "94A3B8" } };
+      const cellBordersNormal = {
+        top: borderThinGray, bottom: borderThinGray,
+        left: borderThinGray, right: borderThinGray
+      };
+
+      for (let r = 0; r < totalRows; r++) {
+        const tracker = trackerList[r];
+        const rType = tracker?.type;
+
+        for (let c = 0; c < totalCols; c++) {
+          const cellRef = XLSXStyle.utils.encode_cell({ r, c });
+          let cell = wsTarget[cellRef];
+          if (!cell) {
+            cell = wsTarget[cellRef] = { t: 's', v: '' };
+          }
+
+          // Default styling
+          cell.s = {
+            font: { name: "Segoe UI", sz: 10, color: { rgb: "334155" } },
+            alignment: { vertical: "center", wrapText: true }
+          };
+
+          if (rType === 'header-company') {
+            cell.s = {
+              font: { name: "Segoe UI", sz: 11, bold: true, color: { rgb: "1E3A8A" } },
+              alignment: { horizontal: "left", vertical: "center" }
+            };
+          } else if (rType === 'header-department') {
+            cell.s = {
+              font: { name: "Segoe UI", sz: 9.5, italic: true, color: { rgb: "475569" } },
+              alignment: { horizontal: "left", vertical: "center" }
+            };
+          } else if (rType === 'header-title') {
+            cell.s = {
+              font: { name: "Segoe UI", sz: 14, bold: true, color: { rgb: "1E3A8A" } },
+              alignment: { horizontal: "center", vertical: "center" }
+            };
+          } else if (rType === 'header-subtitle') {
+            cell.s = {
+              font: { name: "Segoe UI", sz: 10, bold: true, color: { rgb: "475569" } },
+              alignment: { horizontal: "center", vertical: "center" }
+            };
+          } else if (rType === 'header-date') {
+            cell.s = {
+              font: { name: "Segoe UI", sz: 9.5, italic: true, color: { rgb: "64748B" } },
+              alignment: { horizontal: "center", vertical: "center" }
+            };
+          } else if (rType === 'section-header') {
+            cell.s = {
+              fill: { fgColor: { rgb: "F1F5F9" } },
+              font: { name: "Segoe UI", sz: 11, bold: true, color: { rgb: "1E3A8A" } },
+              alignment: { horizontal: "left", vertical: "center" },
+              border: { bottom: borderMediumGray, top: borderThinGray }
+            };
+          } else if (rType === 'column-header') {
+            cell.s = {
+              fill: { fgColor: { rgb: "1E3A8A" } },
+              font: { name: "Segoe UI", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
+              alignment: { horizontal: "center", vertical: "center", wrapText: true },
+              border: cellBordersNormal
+            };
+          } else if (rType === 'data-row') {
+            cell.s = {
+              font: { name: "Segoe UI", sz: 10, color: { rgb: "334155" } },
+              alignment: { 
+                horizontal: c === 0 || c >= 4 ? "left" : "center", 
+                vertical: "center",
+                wrapText: true 
+              },
+              border: cellBordersNormal
+            };
+          } else if (rType === 'data-row-success') {
+            cell.s = {
+              fill: { fgColor: { rgb: "ECFDF5" } },
+              font: { name: "Segoe UI", sz: 10, bold: true, color: { rgb: "047857" } },
+              alignment: { horizontal: c === 0 ? "left" : "center", vertical: "center" },
+              border: cellBordersNormal
+            };
+          } else if (rType === 'data-row-danger') {
+            cell.s = {
+              fill: { fgColor: { rgb: "FCE8E6" } },
+              font: { name: "Segoe UI", sz: 10, bold: true, color: { rgb: "A51D24" } },
+              alignment: { horizontal: c === 0 ? "left" : "center", vertical: "center" },
+              border: cellBordersNormal
+            };
+          }
+        }
+      }
+    };
+
+    styleSheet(ws, rowTracker);
+    ws['!merges'] = merges;
+
+    // Set row heights
+    const heights: any[] = [];
+    rowTracker.forEach((tracker) => {
+      const typeStr = tracker.type;
+      if (typeStr === 'header-company') heights.push({ hpt: 24 });
+      else if (typeStr === 'header-department') heights.push({ hpt: 18 });
+      else if (typeStr === 'header-title') heights.push({ hpt: 30 });
+      else if (typeStr === 'header-subtitle') heights.push({ hpt: 18 });
+      else if (typeStr === 'header-date') heights.push({ hpt: 18 });
+      else if (typeStr === 'section-header') heights.push({ hpt: 24 });
+      else if (typeStr === 'column-header') heights.push({ hpt: 24 });
+      else if (typeStr === 'data-row' || typeStr === 'data-row-success' || typeStr === 'data-row-danger') {
+        heights.push({ hpt: 22 });
+      } else {
+        heights.push({ hpt: 12 });
+      }
+    });
+    ws['!rows'] = heights;
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 18 }, // Dòng Xe
+      { wch: 10 }, // Hạng Lỗi
+      { wch: 25 }, // Khuyết tật
+      { wch: 12 }, // Tần suất
+      { wch: 35 }, // Đánh giá
+      { wch: 40 }, // Nguyên nhân
+      { wch: 45 }  // Phương án CAPA
+    ];
+
+    XLSXStyle.utils.book_append_sheet(wb, ws, "Báo cáo OQC");
+    XLSXStyle.writeFile(wb, filename);
+  };
+
+  // Local form states for Ecount API
+  const [configComCode, setConfigComCode] = useState("DKBIKE_CORP");
+  const [configUserId, setConfigUserId] = useState("thaonguyen_qc");
+  const [configApiKey, setConfigApiKey] = useState("ecount_demo_key_951f496d0acb");
+  const [configZone, setConfigZone] = useState("ia");
+  const [configEnabled, setConfigEnabled] = useState(true);
+  const [configSimulation, setConfigSimulation] = useState(true);
+  const [configInterval, setConfigInterval] = useState("30");
+
+  React.useEffect(() => {
+    if (showEcountSyncModal) {
+      setConfigComCode(ecountConfig.comCode);
+      setConfigUserId(ecountConfig.userId);
+      setConfigApiKey(ecountConfig.apiKey);
+      setConfigZone(ecountConfig.zoneCode ?? "ia");
+      setConfigEnabled(ecountConfig.enabled);
+      setConfigSimulation(ecountConfig.isSimulation);
+      setConfigInterval(ecountConfig.syncInterval ?? "30");
+    }
+  }, [showEcountSyncModal, ecountConfig]);
+
+  // Synchronized Master Model Names
+  const modelNames = React.useMemo(() => {
+    return models && models.length > 0 
+      ? models.map((m: any) => m.name) 
+      : ['DK D2', 'DK EZ3', 'DK Gogo Smart', 'DK Nova', 'DK Roma SX V2', 'DK S3', 'DK V1', 'DK V2'];
+  }, [models]);
+
+  // New IQC Form State
+  const [newIqcSupplierId, setNewIqcSupplierId] = useState('');
+  const [newIqcContent, setNewIqcContent] = useState('');
+  const [newIqcTotalQty, setNewIqcTotalQty] = useState(1000);
+  const [newIqcAqlLevel, setNewIqcAqlLevel] = useState<AQLLevel>(1.5);
+  const [newIqcInspectionLevel, setNewIqcInspectionLevel] = useState<InspectionLevel>('II');
+  const [newIqcCheckedQty, setNewIqcCheckedQty] = useState(() => calculateAQLSample(1000, 0, 1.5, 'II').sampleSize);
+  const [newIqcFailedQty, setNewIqcFailedQty] = useState(0);
+  const [newIqcCheckedBy, setNewIqcCheckedBy] = useState('Đoàn Anh Hùng');
+  const [newIqcItemSummary, setNewIqcItemSummary] = useState('');
+  const [newIqcResult, setNewIqcResult] = useState<'Đạt' | 'Lỗi'>('Đạt');
+  const [newIqcDefectDetail, setNewIqcDefectDetail] = useState('');
+  const [newIqcDate, setNewIqcDate] = useState(() => {
+    const today = new Date();
+    return `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+  });
+  const [newIqcImageUrl, setNewIqcImageUrl] = useState('');
+  const [newIqcImageUrls, setNewIqcImageUrls] = useState<string[]>([]);
+
+  // AQL Interactive Quick Calculator Tool State
+  const [showAqlCalculator, setShowAqlCalculator] = useState(false);
+  const [calcAqlLotSize, setCalcAqlLotSize] = useState<number>(1000);
+  const [calcAqlLevel, setCalcAqlLevel] = useState<AQLLevel>(1.5);
+  const [calcAqlInspectionLevel, setCalcAqlInspectionLevel] = useState<InspectionLevel>('II');
+
+  // New PQC Form State
+  const [newPqcLsx, setNewPqcLsx] = useState('26-90');
+  const [newPqcModel, setNewPqcModel] = useState('DK Roma SX V2');
+  const [newPqcDate, setNewPqcDate] = useState(() => {
+    const today = new Date();
+    return `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+  });
+  const [newPqcQty, setNewPqcQty] = useState(100);
+  const [newPqcCheckedBy, setNewPqcCheckedBy] = useState('Nguyễn Xuân Thao');
+  const [newPqcFindings, setNewPqcFindings] = useState('');
+  const [newPqcStatus, setNewPqcStatus] = useState<'Đang cải tiến' | 'Đã cải tiến' | 'Đạt hoàn toàn'>('Đang cải tiến');
+  const [newPqcImageUrl, setNewPqcImageUrl] = useState('');
+  const [newPqcImageUrls, setNewPqcImageUrls] = useState<string[]>([]);
+
+  // New OQC Form State
+  const [newOqcPartCode, setNewOqcPartCode] = useState('TEMDV11202');
+  const [newOqcSerialNo, setNewOqcSerialNo] = useState('');
+  const [newOqcModel, setNewOqcModel] = useState('DK Roma SX V2');
+  const [newOqcColor, setNewOqcColor] = useState('Đen khói');
+  const [newOqcStatus, setNewOqcStatus] = useState<'Đạt' | 'Lỗi' | 'Chưa kiểm tra'>('Đạt');
+  const [newOqcDefectDetail, setNewOqcDefectDetail] = useState('');
+  const [newOqcFailedCount, setNewOqcFailedCount] = useState(0);
+  const [newOqcRootCause, setNewOqcRootCause] = useState('');
+  const [newOqcLsx, setNewOqcLsx] = useState('26-15');
+  const [newOqcCheckTime, setNewOqcCheckTime] = useState('14:30');
+  const [newOqcDate, setNewOqcDate] = useState(() => {
+    const today = new Date();
+    return `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+  });
+  const [newOqcCheckedBy, setNewOqcCheckedBy] = useState('Liễu Tùng Lâm');
+  const [newOqcImageUrl, setNewOqcImageUrl] = useState('');
+  const [newOqcEvaluation, setNewOqcEvaluation] = useState('');
+  const [newOqcTreatment, setNewOqcTreatment] = useState('');
+
+  // Sực dỡ đồng bộ hóa ban đầu với Master Models
+  React.useEffect(() => {
+    if (modelNames && modelNames.length > 0) {
+      if (!modelNames.includes(newPqcModel)) {
+        setNewPqcModel(modelNames[0]);
+      }
+      if (!modelNames.includes(newOqcModel)) {
+        setNewOqcModel(modelNames[4] || modelNames[0]);
+      }
+    }
+  }, [modelNames]);
+
+  // Fetch Ecount ERP integration configuration on mount
+  React.useEffect(() => {
+    fetch('/api/ecount/config')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.comCode) {
+          setEcountConfig(data);
+        }
+      })
+      .catch(err => console.error("Error fetching Ecount integration config on mount:", err));
+  }, []);
+
+  // Mặc định không chạy quét tự động ngầm để tránh gây loạn giao diện và giật lag cho người dùng.
+  // Đồng bộ hoàn toàn chủ động bằng nút bấm tích hợp thủ công.
+
+  const renderImageUploadField = (
+    imageUrl: string,
+    setImageUrl: (url: string) => void,
+    labelText: string = "Hình ảnh minh họa"
+  ) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        try {
+          // Tự động nén ảnh xuống tối đa 800px và mức chất lượng 0.5 để tiết kiệm tối đa bộ nhớ & băng thông đám mây
+          const compressed = await compressImageFile(file, 800, 800, 0.5);
+          if (compressed) {
+            setImageUrl(compressed);
+          } else {
+            // fallback
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              setImageUrl(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+          }
+        } catch (err) {
+          console.error("[Image Compression Error]:", err);
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setImageUrl(reader.result as string);
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    };
+
+    const clearImage = () => {
+      setImageUrl('');
+    };
+
+    return (
+      <div className="space-y-1">
+        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">{labelText}</label>
+        
+        {imageUrl ? (
+          <div className="relative border border-slate-200 rounded p-2 bg-slate-50 flex items-center justify-between gap-3 animate-in fade-in duration-200">
+            <div className="flex items-center gap-2">
+              <img src={imageUrl} alt="Preview" className="w-10 h-10 object-cover rounded border border-slate-350 shadow-sm" />
+              <span className="text-[10px] text-slate-500 font-bold max-w-[200px] truncate">✓ Đã đính kèm ảnh minh họa</span>
+            </div>
+            <button
+              type="button"
+              onClick={clearImage}
+              className="text-red-500 hover:text-red-700 text-[10px] font-black uppercase px-2 py-1 rounded hover:bg-red-50"
+            >
+              Gỡ bỏ
+            </button>
+          </div>
+        ) : (
+          <div className="border border-dashed border-slate-300 hover:border-indigo-500 rounded p-4 bg-slate-50/50 flex flex-col items-center justify-center text-center transition cursor-pointer relative">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              title="Kéo thả hoặc Click chọn tệp ảnh minh hoạ"
+            />
+            <Upload className="w-5 h-5 text-slate-400 mb-1" />
+            <p className="text-[10px] font-bold text-slate-500">Đính kèm ảnh khuyết điểm lỗi</p>
+            <p className="text-[9px] text-slate-400">Click chọn hoặc kéo thả tệp tại đây (JPEG, PNG dưới 2MB)</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // handlers
+  const handleCreateSupplierAuditRequest = (e: FormEvent) => {
+    e.preventDefault();
+    if (!newAuditComponentName.trim()) {
+      alert('Vui lòng nhập tên linh kiện cần giám sát!');
+      return;
+    }
+    if (!newAuditSpec.trim()) {
+      alert('Vui lòng nhập chỉ tiêu / thông số kỹ thuật yêu cầu!');
+      return;
+    }
+    const today = new Date().toISOString().split('T')[0];
+    const linkedLog = dailyLogs.find(log => log.stt === newAuditLinkedDailyLogStt);
+    const newAudit: SupplierProductionAudit = {
+      id: `SPA-${Date.now().toString().slice(-4)}`,
+      supplierName: newAuditSupplierName,
+      componentName: newAuditComponentName,
+      requestDate: today,
+      targetSpecification: newAuditSpec,
+      requirementType: newAuditReqType,
+      status: 'pending',
+      supplierNote: newAuditNote || '',
+      checkedBy: 'Mr. Thao',
+      dailyLogStt: newAuditLinkedDailyLogStt,
+      dailyLogTitle: linkedLog ? linkedLog.content : undefined
+    };
+    setSupplierProductionAudits([newAudit, ...supplierProductionAudits]);
+    setShowAddSupplierAuditModal(false);
+    setNewAuditComponentName('');
+    setNewAuditSpec('');
+    setNewAuditNote('');
+    setNewAuditLinkedDailyLogStt(undefined);
+  };
+
+  const handleSupplierSubmitResponseSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!supplierResponseAudit) return;
+    
+    const updated = supplierProductionAudits.map(aud => {
+      if (aud.id === supplierResponseAudit.id) {
+        return {
+          ...aud,
+          status: 'updated' as const,
+          actualValueStr: responseValueStr,
+          imageUrl: responseImageUrl || "",
+          supplierNote: responseSupplierNote
+        };
+      }
+      return aud;
+    });
+    setSupplierProductionAudits(updated);
+    setSupplierResponseAudit(null);
+    setResponseValueStr('');
+    setResponseImageUrl('');
+    setResponseSupplierNote('');
+
+    const found = updated.find(a => a.id === supplierResponseAudit.id);
+    if (found && selectedSupplierAuditForDetail?.id === supplierResponseAudit.id) {
+      setSelectedSupplierAuditForDetail(found);
+    }
+  };
+
+  const handleDkAuditEvaluationSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!evaluateAudit) return;
+    
+    const updated = supplierProductionAudits.map(aud => {
+      if (aud.id === evaluateAudit.id) {
+        return {
+          ...aud,
+          status: evalStatus,
+          dkNote: evalDkNote
+        };
+      }
+      return aud;
+    });
+    setSupplierProductionAudits(updated);
+    setEvaluateAudit(null);
+    setEvalDkNote('');
+
+    const found = updated.find(a => a.id === evaluateAudit.id);
+    if (found && selectedSupplierAuditForDetail?.id === evaluateAudit.id) {
+      setSelectedSupplierAuditForDetail(found);
+    }
+  };
+  const handleAddIqcRecord = (e: FormEvent) => {
+    e.preventDefault();
+    if (!newIqcContent.trim()) {
+      alert('Vui lòng nhập nội dung phiếu nhập kiểm!');
+      return;
+    }
+    const targetId = newIqcSupplierId || suppliers[0]?.id || 'NCC00174';
+    const selectedSup = suppliers.find(s => s.id === targetId);
+    const newRecord: IQCRecord = {
+      id: `IQC-${Date.now().toString().slice(-4)}`,
+      date: newIqcDate,
+      supplierId: targetId,
+      supplierName: selectedSup?.name || 'Công ty Cao Su KENDA Việt Nam',
+      content: newIqcContent,
+      totalQty: Number(newIqcTotalQty),
+      checkedQty: Number(newIqcCheckedQty),
+      checkedBy: newIqcCheckedBy,
+      failedQty: Number(newIqcFailedQty),
+      defectRate: Number(newIqcTotalQty) > 0 ? Number(((Number(newIqcFailedQty) / Number(newIqcTotalQty)) * 100).toFixed(2)) : 0,
+      itemSummary: newIqcItemSummary || newIqcContent,
+      result: Number(newIqcFailedQty) > 0 ? 'Lỗi' : 'Đạt',
+      defectDetail: newIqcDefectDetail,
+      imageUrl: newIqcImageUrls[0] || '',
+      imageUrls: newIqcImageUrls
+    };
+    setIqcRecords([newRecord, ...iqcRecords]);
+    setShowAddIqcModal(false);
+    setNewIqcContent('');
+    setNewIqcSupplierId('');
+    setNewIqcTotalQty(1000);
+    setNewIqcCheckedQty(calculateAQLSample(1000, 0, newIqcAqlLevel, newIqcInspectionLevel).sampleSize);
+    setNewIqcFailedQty(0);
+    setNewIqcItemSummary('');
+    setNewIqcDefectDetail('');
+    setNewIqcImageUrl('');
+    setNewIqcImageUrls([]);
+    alert('Thêm bản ghi kiểm nhập IQC thành công!');
+  };
+
+  const parsePastedEcountText = (text: string): EcountRow[] => {
+    if (!text.trim()) return [];
+    const lines = text.split('\n');
+    const rows: EcountRow[] = [];
+    
+    // Dynamic column index map with original fallbacks
+    let colIndices = {
+      date: 0,
+      supplierCode: 1,
+      supplierName: 2,
+      content: 3,
+      quantity: 4,
+      amountText: 5,
+      locationCode: 6,
+      locationName: 7,
+      picName: 9,
+      itemSummary: -1
+    };
+
+    let hasParsedHeader = false;
+
+    for (let idx = 0; idx < lines.length; idx++) {
+      const line = lines[idx].trim();
+      if (!line) continue;
+      
+      const cols = line.includes('\t') ? line.split('\t') : line.split(',');
+      
+      const isHeader = cols.some(c => {
+        const cl = c.toLowerCase();
+        return cl.includes('ngày') || cl.includes('nhà cung cấp') || cl.includes('nội dung') || cl.includes('tên mặt hàng') || cl.includes('tóm tắt');
+      });
+
+      if (isHeader) {
+        cols.forEach((col, cIdx) => {
+          const cl = col.toLowerCase().trim();
+          if (cl.includes('ngày') || cl.includes('date')) colIndices.date = cIdx;
+          else if (cl.includes('mã khách') || cl.includes('mã nhà cung') || cl.includes('mã ncc') || cl.includes('supplier code') || (cl.includes('mã') && cl.includes('cung cấp'))) colIndices.supplierCode = cIdx;
+          else if (cl.includes('nhà cung cấp') || cl.includes('supplier name') || cl === 'ncc') colIndices.supplierName = cIdx;
+          else if (cl === 'nội dung' || cl === 'content' || cl.includes('nội dung')) colIndices.content = cIdx;
+          else if (cl.includes('số lượng') || cl.includes('quantity') || cl === 'qty') colIndices.quantity = cIdx;
+          else if (cl.includes('số tiền') || cl.includes('amount')) colIndices.amountText = cIdx;
+          else if (cl.includes('mã địa điểm') || cl.includes('location code')) colIndices.locationCode = cIdx;
+          else if (cl.includes('tên địa điểm') || cl.includes('location name')) colIndices.locationName = cIdx;
+          else if (cl.includes('tên người phụ trách') || cl.includes('người phụ trách') || cl.includes('pic')) colIndices.picName = cIdx;
+          else if (cl.includes('tên mặt hàng') || cl.includes('tóm tắt') || cl.includes('mặt hàng')) colIndices.itemSummary = cIdx;
+        });
+        hasParsedHeader = true;
+        continue;
+      }
+      
+      if (cols.length < 3) continue;
+      
+      const rawDate = cols[colIndices.date]?.trim() || '';
+      const cleanDate = rawDate.split(' ')[0] || rawDate;
+      const supplierCode = cols[colIndices.supplierCode]?.trim() || '';
+      const supplierName = cols[colIndices.supplierName]?.trim() || '';
+      const content = cols[colIndices.content]?.trim() || '';
+      
+      let rawQtyStr = cols[colIndices.quantity]?.trim() || '1';
+      rawQtyStr = rawQtyStr.replace(/,/g, '').replace(/\.00$/, '');
+      const quantity = parseInt(rawQtyStr) || 1;
+      
+      const amountText = cols[colIndices.amountText]?.trim() || '';
+      const locationCode = cols[colIndices.locationCode]?.trim() || '';
+      const locationName = cols[colIndices.locationName]?.trim() || '';
+      const picName = cols[colIndices.picName]?.trim() || '';
+      const itemSummary = colIndices.itemSummary !== -1 ? cols[colIndices.itemSummary]?.trim() || '' : '';
+      
+      const absQty = Math.abs(quantity);
+      const sampleQty = absQty > 0 ? calculateAQLSample(absQty, 0, 1.5, 'II').sampleSize : 1;
+      
+      rows.push({
+        date: cleanDate,
+        supplierCode,
+        supplierName,
+        content,
+        quantity,
+        amountText,
+        locationCode,
+        locationName,
+        picName,
+        itemSummary,
+        checked: absQty > 0,
+        sampleQty,
+        failedQty: 0,
+        defectDetail: ''
+      });
+    }
+    return rows;
+  };
+
+  const handleEcountPasteChange = (val: string) => {
+    setEcountPasteText(val);
+    try {
+      const parsed = parsePastedEcountText(val);
+      setEcountPasteRows(parsed);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSyncEcountToIqc = (targetRows: EcountRow[]) => {
+    const selected = targetRows.filter(r => r.checked);
+    if (selected.length === 0) {
+      alert("Vui lòng chọn ít nhất một lô hàng (đánh dấu tích chọn bên trái) để đồng bộ!");
+      return;
+    }
+
+    const newRecords: IQCRecord[] = selected.map((row, index) => {
+      const matchedSup = suppliers.find(s => 
+        (s.id || '').toUpperCase() === (row.supplierCode || '').toUpperCase() || 
+        (s.name || '').toLowerCase().includes((row.supplierName || '').toLowerCase()) ||
+        (row.supplierName || '').toLowerCase().includes((s.name || '').toLowerCase())
+      );
+      const finalSupplierId = matchedSup ? matchedSup.id : (row.supplierCode || `NCC${Math.floor(10000 + Math.random() * 90000)}`);
+      const finalSupplierName = matchedSup ? matchedSup.name : row.supplierName;
+
+      const totalQty = Math.max(1, Math.abs(row.quantity));
+      const checkedQty = Number(row.sampleQty) || calculateAQLSample(totalQty, Number(row.failedQty) || 0, 1.5, 'II').sampleSize;
+      const failedQty = Number(row.failedQty) || 0;
+      const defectRate = checkedQty > 0 ? Number(((failedQty / checkedQty) * 100).toFixed(2)) : 0;
+      const result = failedQty > 0 ? 'Lỗi' : 'Đạt';
+
+      return {
+        id: `IQC-EC-${Date.now().toString().slice(-4)}${index}`,
+        date: row.date,
+        supplierId: finalSupplierId,
+        supplierName: finalSupplierName,
+        content: row.content,
+        totalQty,
+        checkedQty,
+        checkedBy: (row.picName || 'Trưởng nhóm IQC').replace(/\./g, '').trim(),
+        failedQty,
+        defectRate,
+        itemSummary: row.itemSummary || row.content,
+        result,
+        defectDetail: row.defectDetail || '',
+        imageUrl: ''
+      };
+    });
+
+    setIqcRecords([...newRecords, ...iqcRecords]);
+    setShowEcountSyncModal(false);
+    
+    // Reset paste state
+    setEcountPasteText('');
+    setEcountPasteRows([]);
+    // Reset checked preloaded state
+    setEcountDataList(ECOUNT_PRELOADED_DATA.map(item => ({ ...item })));
+
+    alert(`🎉 Đã đồng bộ thành công ${newRecords.length} phiếu kiểm nhập IQC từ Ecount.com vào kho dữ liệu quy trình!`);
+  };
+
+  const handleImportIqcSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setIqcImportError('');
+    if (!iqcImportText.trim()) {
+      setIqcImportError('Vui lòng dán dữ liệu kiểm nhập IQC!');
+      return;
+    }
+
+    try {
+      const lines = iqcImportText.split('\n');
+      const parsedRecords: IQCRecord[] = [];
+      let skippedCount = 0;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // Split by tab or comma
+        const cols = line.includes('\t') ? line.split('\t') : line.split(',');
+
+        // Detect and skip headers
+        if (i === 0 && (
+          cols[0].toLowerCase().includes('ngày') || 
+          cols[0].toLowerCase().includes('date') || 
+          cols[1]?.toLowerCase().includes('nhà cung cấp') || 
+          cols[1]?.toLowerCase().includes('supplier')
+        )) {
+          skippedCount++;
+          continue;
+        }
+
+        if (cols.length < 3) {
+          skippedCount++;
+          continue;
+        }
+
+        const dateVal = cols[0]?.trim() || '23/05/2026';
+        const supplierNameVal = cols[1]?.trim() || 'Công ty Cao Su KENDA Việt Nam';
+        const contentVal = cols[2]?.trim() || 'Linh kiện xe điện';
+        const totalQtyVal = Number(cols[3]?.trim()) || 1000;
+        const failedQtyVal = Number(cols[5]?.trim()) || 0;
+        const checkedQtyVal = Number(cols[4]?.trim()) || calculateAQLSample(totalQtyVal, failedQtyVal, 1.5, 'II').sampleSize;
+        const checkedByVal = cols[6]?.trim() || 'Đoàn Anh Hùng';
+        const defectDetailVal = cols[7]?.trim() || '';
+        const itemSummaryVal = cols[8]?.trim() || contentVal;
+
+        const defectRateVal = totalQtyVal > 0 ? Number(((failedQtyVal / totalQtyVal) * 100).toFixed(2)) : 0;
+        const resultVal = failedQtyVal > 0 ? 'Lỗi' : 'Đạt';
+
+        // Match supplier from master list to avoid unmatched names or IDs
+        const matchedSupplier = suppliers.find(s => 
+          s.name.toLowerCase().replace(/[\s,.-]/g, '') === supplierNameVal.toLowerCase().replace(/[\s,.-]/g, '') ||
+          s.name.toLowerCase().includes(supplierNameVal.toLowerCase()) || 
+          supplierNameVal.toLowerCase().includes(s.name.toLowerCase()) ||
+          s.id.toLowerCase() === supplierNameVal.toLowerCase()
+        );
+
+        const finalSupplierId = matchedSupplier ? matchedSupplier.id : (suppliers[0]?.id || 'NCC00174');
+        const finalSupplierName = matchedSupplier ? matchedSupplier.name : supplierNameVal;
+
+        parsedRecords.push({
+          id: `IQC-${Date.now().toString().slice(-4)}${i}`,
+          date: dateVal,
+          supplierId: finalSupplierId,
+          supplierName: finalSupplierName,
+          content: contentVal,
+          totalQty: totalQtyVal,
+          checkedQty: checkedQtyVal,
+          checkedBy: checkedByVal,
+          failedQty: failedQtyVal,
+          defectRate: defectRateVal,
+          itemSummary: itemSummaryVal,
+          result: resultVal,
+          defectDetail: defectDetailVal
+        });
+      }
+
+      if (parsedRecords.length === 0) {
+        setIqcImportError('Không tìm thấy bản ghi hợp lệ nào! Vui lòng kiểm tra định dạng dán.');
+        return;
+      }
+
+      setIqcRecords([...parsedRecords, ...iqcRecords]);
+      setIqcImportText('');
+      setShowImportIqcModal(false);
+      alert(`Nhập thành công ${parsedRecords.length} phiếu IQC nhập kiểm đầu vào! (Bỏ qua: ${skippedCount} dòng)`);
+    } catch (err: any) {
+      setIqcImportError(`Lỗi phân rã dữ liệu: ${err.message || err}`);
+    }
+  };
+
+  const handleEditIqcClick = (record: IQCRecord) => {
+    setEditingIqcRecord({ ...record });
+    setShowEditIqcModal(true);
+  };
+
+  const handleSaveEditIqc = (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingIqcRecord) return;
+    
+    // Recalculate result & rate
+    const totalQty = Number(editingIqcRecord.totalQty);
+    const failedQty = Number(editingIqcRecord.failedQty);
+    const defectRate = totalQty > 0 ? Number(((failedQty / totalQty) * 100).toFixed(2)) : 0;
+    const result = failedQty > 0 ? 'Lỗi' : 'Đạt';
+
+    const updated = {
+      ...editingIqcRecord,
+      totalQty,
+      checkedQty: Number(editingIqcRecord.checkedQty),
+      failedQty,
+      defectRate,
+      result
+    };
+
+    setIqcRecords(iqcRecords.map(r => r.id === updated.id ? updated : r));
+    setShowEditIqcModal(false);
+    setEditingIqcRecord(null);
+    alert('Cập nhật phiếu nhập kiểm IQC thành công!');
+  };
+
+  const handleDeleteIqcClick = (id: string) => {
+    if (window.confirm('Bạn có chắc chắn muốn xóa phiếu kiểm nhập IQC này không? Hành động này không thể khôi phục.')) {
+      setIqcRecords(iqcRecords.filter(r => r.id !== id));
+      alert('Đã xóa phiếu kiểm nhập IQC thành công! Hệ thống đang đồng bộ tự động lên Cloud...');
+    }
+  };
+
+  const handleEditPqcClick = (record: PQCRecord) => {
+    setEditingPqcRecord({ ...record });
+    setShowEditPqcModal(true);
+  };
+
+  const handleSaveEditPqc = (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingPqcRecord) return;
+    if (!editingPqcRecord.findings.trim()) {
+      alert('Vui lòng nhập nội dung đánh giá vấn đề công đoạn!');
+      return;
+    }
+
+    setPqcRecords(pqcRecords.map(r => r.id === editingPqcRecord.id ? editingPqcRecord : r));
+    setShowEditPqcModal(false);
+    setEditingPqcRecord(null);
+    alert('Cập nhật bản ghi kiểm soát công đoạn PQC thành công!');
+  };
+
+  const handleDeletePqcClick = (id: string) => {
+    if (window.confirm('Bạn có chắc chắn muốn xóa bản ghi kiểm soát công đoạn PQC này không? Hành động này không thể khôi phục.')) {
+      setPqcRecords(pqcRecords.filter(r => r.id !== id));
+      alert('Đã xóa bản ghi PQC thành công! Hệ thống đang đồng bộ tự động lên Cloud...');
+    }
+  };
+
+  const handleDeleteOqcClick = (id: string) => {
+    if (window.confirm('Bạn có chắc chắn muốn xóa bản ghi đóng thùng OQC này không? Hành động này không thể khôi phục.')) {
+      setOqcRecords(oqcRecords.filter(r => r.id !== id));
+      alert('Đã xóa bản ghi OQC thành công! Hệ thống đang đồng bộ tự động lên Cloud...');
+    }
+  };
+
+  const handleBulkDeleteIqc = () => {
+    if (selectedIqcIds.length === 0) {
+      alert('Vui lòng chọn ít nhất một phiếu IQC để xóa!');
+      return;
+    }
+    if (window.confirm(`Bạn có chắc chắn muốn xóa hàng loạt ${selectedIqcIds.length} phiếu IQC đã chọn không?`)) {
+      setIqcRecords(iqcRecords.filter(r => !selectedIqcIds.includes(r.id)));
+      setSelectedIqcIds([]);
+      alert(`Đã xóa thành công ${selectedIqcIds.length} phiếu IQC! Hệ thống đang đồng bộ tự động lên Cloud...`);
+    }
+  };
+
+  const handleBulkDeleteOqc = () => {
+    if (selectedOqcIds.length === 0) {
+      alert('Vui lòng chọn ít nhất một bản ghi OQC để xóa!');
+      return;
+    }
+    if (window.confirm(`Bạn có chắc chắn muốn xóa hàng loạt ${selectedOqcIds.length} bản ghi OQC đã chọn không?`)) {
+      setOqcRecords(oqcRecords.filter(r => !selectedOqcIds.includes(r.id)));
+      setSelectedOqcIds([]);
+      alert(`Đã xóa thành công ${selectedOqcIds.length} bản ghi OQC! Hệ thống đang đồng bộ tự động lên Cloud...`);
+    }
+  };
+
+  const handleExportIqcCSV = () => {
+    const csvHeaders = ["Mã IQC", "Ngày kiểm tra", "Nhà cung cấp", "Nội dung", "Tổng số lượng", "Số lượng kiểm", "Người kiểm", "Số lượng lỗi", "Tỷ lệ lỗi (%)", "Kết quả"];
+    const csvContent = iqcRecords.map(r => [
+      r.id,
+      r.date,
+      r.supplierName,
+      r.content,
+      r.totalQty,
+      r.checkedQty,
+      r.checkedBy,
+      r.failedQty,
+      r.defectRate + "%",
+      r.result
+    ]);
+    
+    let csvString = "\uFEFF" + [csvHeaders.join(","), ...csvContent.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `Bao_cao_IQC_Thang_4_2026.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleAddPqcRecord = (e: FormEvent) => {
+    e.preventDefault();
+    if (!newPqcFindings.trim()) {
+      alert('Vui lòng nhập nội dung đánh giá vấn đề công đoạn!');
+      return;
+    }
+    const newRecord: PQCRecord = {
+      id: `PQC-${Date.now().toString().slice(-4)}`,
+      lsx: newPqcLsx,
+      model: newPqcModel,
+      date: newPqcDate,
+      qty: Number(newPqcQty),
+      checkedBy: newPqcCheckedBy,
+      findings: newPqcFindings,
+      status: newPqcStatus,
+      imageUrl: newPqcImageUrls[0] || '',
+      imageUrls: newPqcImageUrls
+    };
+    setPqcRecords([newRecord, ...pqcRecords]);
+    setShowAddPqcModal(false);
+    setNewPqcFindings('');
+    setNewPqcQty(100);
+    setNewPqcImageUrl('');
+    setNewPqcImageUrls([]);
+    alert('Thêm bản ghi kiểm soát công đoạn PQC thành công!');
+  };
+
+  const handleExportPqcCSV = () => {
+    const csvHeaders = ["Mã PQC", "Lệnh sản xuất", "Model", "Ngày kiểm tra", "SLLR xe", "Nhân sự kiểm tra", "Đánh giá vấn đề công đoạn", "Trạng thái"];
+    const csvContent = pqcRecords.map(r => [
+      r.id,
+      r.lsx,
+      r.model,
+      r.date,
+      r.qty,
+      r.checkedBy,
+      r.findings,
+      r.status
+    ]);
+    
+    let csvString = "\uFEFF" + [csvHeaders.join(","), ...csvContent.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `Bao_cao_PQC_Lap_rap_2026.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleAddOqcRecord = (e: FormEvent) => {
+    e.preventDefault();
+    if (!newOqcSerialNo.trim()) {
+      alert('Vui lòng nhập số Sêri!');
+      return;
+    }
+    
+    // Tự động chuyển lỗi xước, thiếu linh kiện thành Đạt
+    let finalStatus = newOqcStatus;
+    const combinedTexts = (newOqcDefectDetail + " " + newOqcRootCause).toLowerCase();
+    const isSpecialDat = 
+      combinedTexts.includes('xước') || 
+      combinedTexts.includes('xuoc') || 
+      combinedTexts.includes('thiếu linh kiện') || 
+      combinedTexts.includes('thieu linh kien') ||
+      combinedTexts.includes('thiếu lk') ||
+      combinedTexts.includes('thieu lk') ||
+      combinedTexts.includes('thiếu') ||
+      combinedTexts.includes('thieu');
+
+    if (isSpecialDat) {
+      finalStatus = 'Đạt';
+    }
+
+    const newRecord: OQCRecord & { checkedBy?: string } = {
+      id: `OQC-${newOqcSerialNo.trim().toUpperCase().replace(/[\/\s.#$\[\]]/g, '_')}`,
+      partCode: newOqcPartCode,
+      serialNo: newOqcSerialNo,
+      model: newOqcModel,
+      color: newOqcColor,
+      status: finalStatus,
+      defectDetail: finalStatus === 'Đạt' ? '' : newOqcDefectDetail,
+      failedCount: finalStatus === 'Đạt' ? 0 : Number(newOqcFailedCount),
+      rootCause: finalStatus === 'Đạt' ? '' : newOqcRootCause,
+      lsx: newOqcLsx,
+      checkTime: newOqcCheckTime,
+      date: newOqcDate,
+      month: Number(newOqcDate.split('/')[1]) || 5,
+      year: Number(newOqcDate.split('/')[2]) || 2026,
+      totalLlr: 1,
+      checkedBy: newOqcCheckedBy,
+      imageUrl: newOqcImageUrl,
+      evaluation: finalStatus === 'Đạt' ? '' : newOqcEvaluation,
+      treatment: finalStatus === 'Đạt' ? '' : newOqcTreatment
+    };
+
+    // Khi nhập tay dữ liệu mới: Tự động gộp các bản ghi trùng lặp
+    const existingIndex = oqcRecords.findIndex(r => r.serialNo.trim().toLowerCase() === newOqcSerialNo.trim().toLowerCase());
+    if (existingIndex > -1) {
+      const updatedOqcRecords = [...oqcRecords];
+      const existing = updatedOqcRecords[existingIndex];
+      if (newRecord.status === 'Lỗi' || existing.status === 'Lỗi') {
+        existing.status = 'Lỗi';
+      }
+      if (newRecord.defectDetail && newRecord.defectDetail !== existing.defectDetail) {
+        existing.defectDetail = existing.defectDetail 
+          ? `${existing.defectDetail}, ${newRecord.defectDetail}`
+          : newRecord.defectDetail;
+      }
+      if (newRecord.rootCause && newRecord.rootCause !== existing.rootCause) {
+        existing.rootCause = existing.rootCause 
+          ? `${existing.rootCause}, ${newRecord.rootCause}`
+          : newRecord.rootCause;
+      }
+      if (newRecord.evaluation && newRecord.evaluation !== existing.evaluation) {
+        existing.evaluation = existing.evaluation
+          ? `${existing.evaluation}, ${newRecord.evaluation}`
+          : newRecord.evaluation;
+      }
+      if (newRecord.treatment && newRecord.treatment !== existing.treatment) {
+        existing.treatment = existing.treatment
+          ? `${existing.treatment}, ${newRecord.treatment}`
+          : newRecord.treatment;
+      }
+      existing.failedCount = (existing.failedCount || 0) + (newRecord.failedCount || 0);
+      if (newRecord.model) existing.model = newRecord.model;
+      if (newRecord.color) existing.color = newRecord.color;
+      if (newRecord.lsx) existing.lsx = newRecord.lsx;
+      setOqcRecords(updatedOqcRecords);
+    } else {
+      setOqcRecords([newRecord, ...oqcRecords]);
+    }
+
+    setShowAddOqcModal(false);
+    setNewOqcSerialNo('');
+    setNewOqcDefectDetail('');
+    setNewOqcFailedCount(0);
+    setNewOqcRootCause('');
+    setNewOqcImageUrl('');
+    setNewOqcEvaluation('');
+    setNewOqcTreatment('');
+    alert('Thêm bản ghi kiểm định KCS thành phẩm OQC thành công!');
+  };
+
+  const handleStartEditOqc = (record: OQCRecord, groupIds: string[]) => {
+    setEditingOqcRecord(record);
+    setEditingOqcGroupIds(groupIds);
+    setEditOqcStatus(record.status);
+    setEditOqcDefectDetail(record.defectDetail || '');
+    setEditOqcRootCause(record.rootCause || '');
+    setEditOqcEvaluation(record.evaluation || '');
+    setEditOqcTreatment(record.treatment || '');
+    setShowEditOqcModal(true);
+  };
+
+  const handleSaveOqcEdit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingOqcRecord) return;
+
+    const updated = oqcRecords.map(r => {
+      if (r.id === editingOqcRecord.id || editingOqcGroupIds.includes(r.id)) {
+        return {
+          ...r,
+          status: editOqcStatus,
+          defectDetail: editOqcStatus === 'Đạt' ? '' : editOqcDefectDetail,
+          rootCause: editOqcStatus === 'Đạt' ? '' : editOqcRootCause,
+          evaluation: editOqcStatus === 'Đạt' ? '' : editOqcEvaluation,
+          treatment: editOqcStatus === 'Đạt' ? '' : editOqcTreatment
+        };
+      }
+      return r;
+    });
+
+    setOqcRecords(updated);
+    setShowEditOqcModal(false);
+    setEditingOqcRecord(null);
+    setEditingOqcGroupIds([]);
+    alert('Cập nhật thông tin đánh giá & phương án xử lý lỗi KCS thành công!');
+  };
+
+  const handleImportOqcSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setOqcImportError('');
+    if (!oqcImportText.trim()) {
+      setOqcImportError('Vui lòng dán dữ liệu hoặc nhập văn bản từ file Excel!');
+      return;
+    }
+
+    try {
+      const lines = oqcImportText.split('\n');
+      const parsedRecords: OQCRecord[] = [];
+      let skippedCount = 0;
+
+      // --- DYNAMIC COLUMN INDEX DETECTION ---
+      let partCodeColIdx = 0;
+      let serialNoColIdx = 1;
+      let colorColIdx = 2;
+      let statusColIdx = 3;
+      let passColIdx = 4;
+      let defectColIdx = 5;
+      let failedCountColIdx = 6;
+      let causeColIdx1 = 7;
+      let causeColIdx2 = 8;
+      let lsxColIdx = 9;
+      let modelColIdx = 10;
+      let checkTimeColIdx = 12;
+      let dColIdx = 13;
+      let mColIdx = 14;
+      let yColIdx = 15;
+      let totalLlrColIdx = 16;
+
+      // Helper to check if a value is likely a model name (and not an LSX)
+      const isModelName = (v: string): boolean => {
+        const clean = v.trim().toLowerCase();
+        if (!clean) return false;
+        if (/^\d+-\d+$/.test(clean)) return false; // LSX pattern
+        if (!isNaN(Number(clean))) return false;
+        if (clean.length < 2 || clean.length > 25) return false;
+        
+        const motorBrands = ['gogo', 'roma', 'volt', 'xman', 'wave', 'mona', 'ares', 'dk', 'lite', 'cross', 'crea', 'ebike', 'motor', 'xe', 'vespa', 'classic'];
+        if (motorBrands.some(brand => clean.includes(brand))) return true;
+        
+        const textPattern = /^[a-zA-Z\s\dđđ]+$/i;
+        return textPattern.test(clean) && !/\d{4,}/.test(clean); 
+      };
+
+      // Detect header row if present
+      const firstLine = lines.find(l => l.trim() !== '');
+      if (firstLine) {
+        const firstCols = firstLine.includes('\t') ? firstLine.split('\t') : firstLine.split(',');
+        const isHeader = firstCols.some(col => {
+          const l = col.toLowerCase();
+          return l.includes('mã') || l.includes('quy cách') || l.includes('sêri') || l.includes('serial') || l.includes('lệnh') || l.includes('model') || l.includes('mẫu') || l.includes('lsx');
+        });
+
+        if (isHeader) {
+          firstCols.forEach((col, idx) => {
+            const cleanCol = col.trim().toLowerCase();
+            if (cleanCol.includes('mã quy') || cleanCol === 'mã' || cleanCol.includes('part')) {
+              partCodeColIdx = idx;
+            } else if (cleanCol.includes('sêri') || cleanCol.includes('serial') || cleanCol.includes('số sê') || cleanCol.includes('số khung') || cleanCol.includes('khung')) {
+              serialNoColIdx = idx;
+            } else if (cleanCol.includes('màu') || cleanCol.includes('sơn')) {
+              colorColIdx = idx;
+            } else if (cleanCol.includes('tình trạng') || cleanCol === 'trạng thái') {
+              statusColIdx = idx;
+            } else if (cleanCol === 'đạt' || cleanCol === 'có đạt') {
+              passColIdx = idx;
+            } else if (cleanCol.includes('chi tiết lỗi') || cleanCol.includes('khuyết tật') || cleanCol === 'lỗi') {
+              defectColIdx = idx;
+            } else if (cleanCol.includes('số lỗi') || cleanCol.includes('số lượng lỗi') || cleanCol.includes('vết lỗi')) {
+              failedCountColIdx = idx;
+            } else if (cleanCol === 'nguyên nhân') {
+              causeColIdx1 = idx;
+            } else if (cleanCol.includes('chi tiết nguyên nhân')) {
+              causeColIdx2 = idx;
+            } else if (cleanCol === 'lsx' || cleanCol.includes('lệnh sản') || cleanCol.includes('số lsx')) {
+              lsxColIdx = idx;
+            } else if (cleanCol === 'model' || cleanCol.includes('dòng xe') || cleanCol.includes('mẫu xe')) {
+              modelColIdx = idx;
+            } else if (cleanCol.includes('giờ kiểm')) {
+              checkTimeColIdx = idx;
+            } else if (cleanCol === 'ngày' && idx > 5) {
+              dColIdx = idx;
+            } else if (cleanCol === 'tháng' && idx > 5) {
+              mColIdx = idx;
+            } else if (cleanCol === 'năm' && idx > 5) {
+              yColIdx = idx;
+            } else if (cleanCol === 'sllr' || cleanCol.includes('lắp ráp')) {
+              totalLlrColIdx = idx;
+            }
+          });
+        }
+      }
+
+      // Safeguard/fine-tune detection based on cell values in a data row
+      const sampleRow = lines.find(l => {
+        const tr = l.trim();
+        if (!tr) return false;
+        const c = tr.includes('\t') ? tr.split('\t') : tr.split(',');
+        const hasHeaderWords = c.some(val => {
+          const lv = val.toLowerCase();
+          return lv.includes('mã') || lv.includes('quy cách') || lv.includes('sêri') || lv.includes('serial') || lv.includes('lệnh') || lv.includes('model') || lv.includes('mẫu') || lv.includes('lsx');
+        });
+        return !hasHeaderWords && c.length >= 8;
+      });
+
+      if (sampleRow) {
+        const sampleCols = sampleRow.includes('\t') ? sampleRow.split('\t') : sampleRow.split(',');
+        let foundLsxIdx = -1;
+        let foundModelIdx = -1;
+
+        sampleCols.forEach((val, idx) => {
+          const v = val.trim();
+          if (/^\d+-\d+$/.test(v)) {
+            foundLsxIdx = idx;
+          } else if (isModelName(v)) {
+            foundModelIdx = idx;
+          }
+        });
+
+        if (foundLsxIdx !== -1) lsxColIdx = foundLsxIdx;
+        if (foundModelIdx !== -1) modelColIdx = foundModelIdx;
+
+        // Ensure distinct indices
+        if (lsxColIdx === modelColIdx) {
+          lsxColIdx = 9;
+          modelColIdx = 10;
+        }
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        // Split by Tab (Standard Excel paste) or Comma (CSV)
+        const cols = line.includes('\t') ? line.split('\t') : line.split(',');
+
+        // Detect and skip headers
+        if (i === 0 && (
+          cols[0].toLowerCase().includes('mã') || 
+          cols[0].toLowerCase().includes('quy cách') || 
+          cols[0].toLowerCase().includes('part') || 
+          cols[1]?.toLowerCase().includes('sêri') || 
+          cols[1]?.toLowerCase().includes('serial')
+        )) {
+          skippedCount++;
+          continue;
+        }
+
+        if (cols.length < 3) {
+          skippedCount++;
+          continue;
+        }
+
+        // Tự động loại bỏ các bản ghi mà nội dung cột 13 (Giờ kiểm tra x) là "chưa kiểm tra"
+        const rawCheckTime = cols[checkTimeColIdx]?.trim() || '';
+        if (
+          rawCheckTime.toLowerCase() === 'chưa kiểm tra' ||
+          rawCheckTime.toLowerCase() === 'chua kiem tra' ||
+          rawCheckTime.toLowerCase().includes('chưa kiểm tra') ||
+          rawCheckTime.toLowerCase().includes('chua kiem tra')
+        ) {
+          skippedCount++;
+          continue;
+        }
+
+        const partCodeVal = cols[partCodeColIdx]?.trim() || 'TEM-GEN';
+        const serialNoVal = cols[serialNoColIdx]?.trim() || `SN-${Math.floor(100000 + Math.random() * 900000)}`;
+        const colorVal = cols[colorColIdx]?.trim() || 'Trắng';
+        
+        // Determine status based on "Tình trạng" or "Đạt"
+        const rawStatus = (cols[statusColIdx]?.trim() || '').toLowerCase();
+        const rawDat = (cols[passColIdx]?.trim() || '').toLowerCase();
+        const defectDetailVal = cols[defectColIdx]?.trim() || '';
+        const causeVal1 = cols[causeColIdx1]?.trim() || '';
+        const causeVal2 = cols[causeColIdx2]?.trim() || '';
+
+        // Check for special exception cases: "xước", "thiếu linh kiện" (and related phrases, ignoring case & accents)
+        const checkText = line.toLowerCase();
+        const isSpecialDat = 
+          checkText.includes('xước') || 
+          checkText.includes('xuoc') || 
+          checkText.includes('thiếu linh kiện') || 
+          checkText.includes('thieu linh kien') ||
+          checkText.includes('thiếu lk') ||
+          checkText.includes('thieu lk') ||
+          checkText.includes('thiếu') ||
+          checkText.includes('thieu');
+
+        let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
+        if (isSpecialDat) {
+          statusVal = 'Đạt';
+        } else if (
+          rawStatus.includes('lỗi') || 
+          rawStatus.includes('ng') || 
+          rawStatus.includes('hỏng') || 
+          rawStatus.includes('fail') || 
+          rawDat === '0' || 
+          rawDat === 'lỗi' || 
+          rawDat === 'ng' ||
+          rawDat === 'không'
+        ) {
+          statusVal = 'Lỗi';
+        } else if (rawStatus.includes('chưa') || rawStatus.includes('pending')) {
+          statusVal = 'Chưa kiểm tra';
+        } else {
+          statusVal = 'Đạt';
+        }
+
+        const failedCountVal = Number(cols[failedCountColIdx]?.trim()) || (statusVal === 'Lỗi' ? 1 : 0);
+        
+        // Combine column (Nguyên nhân) and column (Chi tiết nguyên nhân) if both present
+        let rootCauseVal = '';
+        if (causeVal1 && causeVal2) {
+          rootCauseVal = `${causeVal1} - ${causeVal2}`;
+        } else {
+          rootCauseVal = causeVal1 || causeVal2 || '';
+        }
+
+        let lsxVal = cols[lsxColIdx]?.trim() || '26-10';
+        let modelVal = cols[modelColIdx]?.trim() || 'DK Gogo';
+
+        // Robust auto-swap for Model and LSX columns if they were imported in reverse order
+        const isLsxPattern = (str: string): boolean => {
+          const s = str.trim();
+          if (!s) return false;
+          return /^\d+[a-zA-Z0-9]*-\d+$/.test(s) || (/^[a-zA-Z0-9-]+$/.test(s) && s.includes('-') && /\d/.test(s));
+        };
+
+        const modelIsLsx = isLsxPattern(modelVal);
+        const lsxIsLsx = isLsxPattern(lsxVal);
+
+        if (modelIsLsx && !lsxIsLsx) {
+          const temp = lsxVal;
+          lsxVal = modelVal;
+          modelVal = temp;
+        } else if (!modelIsLsx && !lsxIsLsx) {
+          const modelLooksLikeCode = /^\d+/.test(modelVal) && modelVal.includes('-');
+          const lsxLooksLikeModel = /[a-zA-Z]{2,}/.test(lsxVal) && !/\d+-\d+/.test(lsxVal);
+          if (modelLooksLikeCode && lsxLooksLikeModel) {
+            const temp = lsxVal;
+            lsxVal = modelVal;
+            modelVal = temp;
+          }
+        }
+        
+        const checkTimeVal = cols[checkTimeColIdx]?.trim() || '08:30';
+        
+        const dVal = cols[dColIdx]?.trim();
+        const mVal = cols[mColIdx]?.trim();
+        const yVal = cols[yColIdx]?.trim();
+        
+        let dateVal = '25/05/2026';
+        if (dVal && mVal && yVal) {
+          const dayStr = dVal.padStart(2, '0');
+          const monthStr = mVal.padStart(2, '0');
+          dateVal = `${dayStr}/${monthStr}/${yVal}`;
+        } else {
+          dateVal = new Date().toLocaleDateString('vi-VN');
+        }
+
+        const monthVal = Number(mVal) || 5;
+        const yearVal = Number(yVal) || 2026;
+        const totalLlrVal = Number(cols[totalLlrColIdx]?.trim()) || 1;
+
+        parsedRecords.push({
+          id: `OQC-${serialNoVal.trim().toUpperCase().replace(/[\/\s.#$\[\]]/g, '_')}`,
+          date: dateVal,
+          partCode: partCodeVal,
+          serialNo: serialNoVal,
+          model: modelVal,
+          color: colorVal,
+          status: statusVal,
+          lsx: lsxVal,
+          failedCount: failedCountVal,
+          defectDetail: defectDetailVal,
+          rootCause: rootCauseVal,
+          checkTime: checkTimeVal,
+          month: monthVal,
+          year: yearVal,
+          totalLlr: totalLlrVal,
+          evaluation: '',
+          treatment: ''
+        });
+      }
+
+      if (parsedRecords.length === 0) {
+        setOqcImportError('Không tìm thấy bản ghi hợp lệ nào! Vui lòng kiểm tra định dạng.');
+        return;
+      }
+
+      const mergedParsed: { [serial: string]: OQCRecord } = {};
+      for (const r of parsedRecords) {
+        const serial = r.serialNo.trim().toUpperCase();
+        if (!mergedParsed[serial]) {
+          mergedParsed[serial] = { ...r };
+        } else {
+          const existing = mergedParsed[serial];
+          if (r.status === 'Lỗi' || existing.status === 'Lỗi') {
+            existing.status = 'Lỗi';
+          }
+          if (r.defectDetail && r.defectDetail !== existing.defectDetail) {
+            existing.defectDetail = existing.defectDetail 
+              ? `${existing.defectDetail}, ${r.defectDetail}`
+              : r.defectDetail;
+          }
+          if (r.rootCause && r.rootCause !== existing.rootCause) {
+            existing.rootCause = existing.rootCause 
+              ? `${existing.rootCause}, ${r.rootCause}`
+              : r.rootCause;
+          }
+          if (r.evaluation && r.evaluation !== existing.evaluation) {
+            existing.evaluation = existing.evaluation ? `${existing.evaluation}, ${r.evaluation}` : r.evaluation;
+          }
+          if (r.treatment && r.treatment !== existing.treatment) {
+            existing.treatment = existing.treatment ? `${existing.treatment}, ${r.treatment}` : r.treatment;
+          }
+          existing.failedCount = (existing.failedCount || 0) + (r.failedCount || 0);
+          if (r.model) existing.model = r.model;
+          if (r.color) existing.color = r.color;
+          if (r.lsx) existing.lsx = r.lsx;
+        }
+      }
+      const finalParsed = Object.values(mergedParsed);
+
+      const finalParsedSerials = new Set(finalParsed.map(r => r.serialNo.trim().toUpperCase()));
+      const remainingOldRecords = oqcRecords.filter(r => !finalParsedSerials.has(r.serialNo.trim().toUpperCase()));
+
+      setOqcRecords([...finalParsed, ...remainingOldRecords]);
+      setOqcImportText('');
+      setShowImportOqcModal(false);
+      alert(`Nhập thành công ${finalParsed.length} chiếc xe KCS nghiệm thu! (Đã gộp trùng lặp, Bỏ qua: ${skippedCount} hàng trống/tiêu đề/chưa kiểm tra)`);
+    } catch (err: any) {
+      setOqcImportError(`Lỗi phân rã dữ liệu: ${err.message || err}`);
+    }
+  };
+
+  const handleExportOqcCSV = () => {
+    const csvHeaders = ["STT", "Mã quy cách", "Số Sêri", "Model & Màu sắc", "Tình trạng", "Chi tiết lỗi", "Số lỗi", "Nguyên nhân", "LSX", "Giờ kiểm", "Ngày"];
+    const csvContent = oqcRecords.map((r, i) => [
+      i + 1,
+      r.partCode,
+      r.serialNo,
+      `${r.model} - ${r.color}`,
+      r.status,
+      r.defectDetail,
+      r.failedCount,
+      r.rootCause,
+      r.lsx,
+      r.checkTime,
+      r.date
+    ]);
+    
+    let csvString = "\uFEFF" + [csvHeaders.join(","), ...csvContent.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", `Bao_cao_OQC_KCS_Thanh_pham_2026.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="space-y-6 overflow-y-auto max-h-[calc(100vh-10rem)] pr-2 animate-in fade-in duration-300" id="view_quality_inspection_content">
+      
+      {/* Header Action panel */}
+      <div className="bg-white p-3 sm:p-3.5 rounded-lg border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 bg-emerald-50 text-emerald-700 rounded-lg">
+              <Wrench className="w-4 h-4 text-emerald-600 animate-pulse" />
+            </span>
+            <h2 className="text-base sm:text-lg font-extrabold text-slate-800">
+              Hồ Sơ Nghiệp Vụ & Nhập Liệu Chất Lượng IQC - PQC - OQC
+            </h2>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            Cơ sở dữ liệu kiểm nhập linh kiện đầu vào, giám sát lắp ráp công đoạn và nghiệm thu xe thành phẩm KCS liên kết báo cáo chu kỳ thông minh.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {qcMainSubTab === 'iqc' && (
+            <div className="flex flex-wrap gap-1.5">
+              <button 
+                onClick={() => setShowAddIqcModal(true)}
+                className="bg-emerald-650 hover:bg-emerald-600 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-emerald-150 cursor-pointer border border-emerald-500"
+              >
+                <Plus className="w-3.5 h-3.5" /> ➕ Thêm Phiếu IQC Mới
+              </button>
+              <button 
+                onClick={() => setShowAqlCalculator(!showAqlCalculator)}
+                className={`font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 cursor-pointer border ${
+                  showAqlCalculator ? 'bg-indigo-800 text-amber-300 border-amber-400' : 'bg-slate-800 hover:bg-slate-700 text-white border-slate-600'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" /> 📊 Tra Cứu AQL ISO 2859-1
+              </button>
+              <button 
+                onClick={() => setShowEcountSyncModal(true)}
+                className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-indigo-150 animate-pulse cursor-pointer border border-indigo-400"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-ping"></span>
+                🔗 Nhập từ Ecount.com
+              </button>
+            </div>
+          )}
+          {qcMainSubTab === 'pqc' && (
+            <button 
+              onClick={() => setShowAddPqcModal(true)}
+              className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-indigo-200 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" /> Ghi Nhận Sự Cố PQC
+            </button>
+          )}
+          {qcMainSubTab === 'oqc' && (
+            <div className="flex flex-wrap gap-1.5">
+              <button 
+                onClick={() => setShowAddOqcModal(true)}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-blue-200 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Thêm Nghiệm Thu KCS
+              </button>
+              <button 
+                onClick={() => setShowImportOqcModal(true)}
+                className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-indigo-150 cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" /> Nhập Excel KCS
+              </button>
+              <button 
+                onClick={() => {
+                  if (oqcFilterMonth !== 'All') setExportKcsMonth(parseInt(oqcFilterMonth, 10));
+                  if (oqcFilterWeek !== 'All') {
+                    setExportKcsPeriod('weekly');
+                    setExportKcsWeek(oqcFilterWeek);
+                  }
+                  if (oqcFilterYear !== 'All') setExportKcsYear(parseInt(oqcFilterYear, 10));
+                  setExportKcsModel(oqcFilterModel);
+                  setShowExportKcsReportModal(true);
+                }}
+                className="bg-amber-600 hover:bg-amber-550 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-amber-200 cursor-pointer"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-white" /> Báo Cáo KCS Tuần/Tháng
+              </button>
+            </div>
+          )}
+          {qcMainSubTab === 'supplier_monitoring' && (
+            <button 
+              onClick={() => {
+                if (suppliers && suppliers.length > 0) {
+                  setNewAuditSupplierName(suppliers[0].name || suppliers[0].SupplierName || 'Công ty Việt Nhật Precision');
+                }
+                setShowAddSupplierAuditModal(true);
+              }}
+              className="bg-orange-600 hover:bg-orange-500 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-orange-200 animate-pulse cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" /> Kích hoạt Giám sát NCC
+            </button>
+          )}
+          {qcMainSubTab !== 'reports' && (
+            <button 
+              onClick={
+                qcMainSubTab === 'iqc' ? handleExportIqcCSV :
+                qcMainSubTab === 'pqc' ? handleExportPqcCSV : 
+                qcMainSubTab === 'oqc' ? handleExportOqcCSV : () => alert('Hồ sơ xuất Excel giám sát nhà cung cấp đang đồng bộ trực tiếp lên server.')
+              }
+              className="bg-white hover:bg-slate-50 shadow-sm border border-slate-200 text-slate-700 font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" /> Xuất Excel dữ liệu
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Navigation Sub-Tabs Switch */}
+      <div className="flex border-b border-slate-200 gap-0.5 sm:gap-1 bg-slate-100 p-0.5 sm:p-1 rounded-md sm:rounded-lg">
+        <button
+          onClick={() => setQcMainSubTab('iqc')}
+          className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'iqc' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-emerald-955 hover:bg-white/30'}`}
+        >
+          <Building2 className="w-3.5 h-3.5 text-emerald-655" />
+          IQC ({iqcRecords.length})
+        </button>
+        <button
+          onClick={() => setQcMainSubTab('pqc')}
+          className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'pqc' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-indigo-950 hover:bg-white/30'}`}
+        >
+          <Clock className="w-3.5 h-3.5 text-indigo-500" />
+          PQC ({pqcRecords.length})
+        </button>
+        <button
+          onClick={() => setQcMainSubTab('oqc')}
+          className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'oqc' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-blue-955 hover:bg-white/30'}`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+          OQC ({oqcRecords.length})
+        </button>
+        <button
+          onClick={() => setQcMainSubTab('supplier_monitoring')}
+          className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'supplier_monitoring' ? 'bg-white text-orange-750 shadow-sm' : 'text-slate-600 hover:text-orange-955 hover:bg-white/30'}`}
+        >
+          <Users className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
+          SQC ({supplierProductionAudits.length})
+        </button>
+        <button
+          onClick={() => setQcMainSubTab('reports')}
+          className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'reports' ? 'bg-indigo-650 text-white shadow-sm' : 'text-slate-600 hover:text-indigo-950 hover:bg-white/30'}`}
+        >
+          <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+          BC
+        </button>
+      </div>
+
+      {/* ==================== SUBTAB: IQC ==================== */}
+      {qcMainSubTab === 'iqc' && (
+        <div className="space-y-4">
+          {renderActivePlanTargetsBanner('IQC')}
+
+          {/* Interactive AQL Quick Calculator Panel */}
+          {showAqlCalculator && (
+            <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow-xl border border-indigo-500/30 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex justify-between items-center pb-3 border-b border-indigo-800/60 mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-indigo-600/30 rounded-lg border border-indigo-400/40">
+                    <ShieldCheck className="w-5 h-5 text-indigo-300" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-black text-white tracking-wide uppercase flex items-center gap-2">
+                      Công cụ Tra Cứu & Tính Toán Lấy Mẫu IQC theo AQL ISO 2859-1 / ANSI Z1.4
+                    </h3>
+                    <p className="text-[11px] text-indigo-200">
+                      Tra cứu mã chữ cái, cỡ mẫu trích kiểm tiêu chuẩn và ngưỡng chấp nhận (Ac) / bác bỏ (Re) cho linh kiện đầu vào DKBike.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAqlCalculator(false)}
+                  className="text-slate-400 hover:text-white p-1.5 text-xs font-bold rounded-lg border border-slate-700 hover:border-slate-500 transition cursor-pointer"
+                >
+                  ✕ Đóng
+                </button>
+              </div>
+
+              {(() => {
+                const calcResult = calculateAQLSample(calcAqlLotSize, 0, calcAqlLevel, calcAqlInspectionLevel);
+                return (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-900/60 p-3 rounded-xl border border-indigo-900/50">
+                      <div>
+                        <label className="block text-[10px] font-bold text-indigo-300 uppercase mb-1">1. Nhập Quy Mô Lô Hàng (SL Lô)</label>
+                        <input
+                          type="number"
+                          value={calcAqlLotSize}
+                          onChange={(e) => setCalcAqlLotSize(Math.max(1, Number(e.target.value)))}
+                          className="w-full bg-slate-800 border border-indigo-700/60 rounded-lg p-2 text-white font-mono font-bold text-sm focus:outline-none focus:border-indigo-400"
+                        />
+                        <div className="flex gap-1.5 mt-2 flex-wrap">
+                          {[50, 100, 250, 500, 1000, 2500, 5000].map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => setCalcAqlLotSize(preset)}
+                              className={`text-[9.5px] px-2 py-0.5 rounded font-mono font-bold cursor-pointer transition ${
+                                calcAqlLotSize === preset ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                              }`}
+                            >
+                              {preset.toLocaleString('vi-VN')}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-indigo-300 uppercase mb-1">2. Chọn Cấp Kiểm Tra (Inspection Level)</label>
+                        <select
+                          value={calcAqlInspectionLevel}
+                          onChange={(e) => setCalcAqlInspectionLevel(e.target.value as InspectionLevel)}
+                          className="w-full bg-slate-800 border border-indigo-700/60 rounded-lg p-2 text-white font-bold text-xs focus:outline-none focus:border-indigo-400 cursor-pointer"
+                        >
+                          <option value="I">Cấp I - Lấy mẫu giảm (Linh kiện chất lượng cao)</option>
+                          <option value="II">Cấp II - Kiểm tra thường (Mặc định DKBike QMS)</option>
+                          <option value="III">Cấp III - Kiểm tra thắt chặt (NCC rủi ro cao)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-indigo-300 uppercase mb-1">3. Ngưỡng AQL Chấp Nhận (Acceptable Quality Limit)</label>
+                        <select
+                          value={calcAqlLevel}
+                          onChange={(e) => setCalcAqlLevel(Number(e.target.value) as AQLLevel)}
+                          className="w-full bg-slate-800 border border-indigo-700/60 rounded-lg p-2 text-white font-bold text-xs focus:outline-none focus:border-indigo-400 cursor-pointer"
+                        >
+                          <option value={0.65}>AQL 0.65 - Rất nghiêm ngặt (Linh kiện an toàn)</option>
+                          <option value={1.0}>AQL 1.0 - Nghiêm ngặt (Động cơ, Pin, IC, Cụm phanh)</option>
+                          <option value={1.5}>AQL 1.5 - Chuẩn DK QMS (Sườn, Lốp, Còi, Dây điện)</option>
+                          <option value={2.5}>AQL 2.5 - Phổ thông (Nhựa mạ, Tem nhãn, Ốc vít)</option>
+                          <option value={4.0}>AQL 4.0 - Cho phép phế phẩm nhẹ (Bao bì, Carton)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Result Card */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-gradient-to-r from-indigo-900/40 to-purple-900/40 p-3.5 rounded-xl border border-indigo-500/40">
+                      <div className="bg-slate-900/80 p-3 rounded-lg border border-indigo-500/30 text-center">
+                        <span className="text-[10px] text-indigo-300 block uppercase font-sans font-bold">Mã Chữ Cái AQL</span>
+                        <span className="text-xl sm:text-2xl font-black text-amber-400 font-mono">Mã {calcResult.codeLetter}</span>
+                      </div>
+
+                      <div className="bg-slate-900/80 p-3 rounded-lg border border-emerald-500/30 text-center">
+                        <span className="text-[10px] text-emerald-300 block uppercase font-sans font-bold">Số Lượng Mẫu Lấy Kiểm</span>
+                        <span className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">{calcResult.sampleSize.toLocaleString('vi-VN')} <span className="text-xs font-normal">sp</span></span>
+                      </div>
+
+                      <div className="bg-slate-900/80 p-3 rounded-lg border border-emerald-500/30 text-center">
+                        <span className="text-[10px] text-emerald-300 block uppercase font-sans font-bold">Chấp Nhận (Ac)</span>
+                        <span className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">Ac ≤ {calcResult.ac}</span>
+                        <span className="text-[9px] text-emerald-300 block font-sans">≤ {calcResult.ac} lỗi ➔ Lô Đạt</span>
+                      </div>
+
+                      <div className="bg-slate-900/80 p-3 rounded-lg border border-red-500/30 text-center">
+                        <span className="text-[10px] text-red-300 block uppercase font-sans font-bold">Bác Bỏ (Re)</span>
+                        <span className="text-xl sm:text-2xl font-black text-red-400 font-mono">Re ≥ {calcResult.re}</span>
+                        <span className="text-[9px] text-red-300 block font-sans">≥ {calcResult.re} lỗi ➔ Bác bỏ lô</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+          {(() => {
+            const isIqcFiltered = iqcFilterMonth !== 'All' || iqcFilterSupplier !== 'All' || iqcFilterResult !== 'All' || iqcFilterWeek !== 'All' || iqcSearch.trim() !== '';
+            const totalFilteredLots = filteredIqc.length;
+            const totalLotsAll = iqcRecords.length;
+            
+            // Defective lots in filtered set
+            const failedFilteredLots = filteredIqc.filter(r => r.result === 'Lỗi' || (r.failedQty !== undefined && r.failedQty > 0)).length;
+            const passedFilteredLots = totalFilteredLots - failedFilteredLots;
+            
+            // 1. Calculate pass rate by lot/ticket
+            const passRateLot = totalFilteredLots > 0 ? Math.round((passedFilteredLots / totalFilteredLots) * 100) : 100;
+
+            // Total components checked and total defective components in filtered set
+            const totalQtySum = filteredIqc.reduce((sum, r) => sum + (r.totalQty || 0), 0);
+            const failedQtySum = filteredIqc.reduce((sum, r) => sum + (r.failedQty || 0), 0);
+            const passedQtySum = Math.max(0, totalQtySum - failedQtySum);
+
+            // 2. Calculate pass rate by piece quantity (chi tiết)
+            const passRateQty = totalQtySum > 0 ? (Math.round((passedQtySum / totalQtySum) * 1000) / 10) : 100;
+
+            return (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+                {/* Card 1: Total Lots */}
+                <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden transition-all hover:border-slate-300">
+                  <div className="flex justify-between items-start">
+                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase leading-tight block">
+                      Tổng số lô hàng nhập kiểm
+                    </span>
+                    {isIqcFiltered && (
+                      <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse">
+                        Đã lọc
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-lg sm:text-xl font-black text-slate-800 font-mono mt-0.5 sm:mt-1 block">
+                    {totalFilteredLots.toLocaleString('vi-VN')} <span className="text-xs font-semibold text-slate-500">phiếu</span>
+                  </span>
+                  <p className="text-[10px] text-slate-500 mt-1 flex justify-between items-center">
+                    <span>Quy mô: <strong className="font-mono text-slate-700">{totalQtySum.toLocaleString('vi-VN')}</strong> sp</span>
+                    {isIqcFiltered && (
+                      <span className="text-[9.5px] text-emerald-650 font-bold">({totalFilteredLots}/{totalLotsAll} tổng lô)</span>
+                    )}
+                  </p>
+                </div>
+
+                {/* Card 2: Defective Lots / Defective Components */}
+                <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden transition-all hover:border-red-200">
+                  <div className="flex justify-between items-start">
+                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase leading-tight block">
+                      Linh kiện có lỗi
+                    </span>
+                    {failedFilteredLots > 0 && (
+                      <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">
+                        Phát hiện lỗi
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-lg sm:text-xl font-black text-red-500 font-mono mt-0.5 sm:mt-1 block">
+                    {failedFilteredLots.toLocaleString('vi-VN')} <span className="text-xs font-semibold text-red-400">lô hàng</span>
+                  </span>
+                  <p className="text-[10px] text-slate-500 mt-1 flex justify-between items-center">
+                    <span>Số linh kiện hỏng: <strong className="font-mono text-red-600">{failedQtySum.toLocaleString('vi-VN')}</strong> sp</span>
+                    {failedFilteredLots === 0 && (
+                      <span className="text-[9.5px] text-emerald-600 font-bold">✓ 0 lô lỗi</span>
+                    )}
+                  </p>
+                </div>
+
+                {/* Card 3: Pass rate by Lot / Ticket */}
+                <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden transition-all hover:border-emerald-200">
+                  <div className="flex justify-between items-start">
+                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase leading-tight block">
+                      Tỉ lệ Đạt IQC (theo Lô)
+                    </span>
+                    <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${passRateLot >= 95 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                      {passRateLot >= 95 ? 'Đạt chỉ tiêu' : 'Cần cải thiện'}
+                    </span>
+                  </div>
+                  <span className={`text-lg sm:text-xl font-black font-mono mt-0.5 sm:mt-1 block ${passRateLot >= 95 ? 'text-emerald-600' : passRateLot >= 85 ? 'text-amber-600' : 'text-red-500'}`}>
+                    {passRateLot}%
+                  </span>
+                  <p className="text-[10px] text-slate-500 mt-1 flex justify-between items-center">
+                    <span>Nghiệm thu: <strong className="font-mono text-emerald-600">{passedFilteredLots}</strong>/{totalFilteredLots} lô Đạt</span>
+                    <span className="text-[9.5px] font-bold text-slate-400">
+                      Target: ≥95%
+                    </span>
+                  </p>
+                </div>
+
+                {/* Card 4: Pass rate by Piece Quantity (Số lượng chi tiết) */}
+                <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden transition-all hover:border-indigo-200">
+                  <div className="flex justify-between items-start">
+                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase leading-tight block">
+                      Tỉ lệ Đạt IQC (theo Chi tiết)
+                    </span>
+                    <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${passRateQty >= 98 ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                      {passRateQty >= 98 ? 'Đạt tiêu chuẩn' : 'Cần kiểm soát'}
+                    </span>
+                  </div>
+                  <span className={`text-lg sm:text-xl font-black font-mono mt-0.5 sm:mt-1 block ${passRateQty >= 98 ? 'text-indigo-600' : passRateQty >= 95 ? 'text-amber-600' : 'text-red-500'}`}>
+                    {passRateQty}%
+                  </span>
+                  <p className="text-[10px] text-slate-500 mt-1 flex justify-between items-center">
+                    <span>Số lượng: <strong className="font-mono text-indigo-600">{passedQtySum.toLocaleString('vi-VN')}</strong>/{totalQtySum.toLocaleString('vi-VN')} sp</span>
+                    <span className="text-[9.5px] font-bold text-slate-400">
+                      Target: ≥98%
+                    </span>
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="bg-white p-2.5 sm:p-4 rounded-xl border border-slate-200 space-y-3 sm:space-y-4">
+            {/* Elegant QC Filter Controls Header */}
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5 text-emerald-650" />
+                <h4 className="text-[11px] font-black uppercase text-slate-700 tracking-wider">Bộ lọc tìm kiếm IQC</h4>
+              </div>
+              <div className="flex items-center gap-2">
+                {(iqcFilterMonth !== 'All' || iqcFilterSupplier !== 'All' || iqcFilterResult !== 'All' || iqcFilterWeek !== 'All' || iqcSearch !== '') && (
+                  <button
+                     type="button"
+                     onClick={() => {
+                       setIqcFilterMonth('All');
+                       setIqcFilterSupplier('All');
+                       setIqcFilterResult('All');
+                       setIqcFilterWeek('All');
+                       setIqcSearch('');
+                     }}
+                     className="text-[9px] sm:text-[10px] bg-red-50 text-red-655 hover:bg-red-100 border border-red-200 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer active:scale-95 mr-2"
+                  >
+                    ✕ Nhập lại bộ lọc (Reset)
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsIqcFilterExpanded(!isIqcFilterExpanded)}
+                  className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  {isIqcFilterExpanded ? (
+                    <>Thu nhỏ bộ lọc <ChevronUp className="w-3.5 h-3.5" /></>
+                  ) : (
+                    <>Mở rộng bộ lọc <ChevronDown className="w-3.5 h-3.5" /></>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {isIqcFilterExpanded && (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-4 bg-slate-50 p-2.5 sm:p-4 rounded-xl border border-slate-100 transition-all">
+                <div className="col-span-2 md:col-span-1 space-y-0.5 sm:space-y-1">
+                  <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <Search className="w-3 h-3 text-emerald-500" /> Từ khóa tìm kiếm
+                  </label>
+                  <input 
+                    type="text"
+                    value={iqcSearch}
+                    onChange={(e) => setIqcSearch(e.target.value)}
+                    placeholder="Tra cứu nhà cung cấp, nội dung, mã..."
+                    className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-emerald-600 font-bold"
+                  />
+                </div>
+
+                <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                  <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-550 uppercase tracking-wider flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-emerald-500" /> Tháng kiểm tra
+                  </label>
+                  <select
+                    value={iqcFilterMonth}
+                    onChange={(e) => setIqcFilterMonth(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-emerald-600 font-bold text-slate-700 pointer-events-auto cursor-pointer"
+                  >
+                    <option value="All">Tất cả các tháng</option>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                      <option key={m} value={m.toString()}>Tháng {m}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                  <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-550 uppercase tracking-wider flex items-center gap-1">
+                    <Building2 className="w-3 h-3 text-emerald-500" /> Nhà cung cấp ({uniqueIqcSuppliers.length})
+                  </label>
+                  <select
+                    value={iqcFilterSupplier}
+                    onChange={(e) => setIqcFilterSupplier(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-emerald-600 font-bold text-slate-700 pointer-events-auto cursor-pointer"
+                  >
+                    <option value="All">Tất cả nhà cung cấp</option>
+                    {uniqueIqcSuppliers.map((sup, idx) => (
+                      <option key={`${sup}-${idx}`} value={sup}>{sup}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                  <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-550 uppercase tracking-wider flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-emerald-500" /> Kết quả kiểm tra
+                  </label>
+                  <select
+                    value={iqcFilterResult}
+                    onChange={(e) => setIqcFilterResult(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-emerald-600 font-bold text-slate-700 pointer-events-auto cursor-pointer"
+                  >
+                    <option value="All">Tất cả kết quả</option>
+                    <option value="Đạt">Lô hàng Đạt</option>
+                    <option value="Lỗi">Chỉ lô có Lỗi</option>
+                  </select>
+                </div>
+
+                <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                  <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-550 uppercase tracking-wider flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-emerald-500" /> Tuần làm việc
+                  </label>
+                  <select
+                    value={iqcFilterWeek}
+                    onChange={(e) => setIqcFilterWeek(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-emerald-600 font-bold text-slate-700 pointer-events-auto cursor-pointer"
+                  >
+                    <option value="All">Tất cả các tuần (T1-T5)</option>
+                    <option value="T1">Tuần 1 (T1)</option>
+                    <option value="T2">Tuần 2 (T2)</option>
+                    <option value="T3">Tuần 3 (T3)</option>
+                    <option value="T4">Tuần 4 (T4)</option>
+                    <option value="T5">Tuần 5 (T5)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* IQC Bulk Action Indicator Bar */}
+          {selectedIqcIds.length > 0 && (
+            <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-xl p-3 text-red-900 font-sans shadow-xs animate-in fade-in duration-200 mt-4 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                <span className="text-xs font-bold">Đang chọn {selectedIqcIds.length} bản ghi IQC</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedIqcIds([])}
+                  className="px-3 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-[11px] font-bold rounded-lg cursor-pointer"
+                >
+                  Bỏ chọn
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkDeleteIqc}
+                  className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 cursor-pointer shadow-sm transition-all hover:scale-[1.02]"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Xóa hàng loạt ({selectedIqcIds.length})
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-[10.5px] sm:text-[11px] md:text-xs">
+                <thead>
+                  <tr className="bg-slate-100 border-b text-slate-500 font-extrabold text-[9px] sm:text-[9.5px] md:text-[10px] uppercase">
+                    <th className="py-2 px-1.5 md:p-2.5 w-8 md:w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={filteredIqc.length > 0 && filteredIqc.every(r => selectedIqcIds.includes(r.id))}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            const allFilteredIds = filteredIqc.map(r => r.id);
+                            setSelectedIqcIds(prev => Array.from(new Set([...prev, ...allFilteredIds])));
+                          } else {
+                            const allFilteredIds = filteredIqc.map(r => r.id);
+                            setSelectedIqcIds(prev => prev.filter(id => !allFilteredIds.includes(id)));
+                          }
+                        }}
+                        className="rounded border-slate-300 text-indigo-650 focus:ring-indigo-500 cursor-pointer accent-indigo-650"
+                      />
+                    </th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-10 md:w-12 text-center">Mã</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-16 md:w-20 text-center">Ngày</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-36 md:w-56 lg:w-64 min-w-[130px] md:min-w-[180px]">Nhà cung cấp</th>
+                    <th className="py-2 px-1.5 md:p-2.5 min-w-[170px] md:min-w-[260px]">Quy cách hàng hóa</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-12 md:w-16 text-right">Tổng SL</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-12 md:w-16 text-right">Mẫu</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-14 md:w-20 text-center">KCS</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-12 md:w-16 text-right text-red-500">Lỗi</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-10 md:w-14 text-right">% Lỗi</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-32 md:w-48 lg:w-56 min-w-[120px] md:min-w-[180px] text-left">Tên mặt hàng (Tóm tắt)</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-14 md:w-18 text-center">Kết Quả</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-14 md:w-18 text-center">T.tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredIqc.length === 0 ? (
+                    <tr>
+                      <td colSpan={13} className="py-6 text-center text-slate-400 italic">
+                        Không tìm thấy bản ghi kiểm nhập IQC nào tương ứng với bộ lọc đã chọn.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredIqc.map((r, i) => (
+                      <tr key={i} className="hover:bg-slate-50/60 transition">
+                        <td className="py-2 px-1.5 md:p-2.5 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedIqcIds.includes(r.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedIqcIds(prev => [...prev, r.id]);
+                              } else {
+                                setSelectedIqcIds(prev => prev.filter(id => id !== r.id));
+                              }
+                            }}
+                            className="rounded border-slate-300 text-indigo-650 focus:ring-indigo-500 cursor-pointer accent-indigo-650"
+                          />
+                        </td>
+                        <td className="py-2 px-1.5 md:p-2.5 text-center font-bold text-slate-500 font-mono text-[10px] md:text-xs">
+                          <button
+                            type="button"
+                            onClick={() => setViewDetailModal?.({ type: 'iqc_record', data: r })}
+                            className="text-indigo-650 hover:underline hover:text-indigo-800 font-bold font-mono cursor-pointer text-[10px] md:text-xs"
+                            title="Click xem chi tiết"
+                          >
+                            {r.id}
+                          </button>
+                        </td>
+                        <td className="py-2 px-1.5 md:p-2.5 text-slate-600 font-semibold text-center whitespace-nowrap text-[10px] md:text-xs">{r.date}</td>
+                        <td className="py-2 px-1.5 md:p-2.5">
+                          <span className="font-extrabold text-slate-850 block leading-tight text-[10.5px] sm:text-[11px] md:text-xs">{r.supplierName}</span>
+                          <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold tracking-wider">{r.supplierId}</span>
+                        </td>
+                        <td className="py-2 px-1.5 md:p-2.5 space-y-0.5">
+                          <p className="font-semibold text-slate-700 leading-tight text-[10.5px] sm:text-[11px] md:text-xs">{r.content}</p>
+                          {r.defectDetail && (
+                            <span className="text-[9px] sm:text-[10px] text-red-500 block bg-red-50/50 p-1 rounded border border-red-100 leading-normal">
+                              <b>Phát hiện:</b> {r.defectDetail}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 px-1.5 md:p-2.5 text-right font-bold text-slate-700 font-mono whitespace-nowrap text-[10px] md:text-xs">{r.totalQty.toLocaleString('vi-VN')}</td>
+                        <td className="py-2 px-1.5 md:p-2.5 text-right font-semibold text-slate-600 font-mono whitespace-nowrap text-[10px] md:text-xs">{r.checkedQty.toLocaleString('vi-VN')}</td>
+                        <td className="py-2 px-1.5 md:p-2.5 text-center font-semibold text-slate-600 whitespace-nowrap text-[10px] md:text-xs">{r.checkedBy}</td>
+                        <td className="py-2 px-1.5 md:p-2.5 text-right font-bold text-red-650 font-mono whitespace-nowrap text-[10px] md:text-xs">{r.failedQty > 0 ? r.failedQty.toLocaleString('vi-VN') : '-'}</td>
+                        <td className={`py-2 px-1.5 md:p-2.5 text-right font-bold font-mono whitespace-nowrap text-[10px] md:text-xs ${r.failedQty > 0 ? 'text-red-500' : 'text-slate-400'}`}>{r.defectRate}%</td>
+                        <td className="py-2 px-1.5 md:p-2.5 text-left font-bold text-slate-700 italic text-[10px] sm:text-[11px] md:text-xs break-words whitespace-normal line-clamp-2">{r.itemSummary || r.content}</td>
+                        <td className="py-2 px-1.5 md:p-2.5 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] md:text-[10px] font-extrabold uppercase whitespace-nowrap ${r.result === 'Đạt' ? 'bg-emerald-50 text-emerald-750' : 'bg-red-50 text-red-600 animate-pulse'}`}>
+                            {r.result}
+                          </span>
+                        </td>
+                        <td className="py-2 px-1.5 md:p-2.5 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setViewDetailModal?.({ type: 'iqc_record', data: r })}
+                              className="text-emerald-600 hover:text-emerald-800 p-0.5 cursor-pointer"
+                              title="Xác định chi tiết"
+                            >
+                              <Eye className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleEditIqcClick(r)}
+                              className="text-indigo-600 hover:text-indigo-800 p-0.5 cursor-pointer"
+                              title="Sửa phiếu"
+                            >
+                              <Pencil className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteIqcClick(r.id)}
+                              className="text-rose-600 hover:text-rose-800 p-0.5 cursor-pointer"
+                              title="Xóa phiếu"
+                            >
+                              <Trash2 className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== SUBTAB: PQC ==================== */}
+      {qcMainSubTab === 'pqc' && (
+        <div className="space-y-4">
+          {renderActivePlanTargetsBanner('PQC')}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4">
+            <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm col-span-1">
+              <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase leading-tight">Sự cố công đoạn phát hiện</span>
+              <span className="text-lg sm:text-xl font-black text-slate-800 font-mono mt-0.5 sm:mt-1 block">{pqcRecords.length} vụ việc</span>
+            </div>
+            <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm col-span-1">
+              <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase leading-tight">Đang khắc phục cải tiến</span>
+              <span className="text-lg sm:text-xl font-black text-amber-500 font-mono mt-0.5 sm:mt-1 block">
+                {pqcRecords.filter(r => r.status === 'Đang cải tiến').length} vụ việc
+              </span>
+            </div>
+            <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
+              <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase leading-tight">Tỷ lệ cải tiến thành công</span>
+              <span className="text-lg sm:text-xl font-black text-emerald-600 font-mono mt-0.5 sm:mt-1 block">
+                {Math.round((pqcRecords.filter(r => r.status === 'Đạt hoàn toàn' || r.status === 'Đã cải tiến').length / pqcRecords.length) * 100)}%
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white p-2.5 sm:p-4 rounded-xl border border-slate-200 space-y-3 sm:space-y-4">
+            {/* Elegant PQC Filter Controls Header */}
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-4 h-4 text-indigo-500" />
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Bộ lọc tìm kiếm nâng cao (PQC)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {(pqcFilterMonth !== 'All' || pqcFilterStatus !== 'All' || pqcFilterModel !== 'All' || pqcFilterWeek !== 'All' || pqcSearch !== '') && (
+                  <button
+                     type="button"
+                     onClick={() => {
+                       setPqcFilterMonth('All');
+                       setPqcFilterStatus('All');
+                       setPqcFilterModel('All');
+                       setPqcFilterWeek('All');
+                       setPqcSearch('');
+                     }}
+                     className="text-[9px] sm:text-[10px] bg-red-50 text-red-650 hover:bg-red-100 border border-red-200 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer active:scale-95 mr-2"
+                  >
+                    ✕ Nhập lại bộ lọc (Reset)
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsPqcFilterExpanded(!isPqcFilterExpanded)}
+                  className="flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-indigo-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg transition-all cursor-pointer"
+                >
+                  {isPqcFilterExpanded ? (
+                    <>Thu gọn <ChevronUp className="w-3.5 h-3.5" /></>
+                  ) : (
+                    <>Mở rộng <ChevronDown className="w-3.5 h-3.5" /></>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {isPqcFilterExpanded && (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-4 bg-slate-50 p-2.5 sm:p-4 rounded-xl border border-slate-100 transition-all">
+                <div className="col-span-2 md:col-span-1 space-y-0.5 sm:space-y-1">
+                  <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <Search className="w-3 h-3 text-indigo-505" /> Từ khóa tìm kiếm
+                  </label>
+                  <input 
+                    type="text"
+                    value={pqcSearch}
+                    onChange={(e) => setPqcSearch(e.target.value)}
+                    placeholder="Lệnh LSX, model xe, lỗi, PIC phụ trách..."
+                    className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-indigo-650 font-bold"
+                  />
+                </div>
+
+                <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                  <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-550 uppercase tracking-wider flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-indigo-505" /> Tháng ghi nhận
+                  </label>
+                  <select
+                    value={pqcFilterMonth}
+                    onChange={(e) => setPqcFilterMonth(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-indigo-650 font-bold text-slate-705 pointer-events-auto cursor-pointer"
+                  >
+                    <option value="All">Tất cả các tháng</option>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                      <option key={m} value={m.toString()}>Tháng {m}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                  <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-550 uppercase tracking-wider flex items-center gap-1">
+                    <Truck className="w-3 h-3 text-indigo-505" /> Dòng xe Model ({uniquePqcModels.length})
+                  </label>
+                  <select
+                    value={pqcFilterModel}
+                    onChange={(e) => setPqcFilterModel(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-indigo-650 font-bold text-slate-705 pointer-events-auto cursor-pointer"
+                  >
+                    <option value="All">Tất cả các dòng xe (Model)</option>
+                    {uniquePqcModels.map((mdl, idx) => (
+                      <option key={`${mdl}-${idx}`} value={mdl}>{mdl}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                  <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-550 uppercase tracking-wider flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-indigo-505" /> Trạng thái cải tiến
+                  </label>
+                  <select
+                    value={pqcFilterStatus}
+                    onChange={(e) => setPqcFilterStatus(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-indigo-650 font-bold text-slate-705 pointer-events-auto cursor-pointer"
+                  >
+                    <option value="All">Tất cả trạng thái</option>
+                    <option value="Đạt hoàn toàn">Đạt hoàn toàn</option>
+                    <option value="Đã cải tiến">Đã cải tiến</option>
+                    <option value="Đang cải tiến">Đang cải tiến</option>
+                  </select>
+                </div>
+
+                <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                  <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-550 uppercase tracking-wider flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-indigo-550" /> Tuần làm việc
+                  </label>
+                  <select
+                    value={pqcFilterWeek}
+                    onChange={(e) => setPqcFilterWeek(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-indigo-650 font-bold text-slate-705 pointer-events-auto cursor-pointer"
+                  >
+                    <option value="All">Tất cả các tuần (T1-T5)</option>
+                    <option value="T1">Tuần 1 (T1)</option>
+                    <option value="T2">Tuần 2 (T2)</option>
+                    <option value="T3">Tuần 3 (T3)</option>
+                    <option value="T4">Tuần 4 (T4)</option>
+                    <option value="T5">Tuần 5 (T5)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-[11px] md:text-xs">
+                <thead>
+                  <tr className="bg-slate-100 border-b text-slate-500 font-extrabold text-[9.5px] md:text-[10px] uppercase">
+                    <th className="py-2 px-1.5 md:p-2.5 w-10 md:w-12 text-center">ID</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-16 md:w-20 text-center">Lệnh LSX</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-24 md:w-32">Dòng xe (Model)</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-18 md:w-24 text-center">Ngày kiểm</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-16 md:w-20 text-right">Quy cách</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-24 md:w-28">Người rà soát</th>
+                    <th className="py-2 px-1.5 md:p-2.5 min-w-[260px] md:min-w-[340px]">Nội dung lỗi phát hiện & Chỉ đạo xử lý</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-20 md:w-26 text-center">Trạng thái</th>
+                    <th className="py-2 px-1.5 md:p-2.5 w-16 md:w-20 text-center">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredPqc.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="p-8 text-center text-slate-400 italic">
+                        Không tìm thấy sự cố công đoạn nào tương ứng với bộ lọc đã chọn.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredPqc.map((r, i) => (
+                    <tr key={i} className="hover:bg-slate-50/60 transition">
+                      <td className="py-2 px-1.5 md:p-2.5 text-center font-bold text-slate-400">
+                        <button
+                          type="button"
+                          onClick={() => setViewDetailModal?.({ type: 'pqc_record', data: r })}
+                          className="text-indigo-650 hover:underline hover:text-indigo-800 font-bold font-mono cursor-pointer"
+                          title="Click xem chi tiết"
+                        >
+                          {r.id}
+                        </button>
+                      </td>
+                      <td className="py-2 px-1.5 md:p-2.5 text-center">
+                        <span className="bg-slate-150 text-slate-700 font-extrabold px-1.5 py-0.5 rounded font-mono text-[9px] md:text-[10px]">{r.lsx}</span>
+                      </td>
+                      <td className="py-2 px-1.5 md:p-2.5 font-extrabold text-slate-800">{r.model}</td>
+                      <td className="py-2 px-1.5 md:p-2.5 text-slate-600 text-center font-medium">{r.date}</td>
+                      <td className="py-2 px-1.5 md:p-2.5 text-right font-bold text-slate-700 font-mono">{r.qty.toLocaleString('vi-VN')}</td>
+                      <td className="py-2 px-1.5 md:p-2.5 font-semibold text-slate-600">{r.checkedBy}</td>
+                      <td className="py-2 px-1.5 md:p-2.5 text-slate-600 font-medium leading-relaxed break-words whitespace-normal">{r.findings}</td>
+                      <td className="py-2 px-1.5 md:p-2.5 text-center">
+                        <span className={`px-2 py-0.5 rounded-full text-[8.5px] md:text-[9px] font-black uppercase border ${
+                          r.status === 'Đạt hoàn toàn' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          r.status === 'Đã cải tiến' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          'bg-amber-50 text-amber-600 border-amber-200 animate-pulse'
+                        }`}>
+                          {r.status}
+                        </span>
+                      </td>
+                      <td className="py-2 px-1.5 md:p-2.5 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setViewDetailModal?.({ type: 'pqc_record', data: r })}
+                            className="text-emerald-600 hover:text-emerald-800 p-1 cursor-pointer"
+                            title="Xác định chi tiết"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEditPqcClick(r)}
+                            className="text-indigo-650 hover:text-indigo-805 p-1 cursor-pointer"
+                            title="Chỉnh sửa phiếu PQC"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePqcClick(r.id)}
+                            className="text-rose-605 hover:text-rose-800 p-1 cursor-pointer"
+                            title="Xóa phiếu"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== SUBTAB: OQC ==================== */}
+      {qcMainSubTab === 'oqc' && (
+        <div className="space-y-4">
+          {renderActivePlanTargetsBanner('OQC')}
+          
+          {/* Dashboard Mode Selector */}
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center bg-white p-3 rounded-2xl border border-slate-200/60 shadow-sm gap-3">
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setOqcTabMode('dashboard')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${oqcTabMode === 'dashboard' ? 'bg-white text-blue-700 shadow-xs scale-98 sm:scale-100' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                <Sliders className="w-4 h-4 text-blue-500 animate-pulse" />
+                Bảng điều khiển trực quan KCS (OQC)
+              </button>
+              <button
+                type="button"
+                onClick={() => setOqcTabMode('history')}
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${oqcTabMode === 'history' ? 'bg-white text-blue-700 shadow-xs scale-98 sm:scale-100' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                <FileText className="w-4 h-4 text-indigo-500" />
+                Nhật ký chi tiết & Báo cáo Pivot ({filteredOqc.length})
+              </button>
+            </div>
+            
+            {oqcTabMode === 'dashboard' && (
+              <div className="flex items-center justify-end gap-2 shrink-0 md:mt-0 select-none">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Trạng thái:</span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-200/50 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  Đã đồng bộ Live thực tế
+                </span>
+              </div>
+            )}
+          </div>
+
+          {oqcTabMode === 'dashboard' ? (
+            /* ================================== NEW RENDER: VISUAL KCS/OQC DASHBOARD ================================== */
+            (() => {
+              // Real-world dynamic live coordinates
+              const liveLapRapTotal = filteredOqc.length;
+              const datVal = filteredOqc.filter(isOqcRecordPassed).length;
+              const loiVal = liveLapRapTotal - datVal;
+
+              const today = new Date();
+              // Try to find month from filter first, then from the most common month in filteredOqc, then current month
+              let targetMonth = today.getMonth() + 1;
+              let targetYear = today.getFullYear();
+              
+              if (oqcFilterMonth !== 'All') {
+                targetMonth = parseInt(oqcFilterMonth, 10);
+              } else if (filteredOqc.length > 0) {
+                // Find most common month in filteredOqc
+                const monthCounts: Record<number, number> = {};
+                filteredOqc.forEach(r => {
+                  if (r.month) monthCounts[r.month] = (monthCounts[r.month] || 0) + 1;
+                });
+                const sortedMonths = Object.keys(monthCounts).sort((a, b) => monthCounts[parseInt(b, 10)] - monthCounts[parseInt(a, 10)]);
+                if (sortedMonths.length > 0) {
+                  targetMonth = parseInt(sortedMonths[0], 10);
+                }
+              }
+
+              if (oqcFilterYear !== 'All') {
+                targetYear = parseInt(oqcFilterYear, 10);
+              } else if (filteredOqc.length > 0) {
+                // Find most common year in filteredOqc
+                const yearCounts: Record<number, number> = {};
+                filteredOqc.forEach(r => {
+                  if (r.year) yearCounts[r.year] = (yearCounts[r.year] || 0) + 1;
+                });
+                const sortedYears = Object.keys(yearCounts).sort((a, b) => yearCounts[parseInt(b, 10)] - yearCounts[parseInt(a, 10)]);
+                if (sortedYears.length > 0) {
+                  targetYear = parseInt(sortedYears[0], 10);
+                }
+              }
+
+              // Determine if a week filter is active (specific Week or specific Date)
+              const isWeekFilterActive = oqcFilterWeek !== 'All' || oqcFilterDate !== 'All';
+              const selectedWeek = oqcFilterWeek !== 'All' ? oqcFilterWeek : (oqcFilterDate !== 'All' ? getWeekAndMonthFromDate(oqcFilterDate).week : 'T1');
+              
+              const currentMonthStr = isWeekFilterActive ? `Tuần ${selectedWeek} - Tháng ${targetMonth}` : `Tháng ${targetMonth}`;
+
+              let targetAssembled = 7200; // default month fallback
+
+              if (isWeekFilterActive) {
+                // WEEK MODE
+                let activeWeeklyPlans = weeklyPlans;
+                if (!activeWeeklyPlans || activeWeeklyPlans.length === 0) {
+                  try {
+                    const saved = localStorage.getItem('dk_weekly_plans');
+                    if (saved) activeWeeklyPlans = JSON.parse(saved);
+                  } catch (e) {}
+                }
+                if (!activeWeeklyPlans) activeWeeklyPlans = [];
+
+                const planForWeek = activeWeeklyPlans.find(p => 
+                  p.week === selectedWeek && 
+                  p.month === targetMonth && 
+                  p.year === targetYear
+                );
+
+                let foundValue: number | null = null;
+                if (planForWeek && planForWeek.targets) {
+                  const lrTarget = planForWeek.targets.find(t => {
+                    const contentLower = t.content.toLowerCase();
+                    return (
+                      (contentLower.includes('lắp ráp') || contentLower.includes('lap rap')) &&
+                      (contentLower.includes('số lượng') || contentLower.includes('so luong') || contentLower.includes('sl') || t.unit.toLowerCase() === 'xe')
+                    );
+                  }) || planForWeek.targets.find(t => {
+                    const contentLower = t.content.toLowerCase();
+                    return contentLower.includes('lắp ráp') || contentLower.includes('lap rap');
+                  });
+
+                  if (lrTarget) {
+                    const parsed = parseInt(String(lrTarget.targetValue).replace(/[^0-9]/g, ''), 10);
+                    if (parsed && parsed > 0) {
+                      foundValue = parsed;
+                    }
+                  }
+                }
+                targetAssembled = foundValue !== null ? foundValue : 1800; // default week target if not set
+              } else {
+                // MONTH MODE
+                let activeMonthlyPlans = monthlyPlans;
+                if (!activeMonthlyPlans || activeMonthlyPlans.length === 0) {
+                  try {
+                    const saved = localStorage.getItem('dk_monthly_plans');
+                    if (saved) activeMonthlyPlans = JSON.parse(saved);
+                  } catch (e) {}
+                }
+                if (!activeMonthlyPlans) activeMonthlyPlans = [];
+
+                const planForMonth = activeMonthlyPlans.find(p => 
+                  p.month === targetMonth && 
+                  p.year === targetYear
+                );
+
+                let foundValue: number | null = null;
+                if (planForMonth && planForMonth.targets) {
+                  const lrTarget = planForMonth.targets.find(t => {
+                    const contentLower = t.content.toLowerCase();
+                    return (
+                      (contentLower.includes('lắp ráp') || contentLower.includes('lap rap')) &&
+                      (contentLower.includes('số lượng') || contentLower.includes('so luong') || contentLower.includes('sl') || t.unit.toLowerCase() === 'xe')
+                    );
+                  }) || planForMonth.targets.find(t => {
+                    const contentLower = t.content.toLowerCase();
+                    return contentLower.includes('lắp ráp') || contentLower.includes('lap rap');
+                  });
+
+                  if (lrTarget) {
+                    const parsed = parseInt(String(lrTarget.targetValue).replace(/[^0-9]/g, ''), 10);
+                    if (parsed && parsed > 0) {
+                      foundValue = parsed;
+                    }
+                  }
+                }
+                targetAssembled = foundValue !== null ? foundValue : 7200; // default month target if not set
+              }
+
+              const targetProgress = targetAssembled > 0 ? Math.min(100, Math.round((liveLapRapTotal / targetAssembled) * 100)) : 0;
+
+              // Remaining days of the current month (last day of month minus current day)
+              const lastDayDate = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+              const daysRemaining = lastDayDate - today.getDate();
+
+              const lsxVal = filteredOqc.length;
+              const laprapVal = liveLapRapTotal;
+
+              const pieDatCount = datVal;
+              const pieLoiCount = loiVal;
+              const pieDatPercent = liveLapRapTotal > 0 ? Math.round((pieDatCount / liveLapRapTotal) * 100) : 0;
+              const pieLoiPercent = liveLapRapTotal > 0 ? (100 - pieDatPercent) : 0;
+
+              // Process models mapping dynamically
+              const liveModelsMap: Record<string, number> = {};
+              filteredOqc.forEach(r => {
+                const m = r.model || 'Dòng khác';
+                liveModelsMap[m] = (liveModelsMap[m] || 0) + 1;
+              });
+              let activeBarData = Object.entries(liveModelsMap).map(([name, count]) => ({ name, count }))
+                .sort((a, b) => b.count - a.count);
+              if (activeBarData.length === 0) {
+                activeBarData = [
+                  { name: 'DK ROMA SX v2_App', count: 0 },
+                  { name: 'DK Nova', count: 0 },
+                  { name: 'DK Gogo S', count: 0 },
+                  { name: 'DK EZ3 _ App', count: 0 },
+                  { name: 'DK D2', count: 0 }
+                ];
+              }
+
+              // Build live model defects list
+              const liveModelDefects: Record<string, { name: string; count: number }[]> = {};
+              filteredOqc.forEach(r => {
+                const modelName = r.model || 'Khác';
+                if (!liveModelDefects[modelName]) {
+                  liveModelDefects[modelName] = [];
+                }
+                if (r.status === 'Lỗi' && r.defectDetail) {
+                  const items = r.defectDetail.split(/[,;+\n]/).map(s => s.trim()).filter(Boolean);
+                  items.forEach(defect => {
+                    const existing = liveModelDefects[modelName].find(d => d.name === defect);
+                    if (existing) {
+                      existing.count += (r.failedCount || 1);
+                    } else {
+                      liveModelDefects[modelName].push({ name: defect, count: (r.failedCount || 1) });
+                    }
+                  });
+                }
+              });
+
+              // Get unique models dynamically from filtered OQC records
+              const assembledModels = Array.from(new Set(filteredOqc.map(r => r.model))).filter(Boolean).sort();
+
+              const currentAssembled = liveLapRapTotal;
+
+              return (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                  
+                  {/* INTERACTIVE DASHBOARD FILTER BAR */}
+                  <div className="bg-slate-50 p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-2.5 sm:space-y-3">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-200/40">
+                      <div className="flex items-center gap-1.5">
+                        <Filter className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
+                        <h4 className="text-[10px] sm:text-[10.5px] font-black uppercase text-slate-700 tracking-wider">Bộ lọc dữ liệu chất lượng KCS (OQC Dashboard)</h4>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {(oqcFilterMonth !== 'All' || oqcFilterYear !== 'All' || oqcFilterDate !== 'All' || oqcFilterModel !== 'All' || oqcFilterWeek !== 'All' || oqcSearch !== '') && (
+                          <button
+                             type="button"
+                             onClick={() => {
+                               setOqcFilterMonth('All');
+                               setOqcFilterYear('All');
+                               setOqcFilterDate('All');
+                               setOqcFilterModel('All');
+                               setOqcFilterWeek('All');
+                               setOqcSearch('');
+                             }}
+                             className="text-[9px] sm:text-[10px] bg-red-50 text-red-650 hover:bg-red-100 border border-red-200 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer active:scale-95"
+                          >
+                            ✕ Nhập lại bộ lọc (Reset)
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setIsOqcFilterExpanded(!isOqcFilterExpanded)}
+                          className="flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-blue-700 bg-white hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg transition-all cursor-pointer"
+                        >
+                          {isOqcFilterExpanded ? (
+                            <>Thu gọn <ChevronUp className="w-3 h-3" /></>
+                          ) : (
+                            <>Mở rộng <ChevronDown className="w-3 h-3" /></>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {isOqcFilterExpanded && (
+                      <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 sm:gap-3">
+                        {/* Search */}
+                        <div className="col-span-2 lg:col-span-1 space-y-0.5 sm:space-y-1">
+                          <label className="text-[8.5px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 font-sans">
+                            <Search className="w-2.5 h-2.5 text-indigo-500" /> Tìm nhanh
+                          </label>
+                          <input
+                            type="text"
+                            value={oqcSearch}
+                            onChange={(e) => setOqcSearch(e.target.value)}
+                            placeholder="Số khung, mã phụ tùng, màu..."
+                            className="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-2 sm:p-2 text-xs focus:outline-none focus:border-blue-500 font-bold text-slate-700"
+                          />
+                        </div>
+
+                        {/* Month */}
+                        <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                          <label className="text-[8.5px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 font-sans">
+                            <Calendar className="w-2.5 h-2.5 text-blue-500" /> Lọc theo Tháng
+                          </label>
+                          <select
+                            value={oqcFilterMonth}
+                            onChange={(e) => setOqcFilterMonth(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-2 sm:p-2 text-xs focus:outline-none focus:border-blue-500 font-bold text-slate-700 cursor-pointer"
+                          >
+                            <option value="All">Tất cả tháng</option>
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(month => (
+                              <option key={month} value={String(month)}>Tháng {month}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Year */}
+                        <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                          <label className="text-[8.5px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 font-sans">
+                            <Calendar className="w-2.5 h-2.5 text-blue-500" /> Lọc theo Năm
+                          </label>
+                          <select
+                            value={oqcFilterYear}
+                            onChange={(e) => setOqcFilterYear(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-2 sm:p-2 text-xs focus:outline-none focus:border-blue-500 font-bold text-slate-700 cursor-pointer"
+                          >
+                            <option value="All">Tất cả năm</option>
+                            {uniqueOqcYears.map(year => (
+                              <option key={year} value={String(year)}>Năm {year}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Week */}
+                        <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                          <label className="text-[8.5px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 font-sans">
+                            <Calendar className="w-2.5 h-2.5 text-blue-500" /> Lọc theo Tuần
+                          </label>
+                          <select
+                            value={oqcFilterWeek}
+                            onChange={(e) => setOqcFilterWeek(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-2 sm:p-2 text-xs focus:outline-none focus:border-blue-500 font-bold text-slate-700 cursor-pointer animate-none"
+                          >
+                            <option value="All">Tất cả tuần</option>
+                            <option value="T1">Tuần 1</option>
+                            <option value="T2">Tuần 2</option>
+                            <option value="T3">Tuần 3</option>
+                            <option value="T4">Tuần 4</option>
+                            <option value="T5">Tuần 5</option>
+                          </select>
+                        </div>
+
+                        {/* Date */}
+                        <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                          <label className="text-[8.5px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 font-sans">
+                            <Clock className="w-2.5 h-2.5 text-blue-500" /> Lọc theo Ngày
+                          </label>
+                          <select
+                            value={oqcFilterDate}
+                            onChange={(e) => setOqcFilterDate(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-2 sm:p-2 text-xs focus:outline-none focus:border-blue-500 font-bold text-slate-700 cursor-pointer"
+                          >
+                            <option value="All">Tất cả ngày</option>
+                            {uniqueOqcDates.map(date => (
+                              <option key={date} value={date}>{date}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Model */}
+                        <div className="col-span-2 lg:col-span-1 space-y-0.5 sm:space-y-1">
+                          <label className="text-[8.5px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 font-sans">
+                            <Truck className="w-2.5 h-2.5 text-blue-500" /> Dòng xe (Model)
+                          </label>
+                          <select
+                            value={oqcFilterModel}
+                            onChange={(e) => setOqcFilterModel(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-2 sm:p-2 text-xs focus:outline-none focus:border-blue-500 font-bold text-slate-700 cursor-pointer"
+                          >
+                            <option value="All">Tất cả Dòng xe</option>
+                            {uniqueOqcModels.map((mdl, idx) => (
+                              <option key={`${mdl}-${idx}`} value={mdl}>{mdl}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 1. TOP CARDS GRID */}
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-2.5 sm:gap-4 animate-in slide-in-from-top-1 px-0.5">
+                    {/* TIẾN ĐỘ LẮP RÁP THÁNG HIỆN TẠI */}
+                    <div className="col-span-2 md:col-span-2 bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                      <div className="flex justify-between items-start select-none">
+                        <div>
+                          <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider">Tiến độ lắp ráp {currentMonthStr}</h4>
+                          <span className="text-2xl sm:text-3xl font-black text-rose-500 font-mono block mt-1">{targetProgress}%</span>
+                        </div>
+                        <button type="button" className="text-slate-350 hover:text-slate-500 p-1 transition cursor-pointer">
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="space-y-2 mt-3 sm:mt-4 select-none">
+                        <div className="relative w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div className="absolute top-0 left-0 h-full rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${targetProgress}%` }} />
+                        </div>
+                        <span className="text-[9.5px] sm:text-[10.5px] font-bold text-slate-550 block">
+                          Hiện tại <strong className="text-slate-800 font-mono">{currentAssembled.toLocaleString()}</strong> | Mục tiêu <strong className="text-slate-800 font-mono">{targetAssembled.toLocaleString()}</strong>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Ngày còn lại Tháng Hiện Tại */}
+                    <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                      <div className="flex justify-between items-start select-none">
+                        <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-tight font-sans">Ngày còn lại<br />{currentMonthStr}</h4>
+                        <button type="button" className="text-slate-350 hover:text-slate-500 p-1 transition cursor-pointer font-bold">
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="flex flex-col items-center justify-center p-1 sm:p-2 mb-1 select-none">
+                        <div className="bg-blue-500 text-white font-black text-lg sm:text-2xl w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center font-mono shadow-md shadow-blue-100/50 transition-all duration-500">
+                          {daysRemaining}
+                        </div>
+                        <span className="text-[8.5px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mt-1 sm:mt-1.5 font-sans">Ngày</span>
+                      </div>
+                    </div>
+
+                    {/* SL xe theo LSX */}
+                    <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                      <div className="flex justify-between items-start select-none">
+                        <div>
+                          <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">SL xe theo LSX</h4>
+                          <span className="inline-flex items-center gap-1 bg-amber-50 text-[8px] sm:text-[9px] font-black text-amber-600 border border-amber-200/40 px-1.5 py-0.5 rounded-lg mt-1 select-none shrink-0">
+                            ✧ Smart LSX
+                          </span>
+                        </div>
+                        <button type="button" className="text-slate-350 hover:text-slate-500 p-1 transition cursor-pointer">
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="mt-3 sm:mt-4 select-none">
+                        <span className="text-xl sm:text-3xl font-black text-red-500 font-mono block tracking-tight">{lsxVal.toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    {/* SL xe lắp ráp */}
+                    <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                      <div className="flex justify-between items-start select-none">
+                        <div>
+                          <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">SL xe lắp ráp</h4>
+                          <span className="inline-flex items-center gap-1 bg-amber-50 text-[8px] sm:text-[9px] font-black text-amber-600 border border-amber-200/40 px-1.5 py-0.5 rounded-lg mt-1 select-none shrink-0">
+                            ✦ Smart ráp
+                          </span>
+                        </div>
+                        <button type="button" className="text-slate-350 hover:text-slate-500 p-1 transition cursor-pointer">
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="mt-3 sm:mt-4 select-none">
+                        <span className="text-xl sm:text-3xl font-black text-amber-500 font-mono block tracking-tight">{laprapVal.toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    {/* SL xe đạt lần 1 */}
+                    <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                      <div className="flex justify-between items-start select-none">
+                        <div>
+                          <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">SL xe đạt lần 1</h4>
+                          <span className="inline-flex items-center gap-1 bg-blue-50 text-[8px] sm:text-[9px] font-black text-blue-600 border border-blue-200/40 px-1.5 py-0.5 rounded-lg mt-1 select-none shrink-0">
+                            ✦ Smart Đạt
+                          </span>
+                        </div>
+                        <button type="button" className="text-slate-355 hover:text-slate-505 p-1 transition cursor-pointer">
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="mt-3 sm:mt-4 select-none">
+                        <span className="text-xl sm:text-3xl font-black text-sky-500 font-mono block tracking-tight">{datVal.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. BLUE LINE SEPARATOR WITH DOTS */}
+                  <div className="w-full h-[3px] bg-blue-500/10 rounded-full relative my-1 select-none">
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-500" />
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-500" />
+                  </div>
+
+                  {/* 3. GRAPHS ROW */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left Graph: Tình trạng kiểm tra */}
+                    <div className="lg:col-span-1 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between h-[340px]">
+                      <div className="flex justify-between items-center select-none border-b border-slate-100 pb-2.5">
+                        <div>
+                          <h4 className="font-extrabold text-xs uppercase text-slate-755 flex items-center gap-1.5">
+                            Tình trạng kiểm tra
+                          </h4>
+                          <span className="inline-flex items-center gap-1 bg-purple-50 text-[9px] font-black text-purple-600 border border-purple-200/30 px-2 py-0.5 rounded-md mt-1 select-none">
+                            ✦ Phân tích thông minh
+                          </span>
+                        </div>
+                        <button type="button" className="text-slate-300 hover:text-slate-500 rounded p-1 transition cursor-pointer">
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="flex-grow flex items-center justify-center">
+                        <PieChartComponent 
+                          datPercentage={Math.round(pieDatPercent)} 
+                          loiPercentage={Math.round(pieLoiPercent)} 
+                          datCount={pieDatCount} 
+                          loiCount={pieLoiCount} 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Right Graph: Model Lắp ráp */}
+                    <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between h-[340px]">
+                      <div className="flex justify-between items-center select-none border-b border-slate-100 pb-2.5">
+                        <div>
+                          <h4 className="font-extrabold text-xs uppercase text-slate-755 flex items-center gap-1.5">
+                            Sản lượng Model lắp ráp dập sườn
+                          </h4>
+                          <span className="inline-flex items-center gap-1 bg-purple-50 text-[9px] font-black text-purple-600 border border-purple-200/30 px-2 py-0.5 rounded-md mt-1 select-none">
+                            ✦ Phân tích thông minh (Báo cáo ngày)
+                          </span>
+                        </div>
+                        <button type="button" className="text-slate-300 hover:text-slate-500 rounded p-1 transition cursor-pointer">
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="flex-grow pt-2">
+                        <BarChartComponent data={activeBarData} onBarClick={setOqcDetailModalModel} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3.5. STACKED CHART FOR QUALITY RATE & VOLUME (OQC) */}
+                  <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 hover:shadow-md transition-all duration-300">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 select-none border-b border-slate-100 pb-3 mb-5">
+                      <div>
+                        <h4 className="font-extrabold text-xs uppercase text-slate-755 flex items-center gap-2">
+                          <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                          Phân tích Chất lượng Đạt / Lỗi Xếp chồng theo Dòng xe (OQC)
+                        </h4>
+                        <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase font-mono">
+                          Số lượng đạt (Xanh lá) ở dưới • Số lượng lỗi (Đỏ/Cam) ở trên
+                        </p>
+                      </div>
+                      
+                      {/* Selector Controls */}
+                      <div className="flex bg-slate-100/85 p-0.5 rounded-lg border border-slate-200/60 text-[10px] uppercase font-black tracking-wider shrink-0 transition-all">
+                        <button
+                          type="button"
+                          onClick={() => setStackedMode('volume')}
+                          className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${stackedMode === 'volume' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                        >
+                          Theo Số lượng (Xe)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStackedMode('rate')}
+                          className={`px-3 py-1.5 rounded-md transition-all cursor-pointer ${stackedMode === 'rate' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                        >
+                          Theo Tỷ lệ (%)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Stacked Chart Area */}
+                    {assembledModels.length === 0 ? (
+                      <div className="py-12 text-center text-xs text-slate-400 italic">
+                        Không có dữ liệu OQC để vẽ biểu đồ xếp chồng.
+                      </div>
+                    ) : (
+                      (() => {
+                        const modelStats = assembledModels.map(model => {
+                          const modelRecords = filteredOqc.filter(r => r.model === model);
+                          const total = modelRecords.length;
+                          const passed = modelRecords.filter(isOqcRecordPassed).length;
+                          const failed = total - passed;
+                          const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+                          const failRate = total > 0 ? (100 - passRate) : 0;
+                          return {
+                            model,
+                            total,
+                            passed,
+                            failed,
+                            passRate,
+                            failRate,
+                          };
+                        }).sort((a, b) => b.total - a.total);
+
+                        const maxTotal = Math.max(...modelStats.map(s => s.total), 1);
+
+                        return (
+                          <div className="space-y-4">
+                            {/* Chart Grid representing each model as a vertical bar */}
+                            <div className="flex items-end justify-around gap-2 h-[260px] pt-4 px-2 sm:px-4 relative font-sans select-none border-b border-slate-100/80">
+                              
+                              {/* Background vertical scale lines */}
+                              <div className="absolute inset-x-0 inset-y-0 flex flex-col justify-between pointer-events-none">
+                                {[100, 75, 50, 25, 0].map((tick) => (
+                                  <div key={tick} className="flex items-center w-full relative h-0">
+                                    <span className="text-[9px] text-slate-400 font-extrabold font-mono w-10 shrink-0 text-right pr-2 select-none">
+                                      {stackedMode === 'rate' ? `${tick}%` : Math.round((tick / 100) * maxTotal)}
+                                    </span>
+                                    <div className="flex-1 border-t border-dashed border-slate-100" />
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Stacked Bars Container */}
+                              <div className="absolute inset-y-0 left-12 right-0 flex justify-around items-end z-10 bottom-0 select-none">
+                                {modelStats.map((item, idx) => {
+                                  let passHeight = 0;
+                                  let failHeight = 0;
+                                  
+                                  if (stackedMode === 'rate') {
+                                    passHeight = item.passRate;
+                                    failHeight = item.failRate;
+                                  } else {
+                                    passHeight = (item.passed / maxTotal) * 100;
+                                    failHeight = (item.failed / maxTotal) * 100;
+                                  }
+
+                                  const showPassLabel = passHeight > 12;
+                                  const showFailLabel = failHeight > 12;
+
+                                  return (
+                                    <div 
+                                      key={`${item.model}-${idx}`}
+                                      className="flex flex-col items-center h-full justify-end group/bar relative" 
+                                      style={{ width: `${Math.max(12, Math.min(18, 80 / modelStats.length))}%` }}
+                                    >
+                                      {/* Stacked Pillar Core */}
+                                      <div className="w-full h-full flex flex-col justify-end bg-slate-50/40 hover:bg-slate-100/50 rounded-t-xl transition-all duration-300 relative border border-transparent hover:border-slate-200/50">
+                                        
+                                        {/* Sát trên - Lỗi (Red/Orange segment) */}
+                                        {item.failed > 0 && (
+                                          <div 
+                                            className="w-full bg-rose-500 hover:bg-rose-400 transition-all duration-305 flex flex-col items-center justify-center relative cursor-pointer shadow-inner shrink-0"
+                                            style={{ height: `${failHeight}%` }}
+                                            onClick={() => setOqcDetailModalModel(item.model)}
+                                          >
+                                            {showFailLabel && (
+                                              <div className="text-[10px] text-white font-mono font-black tracking-tighter text-center leading-none">
+                                                <span className="block">{item.failed}</span>
+                                                <span className="block text-[8px] opacity-90">{item.failRate}%</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        {/* Sát dưới - Đạt (Green segment) */}
+                                        {item.passed > 0 && (
+                                          <div 
+                                            className={`w-full bg-emerald-500 hover:bg-emerald-400 transition-all duration-305 flex flex-col items-center justify-center relative cursor-pointer shadow-inner shrink-0 ${item.failed === 0 ? 'rounded-t-xl' : 'rounded-t-none'}`}
+                                            style={{ height: `${passHeight}%` }}
+                                            onClick={() => setOqcDetailModalModel(item.model)}
+                                          >
+                                            {showPassLabel && (
+                                              <div className="text-[10px] text-white font-mono font-black tracking-tighter text-center leading-none">
+                                                <span className="block">{item.passed}</span>
+                                                <span className="block text-[8px] opacity-90">{item.passRate}%</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+
+                                      </div>
+
+                                      {/* Dynamic Detailed Interacting Tooltip */}
+                                      <div className="absolute bottom-full mb-3 opacity-0 group-hover/bar:opacity-100 transition-all bg-slate-900 text-white text-[10px] font-medium p-3 rounded-xl shadow-lg pointer-events-none whitespace-nowrap z-50 transform translate-y-1 group-hover/bar:translate-y-0 scale-95 group-hover/bar:scale-100 border border-slate-850">
+                                        <div className="font-extrabold uppercase text-slate-400 tracking-wider text-[8px] pb-1 border-b border-slate-800 mb-1 flex items-center gap-1">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                          Chi tiết chất lượng dòng xe (KCS)
+                                        </div>
+                                        <div className="font-extrabold text-[11px] text-white uppercase">{item.model}</div>
+                                        <div className="mt-1.5 space-y-0.5 font-mono font-bold text-[10px]">
+                                          <div className="flex justify-between gap-5 text-emerald-400">
+                                            <span>✓ Đạt chuẩn:</span>
+                                            <span>{item.passed} xe ({item.passRate}%)</span>
+                                          </div>
+                                          <div className="flex justify-between gap-5 text-rose-400">
+                                            <span>✗ Có khuyết phẩm:</span>
+                                            <span>{item.failed} xe ({item.failRate}%)</span>
+                                          </div>
+                                          <div className="flex justify-between gap-5 text-slate-350 border-t border-slate-800 pt-1 mt-1 font-sans">
+                                            <span>🛞 Tổng xe:</span>
+                                            <span className="font-mono font-black">{item.total} xe</span>
+                                          </div>
+                                        </div>
+                                        <div className="text-[8px] italic text-slate-500 mt-1.5 block text-center font-sans">Bấm vào cột để xem nhật ký</div>
+                                      </div>
+
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                            </div>
+
+                            {/* X-Axis Labels and Legends */}
+                            <div className="flex flex-col gap-3">
+                              {/* Labels under bars */}
+                              <div className="flex justify-around items-center pl-12 select-none">
+                                {modelStats.map((item, idx) => (
+                                  <div 
+                                    key={`${item.model}-${idx}`} 
+                                    className="text-[10px] font-black text-slate-500 uppercase truncate text-center leading-tight tracking-tight scale-90 cursor-pointer hover:text-blue-600 transition-colors" 
+                                    style={{ width: `${Math.max(12, Math.min(18, 80 / modelStats.length))}%` }} 
+                                    title={item.model}
+                                    onClick={() => setOqcDetailModalModel(item.model)}
+                                  >
+                                    {item.model.replace('DK ', '')}
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Legend Indicator bar on the bottom */}
+                              <div className="flex flex-wrap items-center justify-center gap-5 text-[10px] uppercase font-black text-slate-500 bg-slate-50 border border-slate-100 rounded-xl py-2 px-3">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-3 h-3 rounded bg-emerald-500" />
+                                  <span>Đạt chuẩn ({modelStats.reduce((acc, curr) => acc + curr.passed, 0)} xe)</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-3 h-3 rounded bg-rose-500" />
+                                  <span>Khuyết phẩm ({modelStats.reduce((acc, curr) => acc + curr.failed, 0)} xe)</span>
+                                </div>
+                                <div className="w-px h-3 bg-slate-200 hidden sm:block" />
+                                <div className="text-[9px] tracking-wide text-slate-400">
+                                  Chế độ hiển thị: <strong className="text-slate-600">{stackedMode === 'rate' ? 'Tỉ lệ % đại lượng' : 'Số lượng xe thực tế'}</strong>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()
+                    )}
+                  </div>
+
+                  {/* 4. DEFECTS GRID */}
+                  <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 select-none font-sans">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-ping shrink-0" />
+                        <h3 className="text-xs uppercase font-black text-slate-705 tracking-wider">Top 5 khuyết phẩm chất lượng xe theo từng dòng ({assembledModels.length} dòng xe lắp ráp)</h3>
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-bold italic font-sans">* Mỗi thẻ tương ứng với 1 model xe được lắp ráp trong kỳ lọc</span>
+                    </div>
+
+                    {assembledModels.length === 0 ? (
+                      <div className="bg-white rounded-2xl border border-slate-205 p-12 text-center text-xs text-slate-400 italic">
+                        Không ghi nhận dòng xe lắp ráp (KCS) nào khớp với bộ lọc dữ liệu hiện tại.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {assembledModels.map((model, idx) => {
+                          const listDefects = (liveModelDefects[model] || []).sort((a,b) => b.count - a.count).slice(0, 5);
+                          return (
+                            <ModelDefectCard 
+                              key={`${model}-${idx}`}
+                              modelName={model} 
+                              defects={listDefects} 
+                              onDefectClick={(name, count) => setSelectedDashboardDefect({ name, count, modelName: model })} 
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              );
+            })()
+          ) : (
+            /* ================================== ORIGINAL RENDER (Sổ sách & Pivot chi tiết) ================================== */
+            <div className="space-y-4">
+              {(() => {
+                const passedCount = filteredOqc.filter(isOqcRecordPassed).length;
+                const failedCount = filteredOqc.filter(r => !isOqcRecordPassed(r)).length;
+                const passRate = filteredOqc.length > 0 ? Math.round((passedCount / filteredOqc.length) * 100) : 0;
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
+                    <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm col-span-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase leading-tight">Xe nghiệm thu KCS (Theo bộ lọc)</span>
+                      <span className="text-lg sm:text-xl font-black text-slate-800 font-mono mt-0.5 sm:mt-1 block">{filteredOqc.length} chiếc</span>
+                    </div>
+                    <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm col-span-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase leading-tight font-sans">Hoàn hảo vượt ải KCS (Đạt)</span>
+                      <span className="text-lg sm:text-xl font-black text-emerald-600 font-mono mt-0.5 sm:mt-1 block">
+                        {passedCount} chiếc
+                      </span>
+                    </div>
+                    <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm col-span-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase leading-tight font-sans">Có khuyết phẩm lỗi xe</span>
+                      <span className="text-lg sm:text-xl font-black text-red-500 font-mono mt-0.5 sm:mt-1 block">
+                        {failedCount} chiếc
+                      </span>
+                    </div>
+                    <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm col-span-1">
+                      <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase leading-tight font-sans">Tỷ lệ Đạt 100% lần 1</span>
+                      <span className="text-lg sm:text-xl font-black text-blue-600 font-mono mt-0.5 sm:mt-1 block">
+                        {passRate}% số xe
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="bg-white p-2.5 sm:p-4 rounded-xl border border-slate-200 space-y-3 sm:space-y-4">
+                {/* Elegant OQC Filter Controls Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-4 bg-slate-50 p-2.5 sm:p-4 rounded-xl border border-slate-100">
+                  <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                    <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-555 uppercase tracking-wider flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-blue-500" /> Lọc Ngày kiểm
+                    </label>
+                    <select
+                      value={oqcFilterDate}
+                      onChange={(e) => setOqcFilterDate(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-blue-600 font-bold text-slate-705 cursor-pointer pointer-events-auto"
+                    >
+                      <option value="All">Tất cả các ngày</option>
+                      {uniqueOqcDates.map(date => (
+                        <option key={date} value={date}>{date}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                    <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-555 uppercase tracking-wider flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-blue-500" /> Lọc Tháng
+                    </label>
+                    <select
+                      value={oqcFilterMonth}
+                      onChange={(e) => setOqcFilterMonth(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-blue-600 font-bold text-slate-705 cursor-pointer pointer-events-auto"
+                    >
+                      <option value="All">Tất cả các tháng</option>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(month => (
+                        <option key={month} value={String(month)}>Tháng {month}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                    <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-555 uppercase tracking-wider flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-blue-500" /> Lọc Tuần
+                    </label>
+                    <select
+                      value={oqcFilterWeek}
+                      onChange={(e) => setOqcFilterWeek(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-blue-600 font-bold text-slate-705 cursor-pointer pointer-events-auto"
+                    >
+                      <option value="All">Tất cả các tuần (T1-T5)</option>
+                      <option value="T1">Tuần 1 (T1)</option>
+                      <option value="T2">Tuần 2 (T2)</option>
+                      <option value="T3">Tuần 3 (T3)</option>
+                      <option value="T4">Tuần 4 (T4)</option>
+                      <option value="T5">Tuần 5 (T5)</option>
+                    </select>
+                  </div>
+
+                  <div className="col-span-1 space-y-0.5 sm:space-y-1">
+                    <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-555 uppercase tracking-wider flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-blue-500" /> Lọc Năm
+                    </label>
+                    <select
+                      value={oqcFilterYear}
+                      onChange={(e) => setOqcFilterYear(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-blue-600 font-bold text-slate-705 cursor-pointer pointer-events-auto"
+                    >
+                      <option value="All">Tất cả các năm</option>
+                      {uniqueOqcYears.map(year => (
+                        <option key={year} value={String(year)}>Năm {year}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="col-span-2 md:col-span-1 space-y-0.5 sm:space-y-1">
+                    <label className="text-[8.5px] sm:text-[10px] font-bold text-slate-555 uppercase tracking-wider flex items-center gap-1">
+                      <Truck className="w-3 h-3 text-blue-500" /> Dòng xe Model ({uniqueOqcModels.length})
+                    </label>
+                    <select
+                      value={oqcFilterModel}
+                      onChange={(e) => setOqcFilterModel(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 sm:py-2 text-xs focus:outline-none focus:border-blue-600 font-bold text-slate-705 cursor-pointer pointer-events-auto"
+                    >
+                      <option value="All">Tất cả dòng xe (Model)</option>
+                      {uniqueOqcModels.map((mdl, idx) => (
+                        <option key={`${mdl}-${idx}`} value={mdl}>{mdl}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+            <div className="overflow-x-auto pt-2">
+              <div className="text-xs font-black uppercase text-blue-750 mb-3 flex items-center gap-1.5 bg-blue-50/50 p-2.5 rounded-lg border border-blue-100">
+                <span className="w-2 h-2 rounded-full bg-blue-650 animate-pulse"></span>
+                Báo cáo Pivot tổng hợp chất lượng sản lượng KCS nghiệm thu xuất xưởng (OQC)
+              </div>
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-100 border-b text-slate-500 font-extrabold text-[10px] uppercase">
+                    <th className="p-3 w-12 text-center">STT</th>
+                    <th className="p-3 w-64 text-left">Dòng xe (Model)</th>
+                    <th className="p-3 w-44 text-center font-bold text-slate-700">Số lượng lắp ráp theo model</th>
+                    <th className="p-3 w-36 text-center font-bold text-emerald-700">Số lượng đạt</th>
+                    <th className="p-3 w-36 text-center font-bold text-red-650">Số lượng lỗi</th>
+                    <th className="p-3 w-36 text-center font-bold text-blue-700">Tỷ lệ đạt</th>
+                    <th className="p-3 text-left">Thông tin các lỗi số lượng lớn theo từng model</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {oqcPivotReport.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-slate-400 italic">
+                        Không tìm thấy dữ liệu KCS tương ứng với các bộ lọc đã chọn.
+                      </td>
+                    </tr>
+                  ) : (
+                    oqcPivotReport.map((row, i) => {
+                      const yieldRate = row.total > 0 ? Math.round((row.passed / row.total) * 100) : 0;
+                      return (
+                        <tr key={i} className="hover:bg-slate-50/65 transition font-medium">
+                          <td className="p-3 text-center text-slate-400 font-bold">{i+1}</td>
+                          <td className="p-3 font-extrabold text-slate-800 text-[12px]">{row.model}</td>
+                          <td className="p-3 text-center font-black text-slate-700 text-sm font-mono bg-slate-50/30">{row.total}</td>
+                          <td className="p-3 text-center font-bold text-emerald-600 text-sm font-mono">{row.passed}</td>
+                          <td className="p-3 text-center font-bold text-red-500 text-sm font-mono">{row.failed}</td>
+                          <td className="p-3 text-center bg-blue-50/10">
+                            <span className={`px-2 py-0.5 rounded text-[10.5px] font-black font-mono ${
+                              yieldRate >= 95 ? 'bg-emerald-50 text-emerald-700' :
+                              yieldRate >= 80 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-650'
+                            }`}>
+                              {yieldRate}%
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            {row.failed > 0 ? (
+                              <span className="text-slate-650 font-semibold bg-red-50/10 px-2.5 py-1.5 rounded inline-block text-[11px] leading-relaxed border border-red-100/50">
+                                {row.topErrors}
+                              </span>
+                            ) : (
+                              <span className="text-emerald-600 font-bold flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                ✓ Hoàn hảo (Không phát hiện lỗi)
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Secondary Tables and Pareto Analysis Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-6 border-t border-slate-100 mt-6">
+              
+              {/* Left Column: Chi tiết lỗi theo từng dòng xe */}
+              <div className="lg:col-span-2 overflow-x-auto">
+                <div className="text-xs font-black uppercase text-red-755 mb-3 flex items-center gap-1.5 bg-red-50/50 p-2.5 rounded-lg border border-red-100">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                  Chi tiết phân tích lỗi & số lượng lỗi phát hiện theo từng model dòng xe (KCS OQC)
+                </div>
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-100 border-b text-slate-500 font-extrabold text-[10px] uppercase">
+                      <th className="p-3 w-12 text-center">STT</th>
+                      <th className="p-3 w-48 text-left">Dòng xe (Model)</th>
+                      <th className="p-3 w-32 text-center font-bold text-slate-705 border-x border-slate-100">Tổng số lỗi</th>
+                      <th className="p-3 text-left font-bold text-slate-705">Chi tiết các lỗi phổ biến (Top 5 mỗi dòng xe)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {oqcErrorsByModelReport.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="p-8 text-center text-slate-400 italic">
+                          ✓ Tuyệt vời! Không phát hiện lỗi khuyết điểm nào trên các mẫu xe theo bộ lọc hiện tại.
+                        </td>
+                      </tr>
+                    ) : (
+                      oqcErrorsByModelReport.map((row, i) => (
+                        <tr key={i} className="hover:bg-slate-50/65 transition font-medium">
+                          <td className="p-3 text-center text-slate-400 font-bold">{i+1}</td>
+                          <td className="p-3 font-extrabold text-slate-800 text-[12px]">{row.model}</td>
+                          <td className="p-3 text-center font-black text-red-650 text-xs font-mono bg-red-50/20 border-x border-slate-100">{row.totalCount} lỗi</td>
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-2 py-1">
+                              {row.errors.map((err, idx) => (
+                                <span 
+                                  key={idx} 
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200/50"
+                                >
+                                  <span className="font-semibold text-slate-700">{err.text}:</span>
+                                  <strong className="text-red-650 font-mono font-black border-l pl-1 border-amber-200 ml-0.5">({err.count} xe)</strong>
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Right Column: Top 5 lỗi xuất hiện nhiều nhất toàn hệ thống */}
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 flex flex-col justify-start">
+                <div className="border-b pb-2.5">
+                  <h4 className="font-extrabold text-xs uppercase text-slate-700 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse" />
+                    Hiển thị top 5 lỗi xuất hiện nhiều nhất (OQC)
+                  </h4>
+                  <p className="text-[10px] text-slate-400 leading-relaxed mt-1">
+                    Được tổng hợp và thống kê tần suất khuyết điểm từ tất cả các xe đang lọc.
+                  </p>
+                </div>
+
+                {topOqcErrorsOverall.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-slate-400 italic">
+                    ✓ Không ghi nhận khuyết điểm lỗi xe nào trong chu kỳ này. Lắp ráp đạt 100% hoàn mỹ.
+                  </div>
+                ) : (
+                  <div className="space-y-4 text-xs font-semibold">
+                    {topOqcErrorsOverall.map((item, idx) => {
+                      const maxOverall = topOqcErrorsOverall[0]?.count || 1;
+                      const percentage = Math.round((item.count / maxOverall) * 100);
+                      return (
+                        <div key={idx} className="space-y-1">
+                          <div className="flex justify-between items-center text-[11px]">
+                            <span className="text-slate-800 font-extrabold max-w-[190px] truncate block" title={item.text}>
+                              {idx+1}. {item.text}
+                            </span>
+                            <span className="text-red-600 font-black font-mono bg-red-50 px-2 py-0.5 rounded border border-red-100">
+                              {item.count} xe
+                            </span>
+                          </div>
+                          <div className="relative w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                              className={`absolute top-0 left-0 h-full rounded-full transition-all duration-300 ${
+                                idx === 0 ? 'bg-red-500' : idx === 1 ? 'bg-orange-500' : 'bg-amber-400'
+                              }`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* General OQC Records Log Book Card */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b pb-3 text-left">
+                <div>
+                  <h4 className="font-extrabold text-slate-800 text-xs uppercase flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    Sổ Nhật Ký Chi Tiết Toàn Bộ Bản Ghi KCS (OQC) ({filteredOqc.length} bản ghi)
+                  </h4>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Danh sách chi tiết tất cả các xe đã qua kiểm nghiệm xuất xưởng theo bộ lọc hiện tại. Chọn checkbox để thực hiện xóa hàng loạt.
+                  </p>
+                </div>
+                {selectedOqcIds.length > 0 && (
+                  <div className="flex gap-2 self-end sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOqcIds([])}
+                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg cursor-pointer transition-colors border border-slate-200"
+                    >
+                      Bỏ chọn
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBulkDeleteOqc}
+                      className="px-3 py-1 bg-red-650 hover:bg-red-750 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 cursor-pointer shadow transition-all hover:scale-[1.02]"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Xóa hàng loạt ({selectedOqcIds.length})
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-150">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-505 font-extrabold text-[10px] uppercase">
+                      <th className="p-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={filteredOqc.length > 0 && filteredOqc.every(r => selectedOqcIds.includes(r.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              const allOqcFilteredIds = filteredOqc.map(r => r.id);
+                              setSelectedOqcIds(prev => Array.from(new Set([...prev, ...allOqcFilteredIds])));
+                            } else {
+                              const allOqcFilteredIds = filteredOqc.map(r => r.id);
+                              setSelectedOqcIds(prev => prev.filter(id => !allOqcFilteredIds.includes(id)));
+                            }
+                          }}
+                          className="rounded border-slate-300 text-indigo-650 focus:ring-indigo-500 cursor-pointer accent-indigo-650"
+                        />
+                      </th>
+                      <th className="p-3 w-12 text-center">STT</th>
+                      <th className="p-3 w-40">Dòng xe (Model)</th>
+                      <th className="p-3 w-32">Số khung / máy</th>
+                      <th className="p-3 w-24">Màu sắc</th>
+                      <th className="p-3 w-24">Trạng thái</th>
+                      <th className="p-3 w-40">Chi tiết khuyết tật</th>
+                      <th className="p-3 w-48">Ảnh hưởng chất lượng</th>
+                      <th className="p-3 w-48">Nguyên nhân cốt lõi</th>
+                      <th className="p-3 w-48">Biện pháp xử lý & CAPA</th>
+                      <th className="p-3 w-24 text-center">KCS</th>
+                      <th className="p-3 w-28 text-center">Thời gian</th>
+                      <th className="p-3 w-16 text-center">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredOqc.length === 0 ? (
+                      <tr>
+                        <td colSpan={13} className="p-8 text-center text-slate-400 italic">
+                          Chưa có bản ghi nào được nhập khớp với điều kiện lọc hiện tại.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredOqc.map((row, i) => {
+                        const isPassed = isOqcRecordPassed(row);
+                        return (
+                          <tr key={row.id} className="hover:bg-slate-50 transition font-medium">
+                            <td className="p-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedOqcIds.includes(row.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedOqcIds(prev => [...prev, row.id]);
+                                  } else {
+                                    setSelectedOqcIds(prev => prev.filter(id => id !== row.id));
+                                  }
+                                }}
+                                className="rounded border-slate-300 text-indigo-650 focus:ring-indigo-500 cursor-pointer accent-indigo-650"
+                              />
+                            </td>
+                            <td className="p-3 text-center text-slate-400 font-bold">{i + 1}</td>
+                            <td className="p-3 font-extrabold text-slate-800 text-[11px]">{row.model}</td>
+                            <td className="p-3 font-mono text-slate-650 font-bold">{row.serialNo || 'N/A'}</td>
+                            <td className="p-3 font-bold text-slate-650">{row.color || 'N/A'}</td>
+                            <td className="p-3">
+                              {isPassed ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 text-emerald-750 border border-emerald-250">
+                                  ✓ ĐẠT (Passed)
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black bg-rose-50 text-rose-750 border border-rose-250">
+                                  ✗ LỖI
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-slate-700">
+                              <div className="font-bold text-[11px] text-slate-800 leading-snug">{row.defectDetail || 'Không có'}</div>
+                            </td>
+                            <td className="p-3 text-[10px] text-slate-650 font-sans leading-relaxed">
+                              {!isPassed ? getRowCapaData(row.defectDetail, row.evaluation, row.rootCause, row.treatment).evaluation : '-'}
+                            </td>
+                            <td className="p-3 text-[10px] text-slate-650 font-sans leading-relaxed">
+                              {!isPassed ? getRowCapaData(row.defectDetail, row.evaluation, row.rootCause, row.treatment).rootCause : '-'}
+                            </td>
+                            <td className="p-3 text-[10px] text-indigo-950 font-bold font-sans leading-relaxed bg-amber-500/5">
+                              {!isPassed ? getRowCapaData(row.defectDetail, row.evaluation, row.rootCause, row.treatment).treatment : '-'}
+                            </td>
+                            <td className="p-3 text-slate-600 font-bold text-center text-[10.5px]">{row.checkedBy || 'Trưởng nhóm QC'}</td>
+                            <td className="p-3 text-center font-mono text-[10px] text-slate-500 whitespace-nowrap">
+                              <div>{row.date || 'N/A'}</div>
+                              <div className="text-[9px] text-slate-400 mt-0.5">{row.checkTime || 'N/A'}</div>
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (window.confirm('Bạn có chắc chắn muốn xóa bản ghi đóng thùng OQC này không? Hành động này không thể khôi phục.')) {
+                                    setOqcRecords(oqcRecords.filter(r => r.id !== row.id));
+                                    alert('Đã xóa bản ghi OQC thành công!');
+                                  }
+                                }}
+                                className="text-rose-650 hover:text-rose-800 p-1 cursor-pointer transition"
+                                title="Xóa"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+          )}
+        </div>
+      )}
+
+      {/* ==================== SUBTAB: SUPPLIER MONITORING ==================== */}
+      {qcMainSubTab === 'supplier_monitoring' && (
+        <div className="space-y-6">
+          {renderActivePlanTargetsBanner('SQC')}
+          {/* Summary counters */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-4">
+            <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm col-span-1">
+              <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase leading-tight">Tổng đợt giám sát</span>
+              <span className="text-xs sm:text-sm font-black text-slate-800 font-mono mt-0.5 sm:mt-1 block">{supplierProductionAudits.length} chỉ thị</span>
+            </div>
+            <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-amber-500 col-span-1">
+              <span className="text-[9px] sm:text-[10px] font-bold text-amber-550 block uppercase leading-tight">NCC Đang xử lý</span>
+              <span className="text-xs sm:text-sm font-black text-amber-700 font-mono mt-0.5 sm:mt-1 block">
+                {supplierProductionAudits.filter(a => a.status === 'pending').length} lô hàng
+              </span>
+            </div>
+            <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-blue-500 col-span-1">
+              <span className="text-[9px] sm:text-[10px] font-bold text-blue-550 block uppercase font-sans leading-tight">NCC phản hồi</span>
+              <span className="text-xs sm:text-sm font-black text-blue-700 font-mono mt-0.5 sm:mt-1 block">
+                {supplierProductionAudits.filter(a => a.status === 'updated').length} đợt
+              </span>
+            </div>
+            <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-emerald-500 col-span-1">
+              <span className="text-[9px] sm:text-[10px] font-bold text-emerald-550 block uppercase leading-tight">Ký duyệt Đạt chuẩn</span>
+              <span className="text-xs sm:text-sm font-black text-emerald-700 font-mono mt-0.5 sm:mt-1 block">
+                {supplierProductionAudits.filter(a => a.status === 'approved').length} đợt
+              </span>
+            </div>
+            <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-red-500 col-span-2 lg:col-span-1">
+              <span className="text-[9px] sm:text-[10px] font-bold text-red-550 block uppercase leading-tight">Sai lệch khuôn dập</span>
+              <span className="text-xs sm:text-sm font-black text-red-700 font-mono mt-0.5 sm:mt-1 block">
+                {supplierProductionAudits.filter(a => a.status === 'rejected').length} sự cố
+              </span>
+            </div>
+          </div>
+
+          {/* Business Goal Banner */}
+          <div className="bg-gradient-to-r from-orange-50 to-amber-50 p-4.5 rounded-xl border border-orange-100 flex items-start gap-3.5 shadow-xs">
+            <span className="p-2 bg-white text-orange-600 rounded-lg shadow-xs border border-orange-100 font-bold block shrink-0 text-sm">💡</span>
+            <div className="text-xs">
+              <h4 className="font-extrabold text-slate-800 text-xs">PHƯƠNG PHÁP GIÁM SÁT CHỦ ĐỘNG TẠI NHÀ CUNG CẤP (ACTIVE MONITORING)</h4>
+              <p className="text-slate-500 leading-relaxed mt-1">
+                Thay vì đợi hàng giao tới kho mới kiểm IQC (lúc này lỗi đã dập hàng loạt), QMS DKBike chủ động kích thị giám sát cho Nhà Cung Cấp trong khi sản xuất. 
+                Nhà cung cấp sẽ gửi ảnh trực tiếp từ nhà máy hoặc đo chỉ số kỹ thuật thực tế để DKBike kiểm tra sai lệch trước khi cho phép chạy tràn lan.
+              </p>
+            </div>
+          </div>
+
+          {/* Daily Logs Integration Panel */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-3 gap-2">
+              <div>
+                <h4 className="font-extrabold text-slate-800 text-xs uppercase flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-ping"></span>
+                  📋 Nhật trình công việc ngày liên quan NCC & Giám sát
+                </h4>
+                <p className="text-[10px] text-slate-400 mt-1 leading-tight">
+                  Tự động truy tìm các nhiệm vụ chất lượng hoặc bọc lót theo Nhà Cung Cấp trong ngày để QC đối soát, kích hoạt chỉ thị tức thì.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 self-end sm:self-auto">
+                <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer font-bold select-none border border-slate-200 bg-slate-50 px-2 py-1 rounded hover:bg-slate-100 transition">
+                  <input
+                    type="checkbox"
+                    checked={hideIgnoredLogs}
+                    onChange={(e) => setHideIgnoredLogs(e.target.checked)}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 text-xs accent-indigo-600 cursor-pointer"
+                  />
+                  Ẩn mục bỏ qua
+                </label>
+                <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-md text-[10px] font-black font-mono">
+                  {dailyLogs.filter(log => {
+                    const matches = filterDailyLogsForSqc(log);
+                    return matches && (!hideIgnoredLogs || !ignoredDailyLogStts.includes(log.stt));
+                  }).length} công việc ngày đề xuất
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {dailyLogs.filter(log => {
+                const matches = filterDailyLogsForSqc(log);
+                if (!matches) return false;
+                if (hideIgnoredLogs && ignoredDailyLogStts.includes(log.stt)) return false;
+                return true;
+              }).map((log, index) => {
+                // Find if there is a linked Supplier Production Audit
+                const linkedAudit = supplierProductionAudits.find(aud => aud.dailyLogStt === log.stt);
+                const isIgnored = ignoredDailyLogStts.includes(log.stt);
+                
+                return (
+                  <div key={log.stt || index} className={`p-3.5 rounded-xl border border-slate-150 transition duration-200 flex flex-col justify-between space-y-3 ${isIgnored ? 'opacity-60 bg-slate-100 border-dashed' : 'bg-slate-50/50 hover:bg-white hover:shadow-xs'}`}>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center text-[10px]">
+                        <span className="font-bold text-slate-400 uppercase tracking-wider">{log.date} · Stt #{log.stt} {isIgnored && <span className="text-rose-600 font-extrabold ml-1">(ĐÃ BỎ QUA)</span>}</span>
+                        <div className="flex items-center gap-1.5">
+                          {/* Intelligent Trigger Badge specifying why it was proposed */}
+                          {((log.content || '').toLowerCase().includes('lỗi') || (log.note || '').toLowerCase().includes('lỗi') || (log.content || '').toLowerCase().includes('sự cố') || (log.note || '').toLowerCase().includes('sự cố') || hasQualityErrorInSystem) ? (
+                            <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-150 text-[8px] font-extrabold uppercase">🔴 Sai lỗi</span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-150 text-[8px] font-extrabold uppercase font-mono">📅 Kế hoạch IQC</span>
+                          )}
+                          <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${
+                            log.category === 'IQC' ? 'bg-indigo-100 text-indigo-800' : 
+                            log.category === 'SQC/QA' ? 'bg-orange-100 text-orange-850' : 'bg-slate-200 text-slate-800'
+                          }`}>
+                            {log.category}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <p className={`text-xs font-semibold leading-relaxed font-sans ${isIgnored ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{log.content}</p>
+                      
+                      {log.note && (
+                        <p className={`text-[10px] italic p-2 rounded border font-sans ${isIgnored ? 'bg-slate-50/50 text-slate-400 border-slate-150' : 'bg-white/70 text-slate-500 border-slate-100'}`}>
+                          📝 <strong className="font-bold text-slate-650">Nhật ký QMS:</strong> "{log.note}"
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-slate-100 pt-2.5 mt-1 text-[10px]">
+                      <div className="flex items-center gap-1.5 text-slate-500">
+                        <strong className="font-extrabold text-slate-750">{log.assignee ? log.assignee.trim().split(/\s+/).pop() : ''}</strong>
+                        <span>· KPI: <strong>{log.statusPercent}</strong></span>
+                      </div>
+                      
+                      <div>
+                        {linkedAudit ? (
+                          <div className="flex items-center gap-1.5 bg-indigo-50/50 px-2 py-1 rounded-lg border border-indigo-100">
+                            <span className="font-mono font-bold text-indigo-800 text-[9px]">
+                              🔗 {linkedAudit.id}
+                            </span>
+                            <span className={`text-[9px] font-extrabold ${
+                              linkedAudit.status === 'approved' ? 'text-emerald-700' :
+                              linkedAudit.status === 'rejected' ? 'text-red-700' :
+                              linkedAudit.status === 'updated' ? 'text-blue-700 animate-pulse' : 'text-amber-700'
+                            }`}>
+                              {linkedAudit.status === 'approved' ? '✓ Đạt chuẩn' :
+                               linkedAudit.status === 'rejected' ? '⚠ Sai lệch' :
+                               linkedAudit.status === 'updated' ? '⚡ Chờ duyệt' : '⏳ Chờ ảnh'}
+                            </span>
+                          </div>
+                        ) : isIgnored ? (
+                          <div className="flex items-center gap-1.5 bg-slate-205 border-slate-300 py-1 px-2 rounded-lg text-slate-500 text-[10px]">
+                            <span className="font-bold">Bỏ qua giám sát</span>
+                            <button
+                              type="button"
+                              onClick={() => handleUndoIgnoreDailyLog(log.stt)}
+                              className="text-xs text-indigo-600 hover:text-indigo-800 font-extrabold cursor-pointer hover:underline"
+                            >
+                              Khôi phục
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleSelectLinkedDailyLogForAudit(log.stt);
+                                setShowAddSupplierAuditModal(true);
+                              }}
+                              className="bg-orange-600 hover:bg-orange-500 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-md transition shadow shadow-orange-100 flex items-center gap-1 cursor-pointer"
+                            >
+                              🚀 Khởi tạo giám sát
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleIgnoreDailyLog(log.stt)}
+                              className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[10px] px-2 py-1.5 rounded-md border border-rose-200 transition cursor-pointer"
+                              title="Bỏ qua không cần giám sát"
+                            >
+                              Bỏ qua
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Filtering row */}
+          <div className="bg-white p-2.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2 sm:gap-3">
+            <div className="relative w-full">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="w-3.5 h-3.5 text-slate-400" />
+              </span>
+              <input
+                type="text"
+                placeholder="Tìm mã chỉ thị, tên linh kiện dập, thông số..."
+                value={supplierAuditSearch}
+                onChange={e => setSupplierAuditSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 sm:py-2 text-xs border border-slate-200 rounded-lg bg-slate-50/50 outline-hidden font-medium"
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 items-center">
+              {/* Grid / List View Mode Toggle */}
+              <div className="col-span-2 sm:col-span-auto flex bg-slate-100 p-1 rounded-lg border border-slate-200 justify-center">
+                <button
+                  type="button"
+                  onClick={() => setSupplierAuditViewMode('grid')}
+                  className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-extrabold transition-all uppercase tracking-wider cursor-pointer ${supplierAuditViewMode === 'grid' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                  title="Hiển thị dạng ô thẻ bento"
+                >
+                  <LayoutGrid className="w-3 h-3 text-current" />
+                  Dạng thẻ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSupplierAuditViewMode('list')}
+                  className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-extrabold transition-all uppercase tracking-wider cursor-pointer ${supplierAuditViewMode === 'list' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                  title="Hiển thị dạng danh sách bảng"
+                >
+                  <List className="w-3 h-3 text-current" />
+                  Danh sách
+                </button>
+              </div>
+
+              <select
+                value={supplierAuditFilterSupplier}
+                onChange={e => setSupplierAuditFilterSupplier(e.target.value)}
+                className="col-span-1 text-xs border border-slate-200 rounded-lg bg-white px-2 py-1.5 sm:px-3 sm:py-2 focus:ring-1 focus:ring-orange-500 outline-hidden font-bold text-slate-700 h-8 sm:h-[34px] cursor-pointer"
+              >
+                <option value="All">Tất cả NCC</option>
+                {uniqueAuditSuppliers.map((s, i) => (
+                  <option key={i} value={s}>{s}</option>
+                ))}
+              </select>
+
+              <select
+                value={supplierAuditFilterStatus}
+                onChange={e => setSupplierAuditFilterStatus(e.target.value)}
+                className="col-span-1 text-xs border border-slate-200 rounded-lg bg-white px-2 py-1.5 sm:px-3 sm:py-2 focus:ring-1 focus:ring-orange-500 outline-hidden font-bold text-slate-700 h-8 sm:h-[34px] cursor-pointer"
+              >
+                <option value="All">Mọi Trạng Thái</option>
+                <option value="pending">Chờ NCC gửi ảnh</option>
+                <option value="updated">Chờ duyệt</option>
+                <option value="approved">Đạt chuẩn</option>
+                <option value="rejected">Sai lệch</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Core Display with View Mode Selection */}
+          {filteredSupplierAudits.length === 0 ? (
+            <div className="bg-white p-12 text-center rounded-xl border border-slate-200 shadow-xs">
+              <p className="text-slate-400 text-xs font-bold font-mono">Không tìm thấy đợt giám sát sản xuất NCC phù hợp bộ lọc.</p>
+            </div>
+          ) : supplierAuditViewMode === 'grid' ? (
+            /* GRID / CARD VIEW: Showing only main info on the outside, rest on details click */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {filteredSupplierAudits.map((aud, i) => {
+                let badgeClass = "bg-slate-100 text-slate-500";
+                let badgeLabel = "Chờ phản hồi";
+                let ringClass = "border-slate-200";
+
+                if (aud.status === 'pending') {
+                  badgeClass = "bg-amber-100 text-amber-800 border-amber-200 border";
+                  badgeLabel = "Chờ NCC gửi ảnh";
+                  ringClass = "border-amber-200 bg-amber-50/5 hover:border-amber-300";
+                } else if (aud.status === 'updated') {
+                  badgeClass = "bg-blue-100 text-blue-800 border-blue-200 border";
+                  badgeLabel = "Đã báo cáo - Chờ duyệt";
+                  ringClass = "border-blue-200 bg-blue-50/5 hover:border-blue-300";
+                } else if (aud.status === 'approved') {
+                  badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-200 border";
+                  badgeLabel = "✓ Đạt - Đã duyệt";
+                  ringClass = "border-emerald-200 bg-emerald-50/5 hover:border-emerald-300";
+                } else if (aud.status === 'rejected') {
+                  badgeClass = "bg-red-100 text-red-800 border-red-200 border";
+                  badgeLabel = "✗ Từ chối - Lỗi khuôn";
+                  ringClass = "border-red-200 bg-red-50/5 hover:border-red-300";
+                }
+
+                return (
+                  <div key={i} className={`bg-white rounded-xl border ${ringClass} p-4.5 shadow-xs space-y-3.5 tracking-normal transition-all duration-200 flex flex-col justify-between`}>
+                    <div className="space-y-2.5">
+                      <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                        <span className="text-[9px] font-bold text-slate-400 font-mono uppercase tracking-wider">
+                          🆔 CHỈ THỊ: <span className="text-indigo-650 font-black">{aud.id}</span>
+                        </span>
+                        <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 ${badgeClass}`}>
+                          {badgeLabel}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h4 className="text-xs font-black text-slate-850 leading-snug line-clamp-1">{aud.componentName}</h4>
+                        <p className="text-[10px] font-extrabold text-slate-500 mt-1 uppercase flex items-center gap-1.5">
+                          <span>🏢 Nhà cung cấp:</span>
+                          <span className="text-slate-800 underline decoration-indigo-400 font-extrabold">{aud.supplierName}</span>
+                        </p>
+                      </div>
+
+                      <div className="flex justify-between items-center text-[10px] text-slate-450 border-t border-slate-100 pt-2 font-medium">
+                        <span>Ngày tạo: <strong className="text-slate-700 font-mono">{aud.requestDate}</strong></span>
+                        {aud.dailyLogStt && (
+                          <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                            🔗 Nhật trình #{aud.dailyLogStt}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSupplierAuditForDetail(aud)}
+                      className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-indigo-700 border border-slate-200 py-2 rounded-lg text-[10px] font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer mt-2"
+                    >
+                      👁 Xem Chi Tiết &amp; Thao Tác
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* COMPACT LIST / TABLE VIEW: Neat rows, click to view full details */
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-xs">
+                  <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th scope="col" className="px-4 py-3 text-left">Mã chỉ thị</th>
+                      <th scope="col" className="px-4 py-3 text-left">Linh kiện sản xuất</th>
+                      <th scope="col" className="px-4 py-3 text-left">Nhà cung cấp đối tác</th>
+                      <th scope="col" className="px-4 py-3 text-left">Ngày tạo</th>
+                      <th scope="col" className="px-4 py-3 text-left">Trạng thái phê duyệt</th>
+                      <th scope="col" className="px-4 py-3 text-center">Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white font-medium text-slate-700">
+                    {filteredSupplierAudits.map((aud, i) => {
+                      let badgeClass = "bg-slate-100 text-slate-500";
+                      let badgeLabel = "Chờ phản hồi";
+
+                      if (aud.status === 'pending') {
+                        badgeClass = "bg-amber-100 text-amber-800 border-amber-200 border";
+                        badgeLabel = "Chờ NCC phản hồi";
+                      } else if (aud.status === 'updated') {
+                        badgeClass = "bg-blue-100 text-blue-800 border-blue-200 border";
+                        badgeLabel = "Chờ QMS duyệt";
+                      } else if (aud.status === 'approved') {
+                        badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-200 border";
+                        badgeLabel = "✓ Đạt - Đã duyệt";
+                      } else if (aud.status === 'rejected') {
+                        badgeClass = "bg-red-100 text-red-800 border-red-200 border";
+                        badgeLabel = "✗ Lỗi - Sửa khuôn";
+                      }
+
+                      return (
+                        <tr key={i} className="hover:bg-slate-50/55 transition-colors">
+                          <td className="px-4 py-3 font-mono font-bold text-indigo-600">{aud.id}</td>
+                          <td className="px-4 py-3 font-bold text-slate-850">{aud.componentName}</td>
+                          <td className="px-4 py-3 text-slate-650">{aud.supplierName}</td>
+                          <td className="px-4 py-3 text-slate-500 font-mono">{aud.requestDate}</td>
+                          <td className="px-4 py-3">
+                            <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md inline-block ${badgeClass}`}>
+                              {badgeLabel}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSupplierAuditForDetail(aud)}
+                              className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[10px] px-3 py-1.5 rounded-lg border border-indigo-100 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              👁 Chi tiết &amp; Xử lý
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ==================== SUBTAB: REPORTS ==================== */}
+      {qcMainSubTab === 'reports' && (
+        <div className="space-y-6">
+          
+          {/* Filtering Block */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+              <div className="font-extrabold text-sm text-indigo-950 uppercase flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-indigo-600 animate-spin" /> BỘ CHỈ CHỈ THỊ LIÊN KẾT CHẤT LƯỢNG SẢN XUẤT NHÀ MÁY
+              </div>
+              
+              <div className="flex gap-2 bg-slate-100 p-1 rounded-md">
+                <button 
+                  onClick={() => { setReportTimeFilter('week'); setReportPeriod('All'); }}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition ${reportTimeFilter === 'week' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-white'}`}
+                >
+                  Báo cáo Ngày/Tuần
+                </button>
+                <button 
+                  onClick={() => { setReportTimeFilter('month'); setReportPeriod('All'); }}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition ${reportTimeFilter === 'month' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-white'}`}
+                >
+                  Báo cáo Tháng
+                </button>
+                <button 
+                  onClick={() => { setReportTimeFilter('quarter'); setReportPeriod('All'); }}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition ${reportTimeFilter === 'quarter' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-white'}`}
+                >
+                  Báo cáo Quý
+                </button>
+                <button 
+                  onClick={() => { setReportTimeFilter('year'); setReportPeriod('All'); }}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition ${reportTimeFilter === 'year' ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-white'}`}
+                >
+                  Báo cáo Năm
+                </button>
+              </div>
+            </div>
+
+            <div className="border-t pt-3 flex flex-wrap gap-2 items-center">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider select-none">Chu kỳ lọc dữ liệu:</span>
+              
+              {reportTimeFilter === 'week' && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {['All', ...[1, 2, 3, 4, 5].map(w => `Tuần ${w} (${getWeekDatesForReporting(2026, 4, w)})`)].map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setReportPeriod(p)}
+                      className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border transition ${reportPeriod === p ? 'bg-indigo-600 text-white border-transparent' : 'bg-white text-slate-700 hover:bg-slate-50 shadow-sm'}`}
+                    >
+                      {p === 'All' ? 'Tất cả các tuần' : p}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {reportTimeFilter === 'month' && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {['All', 'Tháng 1/2026', 'Tháng 2/2026', 'Tháng 3/2026', 'Tháng 4/2026', 'Tháng 5/2026', 'Tháng 6/2026', 'Tháng 7/2026', 'Tháng 8/2026', 'Tháng 9/2026', 'Tháng 10/2026', 'Tháng 11/2026', 'Tháng 12/2026'].map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setReportPeriod(p)}
+                      className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border transition ${reportPeriod === p ? 'bg-indigo-600 text-white border-transparent' : 'bg-white text-slate-700 hover:bg-slate-50 shadow-sm'}`}
+                    >
+                      {p === 'All' ? 'Tất cả các tháng' : p}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {reportTimeFilter === 'quarter' && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {['All', 'Quý II/2026'].map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setReportPeriod(p)}
+                      className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border transition ${reportPeriod === p ? 'bg-indigo-600 text-white border-transparent' : 'bg-white text-slate-700 hover:bg-slate-50 shadow-sm'}`}
+                    >
+                      {p === 'All' ? 'Tất cả các Quý' : p}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {reportTimeFilter === 'year' && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {['All', 'Năm 2026'].map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setReportPeriod(p)}
+                      className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border transition ${reportPeriod === p ? 'bg-indigo-600 text-white border-transparent' : 'bg-white text-slate-700 hover:bg-slate-50 shadow-sm'}`}
+                    >
+                      {p === 'All' ? 'Tất cả các Năm' : p}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Connected dynamic reporting content block */}
+          {(() => {
+            const filterByPeriod = (itemDate: string) => {
+              if (reportPeriod === 'All') return true;
+              
+              const parts = itemDate.split('/');
+              const day = Number(parts[0]);
+              const mth = Number(parts[1]);
+
+              if (reportTimeFilter === 'week') {
+                const info = getWeekAndMonthFromDate(itemDate);
+                if (info.month !== 4) return false;
+                if (reportPeriod.includes('Tuần 1')) return info.week === 'T1';
+                if (reportPeriod.includes('Tuần 2')) return info.week === 'T2';
+                if (reportPeriod.includes('Tuần 3')) return info.week === 'T3';
+                if (reportPeriod.includes('Tuần 4')) return info.week === 'T4';
+                if (reportPeriod.includes('Tuần 5')) return info.week === 'T5';
+              }
+              if (reportTimeFilter === 'month') {
+                const match = reportPeriod.match(/Tháng (\d+)/);
+                if (match) {
+                  return mth === parseInt(match[1], 10);
+                }
+              }
+              if (reportTimeFilter === 'quarter') {
+                if (reportPeriod === 'Quý II/2026') return mth >= 4 && mth <= 6;
+              }
+              return true;
+            };
+
+            const safeFilterByPeriod = (rawDate: string | undefined) => {
+              if (!rawDate) return true;
+              if (reportPeriod === 'All') return true;
+              
+              let dateStr = rawDate;
+              if (rawDate.includes('-')) {
+                const parts = rawDate.split('-');
+                if (parts[0].length === 4) {
+                  dateStr = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                }
+              }
+              return filterByPeriod(dateStr);
+            };
+
+            const currentIqc = iqcRecords.filter(r => filterByPeriod(r.date));
+            const currentPqc = pqcRecords.filter(r => filterByPeriod(r.date));
+            const currentOqc = oqcRecords.filter(r => filterByPeriod(r.date));
+
+            // Metric calculating
+            const iqcTotalChecked = currentIqc.reduce((acc, r) => acc + r.checkedQty, 0);
+            const iqcTotalFailed = currentIqc.reduce((acc, r) => acc + r.failedQty, 0);
+            const iqcPpmRate = iqcTotalChecked > 0 ? Number(((iqcTotalFailed / iqcTotalChecked) * 100).toFixed(2)) : 0;
+
+            const pqcTotalIssues = currentPqc.length;
+            const pqcResolved = currentPqc.filter(r => r.status === 'Đạt hoàn toàn' || r.status === 'Đã cải tiến').length;
+            const pqcRate = pqcTotalIssues > 0 ? Math.round((pqcResolved / pqcTotalIssues) * 100) : 0;
+
+            const oqcTotalChecked = currentOqc.length;
+            const oqcTotalPassed = currentOqc.filter(r => r.status === 'Đạt').length;
+            const oqcYieldRate = oqcTotalChecked > 0 ? Number(((oqcTotalPassed / oqcTotalChecked) * 100).toFixed(2)) : 0;
+
+            // Pareto Pareto Count
+            const errorsCountMap: Record<string, number> = {};
+            currentOqc.forEach(r => {
+              if (r.status === 'Lỗi' && r.defectDetail) {
+                const err = r.defectDetail.split(',').map(s => s.trim())[0];
+                errorsCountMap[err] = (errorsCountMap[err] || 0) + 1;
+              }
+            });
+            const sortedErrors = Object.entries(errorsCountMap)
+              .map(([name, count]) => ({ name, count }))
+              .sort((a,b) => b.count - a.count)
+              .slice(0, 5);
+
+            // Model Quality Comparison
+            const modelQualityMap: Record<string, { total: number; passed: number }> = {};
+            currentOqc.forEach(r => {
+              if (!modelQualityMap[r.model]) {
+                modelQualityMap[r.model] = { total: 0, passed: 0 };
+              }
+              modelQualityMap[r.model].total += 1;
+              if (r.status === 'Đạt') {
+                modelQualityMap[r.model].passed += 1;
+              }
+            });
+            const modelQualityArray = Object.entries(modelQualityMap).map(([modelName, info]) => {
+              const yieldPercent = info.total > 0 ? Math.round((info.passed / info.total) * 100) : 0;
+              return { name: modelName, total: info.total, passed: info.passed, yieldRate: yieldPercent };
+            });
+
+            const currentDailyLogs = dailyLogs.filter(log => safeFilterByPeriod(log.date));
+            const progressAvg = currentDailyLogs.length > 0 
+              ? Math.round(currentDailyLogs.reduce((acc, log) => acc + parseInt(log.statusPercent || '0'), 0) / currentDailyLogs.length)
+              : 100;
+
+            const currentPtsp = ptspTasks.filter(t => safeFilterByPeriod(t.startDate || '23/04/2026'));
+            const totalPtsp = currentPtsp.length;
+            const passedPtsp = currentPtsp.filter(t => t.progress === 100).length;
+
+            const unresolvedCapas = capas.filter(c => c.Status !== 'Đã đóng');
+            const unresolvedPqc = currentPqc.filter(p => p.status !== 'Đạt hoàn toàn');
+            
+            return (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                
+                {/* Visual Status Indicator & Dashboard Header */}
+                <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-6 rounded-2xl border border-slate-800 shadow-lg space-y-3 relative overflow-hidden">
+                  <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-indigo-505/10 rounded-full blur-3xl pointer-events-none" />
+                  <div className="flex flex-wrap justify-between items-center gap-2">
+                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-full font-black uppercase tracking-widest border border-indigo-500/30">
+                      Báo Cáo Tổng Hợp Chất Lượng & Công Việc
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono">
+                      Thời kỳ lọc: <strong className="text-slate-202 font-bold">{reportPeriod === 'All' ? 'Toàn bộ chu kỳ' : reportPeriod}</strong>
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black tracking-tight text-white">Consolidated Quality Report Dashboard</h3>
+                    <p className="text-xs text-slate-300 max-w-2xl font-semibold">
+                      Cơ chế tự động khai phóng dữ liệu, đồng bộ hóa chu sở chỉ số từ Báo cáo ngày (Daily Work logs), biên bản nghiệm thu linh kiện (IQC), khuyết tật lỗi công đoạn ráp (PQC), KCS thành phẩm (OQC) và quản lý tiến trình thử nghiệm kỹ thuật (PTSP).
+                    </p>
+                  </div>
+                  <div className="pt-2 flex gap-4 text-xs font-mono">
+                    <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50">
+                      <span className="text-slate-400 text-[10px] block uppercase font-bold">Báo cáo ngày đã nạp</span>
+                      <strong className="text-emerald-400 text-sm font-black">{currentDailyLogs.length} nhật trình</strong>
+                    </div>
+                    <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-700/50">
+                      <span className="text-slate-400 text-[10px] block uppercase font-bold">Tài liệu việc ngày đạt</span>
+                      <strong className="text-indigo-400 text-sm font-black">{progressAvg}% hoàn thành</strong>
+                    </div>
+                    <div className="bg-slate-800/60 p-2.5 rounded-lg border border-slate-705/50">
+                      <span className="text-slate-400 text-[10px] block uppercase font-bold">Thử nghiệm PTSP kỳ</span>
+                      <strong className="text-amber-400 text-sm font-black">{passedPtsp}/{totalPtsp || 3} đạt chuẩn</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4 Blocks of Big Quality Metrics */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  
+                  {/* IQC */}
+                  <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-xs space-y-3 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">IQC (Đầu vào)</span>
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      </div>
+                      <div className="font-mono">
+                        <span className="text-2.5xl font-black text-slate-800">{iqcPpmRate}%</span>
+                        <span className="text-[10px] text-slate-400 block font-semibold">Tỷ lệ lỗi kiểm mẫu đầu vào</span>
+                      </div>
+                    </div>
+                    <div className="border-t pt-2.5 text-[11px] text-slate-500 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Đã kiểm nghiệm:</span>
+                        <span className="text-slate-800 font-bold">{iqcTotalChecked} chiếc</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Sự cố lỗi hàng:</span>
+                        <span className="text-red-500 font-bold">{iqcTotalFailed} chiếc</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* PQC */}
+                  <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-xs space-y-3 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">PQC (Công đoạn)</span>
+                        <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                      </div>
+                      <div className="font-mono">
+                        <span className="text-2.5xl font-black text-slate-800">{pqcTotalIssues} lỗi</span>
+                        <span className="text-[10px] text-slate-400 block font-semibold">Sự cố lắp ráp bám dây chuyền</span>
+                      </div>
+                    </div>
+                    <div className="border-t pt-2.5 text-[11px] text-slate-500 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Đã xử lý dứt điểm:</span>
+                        <span className="text-emerald-600 font-bold">{pqcResolved} vụ ({pqcRate}%)</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Đang bám sát CAPA:</span>
+                        <span className="text-amber-500 font-bold">{pqcTotalIssues - pqcResolved} vụ</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* OQC */}
+                  <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-xs space-y-3 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">OQC (KCS Đầu ra)</span>
+                        <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+                      </div>
+                      <div className="font-mono">
+                        <span className="text-2.5xl font-black text-blue-700">{oqcYieldRate}%</span>
+                        <span className="text-[10px] text-slate-400 block font-semibold">Tỷ lệ đạt chuẩn xe 1st-Yield</span>
+                      </div>
+                    </div>
+                    <div className="border-t pt-2.5 text-[11px] text-slate-500 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Tổng xe nghiệm thu:</span>
+                        <span className="text-slate-800 font-bold">{oqcTotalChecked} chiếc</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Xe lỗi gá lắp:</span>
+                        <span className="text-rose-600 font-bold">{oqcTotalChecked - oqcTotalPassed} chiếc</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* PTSP */}
+                  <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-xs space-y-3 flex flex-col justify-between">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider">PTSP (Thử nghiệm SP)</span>
+                        <span className="w-2 h-2 rounded-full bg-purple-500" />
+                      </div>
+                      <div className="font-mono">
+                        <span className="text-2.5xl font-black text-slate-800">
+                          {totalPtsp > 0 ? Math.round((passedPtsp / totalPtsp) * 100) : 100}%
+                        </span>
+                        <span className="text-[10px] text-slate-400 block font-semibold">Tỷ lệ đợt thử nghiệm mẫu đạt</span>
+                      </div>
+                    </div>
+                    <div className="border-t pt-2.5 text-[11px] text-slate-500 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Số mẫu thử nghiệm:</span>
+                        <span className="text-slate-800 font-bold">{totalPtsp || 3} vòng</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Mẫu đạt phê duyệt:</span>
+                        <span className="text-purple-600 font-bold">{passedPtsp || 3} model</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Sub-dashboard section: Daily Logs Report Work Section (Báo cáo công việc link từ báo cáo ngày) */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 space-y-4">
+                  <div className="flex justify-between items-center border-b pb-2 flex-wrap gap-2">
+                    <div>
+                      <h4 className="font-extrabold text-xs uppercase text-slate-800 flex items-center gap-2">
+                        <span className="flex h-2.5 w-2.5 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                        </span>
+                        Báo cáo công việc ngày liên kết tự động (Daily logs aggregation)
+                      </h4>
+                      <p className="text-[10px] text-slate-400">Dữ liệu được tích hợp trực tiếp từ danh mục nhật trình KCS và 5S trong kỳ lọc.</p>
+                    </div>
+                    <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded font-mono font-bold font-semibold">
+                      Tổng số: {currentDailyLogs.length} hạng mục công việc ngày
+                    </span>
+                  </div>
+
+                  {currentDailyLogs.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-slate-400 italic">
+                      Không tìm thấy bản ghi nhật trình công việc nào cho chu kỳ đã chọn.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto max-h-[300px] overflow-y-auto pr-1">
+                      <table className="w-full text-left font-sans text-xs">
+                        <thead className="text-[9px] font-bold text-slate-400 uppercase bg-slate-50 sticky top-0">
+                          <tr>
+                            <th className="p-2.5 bg-slate-100">Ngày</th>
+                            <th className="p-2.5 bg-slate-100">Phân Nhóm</th>
+                            <th className="p-2.5 bg-slate-100">Nội Dung Thực Hiện</th>
+                            <th className="p-2.5 bg-slate-100 text-center">Tiến độ</th>
+                            <th className="p-2.5 bg-slate-100">Người Phụ Trách</th>
+                            <th className="p-2.5 bg-slate-100">Đánh giá / Note</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                          {currentDailyLogs.map((log) => (
+                            <tr key={log.stt} className="hover:bg-slate-50/50">
+                              <td className="p-2.5 text-slate-500 font-mono text-[10px] whitespace-nowrap">{log.date}</td>
+                              <td className="p-2.5">
+                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
+                                  log.category === '5S' ? 'bg-amber-100 text-amber-700' :
+                                  log.category === 'Họp giao ca' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                }`}>{log.category}</span>
+                              </td>
+                              <td className="p-2.5 font-bold text-slate-850 text-xs max-w-sm truncate" title={log.content}>
+                                {log.content}
+                              </td>
+                              <td className="p-2.5 text-center font-mono">
+                                <span className={`inline-block px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                                  log.statusPercent === '100%' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                                }`}>
+                                  {log.statusPercent}
+                                </span>
+                              </td>
+                              <td className="p-2.5 font-bold text-slate-600 truncate">{log.assignee ? log.assignee.trim().split(/\s+/).pop() : ''}</td>
+                              <td className="p-2.5 text-[10px] text-slate-400 italic font-medium" title={log.note || '-'}>
+                                {log.note || 'Đã kiểm tra liên tuyến'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Pareto top failures and comparisons */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  
+                  {/* Pareto */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
+                    <div className="border-b pb-2">
+                      <h4 className="font-extrabold text-xs uppercase text-slate-700 flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse" /> Top khuyết điểm gá ráp xe nhiều nhất (Pareto phân tích)
+                      </h4>
+                      <p className="text-[10px] text-slate-400">Đếm tổng tần suất xuất hiện khuyết điểm và lỗi cấu trúc xe khi kiểm KCS đầu ra.</p>
+                    </div>
+
+                    {sortedErrors.length === 0 ? (
+                      <div className="py-12 text-center text-xs text-slate-400 italic">
+                        Không ghi nhận mã lỗi xe nào trong chu kỳ này. Lắp ráp đạt 100% hoàn mỹ.
+                      </div>
+                    ) : (
+                      <div className="space-y-3.5 text-xs font-semibold">
+                        {sortedErrors.map((item, idx) => {
+                          const totalErrors = Object.values(errorsCountMap).reduce((a,b)=>a+b, 0);
+                          const prevPerc = totalErrors > 0 ? Math.round((item.count / totalErrors) * 100) : 0;
+                          return (
+                            <div key={idx} className="space-y-1">
+                              <div className="flex justify-between">
+                                <span className="text-slate-850 font-bold">{idx+1}. {item.name}</span>
+                                <span className="text-red-500 font-extrabold font-mono">{item.count} vụ ({prevPerc}%)</span>
+                              </div>
+                              <div className="relative w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div 
+                                  className={`absolute top-0 left-0 h-full rounded-full transition-all ${
+                                    idx === 0 ? 'bg-red-500' : idx === 1 ? 'bg-orange-500' : 'bg-amber-400'
+                                  }`}
+                                  style={{ width: `${prevPerc}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Model Quality comparisons */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
+                    <div className="border-b pb-2">
+                      <h4 className="font-extrabold text-xs uppercase text-slate-700 flex items-center gap-1.5">
+                        <Sliders className="w-4 h-4 text-indigo-500" /> So sánh hiệu suất KCS theo từng model xe
+                      </h4>
+                      <p className="text-[10px] text-slate-400">Tỷ lệ Yield Rate đạt chuẩn KCS lần đầu, làm dữ liệu hỗ trợ thiết kế cải tiến kỹ thuật.</p>
+                    </div>
+
+                    {modelQualityArray.length === 0 ? (
+                      <div className="py-12 text-center text-xs text-slate-400 italic">
+                        Chưa nghiệm mẫu KCS cho dòng model nào trong chu kỳ này.
+                      </div>
+                    ) : (
+                      <div className="space-y-4 text-xs font-semibold">
+                        {modelQualityArray.sort((a,b) => b.yieldRate - a.yieldRate).map((item, idx) => (
+                          <div key={idx} className="space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-slate-850 font-bold">{item.name}</span>
+                              <span className="font-mono text-slate-500">
+                                Đạt: <b className={item.yieldRate >= 95 ? 'text-emerald-600' : 'text-amber-500'}>{item.yieldRate}%</b> ({item.passed}/{item.total} xe)
+                              </span>
+                            </div>
+                            <div className="relative w-full h-2 bg-slate-100 rounded-full overflow-hidden font-mono text-[9px]">
+                              <div 
+                                className={`absolute top-0 left-0 h-full rounded-full transition-all ${
+                                  item.yieldRate >= 95 ? 'bg-emerald-500' : item.yieldRate >= 80 ? 'bg-blue-500' : 'bg-amber-400'
+                                }`}
+                                style={{ width: `${item.yieldRate}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* Outstanding Bottlenecks & Critical Issues List */}
+                <div className="bg-red-50/40 border border-red-200 rounded-xl p-5 space-y-4 shadow-sm" id="outstanding_bottlenecks_block">
+                  <div className="flex justify-between items-center border-b border-red-200 pb-2 flex-wrap gap-2">
+                    <div>
+                      <h4 className="font-black text-xs uppercase text-red-900 flex items-center gap-1.5">
+                        <AlertOctagon className="w-4.5 h-4.5 text-red-600 animate-bounce" /> DANH SÁCH CHI TIẾT CÁC VẤN ĐỀ CÒN TỒN ĐỌNG CHƯA KHẮC PHỤC
+                      </h4>
+                      <p className="text-[10px] text-red-700 font-medium">Đối tượng cần can thiệp dứt điểm, bám sát hành động phòng ngừa khắc phục CAPA.</p>
+                    </div>
+                    <span className="text-[10px] bg-rose-100 text-rose-800 border border-slate-200 px-2 py-0.5 rounded font-mono font-bold uppercase tracking-wide">
+                      Tồn dư: {unresolvedCapas.length + unresolvedPqc.length} điểm nghẽn
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    {/* Unresolved CAPAs */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+                      <span className="text-[10px] font-bold text-red-800 uppercase bg-red-50 px-2 py-0.5 rounded border border-red-100">
+                        Hành động CAPA đang mở ({unresolvedCapas.length})
+                      </span>
+                      {unresolvedCapas.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic">Tuyệt vời! Không có CAPA nào bị chậm hay phát sinh tồn nợ.</p>
+                      ) : (
+                        <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1 text-xs">
+                          {unresolvedCapas.map((capa) => (
+                            <div key={capa.CAPAID} className="p-2 border border-slate-100 bg-slate-50/80 rounded-lg space-y-1">
+                              <div className="flex justify-between">
+                                <span className="font-black text-[9px] text-blue-800 font-mono">{capa.CAPAID}</span>
+                                <span className="text-rose-600 font-bold text-[10px] uppercase">Chưa khắc phục</span>
+                              </div>
+                              <p className="font-semibold text-slate-850 text-xs line-clamp-2">{capa.Issue}</p>
+                              <div className="flex justify-between text-[10px] text-slate-400 font-semibold font-medium">
+                                <span>Phụ trách: <strong>{capa.Owner}</strong></span>
+                                <span>Hạn: <strong>{capa.DueDate}</strong></span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Unresolved PQC incidents */}
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+                      <span className="text-[10px] font-bold text-amber-800 uppercase bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
+                        Sự cố lắp ráp PQC chưa khắc phục hoàn toàn ({unresolvedPqc.length})
+                      </span>
+                      {unresolvedPqc.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic">Tất cả lỗi PQC trong chu kỳ đã được sửa và hoàn thiện xe hoàn toàn!</p>
+                      ) : (
+                        <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1 text-xs">
+                          {unresolvedPqc.map((pqc) => (
+                            <div key={pqc.id} className="p-2 border border-slate-100 bg-slate-50/80 rounded-lg space-y-1">
+                              <div className="flex justify-between">
+                                <span className="font-black text-[9px] text-blue-800 font-mono">{pqc.id} - Model {pqc.model}</span>
+                                <span className="text-amber-600 font-bold text-[10px] uppercase">{pqc.status}</span>
+                              </div>
+                              <p className="font-semibold text-slate-800 text-xs line-clamp-2">{pqc.findings || ''}</p>
+                              <div className="flex justify-between text-[10px] text-slate-400 font-semibold font-medium">
+                                <span>Lệnh SX: <strong>{pqc.lsx || ''}</strong></span>
+                                <span>KCS kiểm: <strong>{pqc.checkedBy || ''}</strong></span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* Analytical comments by Trưởng Phòng Nguyễn Xuân Thao */}
+                <div className="bg-slate-900 text-slate-100 p-5 rounded-xl shadow border border-slate-800 space-y-3 font-medium">
+                  <h4 className="font-extrabold text-xs uppercase tracking-wider text-indigo-400 flex items-center gap-2">
+                    <AlertOctagon className="w-4.5 h-4.5 text-amber-400 animate-pulse" /> Nhận định kết luận Báo cáo thời kỳ của Trưởng phòng Nguyễn Xuân Thao
+                  </h4>
+                  <p className="text-xs text-slate-355 leading-relaxed font-semibold">
+                    Khảo sát kết hợp IQC & PQC: Số liệu cho thấy <b>tỷ lệ lỗi tại kho sườn kim loại ({iqcPpmRate}%)</b> có liên kết chặt chẽ đến tỉ lệ sườn rỉ sét bavia bám cứng đầu ra của các dòng model Nova S và EZ3. QLCL đã ban hành <b>sắc lệnh CAPA số #928</b> yêu cầu các đơn vị liên quan che bọc màng khí bọt khí khít chống nứt lúc vận chuyển về xưởng. Lực lượng kiểm soát PQC & OQC cần tiếp tục bám chặt dải rải mẫu KCS, bảo trì khuôn móng mạ bưởng và lập tức triệu hồi các lô linh kiện lỗi của nhà cung cấp không đạt hạng A hoặc B PPM tiêu chuẩn tự động để phòng ngừa rủi ro bảo hành tối đa.
+                  </p>
+                </div>
+
+              </div>
+            );
+          })()}
+
+        </div>
+      )}
+
+      {/* MODAL: ADD IQC RECORD */}
+      {showAddIqcModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl border shadow-lg max-w-lg w-full p-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-slate-800 text-sm uppercase text-emerald-700 flex items-center gap-1.5">
+                <Plus className="w-4 h-4 shadow-sm" /> THÊM PHIẾU KIỂM NHẬP HÀNG ĐẦU VÀO (IQC)
+              </h3>
+              <button 
+                onClick={() => setShowAddIqcModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddIqcRecord} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhà Cung Cấp</label>
+                <select 
+                  value={newIqcSupplierId}
+                  onChange={(e)=>setNewIqcSupplierId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850 font-bold"
+                >
+                  <option value="">-- Chọn Nhà Cung Cấp --</option>
+                  {suppliers.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nội Dung Phiếu Kiểm (PNK / Tên Lô hàng)</label>
+                <input 
+                  type="text" 
+                  value={newIqcContent}
+                  onChange={(e)=>setNewIqcContent(e.target.value)}
+                  placeholder="Nội dung cụ thể (Ví dụ: PNK 0192 Lốp Kenda mới...)" 
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-2 focus:bg-white focus:outline-none focus:border-emerald-600 font-bold"
+                  required
+                />
+              </div>
+
+              {/* Standard AQL ISO 2859-1 Guidance Banner */}
+              {(() => {
+                const currentAql = calculateAQLSample(newIqcTotalQty, newIqcFailedQty, newIqcAqlLevel, newIqcInspectionLevel);
+                return (
+                  <div className="bg-indigo-50/90 border border-indigo-200 rounded-xl p-3 text-xs space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 font-bold text-indigo-900">
+                      <span className="flex items-center gap-1.5 text-[11px] sm:text-xs">
+                        <ShieldCheck className="w-4 h-4 text-indigo-650" />
+                        Tiêu chuẩn trích mẫu AQL (ISO 2859-1 / ANSI Z1.4)
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <select 
+                          value={newIqcAqlLevel} 
+                          onChange={(e) => {
+                            const lvl = Number(e.target.value) as AQLLevel;
+                            setNewIqcAqlLevel(lvl);
+                            setNewIqcCheckedQty(calculateAQLSample(newIqcTotalQty, newIqcFailedQty, lvl, newIqcInspectionLevel).sampleSize);
+                          }}
+                          className="text-[10px] bg-white border border-indigo-200 rounded px-1.5 py-0.5 font-bold text-indigo-800 cursor-pointer"
+                        >
+                          <option value={0.65}>AQL 0.65 (Rất nghiêm)</option>
+                          <option value={1.0}>AQL 1.0 (Nghiêm ngặt)</option>
+                          <option value={1.5}>AQL 1.5 (Chuẩn DKBike)</option>
+                          <option value={2.5}>AQL 2.5 (Phổ thông)</option>
+                          <option value={4.0}>AQL 4.0 (Nhiều phế phẩm)</option>
+                        </select>
+                        <select 
+                          value={newIqcInspectionLevel} 
+                          onChange={(e) => {
+                            const lvl = e.target.value as InspectionLevel;
+                            setNewIqcInspectionLevel(lvl);
+                            setNewIqcCheckedQty(calculateAQLSample(newIqcTotalQty, newIqcFailedQty, newIqcAqlLevel, lvl).sampleSize);
+                          }}
+                          className="text-[10px] bg-white border border-indigo-200 rounded px-1.5 py-0.5 font-bold text-indigo-800 cursor-pointer"
+                        >
+                          <option value="I">Cấp I (Giảm)</option>
+                          <option value="II">Cấp II (Thường)</option>
+                          <option value="III">Cấp III (Nghiêm)</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-0.5 font-mono text-[11px] text-slate-700">
+                      <div className="bg-white p-1.5 rounded-lg border border-indigo-100 text-center shadow-2xs">
+                        <span className="text-[9px] text-slate-500 block font-sans">Mã chữ cái:</span>
+                        <b className="text-indigo-700 text-xs">Mã {currentAql.codeLetter}</b>
+                      </div>
+                      <div className="bg-white p-1.5 rounded-lg border border-indigo-100 text-center shadow-2xs">
+                        <span className="text-[9px] text-slate-500 block font-sans">Mẫu kiểm AQL:</span>
+                        <b className="text-emerald-700 text-xs">{currentAql.sampleSize} sp</b>
+                      </div>
+                      <div className="bg-white p-1.5 rounded-lg border border-indigo-100 text-center shadow-2xs">
+                        <span className="text-[9px] text-slate-500 block font-sans">Chấp nhận (Ac):</span>
+                        <b className="text-emerald-600 text-xs font-bold">Ac ≤ {currentAql.ac}</b>
+                      </div>
+                      <div className="bg-white p-1.5 rounded-lg border border-indigo-100 text-center shadow-2xs">
+                        <span className="text-[9px] text-slate-500 block font-sans">Bác bỏ (Re):</span>
+                        <b className="text-red-600 text-xs font-bold">Re ≥ {currentAql.re}</b>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Tổng Số Lượng Lô hàng</label>
+                  <input 
+                    type="number" 
+                    value={newIqcTotalQty}
+                    onChange={(e)=>{
+                      const val = Number(e.target.value);
+                      setNewIqcTotalQty(val);
+                      setNewIqcCheckedQty(calculateAQLSample(val, newIqcFailedQty, newIqcAqlLevel, newIqcInspectionLevel).sampleSize);
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-mono font-bold"
+                    required
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide">Số Mẫu Kiểm Tra AQL</label>
+                    <button
+                      type="button"
+                      onClick={() => setNewIqcCheckedQty(calculateAQLSample(newIqcTotalQty, newIqcFailedQty, newIqcAqlLevel, newIqcInspectionLevel).sampleSize)}
+                      className="text-[9px] text-indigo-600 hover:underline font-bold"
+                    >
+                      ⚡ Khôi phục AQL
+                    </button>
+                  </div>
+                  <input 
+                    type="number" 
+                    value={newIqcCheckedQty}
+                    onChange={(e)=>setNewIqcCheckedQty(Number(e.target.value))}
+                    className="w-full bg-indigo-50/50 border border-indigo-200 rounded p-2 font-mono font-bold text-indigo-900"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Số Lượng Linh Kiện Lỗi phát hiện</label>
+                  <input 
+                    type="number" 
+                    value={newIqcFailedQty}
+                    onChange={(e)=>setNewIqcFailedQty(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-mono font-bold text-red-650"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Ngày nhập kiểm</label>
+                  <input 
+                    type="text" 
+                    value={newIqcDate}
+                    onChange={(e)=>setNewIqcDate(e.target.value)}
+                    placeholder="DD/MM/YYYY"
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Người Kiểm Phụ trách</label>
+                  <select 
+                    value={newIqcCheckedBy}
+                    onChange={(e)=>setNewIqcCheckedBy(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-700 font-semibold"
+                  >
+                    <option value="Nguyễn Xuân Thao">Nguyễn Xuân Thao</option>
+                    <option value="Hà Khắc Việt">Hà Khắc Việt</option>
+                    <option value="Hoàng Văn Phấn">Hoàng Văn Phấn</option>
+                    <option value="Đoàn Anh Hùng">Đoàn Anh Hùng</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Tóm Tắt Linh kiện (Dây, Lốp, Khung...)</label>
+                  <input 
+                    type="text" 
+                    value={newIqcItemSummary}
+                    onChange={(e)=>setNewIqcItemSummary(e.target.value)}
+                    placeholder="PT sườn, lốp còi..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chi tiết khuyết điểm sai lỗi phát hiện (Nếu có)</label>
+                <textarea 
+                  value={newIqcDefectDetail}
+                  onChange={(e)=>setNewIqcDefectDetail(e.target.value)}
+                  placeholder="Mô tả khuyết điểm cấu trúc sản phẩm..." 
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-2 h-16 focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5" id="iqc_multiple_image_uploader">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                  <span>Ảnh chụp minh chứng hiện trạng lỗi IQC (2 - 3 ảnh)</span>
+                  <span className={`${newIqcImageUrls.length >= 2 ? 'text-emerald-600 font-extrabold' : 'text-slate-400 font-bold'}`}>
+                    {newIqcImageUrls.length}/3 ảnh
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-3">
+                  {newIqcImageUrls.map((url, index) => (
+                    <div key={index} className="relative group rounded-lg border border-slate-200 overflow-hidden bg-slate-50 shadow-2xs h-24 cursor-zoom-in hover:brightness-95 transition">
+                      <img src={url} alt={`IQC-Preview-${index}`} className="w-full h-full object-cover" onClick={() => setLocalZoomImage(url)} />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = [...newIqcImageUrls];
+                          updated.splice(index, 1);
+                          setNewIqcImageUrls(updated);
+                        }}
+                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-4.5 h-4.5 flex items-center justify-center text-[10px] font-black hover:bg-red-700 shadow-md cursor-pointer"
+                        title="Xóa hình ảnh"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {newIqcImageUrls.length < 3 && (
+                    <label className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 hover:border-indigo-500 bg-slate-50/50 hover:bg-slate-50 cursor-pointer transition h-24 text-slate-400 hover:text-indigo-600">
+                      <Plus className="w-5 h-5 mb-1" />
+                      <span className="text-[10px] font-bold text-center leading-tight">Thêm ảnh</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const compressed = await compressImageFile(file, 500, 500, 0.4);
+                              if (compressed) {
+                                setNewIqcImageUrls(prev => [...prev, compressed]);
+                              }
+                            } catch (err) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setNewIqcImageUrls(prev => [...prev, reader.result as string]);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+                {newIqcImageUrls.length < 2 && (
+                  <p className="text-[10px] text-amber-600 font-bold italic mt-1">
+                    * Khuyên dùng thêm ít nhất { 2 - newIqcImageUrls.length } ảnh để minh họa hiện trường tốt nhất.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 border-t pt-3.5">
+                <button 
+                  type="button"
+                  onClick={() => setShowAddIqcModal(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-705 font-bold px-4 py-2 rounded text-xs transition"
+                >
+                  Hủy bỏ
+                </button>
+                <button 
+                  type="submit"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-5 py-2 rounded text-xs transition shadow"
+                >
+                  Lưu trữ kho IQC
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD PQC RECORD */}
+      {showAddPqcModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl border shadow-lg max-w-lg w-full p-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-slate-800 text-sm uppercase text-indigo-705 flex items-center gap-1.5">
+                <Plus className="w-4 h-4 shadow-sm" /> GHI NHẬN SỰ CỐ CÔNG ĐOẠN LẮP RÁP (PQC)
+              </h3>
+              <button 
+                onClick={() => setShowAddPqcModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddPqcRecord} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Mã lệnh sản xuất (LSX)</label>
+                  <input 
+                    type="text" 
+                    value={newPqcLsx}
+                    onChange={(e)=>setNewPqcLsx(e.target.value)}
+                    placeholder="Ví dụ: 26-90"
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Dòng xe (Model)</label>
+                  <input 
+                    type="text" 
+                    value={newPqcModel}
+                    onChange={(e)=>setNewPqcModel(e.target.value)}
+                    placeholder="Chọn hoặc nhập Model..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold"
+                    list="pqc-master-models"
+                    required
+                  />
+                  <datalist id="pqc-master-models">
+                    {modelNames.map(name => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Số Lượng Lắp Ráp liên quan (Xe)</label>
+                  <input 
+                    type="number" 
+                    value={newPqcQty}
+                    onChange={(e)=>setNewPqcQty(Number(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-mono font-bold"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Ngày phát hiện</label>
+                  <input 
+                    type="text" 
+                    value={newPqcDate}
+                    onChange={(e)=>setNewPqcDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Người Giám Sát ghi nhận</label>
+                  <select 
+                    value={newPqcCheckedBy}
+                    onChange={(e)=>setNewPqcCheckedBy(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold text-slate-705"
+                  >
+                    <option value="Nguyễn Xuân Thao">Nguyễn Xuân Thao (Trưởng phòng)</option>
+                    <option value="Hoàng Văn Phấn">Hoàng Văn Phấn</option>
+                    <option value="Hà Khắc Việt">Hà Khắc Việt</option>
+                    <option value="Đoàn Anh Hùng">Đoàn Anh Hùng</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Trạng thái công đoạn</label>
+                  <select 
+                    value={newPqcStatus}
+                    onChange={(e)=>setNewPqcStatus(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-705 font-bold"
+                  >
+                    <option value="Đang cải tiến">Đang cải tiến (Theo dõi CAPA)</option>
+                    <option value="Đã cải tiến">Đã cải tiến (Áp dụng thử)</option>
+                    <option value="Đạt hoàn toàn">Đạt hoàn toàn (Quy chuẩn hóa)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhận xét, đánh giá vấn đề & Phương hướng cải tiến</label>
+                <textarea 
+                  value={newPqcFindings}
+                  onChange={(e)=>setNewPqcFindings(e.target.value)}
+                  placeholder="Mô tả bavia, rơ lóng khung, dập sườn sần bọt nổ sơn hoặc gá nẹp đai giắc cắm..." 
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-2 h-20 focus:bg-white focus:outline-none font-medium"
+                />
+              </div>
+
+              <div className="space-y-1.5" id="pqc_multiple_image_uploader">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                  <span>Ảnh chụp minh chứng hiện trạng lỗi (2 - 3 ảnh)</span>
+                  <span className={`${newPqcImageUrls.length >= 2 ? 'text-emerald-600 font-extrabold' : 'text-slate-400 font-bold'}`}>
+                    {newPqcImageUrls.length}/3 ảnh
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-3">
+                  {newPqcImageUrls.map((url, index) => (
+                    <div key={index} className="relative group rounded-lg border border-slate-200 overflow-hidden bg-slate-50 shadow-2xs h-24 cursor-zoom-in hover:brightness-95 transition">
+                      <img src={url} alt={`PQC-Preview-${index}`} className="w-full h-full object-cover" onClick={() => setLocalZoomImage(url)} />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = [...newPqcImageUrls];
+                          updated.splice(index, 1);
+                          setNewPqcImageUrls(updated);
+                        }}
+                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-4.5 h-4.5 flex items-center justify-center text-[10px] font-black hover:bg-red-700 shadow-md cursor-pointer"
+                        title="Xóa hình ảnh"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {newPqcImageUrls.length < 3 && (
+                    <label className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 hover:border-indigo-500 bg-slate-50/50 hover:bg-slate-50 cursor-pointer transition h-24 text-slate-400 hover:text-indigo-600">
+                      <Plus className="w-5 h-5 mb-1" />
+                      <span className="text-[10px] font-bold text-center leading-tight">Thêm ảnh</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const compressed = await compressImageFile(file, 500, 500, 0.4);
+                              if (compressed) {
+                                setNewPqcImageUrls(prev => [...prev, compressed]);
+                              }
+                            } catch (err) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setNewPqcImageUrls(prev => [...prev, reader.result as string]);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+                {newPqcImageUrls.length < 2 && (
+                  <p className="text-[10px] text-amber-600 font-bold italic mt-1">
+                    * Khuyên dùng thêm ít nhất {2 - newPqcImageUrls.length} ảnh để minh họa hiện trường tốt nhất.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 border-t pt-3.5">
+                <button 
+                  type="button"
+                  onClick={() => setShowAddPqcModal(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-705 font-bold px-4 py-2 rounded text-xs transition"
+                >
+                  Hủy bỏ
+                </button>
+                <button 
+                  type="submit"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2 rounded text-xs transition shadow"
+                >
+                  Ghi nhận PQC
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT PQC RECORD */}
+      {showEditPqcModal && editingPqcRecord && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl border shadow-lg max-w-lg w-full p-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-slate-800 text-sm uppercase text-indigo-705 flex items-center gap-1.5" id="pqc-edit-title">
+                <Pencil className="w-4 h-4 shadow-sm" /> CHỈNH SỬA SỰ CỐ CÔNG ĐOẠN LẮP RÁP (PQC)
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowEditPqcModal(false);
+                  setEditingPqcRecord(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditPqc} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Mã lệnh sản xuất (LSX)</label>
+                  <input 
+                    type="text" 
+                    value={editingPqcRecord.lsx}
+                    onChange={(e)=>setEditingPqcRecord({...editingPqcRecord, lsx: e.target.value})}
+                    placeholder="Ví dụ: 26-90"
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Dòng xe (Model)</label>
+                  <input 
+                    type="text" 
+                    value={editingPqcRecord.model}
+                    onChange={(e)=>setEditingPqcRecord({...editingPqcRecord, model: e.target.value})}
+                    placeholder="Ví dụ: DK V1_App.2Y, DK Nova..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Số Lượng Lắp Ráp liên quan (Xe)</label>
+                  <input 
+                    type="number" 
+                    value={editingPqcRecord.qty}
+                    onChange={(e)=>setEditingPqcRecord({...editingPqcRecord, qty: Number(e.target.value)})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-mono font-bold"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Ngày phát hiện</label>
+                  <input 
+                    type="text" 
+                    value={editingPqcRecord.date}
+                    onChange={(e)=>setEditingPqcRecord({...editingPqcRecord, date: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Người Giám Sát ghi nhận</label>
+                  <select 
+                    value={editingPqcRecord.checkedBy}
+                    onChange={(e)=>setEditingPqcRecord({...editingPqcRecord, checkedBy: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold text-slate-705"
+                  >
+                    <option value="Nguyễn Xuân Thao">Nguyễn Xuân Thao (Trưởng phòng)</option>
+                    <option value="Hoàng Văn Phấn">Hoàng Văn Phấn</option>
+                    <option value="Hà Khắc Việt">Hà Khắc Việt</option>
+                    <option value="Đoàn Anh Hùng">Đoàn Anh Hùng</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Trạng thái công đoạn</label>
+                  <select 
+                    value={editingPqcRecord.status}
+                    onChange={(e)=>setEditingPqcRecord({...editingPqcRecord, status: e.target.value as any})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-705 font-bold"
+                  >
+                    <option value="Đang cải tiến">Đang cải tiến (Theo dõi CAPA)</option>
+                    <option value="Đã cải tiến">Đã cải tiến (Áp dụng thử)</option>
+                    <option value="Đạt hoàn toàn">Đạt hoàn toàn (Quy chuẩn hóa)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhận xét, đánh giá vấn đề & Phương hướng cải tiến</label>
+                <textarea 
+                  value={editingPqcRecord.findings}
+                  onChange={(e)=>setEditingPqcRecord({...editingPqcRecord, findings: e.target.value})}
+                  placeholder="Mô tả bavia, rơ lóng khung, dập sườn sần bọt nổ sơn hoặc gá nẹp đai giắc cắm..." 
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-2 h-20 focus:bg-white focus:outline-none font-medium"
+                />
+              </div>
+
+              <div className="space-y-1.5" id="pqc_edit_multiple_image_uploader">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                  <span>Ảnh chụp minh chứng hiện trạng lỗi (2 - 3 ảnh)</span>
+                  <span className={`${(editingPqcRecord.imageUrls || []).length >= 2 ? 'text-emerald-600 font-extrabold' : 'text-slate-400 font-bold'}`}>
+                    {(editingPqcRecord.imageUrls || []).length}/3 ảnh
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-3">
+                  {(editingPqcRecord.imageUrls || []).map((url, index) => (
+                    <div key={index} className="relative group rounded-lg border border-slate-200 overflow-hidden bg-slate-50 shadow-2xs h-24 cursor-zoom-in hover:brightness-95 transition">
+                      <img src={url} alt={`PQC-Edit-Preview-${index}`} className="w-full h-full object-cover" onClick={() => setLocalZoomImage(url)} />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updatedUrls = [...(editingPqcRecord.imageUrls || [])];
+                          updatedUrls.splice(index, 1);
+                          setEditingPqcRecord({
+                            ...editingPqcRecord,
+                            imageUrls: updatedUrls,
+                            imageUrl: updatedUrls[0] || ''
+                          });
+                        }}
+                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-4.5 h-4.5 flex items-center justify-center text-[10px] font-black hover:bg-red-700 shadow-md cursor-pointer"
+                        title="Xóa hình ảnh"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {(editingPqcRecord.imageUrls || []).length < 3 && (
+                    <label className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 hover:border-indigo-500 bg-slate-50/50 hover:bg-slate-50 cursor-pointer transition h-24 text-slate-400 hover:text-indigo-600">
+                      <Plus className="w-5 h-5 mb-1" />
+                      <span className="text-[10px] font-bold text-center leading-tight">Thêm ảnh</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                             try {
+                               const compressed = await compressImageFile(file, 500, 500, 0.4);
+                               if (compressed) {
+                                 const updatedUrls = [...(editingPqcRecord.imageUrls || []), compressed];
+                                 setEditingPqcRecord({
+                                   ...editingPqcRecord,
+                                   imageUrls: updatedUrls,
+                                   imageUrl: updatedUrls[0] || ''
+                                 });
+                               }
+                             } catch (err) {
+                               const reader = new FileReader();
+                               reader.onloadend = () => {
+                                 const updatedUrls = [...(editingPqcRecord.imageUrls || []), reader.result as string];
+                                 setEditingPqcRecord({
+                                   ...editingPqcRecord,
+                                   imageUrls: updatedUrls,
+                                   imageUrl: updatedUrls[0] || ''
+                                 });
+                               };
+                               reader.readAsDataURL(file);
+                             }
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t pt-3.5">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowEditPqcModal(false);
+                    setEditingPqcRecord(null);
+                  }}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-705 font-bold px-4 py-2 rounded text-xs transition"
+                >
+                  Hủy bỏ
+                </button>
+                <button 
+                  type="submit"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2 rounded text-xs transition shadow"
+                  id="pqc_edit_submit_btn"
+                >
+                  Lưu thay đổi
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD OQC RECORD */}
+      {showAddOqcModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl border shadow-lg max-w-lg w-full p-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-slate-800 text-sm uppercase text-blue-700 flex items-center gap-1.5">
+                <Plus className="w-4 h-4 shadow-sm" /> THÊM KẾT QUẢ NGHIỆM THU XE THÀNH PHẨM (KCS / OQC)
+              </h3>
+              <button 
+                onClick={() => setShowAddOqcModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddOqcRecord} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Mã Quy Cách TEM</label>
+                  <input 
+                    type="text" 
+                    value={newOqcPartCode}
+                    onChange={(e)=>setNewOqcPartCode(e.target.value)}
+                    placeholder="Ví dụ: TEMDV11202"
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Số Sêri Định Định Xe</label>
+                  <input 
+                    type="text" 
+                    value={newOqcSerialNo}
+                    onChange={(e)=>setNewOqcSerialNo(e.target.value)}
+                    placeholder="Ví dụ: 26DK01234"
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhân viên kiểm thử OQC</label>
+                  <select 
+                    value={newOqcCheckedBy}
+                    onChange={(e)=>setNewOqcCheckedBy(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-705 font-bold"
+                  >
+                    <option value="Liễu Tùng Lâm">Liễu Tùng Lâm</option>
+                    <option value="Lành Xuân Hải">Lành Xuân Hải</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Model dòng xe điện</label>
+                  <select 
+                    value={newOqcModel}
+                    onChange={(e)=>setNewOqcModel(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850 font-extrabold bg-slate-50 pointer-events-auto cursor-pointer"
+                  >
+                    {modelNames.map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Màu Sắc Sơn</label>
+                  <input 
+                    type="text" 
+                    value={newOqcColor}
+                    onChange={(e)=>setNewOqcColor(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nghiệm nghiệm chất lượng</label>
+                  <select 
+                    value={newOqcStatus}
+                    onChange={(e)=>setNewOqcStatus(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold text-slate-705"
+                  >
+                    <option value="Đạt">Đạt (Không phát hiện lỗi)</option>
+                    <option value="Lỗi">Lỗi (Từ chối bàn giao)</option>
+                    <option value="Chưa kiểm tra">Chưa kiểm tra</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Lệnh sản xuất (LSX)</label>
+                  <input 
+                    type="text" 
+                    value={newOqcLsx}
+                    onChange={(e)=>setNewOqcLsx(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold"
+                    required
+                  />
+                </div>
+              </div>
+
+              {newOqcStatus === 'Lỗi' && (
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-3 duration-150 bg-red-50/40 p-4 border border-red-100 rounded-xl">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-505 mb-1 uppercase tracking-wide">Tổng số khuyết điểm phế phẩm</label>
+                      <input 
+                        type="number" 
+                        value={newOqcFailedCount}
+                        onChange={(e)=>setNewOqcFailedCount(Number(e.target.value))}
+                        className="w-full bg-white border border-slate-200 rounded p-2 font-bold font-mono"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-505 mb-1 uppercase tracking-wide">Chi tiết khuyết điểm xe</label>
+                      <input 
+                        type="text" 
+                        value={newOqcDefectDetail}
+                        onChange={(e)=>setNewOqcDefectDetail(e.target.value)}
+                        placeholder="Ví dụ: Xước sườn tay xách..."
+                        className="w-full bg-white border border-slate-200 rounded p-2 font-bold"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-505 mb-1 uppercase tracking-wide">Nguyên Nhân / Hành động khắc phục tại chuyền</label>
+                    <input 
+                      type="text" 
+                      value={newOqcRootCause}
+                      onChange={(e)=>setNewOqcRootCause(e.target.value)}
+                      placeholder="Mô tả bốc bốc xếp cẩu thả, hoặc không luồn bọt lót sườn..."
+                      className="w-full bg-white border border-slate-200 rounded p-2 font-semibold"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 border-t pt-2.5 border-red-100/50">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-505 mb-1 uppercase tracking-wide">Đánh giá mức độ khuyết điểm</label>
+                      <select 
+                        value={newOqcEvaluation}
+                        onChange={(e)=>setNewOqcEvaluation(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded p-2 text-slate-705 font-bold"
+                        required
+                      >
+                        <option value="">-- Chọn đánh giá --</option>
+                        <option value="Lỗi nhẹ (Minor) - Khắc phục nhanh tại vị trí">Lỗi nhẹ (Minor) - Khắc phục nhanh</option>
+                        <option value="Lỗi vừa (Major) - Cần tháo ra lắp ráp lại">Lỗi vừa (Major) - Tháo lắp lại</option>
+                        <option value="Lỗi nặng (Critical) - Đình chỉ bàn giao, bắt làm lại cả cụm">Lỗi nặng (Critical) - Làm lại cả cụm</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-505 mb-1 uppercase tracking-wide">Phương án xử lý kỹ thuật</label>
+                      <input 
+                        type="text" 
+                        value={newOqcTreatment}
+                        onChange={(e)=>setNewOqcTreatment(e.target.value)}
+                        placeholder="Ví dụ: Hạ xe sửa sơn, thay linh kiện mới, sơn dặm..."
+                        className="w-full bg-white border border-slate-200 rounded p-2 font-semibold"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-505 mb-1 uppercase tracking-wide">Ngày kiểm tra</label>
+                  <input 
+                    type="text" 
+                    value={newOqcDate}
+                    onChange={(e)=>setNewOqcDate(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-505 mb-1 uppercase tracking-wide">Giờ kiểm định (HH:MM)</label>
+                  <input 
+                    type="text" 
+                    value={newOqcCheckTime}
+                    onChange={(e)=>setNewOqcCheckTime(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 font-bold font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              {renderImageUploadField(newOqcImageUrl, setNewOqcImageUrl, "Đính kèm ảnh minh họa lỗi OQC (Thành phẩm)")}
+
+              <div className="flex justify-end gap-2 border-t pt-3.5 font-bold">
+                <button 
+                  type="button"
+                  onClick={() => setShowAddOqcModal(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded text-xs transition animate-slide-in-from-left"
+                >
+                  Hủy bỏ
+                </button>
+                <button 
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded text-xs transition shadow shadow-blue-200"
+                >
+                  Lưu trữ KCS OQC
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Excel/TSV Bulk KCS/OQC Importer */}
+      {showImportOqcModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 border border-slate-200 flex flex-col max-h-[90vh]" id="oqc_import_modal">
+            <h3 className="font-extrabold text-slate-800 text-sm uppercase flex items-center gap-1.5 border-b pb-2 mb-4">
+              <Upload className="w-4 h-4 text-indigo-600 animate-bounce" /> Nhập Danh Sách KCS Định Dạng Excel (Bulk Copy-Paste)
+            </h3>
+
+            <div className="text-xs text-slate-500 mb-4 bg-slate-50 p-3 rounded-lg border leading-relaxed space-y-1">
+              <p className="font-bold text-slate-700">Hướng dẫn nhanh cách dán dữ liệu:</p>
+              <p>1. Thiết lập các cột trên file Excel theo đúng thứ tự sau (17 cột):</p>
+              <div className="bg-white p-1.5 px-2.5 rounded border font-mono text-[10px] text-indigo-800 font-bold overflow-x-auto whitespace-nowrap">
+                1. Mã quy cách | 2. Số Sêri | 3. Màu xe | 4. Tình trạng | 5. Đạt | 6. Chi tiết lỗi | 7. Số lỗi | 8. Nguyên nhân | 9. Chi tiết nguyên nhân | 10. LSX | 11. Model | 12. Tính toán giờ ngày | 13. Giờ kiểm tra x | 14. Ngày | 15. Tháng | 16. Năm | 17. SLLR
+              </div>
+              <p>2. Chọn các dòng dữ liệu trong Excel (không gồm tiêu đề hoặc gồm tiêu đề đều được) &rarr; Nhấn <kbd className="bg-slate-200 px-1 py-0.5 rounded text-slate-700 font-mono text-[11px]">Ctrl + C</kbd> để copy.</p>
+              <p>3. Click vào ô văn bản phía dưới &rarr; Nhấn <kbd className="bg-slate-200 px-1 py-0.5 rounded text-slate-700 font-mono text-[11px]">Ctrl + V</kbd> để dán &rarr; Click <span className="font-bold text-indigo-700">"Bắt đầu Import"</span>.</p>
+              <div className="text-emerald-700 font-semibold bg-emerald-50 p-2 rounded border border-emerald-200 inline-block mt-1">
+                💡 Hệ thống tự động nhận diện các dòng ghi nhận lỗi <strong className="underline">"xước"</strong> hoặc <strong className="underline">"thiếu" / "thiếu linh kiện"</strong> và sẽ tự động chuyển tình trạng xe đó thành <strong className="text-emerald-800">Đạt</strong>.
+              </div>
+            </div>
+
+            <form onSubmit={handleImportOqcSubmit} className="space-y-4 flex-1 flex flex-col min-h-0 text-xs text-slate-800">
+              <div className="flex-1 min-h-0 flex flex-col space-y-1">
+                <label className="font-extrabold text-slate-700 block">Dán nội dung bảng tính Excel tại đây:</label>
+                <textarea
+                  value={oqcImportText}
+                  onChange={(e) => setOqcImportText(e.target.value)}
+                  placeholder="TEMDV11202&#9;26DK100234&#9;Xanh Cửu Long&#9;Đạt&#9;1&#9;&#9;0&#9;&#9;&#9;26-10&#9;DK Gogo&#9;&#9;08:30&#9;25&#9;05&#9;2026&#9;1&#10;TEMDV11202&#9;26DK100235&#9;Xám xi măng&#9;Lỗi&#9;0&#9;Xước rè trước&#9;1&#9;Va chạm khâu bốc dỡ&#9;Khu vực đóng gói&#9;26-10&#9;DK Volt v2&#9;&#9;14:15&#9;25&#9;05&#9;2026&#9;1"
+                  className="w-full flex-1 bg-slate-50 border p-2.5 font-mono text-[11px] focus:bg-white rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none overflow-y-auto border-slate-300"
+                />
+              </div>
+
+              {oqcImportError && (
+                <div className="p-2.5 bg-red-50 text-red-700 rounded border border-red-150 font-bold text-[11px]">
+                  ⚠️ {oqcImportError}
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end border-t pt-3.5">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowImportOqcModal(false);
+                    setOqcImportError('');
+                    setOqcImportText('');
+                  }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition"
+                >
+                  Hủy bỏ
+                </button>
+                <button 
+                  type="submit"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition shadow shadow-indigo-200"
+                >
+                  Bắt đầu Import ({oqcImportText.split('\n').filter(Boolean).length} dòng dán)
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Edit Evaluation and Treatment for KCS OQC defect */}
+      {showEditOqcModal && editingOqcRecord && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 border border-slate-200 text-xs text-slate-800 space-y-4">
+            <h3 className="font-extrabold text-slate-800 text-sm uppercase flex items-center gap-1.5 border-b pb-2">
+              <Pencil className="w-4 h-4 text-indigo-605" /> Đánh giá thông tin & Biện pháp khắc phục xe KCS
+            </h3>
+
+            <div className="bg-indigo-50/50 p-3.5 rounded-lg border border-indigo-100 grid grid-cols-2 gap-x-4 gap-y-2 leading-snug">
+              <div>
+                <span className="text-slate-400 block font-bold text-[10px] uppercase">Số Sêri xe</span>
+                <span className="font-mono font-black text-slate-800 text-xs">{editingOqcRecord.serialNo}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block font-bold text-[10px] uppercase">Dòng xe (Model)</span>
+                <span className="font-extrabold text-slate-800 text-xs">{editingOqcRecord.model}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block font-bold text-[10px] uppercase">Lệnh sản xuất (LSX)</span>
+                <span className="font-bold text-slate-700">{editingOqcRecord.lsx}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block font-bold text-[10px] uppercase">Giờ & Ngày kiểm</span>
+                <span className="font-semibold text-slate-600 font-mono">{editingOqcRecord.checkTime} - {editingOqcRecord.date}</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveOqcEdit} className="space-y-4 font-sans text-xs">
+              <div className="space-y-3 p-4 bg-red-50/20 border border-red-100/50 rounded-xl">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Trạng thái KCS</label>
+                  <select 
+                    value={editOqcStatus}
+                    onChange={(e)=>setEditOqcStatus(e.target.value as any)}
+                    className="w-full bg-white border border-slate-200 rounded p-2 text-slate-700 font-bold"
+                    required
+                  >
+                    <option value="Lỗi">Lỗi (Defective)</option>
+                    <option value="Đạt">Đạt (Passed)</option>
+                  </select>
+                </div>
+
+                {editOqcStatus === 'Lỗi' && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chi tiết khuyết điểm xe</label>
+                        <input 
+                          type="text" 
+                          value={editOqcDefectDetail}
+                          onChange={(e)=>setEditOqcDefectDetail(e.target.value)}
+                          placeholder="Ví dụ: Xước sườn..."
+                          className="w-full bg-white border border-slate-200 rounded p-2 font-bold"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nguyên nhân khuyết điểm</label>
+                        <input 
+                          type="text" 
+                          value={editOqcRootCause}
+                          onChange={(e)=>setEditOqcRootCause(e.target.value)}
+                          placeholder="Mô tả nguyên nhân..."
+                          className="w-full bg-white border border-slate-200 rounded p-2 font-semibold"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Đánh giá mức độ khuyết điểm</label>
+                      <select 
+                        value={editOqcEvaluation}
+                        onChange={(e)=>setEditOqcEvaluation(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded p-2 text-slate-700 font-bold"
+                        required
+                      >
+                        <option value="">-- Chọn Đánh giá mức độ --</option>
+                        <option value="Lỗi nhẹ (Minor) - Khắc phục nhanh tại vị trí">Lỗi nhẹ (Minor) - Khắc phục nhanh</option>
+                        <option value="Lỗi vừa (Major) - Cần tháo ra lắp ráp lại">Lỗi vừa (Major) - Tháo lắp lại</option>
+                        <option value="Lỗi nặng (Critical) - Đình chỉ bàn giao, bắt làm lại cả cụm">Lỗi nặng (Critical) - Làm lại cả cụm</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Phương án xử lý kỹ thuật</label>
+                      <input 
+                        type="text" 
+                        value={editOqcTreatment}
+                        onChange={(e)=>setEditOqcTreatment(e.target.value)}
+                        placeholder="Ví dụ: Thay linh kiện mới, sơn sấy dặm sườn..."
+                        className="w-full bg-white border border-slate-200 rounded p-2 font-semibold"
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 justify-end pt-2 border-t">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowEditOqcModal(false);
+                    setEditingOqcRecord(null);
+                  }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-750 font-bold rounded-lg transition cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button 
+                  type="submit"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition shadow shadow-indigo-200 cursor-pointer"
+                >
+                  Xác nhận lưu thay đổi
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Ecount ERP Sync & IQC Linker */}
+      {showEcountSyncModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full flex flex-col h-[85vh] border border-slate-200 overflow-hidden" id="ecount_sync_modal">
+            {/* Header */}
+            <div className="bg-[#1e293b] p-4 text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="bg-blue-600 p-2 rounded-lg text-white">
+                  <Building2 className="w-5 h-5 text-indigo-100" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-blue-300 uppercase tracking-widest font-mono">DKBike QMS Integration Service</span>
+                  <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1">
+                    Cổng Đồng Bộ ERP Ecount.com &rarr; Kiểm Định Chất Lượng IQC
+                  </h3>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowEcountSyncModal(false)}
+                className="text-slate-400 hover:text-white bg-slate-800 p-1.5 rounded-full cursor-pointer transition flex items-center justify-center"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Inner Tabs and Sub-header */}
+            <div className="bg-slate-50 border-b px-6 py-3 flex flex-wrap gap-4 items-center justify-between shrink-0">
+              <div className="flex bg-slate-200 p-1 rounded-lg gap-1 text-xs font-bold text-slate-600">
+                <button 
+                  onClick={() => setEcountSyncTab('snapshot')}
+                  className={`px-4 py-1.5 rounded-md transition cursor-pointer ${ecountSyncTab === 'snapshot' ? 'bg-white text-slate-850 shadow' : 'hover:text-slate-900 hover:bg-white/40'}`}
+                >
+                  📸 1. Trích xuất ảnh chụp Ecount
+                </button>
+                <button 
+                  onClick={() => setEcountSyncTab('paste')}
+                  className={`px-4 py-1.5 rounded-md transition cursor-pointer ${ecountSyncTab === 'paste' ? 'bg-white text-slate-850 shadow' : 'hover:text-slate-900 hover:bg-white/40'}`}
+                >
+                  📋 2. Dán bảng dữ liệu (Ctrl+V)
+                </button>
+              </div>
+
+              {ecountSyncTab === 'snapshot' && (
+                <div className="relative w-72">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                  <input 
+                    type="text" 
+                    value={ecountSearchQuery}
+                    onChange={e => setEcountSearchQuery(e.target.value)}
+                    placeholder="Tìm nhanh nhà cung cấp, nội dung..."
+                    className="w-full bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-500 rounded-lg pl-8 pr-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Content Body */}
+            <div className="flex-1 overflow-y-auto p-6 min-h-0 bg-slate-50/50">
+              {ecountSyncTab === 'snapshot' && (
+                <div className="space-y-4">
+                  <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-ping"></span>
+                      Dữ liệu mua hàng từ màn hình Ecount ERP của DKBike
+                    </h4>
+                    <p className="text-xs text-slate-550 leading-relaxed font-semibold">
+                      Hệ thống tự động đồng bộ 16 lô hàng ghi nhận trên Ecount trong ảnh screenshot của bạn. Linh kiện có thể cài đặt số lượng thử nghiệm IQC đầu vào và số lượng hàng lỗi phát hiện trực tiếp tại bảng này để lập tức sinh hồ sơ kiểm định thông minh:
+                    </p>
+                  </div>
+
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-900 text-slate-200 text-[11px] uppercase tracking-wider font-extrabold">
+                          <th className="p-3 text-center w-12">Chọn</th>
+                          <th className="p-3 pl-4">Ngày mua</th>
+                          <th className="p-3">Mã NCC</th>
+                          <th className="p-3">Tên Nhà Cung Cấp</th>
+                          <th className="p-3">Nội dung phiếu nhập</th>
+                          <th className="p-3 text-right">SL Nhập</th>
+                          <th className="p-3 text-emerald-800 bg-emerald-50/50 text-center w-24">SL Kiểm Mẫu</th>
+                          <th className="p-3 text-red-800 bg-red-50/50 text-center w-24">SL Lỗi QMS</th>
+                          <th className="p-3 text-red-800 bg-red-50/50">Mô tả sự cố của lô hàng</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-705">
+                        {ecountDataList
+                          .filter(item => {
+                            if (!ecountSearchQuery) return true;
+                            const query = ecountSearchQuery.toLowerCase();
+                            return (
+                              item.supplierName.toLowerCase().includes(query) ||
+                              item.supplierCode.toLowerCase().includes(query) ||
+                              item.content.toLowerCase().includes(query)
+                            );
+                          })
+                          .map((row, idx) => {
+                            const isMatched = suppliers.some(s => s.id === row.supplierCode);
+                            return (
+                              <tr key={idx} className={`hover:bg-slate-50 transition-colors ${row.checked ? 'bg-indigo-50/20' : ''}`}>
+                                <td className="p-3 text-center">
+                                  <input 
+                                    type="checkbox"
+                                    checked={!!row.checked}
+                                    onChange={e => {
+                                      const updated = [...ecountDataList];
+                                      const indexInFullList = ecountDataList.findIndex(item => item.content === row.content);
+                                      if (indexInFullList !== -1) {
+                                        updated[indexInFullList].checked = e.target.checked;
+                                        setEcountDataList(updated);
+                                      }
+                                    }}
+                                    className="w-4 h-4 text-blue-600 rounded cursor-pointer focus:ring-0"
+                                  />
+                                </td>
+                                <td className="p-3 pl-4 text-slate-500 font-mono text-[11px] whitespace-nowrap">{row.date}</td>
+                                <td className="p-3 font-mono font-bold text-indigo-750 text-[11px]">{row.supplierCode}</td>
+                                <td className="p-3">
+                                  <div>
+                                    <span className="block text-slate-900 font-bold leading-normal">{row.supplierName}</span>
+                                    {isMatched ? (
+                                      <span className="inline-flex items-center gap-0.5 text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.2 rounded font-black border border-emerald-100 mt-1">
+                                        <Check className="w-2.5 h-2.5 stroke-[4]" /> Đã kết nối Danh bạ QMS
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-0.5 text-[9px] bg-orange-50 text-orange-700 px-1.5 py-0.2 rounded font-black border border-orange-100 mt-1">
+                                        ⚠ Tự động Link Mã mới
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-3 text-slate-600 text-xs italic leading-tight font-normal">{row.content}</td>
+                                <td className="p-3 text-right font-mono font-bold text-slate-900">
+                                  {row.quantity.toLocaleString('vi-VN')}
+                                </td>
+                                <td className="p-3 bg-emerald-50/10 text-center">
+                                  <input 
+                                    type="number"
+                                    value={row.sampleQty ?? 0}
+                                    onChange={e => {
+                                      const updated = [...ecountDataList];
+                                      const indexInFullList = ecountDataList.findIndex(item => item.content === row.content);
+                                      if (indexInFullList !== -1) {
+                                        updated[indexInFullList].sampleQty = Number(e.target.value);
+                                        setEcountDataList(updated);
+                                      }
+                                    }}
+                                    disabled={!row.checked}
+                                    className="w-20 bg-white border border-slate-200 hover:border-emerald-300 text-center rounded p-1 font-mono font-bold text-slate-800 focus:outline-emerald-500 disabled:opacity-50 text-xs"
+                                  />
+                                </td>
+                                <td className="p-3 bg-red-50/10 text-center">
+                                  <input 
+                                    type="number"
+                                    value={row.failedQty ?? 0}
+                                    onChange={e => {
+                                      const updated = [...ecountDataList];
+                                      const indexInFullList = ecountDataList.findIndex(item => item.content === row.content);
+                                      if (indexInFullList !== -1) {
+                                        updated[indexInFullList].failedQty = Number(e.target.value);
+                                        if (updated[indexInFullList].failedQty > (updated[indexInFullList].sampleQty || 1)) {
+                                          updated[indexInFullList].failedQty = updated[indexInFullList].sampleQty || 1;
+                                        }
+                                        setEcountDataList(updated);
+                                      }
+                                    }}
+                                    disabled={!row.checked}
+                                    className={`w-20 text-center rounded p-1 font-mono font-bold focus:outline-red-500 disabled:opacity-50 text-xs ${Number(row.failedQty) > 0 ? 'bg-red-50 border-red-350 text-red-750 animate-pulse font-extrabold' : 'bg-white border-slate-200 text-slate-850'}`}
+                                  />
+                                </td>
+                                <td className="p-3 bg-red-50/10">
+                                  <input 
+                                    type="text"
+                                    value={row.defectDetail || ''}
+                                    onChange={e => {
+                                      const updated = [...ecountDataList];
+                                      const indexInFullList = ecountDataList.findIndex(item => item.content === row.content);
+                                      if (indexInFullList !== -1) {
+                                        updated[indexInFullList].defectDetail = e.target.value;
+                                        setEcountDataList(updated);
+                                      }
+                                    }}
+                                    disabled={!row.checked || !row.failedQty}
+                                    placeholder="Ví dụ: Xước sơn sườn xe, lỗi phanh..."
+                                    className="w-full bg-white border border-slate-200 rounded p-1 text-xs focus:outline-none focus:border-red-500 font-normal disabled:opacity-50"
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {ecountSyncTab === 'paste' && (
+                <div className="space-y-4">
+                  <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5 animate-pulse">
+                      <Upload className="w-4 h-4 text-indigo-650" />
+                      Dán Bản tính Mua hàng Mới copy từ Ecount.com
+                    </h4>
+                    <p className="text-xs text-slate-550 leading-relaxed font-semibold">
+                      Hãy chọn các cột trên trang Ecount của bạn (Danh sách mua), copy rồi paste thẳng vào vùng dán chữ nhật dưới. Cổng tích hợp QMS thông dịch tự động chuỗi dữ liệu TSV/Excel, giúp tiết kiệm thời gian nhập tay cho cả nhóm quản lý chất lượng DKBike!
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[42vh]">
+                    <div className="flex flex-col space-y-1">
+                      <label className="font-extrabold text-slate-700 text-xs">Phần dán dữ liệu thô (Ctrl + V):</label>
+                      <textarea
+                        value={ecountPasteText}
+                        onChange={e => handleEcountPasteChange(e.target.value)}
+                        placeholder="Dán các cột dạng: Ngày&#9;Mã NCC&#9;Tên Nhà Cung Cấp&#9;Nội dung&#9;Số lượng&#9;..."
+                        className="flex-1 w-full bg-slate-100 hover:bg-slate-50 border focus:bg-white rounded-xl focus:ring-1 focus:ring-indigo-500 focus:outline-none p-4 font-mono text-[11px] border-slate-300 resize-none overflow-y-auto leading-relaxed"
+                      />
+                    </div>
+
+                    <div className="flex flex-col min-h-0">
+                      <label className="font-extrabold text-slate-700 text-xs">Bảng trích duyệt kiểm trong thời gian thực ({ecountPasteRows.length} dòng dữ liệu):</label>
+                      <div className="flex-1 bg-white border rounded-xl overflow-y-auto shadow-inner border-slate-200 p-2">
+                        {ecountPasteRows.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-full text-slate-400 italic font-mono space-y-2 py-8">
+                            <span>Chưa phát hiện bản dán dữ liệu Ecount từ clipboard...</span>
+                            <span className="text-[10px] font-normal leading-relaxed text-center max-w-sm">Hệ thống của chúng tôi sẽ tự lọc để trích xuất sạch các cột từ Ecount để gán kiểm IQC đầu vào.</span>
+                          </div>
+                        ) : (
+                          <table className="w-full text-left text-[11px] border-collapse font-sans font-semibold">
+                            <thead>
+                              <tr className="bg-slate-100 text-slate-650 border-b uppercase font-bold text-[9px]">
+                                <th className="p-1.5">Chọn</th>
+                                <th className="p-1.5">Ngày</th>
+                                <th className="p-1.5">Mã NCC</th>
+                                <th className="p-1.5">Nhà cung cấp</th>
+                                <th className="p-1.5">Quy cách hàng</th>
+                                <th className="p-1.5 text-right">SL nhập</th>
+                                <th className="p-1.5 text-center">SL Mẫu kiểm</th>
+                                <th className="p-1.5 text-center">SL lỗi</th>
+                                <th className="p-1.5 whitespace-nowrap">Tên mặt hàng (Tóm tắt)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {ecountPasteRows.map((row, idx) => (
+                                <tr key={idx} className="border-b hover:bg-slate-50 text-slate-700">
+                                  <td className="p-1.5 text-center">
+                                    <input 
+                                      type="checkbox"
+                                      checked={!!row.checked}
+                                      onChange={e => {
+                                        const updated = [...ecountPasteRows];
+                                        updated[idx].checked = e.target.checked;
+                                        setEcountPasteRows(updated);
+                                      }}
+                                      className="w-3.5 h-3.5 focus:ring-0"
+                                    />
+                                  </td>
+                                  <td className="p-1.5 font-mono text-[10px]">{row.date}</td>
+                                  <td className="p-1.5 font-mono font-bold text-slate-800">{row.supplierCode}</td>
+                                  <td className="p-1.5 truncate max-w-[100px] text-slate-900" title={row.supplierName}>{row.supplierName}</td>
+                                  <td className="p-1.5 truncate max-w-[120px] text-slate-505 italic" title={row.content}>{row.content}</td>
+                                  <td className="p-1.5 text-right font-mono font-bold text-slate-950">{row.quantity}</td>
+                                  <td className="p-1.5 text-center">
+                                    <input 
+                                      type="number"
+                                      disabled={!row.checked}
+                                      value={row.sampleQty ?? 1}
+                                      onChange={e => {
+                                        const updated = [...ecountPasteRows];
+                                        updated[idx].sampleQty = Number(e.target.value);
+                                        setEcountPasteRows(updated);
+                                      }}
+                                      className="w-12 bg-slate-50 border text-center font-mono rounded text-xs disabled:opacity-50"
+                                    />
+                                  </td>
+                                  <td className="p-1.5 text-center">
+                                    <input 
+                                      type="number"
+                                      disabled={!row.checked}
+                                      value={row.failedQty ?? 0}
+                                      onChange={e => {
+                                        const updated = [...ecountPasteRows];
+                                        updated[idx].failedQty = Number(e.target.value);
+                                        setEcountPasteRows(updated);
+                                      }}
+                                      className={`w-12 border text-center font-mono rounded text-xs disabled:opacity-50 ${Number(row.failedQty) > 0 ? 'bg-red-50 text-red-600 font-extrabold border-red-300' : 'bg-slate-50 border-slate-200'}`}
+                                    />
+                                  </td>
+                                  <td className="p-1.5">
+                                    <input 
+                                      type="text"
+                                      disabled={!row.checked}
+                                      value={row.itemSummary || ''}
+                                      onChange={e => {
+                                        const updated = [...ecountPasteRows];
+                                        updated[idx].itemSummary = e.target.value;
+                                        setEcountPasteRows(updated);
+                                      }}
+                                      className="w-full bg-slate-50 border px-1.5 py-0.5 rounded text-[11px] border-slate-200 disabled:opacity-50 font-medium text-slate-800"
+                                      placeholder="Mặt hàng..."
+                                    />
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+
+            </div>
+
+            {/* Footer buttons */}
+            <div className="bg-slate-100 p-4 border-t flex justify-between items-center shrink-0">
+              <button 
+                type="button" 
+                onClick={() => {
+                  if (window.confirm("Bác có chắc chắn muốn khôi phục về trạng thái ban đầu không?")) {
+                    setEcountDataList(ECOUNT_PRELOADED_DATA.map(item => ({ ...item })));
+                  }
+                }}
+                className="text-xs bg-white hover:bg-slate-200 font-bold border rounded-lg px-4 py-2 text-slate-700 cursor-pointer"
+              >
+                🔄 Khử thay đổi & khôi phục mẫu ERP
+              </button>
+
+              <div className="flex gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => setShowEcountSyncModal(false)}
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold rounded-lg text-xs cursor-pointer"
+                >
+                  Đóng lại
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    if (ecountSyncTab === 'snapshot') {
+                      handleSyncEcountToIqc(ecountDataList);
+                    } else {
+                      handleSyncEcountToIqc(ecountPasteRows);
+                    }
+                  }}
+                  className="px-6 py-2 bg-[#0213b0] hover:bg-blue-800 text-white font-extrabold rounded-lg text-xs shadow-md shadow-blue-150 cursor-pointer flex items-center gap-1.5"
+                >
+                  <CheckSquare className="w-4 h-4" /> 
+                  Xác nhận & Đồng bộ vào IQC ({ecountSyncTab === 'snapshot' ? ecountDataList.filter(r => r.checked).length : ecountPasteRows.filter(r => r.checked).length} dòng tuyển)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Excel/TSV Bulk IQC Importer */}
+      {showImportIqcModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 border border-slate-200 flex flex-col max-h-[90vh]" id="iqc_import_modal">
+            <h3 className="font-extrabold text-slate-800 text-sm uppercase flex items-center gap-1.5 border-b pb-2 mb-4">
+              <Upload className="w-4 h-4 text-emerald-600 animate-bounce" /> Nhập Danh Sách IQC Định Dạng Excel (Bulk Copy-Paste)
+            </h3>
+
+            <div className="text-xs text-slate-500 mb-4 bg-slate-50 p-3 rounded-lg border leading-relaxed space-y-1">
+              <p className="font-bold text-slate-705">Hướng dẫn nhanh cách dán dữ liệu IQC:</p>
+              <p>1. Thiết lập các cột trên file Excel theo đúng thứ tự sau:</p>
+              <div className="bg-white p-1.5 px-2.5 rounded border font-mono text-[10px] text-emerald-850 font-bold overflow-x-auto">
+                Ngày | Tên nhà cung cấp | Quy cách hàng hóa | Tổng SL nhập | Số lượng kiểm mẫu | Số lượng lỗi | Người kiểm | Chi tiết sự cố lỗi | Mô tả tóm tắt
+              </div>
+              <p>2. Chọn các dòng dữ liệu trong Excel (không gồm tiêu đề hoặc gồm tiêu đề đều được) &rarr; Nhấn <kbd className="bg-slate-250 px-1 py-0.5 rounded text-slate-700 font-mono text-[11px]">Ctrl + C</kbd> để copy.</p>
+              <p>3. Click vào ô văn bản phía dưới &rarr; Nhấn <kbd className="bg-slate-250 px-1 py-0.5 rounded text-slate-700 font-mono text-[11px]">Ctrl + V</kbd> để dán &rarr; Click <span className="font-bold text-emerald-750">"Bắt đầu Import"</span>.</p>
+            </div>
+
+            <form onSubmit={handleImportIqcSubmit} className="space-y-4 flex-1 flex flex-col min-h-0 text-xs text-slate-800">
+              <div className="flex-1 min-h-0 flex flex-col space-y-1">
+                <label className="font-extrabold text-slate-700 block">Dán nội dung bảng tính Excel tại đây:</label>
+                <textarea
+                  value={iqcImportText}
+                  onChange={(e) => setIqcImportText(e.target.value)}
+                  placeholder="24/04/2026&#9;Công ty Cao Su KENDA Việt Nam&#9;PNK 0173 KENDA_300.9090&#9;1000&#9;100&#9;2&#9;Đoàn Anh Hùng&#9;Nứt gờ lốp nhẹ&#9;Lốp sau xe máy điện"
+                  className="w-full flex-1 bg-slate-50 border p-2.5 font-mono text-[11px] focus:bg-white rounded-lg focus:ring-1 focus:ring-emerald-505 focus:outline-none resize-none overflow-y-auto border-slate-300"
+                />
+              </div>
+
+              {iqcImportError && (
+                <div className="p-2.5 bg-red-50 text-red-700 rounded border border-red-150 font-bold text-[11px]">
+                  ⚠️ {iqcImportError}
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end border-t pt-3.5">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowImportIqcModal(false);
+                    setIqcImportError('');
+                    setIqcImportText('');
+                  }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition"
+                >
+                  Hủy bỏ
+                </button>
+                <button 
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition shadow shadow-emerald-200"
+                >
+                  Bắt đầu Import ({iqcImportText.split('\n').filter(Boolean).length} dòng dán)
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Edit IQC Record */}
+      {showEditIqcModal && editingIqcRecord && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 border border-slate-200 flex flex-col max-h-[90vh]" id="iqc_edit_modal">
+            <h3 className="font-extrabold text-slate-800 text-sm uppercase flex items-center gap-1.5 border-b pb-2 mb-4">
+              <Pencil className="w-4 h-4 text-emerald-600" /> Sửa phiếu kiểm nhập IQC ({editingIqcRecord.id})
+            </h3>
+
+            <form onSubmit={handleSaveEditIqc} className="space-y-4 overflow-y-auto pr-1 flex-1 text-xs text-slate-800">
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Chọn Nhà cung cấp liên kết</label>
+                <select 
+                  value={editingIqcRecord.supplierId || ''} 
+                  onChange={e => {
+                    const selectedSup = suppliers.find(s => s.id === e.target.value);
+                    if (selectedSup) {
+                      setEditingIqcRecord({
+                        ...editingIqcRecord, 
+                        supplierId: selectedSup.id, 
+                        supplierName: selectedSup.name
+                      });
+                    }
+                  }} 
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-bold" 
+                  required 
+                >
+                  <option value="">-- Chọn Nhà Cung Cấp --</option>
+                  {suppliers.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Quy cách linh kiện / hàng hóa</label>
+                <input 
+                  type="text" 
+                  value={editingIqcRecord.content || ''} 
+                  onChange={e => setEditingIqcRecord({...editingIqcRecord, content: e.target.value})} 
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800" 
+                  required 
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Mô tả tóm tắt</label>
+                <input 
+                  type="text" 
+                  value={editingIqcRecord.itemSummary || ''} 
+                  onChange={e => setEditingIqcRecord({...editingIqcRecord, itemSummary: e.target.value})} 
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800" 
+                />
+              </div>
+
+              {/* AQL Info in Edit Modal */}
+              {(() => {
+                const currentAql = calculateAQLSample(editingIqcRecord.totalQty || 0, editingIqcRecord.failedQty || 0, 1.5, 'II');
+                return (
+                  <div className="bg-indigo-50/80 border border-indigo-200 rounded-lg p-2.5 text-xs">
+                    <div className="flex justify-between items-center font-bold text-indigo-900 mb-1">
+                      <span className="flex items-center gap-1 text-[11px]">
+                        <ShieldCheck className="w-3.5 h-3.5 text-indigo-650" />
+                        AQL ISO 2859-1 (Mã {currentAql.codeLetter})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setEditingIqcRecord({ ...editingIqcRecord, checkedQty: currentAql.sampleSize })}
+                        className="text-[10px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-2 py-0.5 rounded cursor-pointer"
+                      >
+                        ⚡ Áp dụng mẫu AQL ({currentAql.sampleSize})
+                      </button>
+                    </div>
+                    <p className="text-[10.5px] text-slate-600">
+                      Lô {(editingIqcRecord.totalQty || 0).toLocaleString('vi-VN')} sp ➔ Mẫu chuẩn: <b>{currentAql.sampleSize} sp</b>. Ngưỡng: <b>Ac ≤ {currentAql.ac}</b> (Chấp nhận), <b>Re ≥ {currentAql.re}</b> (Bác bỏ).
+                    </p>
+                  </div>
+                );
+              })()}
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Tổng SL nhập</label>
+                  <input 
+                    type="number" 
+                    value={editingIqcRecord.totalQty ?? 0} 
+                    onChange={e => {
+                      const totalVal = Number(e.target.value);
+                      const aqlVal = calculateAQLSample(totalVal, editingIqcRecord.failedQty || 0, 1.5, 'II').sampleSize;
+                      setEditingIqcRecord({
+                        ...editingIqcRecord, 
+                        totalQty: totalVal,
+                        checkedQty: aqlVal
+                      });
+                    }} 
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-mono font-bold" 
+                    required 
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Mẫu kiểm (AQL)</label>
+                  <input 
+                    type="number" 
+                    value={editingIqcRecord.checkedQty ?? 0} 
+                    onChange={e => setEditingIqcRecord({...editingIqcRecord, checkedQty: Number(e.target.value)})} 
+                    className="w-full bg-indigo-50/60 border border-indigo-200 rounded p-2 text-indigo-900 font-mono font-bold" 
+                    required 
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Số lỗi phát hiện</label>
+                  <input 
+                    type="number" 
+                    value={editingIqcRecord.failedQty ?? 0} 
+                    onChange={e => setEditingIqcRecord({...editingIqcRecord, failedQty: Number(e.target.value)})} 
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-mono font-bold text-red-600" 
+                    required 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Chi tiết sự cố lỗi (nếu có)</label>
+                <input 
+                  type="text" 
+                  value={editingIqcRecord.defectDetail || ''} 
+                  onChange={e => setEditingIqcRecord({...editingIqcRecord, defectDetail: e.target.value})} 
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800" 
+                  placeholder="Ví dụ: Xước sơn bóng nhẹ, dính tạp chất..."
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Người kiểm</label>
+                  <input 
+                    type="text" 
+                    value={editingIqcRecord.checkedBy || ''} 
+                    onChange={e => setEditingIqcRecord({...editingIqcRecord, checkedBy: e.target.value})} 
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800" 
+                    required 
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Ngày kiểm</label>
+                  <input 
+                    type="text" 
+                    value={editingIqcRecord.date || ''} 
+                    onChange={e => setEditingIqcRecord({...editingIqcRecord, date: e.target.value})} 
+                    className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800" 
+                    required 
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end border-t pt-3 mt-4">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowEditIqcModal(false);
+                    setEditingIqcRecord(null);
+                  }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-250 text-slate-750 font-bold rounded"
+                >
+                  Đóng
+                </button>
+                <button 
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded transition shadow shadow-emerald-200"
+                >
+                  Cập nhật phiếu IQC
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD SUPPLIER PRODUCTION AUDIT REQUEST */}
+      {showAddSupplierAuditModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-lg max-w-lg w-full p-6 space-y-4 text-xs">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-extrabold text-slate-800 text-sm uppercase text-orange-700 flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-orange-600 animate-pulse" /> KÍCH HOẠT CHỈ THỊ GIÁM SÁT SẢN XUẤT (ACTIVE AUDIT)
+              </h3>
+              <button 
+                onClick={() => setShowAddSupplierAuditModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateSupplierAuditRequest} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                  🔗 Tự động nạp từ Nhật trình Công việc ngày (Nếu có)
+                </label>
+                <select
+                  value={newAuditLinkedDailyLogStt || ''}
+                  onChange={e => {
+                    const sttVal = e.target.value;
+                    if (sttVal) {
+                      handleSelectLinkedDailyLogForAudit(Number(sttVal));
+                    } else {
+                      setNewAuditLinkedDailyLogStt(undefined);
+                    }
+                  }}
+                  className="w-full border border-slate-200 rounded-lg p-2 bg-indigo-50/50 font-bold text-indigo-900 focus:ring-1 focus:ring-indigo-500 outline-hidden"
+                >
+                  <option value="">-- Chọn công việc nhật trình để tự động điền nhanh dữ liệu --</option>
+                  {dailyLogs.map(log => (
+                    <option key={log.stt} value={log.stt}>
+                      [{log.date}] [{log.category}] {log.content.substring(0, 75)}...
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[9px] text-indigo-600 font-bold italic mt-1">
+                  * Chọn công việc ngày giúp tự động liên kết trạng thái và điền nhanh thông số thiết kế.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhà Cung Cấp Phụ Trách</label>
+                <select 
+                  value={newAuditSupplierName}
+                  onChange={e => setNewAuditSupplierName(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg p-2 bg-slate-50 font-bold text-slate-700"
+                >
+                  {suppliers.map(s => {
+                    const sName = s.name || s.SupplierName || '';
+                    return (
+                      <option key={s.id || s.SupplierID} value={sName}>
+                        {sName} {s.id ? `(${s.id})` : ''}
+                      </option>
+                    );
+                  })}
+                  {suppliers.length === 0 && (
+                    <>
+                      <option value="Công ty Việt Nhật Precision">Công ty Việt Nhật Precision (Nhựa, Khuôn phôi)</option>
+                      <option value="Công ty Cao Su KENDA Việt Nam">Công ty Cao Su KENDA Việt Nam (Săm lốp)</option>
+                      <option value="Công ty Ắc quy Tia Sáng">Công ty Ắc quy Tia Sáng (Ắc quy điện)</option>
+                      <option value="Đầu mối linh kiện chấn dập HT">Đầu mối linh kiện chấn dập HT (Khung, càng sắt)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Tên linh kiện gia công / sản xuất</label>
+                <input 
+                  type="text" 
+                  placeholder="Ví dụ: Càng xe điện sau Xmen, Lốp 3.00-10 Gold, Trục càng đúc..."
+                  value={newAuditComponentName} 
+                  onChange={e => setNewAuditComponentName(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg p-2"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chỉ tiêu dung sai/thông số kỹ thuật tối thiểu cần xác nhận</label>
+                <input 
+                  type="text" 
+                  placeholder="Ví dụ: Đo độ dày lớp sơn ngoài (yêu cầu &gt;= 1.2mm), Góc vát phôi dập..."
+                  value={newAuditSpec} 
+                  onChange={e => setNewAuditSpec(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg p-2"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Yêu cầu đính kèm</label>
+                  <select 
+                    value={newAuditReqType}
+                    onChange={e => setNewAuditReqType(e.target.value as any)}
+                    className="w-full border border-slate-200 rounded-lg p-2 bg-slate-50 font-bold text-slate-700"
+                  >
+                    <option value="both">Ảnh gia công &amp; Chỉ số đo đạc</option>
+                    <option value="image_only">Chỉ chụp ảnh cận cảnh</option>
+                    <option value="spec_only">Chỉ ghi nhận thông số</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Người đại diện kiểm tra</label>
+                  <input 
+                    type="text" 
+                    value="Mr. Thao QMS"
+                    className="w-full border border-slate-200 rounded-lg p-2 bg-slate-100 font-semibold text-slate-500"
+                    disabled
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Hướng dẫn hoặc lưu ý quy trình của DKBike</label>
+                <textarea 
+                  rows={2}
+                  placeholder="Vui lòng kiểm tra dưỡng đo trước khi tiến hành dập khối lượng lớn tránh sai hỏng toàn lô hàng."
+                  value={newAuditNote} 
+                  onChange={e => setNewAuditNote(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg p-2 font-medium text-slate-600"
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end border-t pt-3 mt-4">
+                <button 
+                  type="button"
+                  onClick={() => setShowAddSupplierAuditModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded"
+                >
+                  Đóng
+                </button>
+                <button 
+                  type="submit"
+                  className="px-5 py-2 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded transition shadow shadow-orange-200"
+                >
+                  Kích hoạt chỉ thị
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: SUPPLIER RESPONSE DATA RECORD */}
+      {supplierResponseAudit && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-lg max-w-lg w-full p-6 space-y-4 text-xs">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-extrabold text-slate-800 text-sm uppercase text-teal-700 flex items-center gap-1.5">
+                <Camera className="w-4 h-4 text-teal-600" /> CẬP NHẬT KẾT QUẢ ĐO LƯỜNG TỪ NHÀ CUNG CẤP
+              </h3>
+              <button 
+                onClick={() => setSupplierResponseAudit(null)}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 bg-blue-50 rounded-lg text-[11px] leading-relaxed border border-blue-100">
+              <p>📍 <strong className="font-bold text-slate-800">Yêu cầu từ DKBike:</strong> Kiểm tra chỉ tiêu <span className="font-extrabold text-slate-900 underline">"{supplierResponseAudit.targetSpecification}"</span> của linh kiện <strong className="text-slate-900">{supplierResponseAudit.componentName}</strong> trước khi bắt đầu sản xuất loạt.</p>
+            </div>
+
+            <form onSubmit={handleSupplierSubmitResponseSubmit} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Kết quả đo lường thực tế (Dung sai/Kích thước)</label>
+                <input 
+                  type="text" 
+                  placeholder="Ví dụ: Đo thực tế đạt 1.25mm (+-0.02), Góc vát khuôn 45.2 độ đạt chuẩn..."
+                  value={responseValueStr} 
+                  onChange={e => setResponseValueStr(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg p-2 font-mono font-bold text-blue-700"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Đính kèm ảnh chụp hiện trường sản xuất/dưỡng kiểm</label>
+                <select 
+                  value={responseImageUrl}
+                  onChange={e => setResponseImageUrl(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg p-2 bg-slate-50 font-bold text-slate-700"
+                >
+                  <option value="">-- Click chọn ảnh đo đạc thực tế tại xưởng --</option>
+                  <option value="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=500&amp;q=80">Mẫu Linh kiện Kim loại dập sắc nét (Đạt chuẩn)</option>
+                  <option value="https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=500&amp;q=80">Gia công sườn càng sắt bám chắc (Đạt chuẩn)</option>
+                  <option value="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=500&amp;q=80">Quy trình cán săm lốp cao su nóng (Đạt chuẩn)</option>
+                  <option value="https://images.unsplash.com/photo-1616401784845-180882ba9ba8?w=500&amp;q=80">Khung vỏ sườn có vết đốm sơn rỗ (Sai lệch dung sai)</option>
+                </select>
+                <p className="text-[9px] text-slate-400 mt-1">Trong thực tế ngoài hiện xưởng, NCC sẽ quét QR code chỉ thị và chụp ảnh trực tiếp từ camera điện thoại để đồng bộ.</p>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Phản hồi hoặc đề xuất từ kỹ sư Nhà cung cấp</label>
+                <textarea 
+                  rows={2}
+                  placeholder="Khuôn ráp hoàn thiện, kết quả đo dưỡng đạt dung sai vàng. Đề xuất DKBike duyệt cho chạy sản xuất hàng loạt."
+                  value={responseSupplierNote} 
+                  onChange={e => setResponseSupplierNote(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg p-2"
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end border-t pt-3 mt-4">
+                <button 
+                  type="button"
+                  onClick={() => setSupplierResponseAudit(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-205 text-slate-700 font-bold rounded"
+                >
+                  Huỷ bỏ
+                </button>
+                <button 
+                  type="submit"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded transition shadow shadow-blue-200"
+                >
+                  Gửi dữ liệu xác thực ảnh &amp; thông số
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DKBIKE REVIEW & EVALUATION */}
+      {evaluateAudit && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-lg max-w-lg w-full p-6 space-y-4 text-xs">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-extrabold text-slate-800 text-sm uppercase text-indigo-700 flex items-center gap-1.5">
+                <Sliders className="w-4 h-4 text-indigo-600" /> ĐÁNH GIÁ &amp; PHÊ DUYỆT CHUYÊN MÔN BAN QMS DKBIKE
+              </h3>
+              <button 
+                onClick={() => setEvaluateAudit(null)}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2 bg-slate-50 p-3 rounded-lg border text-[11px]">
+              <p>📁 <strong className="font-bold">Chỉ thị:</strong> {evaluateAudit.id} - {evaluateAudit.componentName}</p>
+              <p>🏢 <strong className="font-bold">Nhà cung cấp:</strong> {evaluateAudit.supplierName}</p>
+              <p>📊 <strong className="font-bold">Kết quả đo từ NCC:</strong> <strong className="text-rose-600 underline font-mono">{evaluateAudit.actualValueStr || 'N/A'}</strong></p>
+            </div>
+
+            <form onSubmit={handleDkAuditEvaluationSubmit} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Quyết định phê duyệt chất lượng</label>
+                <div className="grid grid-cols-2 gap-3 mt-1">
+                  <label className={`flex items-center justify-center gap-2 border p-3 rounded-xl cursor-pointer font-bold ${evalStatus === 'approved' ? 'border-emerald-500 bg-emerald-50/50 text-emerald-800' : 'border-slate-200 bg-slate-50/20'}`}>
+                    <input 
+                      type="radio" 
+                      name="eval_status" 
+                      value="approved"
+                      checked={evalStatus === 'approved'} 
+                      onChange={() => setEvalStatus('approved')}
+                      className="accent-emerald-600"
+                    />
+                    <span>Approved (Đạt chất lượng)</span>
+                  </label>
+                  <label className={`flex items-center justify-center gap-2 border p-3 rounded-xl cursor-pointer font-bold ${evalStatus === 'rejected' ? 'border-red-500 bg-red-50/50 text-red-800' : 'border-slate-200 bg-slate-50/20'}`}>
+                    <input 
+                      type="radio" 
+                      name="eval_status" 
+                      value="rejected"
+                      checked={evalStatus === 'rejected'} 
+                      onChange={() => setEvalStatus('rejected')}
+                      className="accent-red-600"
+                    />
+                    <span>Rejected (Sai lệch - Đình chỉ)</span>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhận định &amp; Chỉ thị kỹ thuật của Mr. Thao (QMS)</label>
+                <textarea 
+                  rows={3}
+                  value={evalDkNote} 
+                  onChange={e => setEvalDkNote(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg p-2 text-slate-700 font-semibold leading-relaxed"
+                  placeholder="Nhập nhận định kỹ thuật để gửi trả kết quả sang hệ thống nhà cung cấp..."
+                  required
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end border-t pt-3 mt-4">
+                <button 
+                  type="button"
+                  onClick={() => setEvaluateAudit(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-205 text-slate-755 font-bold rounded"
+                >
+                  Huỷ bỏ
+                </button>
+                <button 
+                  type="submit"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded shadow transition"
+                >
+                  Ký số duyệt chất lượng
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT SUPPLIER PRODUCTION AUDIT */}
+      {editingSupplierAudit && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-lg max-w-lg w-full p-6 space-y-4 text-xs font-sans">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-extrabold text-slate-800 text-sm uppercase text-indigo-700 flex items-center gap-1.5">
+                <Sliders className="w-4 h-4 text-indigo-650 animate-pulse" /> CHỈNH SỬA CHỈ THỊ GIÁM SÁT NCC: {editingSupplierAudit.id}
+              </h3>
+              <button 
+                onClick={() => setEditingSupplierAudit(null)}
+                className="text-slate-450 hover:text-slate-650 font-extrabold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateSupplierAudit} className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhà Cung Cấp</label>
+                <select 
+                  value={editAuditSupplierName}
+                  onChange={e => setEditAuditSupplierName(e.target.value)}
+                  className="w-full border border-slate-250 rounded-lg p-2 bg-slate-50 font-bold text-slate-700"
+                >
+                  {suppliers.map(s => {
+                    const sName = s.name || s.SupplierName || '';
+                    return (
+                      <option key={s.id || s.SupplierID} value={sName}>
+                        {sName} {s.id ? `(${s.id})` : ''}
+                      </option>
+                    );
+                  })}
+                  {suppliers.length === 0 && (
+                    <>
+                      <option value="Công ty Việt Nhật Precision">Công ty Việt Nhật Precision (Nhựa, Khuôn phôi)</option>
+                      <option value="Công ty Cao Su KENDA Việt Nam">Công ty Cao Su KENDA Việt Nam (Săm lốp)</option>
+                      <option value="Công ty Ắc quy Tia Sáng">Công ty Ắc quy Tia Sáng (Ắc quy điện)</option>
+                      <option value="Đầu mối linh kiện chấn dập HT">Đầu mối linh kiện chấn dập HT (Khung, càng sắt)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-550 mb-1 uppercase tracking-wide">Tên linh kiện dập/sản xuất</label>
+                <input 
+                  type="text" 
+                  value={editAuditComponentName}
+                  onChange={e => setEditAuditComponentName(e.target.value)}
+                  className="w-full border border-slate-250 rounded-lg p-2 font-medium"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-550 mb-1 uppercase tracking-wide">Chỉ tiêu bắt buộc giám sát</label>
+                <input 
+                  type="text" 
+                  value={editAuditSpec}
+                  onChange={e => setEditAuditSpec(e.target.value)}
+                  className="w-full border border-slate-250 rounded-lg p-2 font-medium"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Yêu cầu đính kèm</label>
+                  <select 
+                    value={editAuditReqType}
+                    onChange={e => setEditAuditReqType(e.target.value as any)}
+                    className="w-full border border-slate-250 rounded-lg p-2 bg-slate-50 font-bold text-slate-700"
+                  >
+                    <option value="both">Ảnh gia công &amp; Số đo</option>
+                    <option value="image_only">Chỉ chụp ảnh</option>
+                    <option value="spec_only">Chỉ ghi thông số</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Trạng thái chỉ thị</label>
+                  <select 
+                    value={editAuditStatus}
+                    onChange={e => setEditAuditStatus(e.target.value as any)}
+                    className="w-full border border-slate-250 rounded-lg p-2 bg-slate-50 font-bold text-slate-700"
+                  >
+                    <option value="pending">⏳ Chờ NCC gửi ảnh</option>
+                    <option value="updated">⚡ NCC phản hồi (Chờ duyệt)</option>
+                    <option value="approved">✓ Đạt - Cho sản xuất hàng loạt</option>
+                    <option value="rejected">⚠ Sai lệch - Cảnh báo lỗi</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Kết quả đo lường thực tế từ NCC</label>
+                <input 
+                  type="text" 
+                  value={editAuditActualValue}
+                  onChange={e => setEditAuditActualValue(e.target.value)}
+                  className="w-full border border-slate-250 rounded-lg p-2 font-mono font-bold text-indigo-750"
+                  placeholder="Ví dụ: Đo thực tế đạt 1.25mm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                  Ảnh minh chứng xác thực hiện trường (Chấp nhận drag-drop / click upload)
+                </label>
+                
+                {editAuditImageUrl ? (
+                  <div className="relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50 p-2 flex items-center justify-between gap-3 animate-in fade-in duration-200">
+                    <div className="flex items-center gap-3">
+                      <img 
+                        src={editAuditImageUrl} 
+                        alt="Ảnh xác thực" 
+                        className="w-12 h-12 object-cover rounded-lg border border-slate-200 shadow-xs shrink-0"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="overflow-hidden">
+                        <span className="block text-[10px] font-bold text-emerald-700 uppercase">✓ Đã đính ảnh xác thực</span>
+                        <span className="block text-[8px] text-slate-400 font-mono truncate max-w-[200px]">
+                          {editAuditImageUrl.startsWith("data:") ? "Bản vẽ/Ảnh từ máy tính" : editAuditImageUrl}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditAuditImageUrl('')}
+                      className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold rounded-lg transition-colors cursor-pointer text-[10px]"
+                    >
+                      Xóa ảnh
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setEditAuditDragOver(true);
+                      }}
+                      onDragLeave={() => setEditAuditDragOver(false)}
+                      onDrop={async (e) => {
+                        e.preventDefault();
+                        setEditAuditDragOver(false);
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) {
+                          try {
+                            const compressed = await compressImageFile(file, 500, 500, 0.4);
+                            if (compressed) {
+                              setEditAuditImageUrl(compressed);
+                            }
+                          } catch (err) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setEditAuditImageUrl(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }
+                      }}
+                      className={`flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-4 transition-all ${
+                        editAuditDragOver 
+                          ? 'border-indigo-500 bg-indigo-50/50 scale-[0.99]' 
+                          : 'border-slate-300 hover:border-slate-400 bg-slate-50/50'
+                      }`}
+                    >
+                      <Upload className="w-5 h-5 text-slate-400 mb-1.5 animate-bounce" />
+                      <span className="text-[10px] font-bold text-slate-600 block text-center">
+                        Kéo thả ảnh xác thực hoặc click để duyệt chọn
+                      </span>
+                      <span className="text-[9px] text-slate-400 mt-1 block">
+                        PNG, JPG, HEIC tối đa 3MB
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="absolute inset-x-0 inset-y-0 w-full h-full opacity-0 cursor-pointer"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const compressed = await compressImageFile(file, 500, 500, 0.4);
+                              if (compressed) {
+                                setEditAuditImageUrl(compressed);
+                              }
+                            } catch (err) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setEditAuditImageUrl(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Collapsible/Toggle manual selection and URL input for advanced convenience */}
+                <details className="text-[10px] font-bold text-slate-500 bg-slate-50 border border-slate-150 rounded-lg p-2">
+                  <summary className="cursor-pointer select-none text-slate-600 hover:text-slate-800 transition-colors uppercase font-black tracking-wide flex items-center gap-1.5">
+                    ⚙ Nhập URL thủ công hoặc chọn ảnh mẫu
+                  </summary>
+                  <div className="mt-2 space-y-2 pt-2 border-t border-slate-200">
+                    <div>
+                      <span className="block text-[9px] text-slate-400 mb-1">Chọn nhanh ảnh mẫu thư viện:</span>
+                      <select 
+                        value={editAuditImageUrl.startsWith("data:") ? "" : editAuditImageUrl}
+                        onChange={e => setEditAuditImageUrl(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg p-1.5 bg-white text-slate-600 font-medium"
+                      >
+                        <option value="">-- Click chọn ảnh đo đạc thực tế --</option>
+                        <option value="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=500&amp;q=80">Mẫu Linh kiện Kim loại dập (Đạt chuẩn)</option>
+                        <option value="https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=500&amp;q=85">Gia công sườn càng sắt (Đạt chuẩn)</option>
+                        <option value="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=500&amp;q=85">Quy trình cán săm lốp (Đạt chuẩn)</option>
+                        <option value="https://images.unsplash.com/photo-1616401784845-180882ba9ba8?w=500&amp;q=85">Khung vỏ sườn bám sạm (Sai lệch)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] text-slate-400 mb-1">Hoặc dán link URL ảnh bất kỳ:</span>
+                      <input 
+                        type="text" 
+                        value={editAuditImageUrl}
+                        onChange={e => setEditAuditImageUrl(e.target.value)}
+                        className="w-full border border-slate-150 rounded-lg p-1.5 font-mono text-[9px] font-normal"
+                        placeholder="http://..."
+                      />
+                    </div>
+                  </div>
+                </details>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Lời nhắn / Ghi chú của NCC Phụ Trợ</label>
+                <input 
+                  type="text" 
+                  value={editAuditNote}
+                  onChange={e => setEditAuditNote(e.target.value)}
+                  className="w-full border border-slate-250 rounded-lg p-2"
+                  placeholder="NCC phản hồi..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhận định &amp; Chỉ thị của Mr. Thao (QMS DKBike)</label>
+                <textarea 
+                  rows={2}
+                  value={editAuditDkNote}
+                  onChange={e => setEditAuditDkNote(e.target.value)}
+                  className="w-full border border-slate-250 rounded-lg p-2 font-semibold"
+                  placeholder="Đặc tính kỹ thuật đạt chuẩn..."
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end border-t pt-3 mt-4">
+                <button 
+                  type="button"
+                  onClick={() => setEditingSupplierAudit(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-205 text-slate-700 font-bold rounded"
+                >
+                  Đóng
+                </button>
+                <button 
+                  type="submit"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded transition shadow"
+                >
+                  Lưu thay đổi [Cập nhật]
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DETAIL OF SUPPLIER PRODUCTION AUDIT */}
+      {selectedSupplierAuditForDetail && (() => {
+        const aud = selectedSupplierAuditForDetail;
+        let badgeClass = "bg-slate-100 text-slate-500";
+        let badgeLabel = "Chờ phản hồi";
+
+        if (aud.status === 'pending') {
+          badgeClass = "bg-amber-100 text-amber-800 border-amber-200 border";
+          badgeLabel = "Chờ NCC gửi ảnh & thông số";
+        } else if (aud.status === 'updated') {
+          badgeClass = "bg-blue-100 text-blue-800 border-blue-200 border";
+          badgeLabel = "Đã gửi dữ liệu - Chờ duyệt";
+        } else if (aud.status === 'approved') {
+          badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-200 border";
+          badgeLabel = "✓ Đạt - Đã duyệt sản xuất";
+        } else if (aud.status === 'rejected') {
+          badgeClass = "bg-red-100 text-red-800 border-red-200 border";
+          badgeLabel = "⚠ Sai lệch - Cảnh báo sửa khuôn";
+        }
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-xl w-full p-6 space-y-5 text-xs font-sans relative">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="p-1.5 bg-indigo-50 text-indigo-700 rounded-md">
+                    <CheckSquare className="w-4 h-4" />
+                  </span>
+                  <h3 className="font-extrabold text-slate-900 text-sm uppercase">
+                    Chi Tiết Chỉ Thị Giám Sát NCC: <span className="text-indigo-650 font-mono">{aud.id}</span>
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => setSelectedSupplierAuditForDetail(null)}
+                  className="text-slate-400 hover:text-slate-600 font-extrabold text-base cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+                {/* General Info */}
+                <div className="grid grid-cols-2 gap-4 bg-slate-50/60 p-3.5 rounded-xl border border-slate-100">
+                  <div>
+                    <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Linh kiện cần dập mẫu:</span>
+                    <span className="text-xs font-black text-slate-880 block mt-0.5">{aud.componentName}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Nhà cung cấp đối tác:</span>
+                    <span className="text-xs font-extrabold text-indigo-700 block mt-0.5">{aud.supplierName}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ngày tạo chỉ thị:</span>
+                    <span className="text-xs font-bold text-slate-600 block mt-0.5 font-mono">{aud.requestDate}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Người ban hành:</span>
+                    <span className="text-xs font-bold text-slate-600 block mt-0.5">{aud.checkedBy || 'Mr. Thao'}</span>
+                  </div>
+                  {aud.dailyLogStt && (
+                    <div className="col-span-2 border-t border-slate-100 pt-2 mt-1">
+                      <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Liên kết nhật trình chất lượng:</span>
+                      <span className="text-xs font-semibold text-slate-750 block mt-0.5 bg-indigo-50/50 px-2 py-1 rounded inline-block">
+                        🔗 Nhật trình #{aud.dailyLogStt} - {aud.dailyLogTitle}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Requirements & Target Specs */}
+                <div className="p-3.5 bg-indigo-50/35 border border-indigo-100/50 rounded-xl space-y-2.5">
+                  <div>
+                    <span className="font-extrabold text-indigo-950 text-[10px] uppercase block tracking-wider">Yêu cầu kiểm soát &amp; kỹ thuật:</span>
+                    <p className="font-extrabold text-slate-800 text-xs mt-1 leading-relaxed">{aud.targetSpecification}</p>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] border-t border-slate-150/70 pt-2">
+                    <span className="text-slate-500">Hình thức NCC phản hồi:</span>
+                    <span className="font-bold text-indigo-750">
+                      {aud.requirementType === 'both' ? 'Ảnh gia công &amp; Số đo' : aud.requirementType === 'image_only' ? 'Chỉ chụp ảnh' : 'Chỉ ghi số đo'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Status and NCC response */}
+                <div className="space-y-3 border-t border-slate-100 pt-3">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-500 uppercase text-[9px] tracking-wider">Trạng thái hiện tại:</span>
+                    <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md ${badgeClass}`}>
+                      {badgeLabel}
+                    </span>
+                  </div>
+
+                  {/* Show results if NCC responded */}
+                  {(aud.status === 'updated' || aud.status === 'approved' || aud.status === 'rejected') && (
+                    <div className="space-y-3 bg-slate-50 p-3 rounded-xl border border-slate-150/50">
+                      <div>
+                        <span className="font-bold text-slate-450 block uppercase text-[8px] tracking-wider">Kết quả NCC báo cáo đo lường:</span>
+                        <p className="font-mono font-black text-rose-600 text-xs mt-0.5">{aud.actualValueStr || 'Chưa nhận số đo'}</p>
+                      </div>
+
+                      {aud.supplierNote && (
+                        <div>
+                          <span className="font-bold text-slate-450 block uppercase text-[8px] tracking-wider">Ý kiến / Lời nhắn từ xưởng NCC:</span>
+                          <p className="text-[10px] text-slate-600 italic mt-0.5 bg-white p-2 rounded border border-slate-100">
+                            "{aud.supplierNote}"
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Image attachments block - with compression and neat collapse */}
+                      <div className="space-y-1.5">
+                        {aud.imageUrl ? (
+                          <>
+                            <span className="font-bold text-slate-450 block uppercase text-[8px] tracking-wider">Ảnh chụp cận cảnh hiện trường mẫu dập:</span>
+                            <div 
+                              onClick={() => setLocalZoomImage(aud.imageUrl)}
+                              className="relative group rounded-lg overflow-hidden border border-slate-200 aspect-video bg-white cursor-zoom-in hover:border-indigo-400 transition"
+                            >
+                              <img 
+                                src={aud.imageUrl} 
+                                alt="Ảnh mẫu xưởng NCC" 
+                                className="w-full h-full object-cover group-hover:scale-102 duration-200 transition-transform"
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+                                <span className="text-white text-[10px] font-semibold flex items-center gap-1 bg-slate-900 border border-slate-700 px-2.5 py-1 rounded">
+                                  <Camera className="w-3.5 h-3.5 text-orange-400 animate-pulse" /> Xem ảnh lớn
+                                </span>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          /* COMPACT collapse if Approved & no image */
+                          aud.status !== 'approved' && (
+                            <>
+                              <span className="font-bold text-slate-450 block uppercase text-[8px] tracking-wider">Ảnh chụp hiện trường:</span>
+                              <p className="text-[10px] text-slate-400 italic font-medium">Nhà cung cấp chưa đính kèm ảnh.</p>
+                            </>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* DK QMS feedback notes */}
+                  {aud.dkNote && (
+                    <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl space-y-1">
+                      <span className="font-extrabold text-indigo-700 block text-[8px] uppercase tracking-wider">Mr. Thao QMS đánh giá duyệt:</span>
+                      <p className="text-slate-800 font-bold italic leading-relaxed text-[11px]">"{aud.dkNote}"</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action operations directly in detail view */}
+              <div className="border-t border-slate-150 pt-3 flex flex-col gap-2.5">
+                {aud.status === 'pending' && (
+                  <div className="space-y-1.5 w-full">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSupplierResponseAudit(aud);
+                        setResponseValueStr('');
+                        setResponseSupplierNote('');
+                      }}
+                      className="w-full bg-teal-600 hover:bg-teal-500 text-white py-2 rounded-lg text-xs font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-teal-100"
+                    >
+                      <Camera className="w-4 h-4 text-white" />
+                      Nhập phản hồi &amp; thông số đo lường NCC
+                    </button>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleQuickApproveAudit(aud.id)}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center justify-center shadow-sm shadow-emerald-100"
+                        title="Ký duyệt đạt kết quả này trực tiếp"
+                      >
+                        ✓ Hoàn thành &amp; Đạt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickRejectAudit(aud.id)}
+                        className="bg-rose-600 hover:bg-rose-550 text-white py-2 rounded-lg text-xs font-extrabold transition cursor-pointer flex items-center justify-center shadow-sm shadow-rose-100"
+                        title="Cảnh báo LỖI &amp; Dừng dập lập tức"
+                      >
+                        ✗ Báo lỗi / Từ chối
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {aud.status === 'updated' && (
+                  <div className="flex gap-2 w-full">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSupplierResponseAudit(aud);
+                        setResponseValueStr(aud.actualValueStr || '');
+                        setResponseSupplierNote(aud.supplierNote || '');
+                      }}
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 py-2 rounded-lg text-xs font-extrabold transition cursor-pointer"
+                    >
+                      Sửa phản hồi NCC
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEvaluateAudit(aud);
+                        setEvalStatus('approved');
+                        setEvalDkNote(`Ảnh gửi rõ nét, thông số kỹ thuật thực tế ${aud.actualValueStr || ''} đạt chuẩn dung sai vàng thiết kế. Đạt phê chuẩn cho sản xuất tiếp hàng loạt.`);
+                      }}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2 rounded-lg text-xs transition shadow-sm flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Check className="w-4 h-4" /> Phê duyệt Đạt
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEvaluateAudit(aud);
+                        setEvalStatus('rejected');
+                        setEvalDkNote('KCS phát hiện lỗi sai lệch kỹ thuật liên quan thông số dung sai. Từ chối phê duyệt sản xuất.');
+                      }}
+                      className="flex-1 bg-rose-600 hover:bg-rose-550 text-white font-extrabold py-2 rounded-lg text-xs transition shadow-sm flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      ✗ Từ chối/Lỗi
+                    </button>
+                  </div>
+                )}
+
+                {/* Edit & Delete always available */}
+                <div className="flex gap-2 justify-end items-center mt-1 border-t border-slate-100 pt-3">
+                  {(aud.status === 'approved' || aud.status === 'rejected') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEvaluateAudit(aud);
+                        setEvalStatus(aud.status);
+                        setEvalDkNote(aud.dkNote || '');
+                      }}
+                      className="bg-indigo-50 hover:bg-indigo-150 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer mr-auto"
+                    >
+                      <Sliders className="w-3.5 h-3.5 text-indigo-550" /> Sửa phê duyệt
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditSupplierAuditModal(aud)}
+                    className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                  >
+                    ✏ Sửa Chỉ thị
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSupplierAudit(aud.id)}
+                    className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                  >
+                    🗑 Xóa
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setSelectedSupplierAuditForDetail(null)}
+                    className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-lg text-xs transition-colors"
+                  >
+                    Đóng
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL: DANH SÁCH CHI TIẾT BẢN GHI THEO MODEL BIỂU ĐỒ SẢN LƯỢNG */}
+      {oqcDetailModalModel && (() => {
+        const detailRecords = filteredOqc.filter(r => (r.model || 'Dòng khác') === oqcDetailModalModel);
+        return (
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-5xl w-full overflow-hidden text-xs flex flex-col font-sans max-h-[85vh] animate-in zoom-in-95 duration-150">
+              
+              {/* Header */}
+              <div className="bg-slate-900 text-white p-5 select-none relative flex justify-between items-center">
+                <div>
+                  <div className="flex items-center gap-2 mb-1 text-left">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                    <span className="text-[10px] font-black tracking-widest text-sky-400 uppercase">Hệ Thống QMS - Nhật Ký Bản Ghi Đã Nhập</span>
+                  </div>
+                  <h3 className="font-black text-slate-100 text-sm sm:text-base uppercase tracking-tight text-left">
+                    Danh Sách Bản Ghi KCS/OQC - {oqcDetailModalModel} ({detailRecords.length} xe)
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => setOqcDetailModalModel(null)}
+                  className="text-slate-450 hover:text-white transition-all bg-white/10 hover:bg-white/20 p-1.5 rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm cursor-pointer"
+                  title="Đóng cửa sổ"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Scrollable Container Body */}
+              <div className="p-6 overflow-y-auto max-h-[calc(85vh-120px)] space-y-4">
+                {selectedOqcIds.length > 0 && (
+                  <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-xl p-3 text-red-900 font-sans shadow-xs animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                      <span className="text-xs font-bold">Đang chọn {selectedOqcIds.length} bản ghi OQC</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOqcIds([])}
+                        className="px-3 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-[11px] font-bold rounded-lg cursor-pointer"
+                      >
+                        Bỏ chọn
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleBulkDeleteOqc}
+                        className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 cursor-pointer shadow-sm transition-all hover:scale-[1.02]"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Xóa hàng loạt ({selectedOqcIds.length})
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {detailRecords.length === 0 ? (
+                  <div className="p-12 text-center text-slate-400 italic">
+                    Chưa có bản ghi nào được nhập cho dòng xe {oqcDetailModalModel} khớp với điều kiện lọc hiện tại.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-slate-205">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-extrabold text-[10px] uppercase">
+                          <th className="p-3 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              checked={detailRecords.length > 0 && detailRecords.every(r => selectedOqcIds.includes(r.id))}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  const allModelOqcIds = detailRecords.map(r => r.id);
+                                  setSelectedOqcIds(prev => Array.from(new Set([...prev, ...allModelOqcIds])));
+                                } else {
+                                  const allModelOqcIds = detailRecords.map(r => r.id);
+                                  setSelectedOqcIds(prev => prev.filter(id => !allModelOqcIds.includes(id)));
+                                }
+                              }}
+                              className="rounded border-slate-300 text-indigo-650 focus:ring-indigo-500 cursor-pointer accent-indigo-650"
+                            />
+                          </th>
+                          <th className="p-3 w-12 text-center">STT</th>
+                          <th className="p-3">Số khung / máy</th>
+                          <th className="p-3">Mã linh kiện / LSX</th>
+                          <th className="p-3">Màu sắc</th>
+                          <th className="p-3">Trạng thái</th>
+                          <th className="p-3">Chi tiết khuyết tật</th>
+                          <th className="p-3">Đánh giá chung</th>
+                          <th className="p-3">KCS kiểm tra</th>
+                          <th className="p-3 text-center">Thời gian</th>
+                          <th className="p-3 w-16 text-center">Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {detailRecords.map((row, i) => {
+                          const isPassed = isOqcRecordPassed(row);
+                          return (
+                            <tr key={row.id} className="hover:bg-slate-50 transition font-medium">
+                              <td className="p-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedOqcIds.includes(row.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedOqcIds(prev => [...prev, row.id]);
+                                    } else {
+                                      setSelectedOqcIds(prev => prev.filter(id => id !== row.id));
+                                    }
+                                  }}
+                                  className="rounded border-slate-300 text-indigo-650 focus:ring-indigo-500 cursor-pointer accent-indigo-650"
+                                />
+                              </td>
+                              <td className="p-3 text-center text-slate-400 font-bold">{i + 1}</td>
+                              <td className="p-3 font-mono text-slate-800 font-bold">{row.serialNo || 'N/A'}</td>
+                              <td className="p-3 font-mono text-slate-500">
+                                <span className="block font-bold text-[11px] text-slate-700">{row.partCode || 'N/A'}</span>
+                                <span className="text-[10px] text-slate-400">LSX: {row.lsx || 'N/A'}</span>
+                              </td>
+                              <td className="p-3 font-bold text-slate-650">{row.color || 'N/A'}</td>
+                              <td className="p-3">
+                                {isPassed ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 text-emerald-750 border border-emerald-250">
+                                    ✓ ĐẠT (Passed)
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black bg-rose-50 text-rose-750 border border-rose-250">
+                                    ✗ LỖI
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3 text-slate-700" style={{ maxWidth: '220px' }}>
+                                <div className="font-bold text-[11px] text-slate-805 leading-snug">{row.defectDetail || 'Không có khuyết điểm'}</div>
+                                {row.rootCause && (
+                                  <div className="text-[10px] text-slate-400 mt-0.5">Nguyên nhân: {row.rootCause}</div>
+                                )}
+                              </td>
+                              <td className="p-3" style={{ maxWidth: '200px' }}>
+                                {row.evaluation ? (
+                                  <div className="bg-amber-50 text-amber-800 p-2 rounded border border-amber-200 text-[10px] leading-snug">
+                                    <strong>Đánh giá:</strong> {row.evaluation}
+                                    {row.treatment && (
+                                      <span className="block mt-1 text-indigo-755 font-bold">
+                                        👉 {row.treatment}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 italic text-[10px]">Chưa ghi nhận nhận xét</span>
+                                )}
+                              </td>
+                              <td className="p-3 text-slate-600 font-bold">{row.checkedBy || 'Trưởng nhóm QC'}</td>
+                              <td className="p-3 text-center font-mono text-[10px] text-slate-500 whitespace-nowrap">
+                                <div>{row.date || 'N/A'}</div>
+                                <div className="text-[9px] text-slate-400 mt-0.5">{row.checkTime || 'N/A'}</div>
+                              </td>
+                              <td className="p-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteOqcClick(row.id)}
+                                  className="text-rose-650 hover:text-rose-800 p-1 cursor-pointer transition"
+                                  title="Xóa bản ghi"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="bg-slate-50 p-4 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-2">
+                <span className="text-[10px] text-slate-400 font-sans italic text-center sm:text-left">
+                  * Dữ liệu đồng bộ trực tiếp từ máy quét KCS đầu chuyền dập sườn &amp; lắp ráp DKBike
+                </span>
+                <button 
+                  type="button"
+                  onClick={() => setOqcDetailModalModel(null)}
+                  className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition cursor-pointer select-none"
+                >
+                  Đóng cửa sổ
+                </button>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL: ĐÁNH GIÁ THÔNG TIN & BIỆN PHÁP KHẮC PHỤC KHUYẾT PHẨM TOP 5 */}
+      {selectedDashboardDefect && (() => {
+        return (
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-2xl w-full overflow-hidden text-xs flex flex-col font-sans max-h-[85vh] animate-in zoom-in-95 duration-150">
+              
+              {/* Header */}
+              <div className="bg-slate-900 text-white p-5 select-none relative">
+                <button 
+                  onClick={() => setSelectedDashboardDefect(null)}
+                  className="absolute top-4 right-4 text-slate-450 hover:text-white transition-all bg-white/10 hover:bg-white/20 p-1.5 rounded-full w-7 h-7 flex items-center justify-center font-bold text-sm"
+                  title="Đóng cửa sổ"
+                >
+                  ✕
+                </button>
+                <div className="flex items-center gap-2.5 mb-1">
+                  <Wrench className="w-4 h-4 text-rose-500 animate-pulse" />
+                  <span className="text-[10px] font-black tracking-widest text-sky-400 uppercase">QMS Đánh Giá &amp; Chỉ Đạo Xử Lý Khuyết Phẩm DKBike (Có thể chỉnh sửa dữ liệu)</span>
+                </div>
+                <h3 className="font-black text-slate-100 text-base uppercase tracking-tight pr-6">
+                  Đánh giá thông tin &amp; Biện pháp khắc phục
+                </h3>
+              </div>
+
+              {/* Scrollable Container Body */}
+              <div className="p-6 space-y-5 overflow-y-auto max-h-[calc(85vh-150px)]">
+                
+                {/* Visual Status Grid banner */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60 shadow-3xs">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Dòng xe lỗi (Model)</span>
+                    <strong className="text-[12px] font-extrabold text-slate-800 uppercase font-mono block mt-0.5">{selectedDashboardDefect.modelName}</strong>
+                  </div>
+                  <div className="bg-rose-50/40 p-3 rounded-xl border border-rose-100/70 shadow-3xs">
+                    <span className="text-[9px] font-bold text-rose-500 block uppercase tracking-wider">Tên khuyết phẩm lỗi</span>
+                    <strong className="text-[12px] font-black text-rose-700 uppercase block mt-0.5">{selectedDashboardDefect.name}</strong>
+                  </div>
+                  <div className="bg-amber-50/40 p-3 rounded-xl border border-amber-100/70 shadow-3xs flex flex-col justify-between">
+                    <span className="text-[9px] font-bold text-amber-600 block uppercase tracking-wider">Tần suất ghi nhận</span>
+                    <span className="text-sm font-black text-rose-600 font-mono tracking-tighter mt-0.5 shrink-0 block">
+                      {selectedDashboardDefect.count} chiếc xe lỗi
+                    </span>
+                  </div>
+                </div>
+
+                {/* Sub banner for Severity classification and group choice */}
+                <div className="p-4 bg-slate-50/50 rounded-2xl border border-slate-200/50 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5 text-left">
+                    <span className="text-[10px] font-bold text-slate-550 uppercase tracking-widest block">Mức độ cảnh báo:</span>
+                    <select 
+                      value={draftSeverity}
+                      onChange={(e) => setDraftSeverity(e.target.value)}
+                      className="bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-750 focus:outline-none focus:border-indigo-500 w-full"
+                    >
+                      <option value="Nhẹ (Minor - Thẩm mỹ phụ trợ)">Nhẹ (Minor - Thẩm mỹ phụ trợ)</option>
+                      <option value="Trung bình (Major - Ngoại quan)">Trung bình (Major - Ngoại quan)</option>
+                      <option value="Trung bình (Major - Thẩm mỹ lắp ráp)">Trung bình (Major - Thẩm mỹ lắp ráp)</option>
+                      <option value="Trung bình (Major - Nghi ngờ dung sai)">Trung bình (Major - Nghi ngờ dung sai)</option>
+                      <option value="Nghiêm trọng (Critical - Chức năng)">Nghiêm trọng (Critical - Chức năng)</option>
+                      <option value="Nghiêm trọng (Critical - Cơ cấu)">Nghiêm trọng (Critical - Cơ cấu)</option>
+                      <option value="Nguy hại (Critical - Hệ thống điện)">Nguy hại (Critical - Hệ thống điện)</option>
+                      <option value="Nguy hại (Critical - An toàn vận hành)">Nguy hại (Critical - An toàn vận hành)</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5 text-left">
+                    <span className="text-[10px] font-bold text-slate-550 uppercase tracking-widest block">Phân nhóm lỗi:</span>
+                    <input 
+                      type="text"
+                      value={draftCategory}
+                      onChange={(e) => setDraftCategory(e.target.value)}
+                      className="bg-white border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-750 focus:outline-none focus:border-indigo-500 w-full"
+                    />
+                  </div>
+                </div>
+
+                {/* Main Content Area */}
+                <div className="space-y-4">
+                  
+                  {/* Item 1: Impact & Root Cause */}
+                  <div className="space-y-4 bg-white p-4.5 rounded-2xl border border-slate-200/80 shadow-4xs text-left">
+                    <div className="space-y-1.5">
+                      <h4 className="text-[10.5px] font-extrabold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <span className="w-1.5 h-3 bg-amber-500 rounded-sm" />
+                        1. Đánh giá ảnh hưởng chất lượng &amp; Vận hành
+                      </h4>
+                      <textarea
+                        value={draftImpact}
+                        onChange={(e) => setDraftImpact(e.target.value)}
+                        className="w-full h-16 bg-slate-50 border border-slate-200 rounded-lg p-2 text-[11.5px] text-slate-700 leading-relaxed font-semibold focus:outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                        placeholder="Nhập đánh giá ảnh hưởng ngoại quan hoặc vận hành..."
+                      />
+                    </div>
+
+                    <div className="h-[1px] bg-slate-100 my-2" />
+
+                    <div className="space-y-1.5">
+                      <h4 className="text-[10.5px] font-extrabold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <span className="w-1.5 h-3 bg-rose-500 rounded-sm" />
+                        2. Nhận định nguyên nhân cốt lõi (Root Cause)
+                      </h4>
+                      <textarea
+                        value={draftRootCause}
+                        onChange={(e) => setDraftRootCause(e.target.value)}
+                        className="w-full h-16 bg-slate-50 border border-slate-200 rounded-lg p-2 text-[11.5px] text-slate-700 leading-relaxed font-semibold focus:outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                        placeholder="Nhập nhận định nguyên nhân cốt lõi xảy ra lỗi..."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Item 2: Actions (CAPA) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+                    
+                    {/* Emergency corrective action */}
+                    <div className="bg-emerald-50/20 border border-emerald-500/20 rounded-2xl p-4.5 space-y-2">
+                      <h4 className="text-[10.5px] font-black text-emerald-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                        Biện pháp Khẩn cấp (Sửa lỗi - Xuống dòng cho mỗi ý)
+                      </h4>
+                      <textarea
+                        value={draftEmergency}
+                        onChange={(e) => setDraftEmergency(e.target.value)}
+                        className="w-full h-24 bg-slate-50/35 border border-emerald-250/30 rounded-lg p-2 text-[11px] text-emerald-950 font-medium leading-relaxed focus:outline-none focus:bg-white focus:border-emerald-500 transition-all"
+                        placeholder="Nhập các biện pháp xử lý khẩn cấp (mỗi biện pháp một dòng)..."
+                      />
+                    </div>
+
+                    {/* Long-term prevention */}
+                    <div className="bg-indigo-50/20 border border-indigo-500/20 rounded-2xl p-4.5 space-y-2">
+                      <h4 className="text-[10.5px] font-black text-indigo-800 uppercase tracking-wide flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                        Phòng ngừa Lâu dài (Xử lý Hệ thống - Xuống dòng cho mỗi ý)
+                      </h4>
+                      <textarea
+                        value={draftPreventative}
+                        onChange={(e) => setDraftPreventative(e.target.value)}
+                        className="w-full h-24 bg-slate-50/35 border border-indigo-250/30 rounded-lg p-2 text-[11px] text-indigo-950 font-medium leading-relaxed focus:outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                        placeholder="Nhập các biện pháp phòng ngừa lâu dài lỗi tái diễn (mỗi biện pháp một dòng)..."
+                      />
+                    </div>
+
+                  </div>
+
+                  {/* Section 4: Operational stats */}
+                  <div className="bg-slate-900 text-slate-105 rounded-2xl p-4.5 text-[11px] space-y-3 shadow-inner font-sans text-left">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-white/10 pb-2">
+                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wide">CHỈ ĐẠO BAN HÀNH BỞI:</span>
+                      <input 
+                        type="text"
+                        value={draftOwner}
+                        onChange={(e) => setDraftOwner(e.target.value)}
+                        className="bg-slate-800 text-sky-305 font-extrabold border border-slate-700 rounded px-2.5 py-1 w-full sm:w-2/3 focus:outline-none focus:border-sky-400 text-xs"
+                      />
+                    </div>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wide">THỜI HẠN ÁP DỤNG KPI/CAPA:</span>
+                      <input 
+                        type="text"
+                        value={draftDue}
+                        onChange={(e) => setDraftDue(e.target.value)}
+                        className="bg-slate-800 text-amber-400 font-extrabold border border-slate-700 rounded px-2.5 py-1 w-full sm:w-2/3 focus:outline-none focus:border-amber-450 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* Bottom Footer Actions */}
+              <div className="bg-slate-50 p-4 border-t border-slate-100 flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
+                <span className="text-[10px] text-slate-400 italic">
+                  * Biện pháp kỹ thuật ban hành tức thì trên hệ thống QMS DKBike và lưu trữ vĩnh viễn
+                </span>
+                <div className="flex gap-2">
+                  <button 
+                    type="button"
+                    onClick={() => setSelectedDashboardDefect(null)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer select-none"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={handleSaveCustomAnalysis}
+                    className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-650 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl transition shadow-md cursor-pointer select-none flex items-center gap-1.5"
+                  >
+                    <Check className="w-4 h-4" /> Lưu thông tin &amp; Ban hành CAPA
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ========================================================================= */}
+      {/* MODAL: XUẤT BÁO CÁO KCS TUẦN/THÁNG (KCS/OQC REPORT EXPORT MODAL)           */}
+      {/* ========================================================================= */}
+      {showExportKcsReportModal && (
+        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4 z-[9999] overflow-y-auto no-print animate-in fade-in duration-200">
+          <div className="bg-slate-900 text-slate-100 rounded-2xl border border-slate-700 shadow-2xl max-w-6xl w-full h-[90vh] flex flex-col overflow-hidden">
+            
+            {/* Header */}
+            <div className="flex justify-between items-center bg-slate-950 px-6 py-4 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="p-2.5 bg-amber-600/30 text-amber-400 rounded-xl border border-amber-500/30">
+                  <FileSpreadsheet className="w-5 h-5 text-amber-400 animate-pulse" />
+                </span>
+                <div>
+                  <h3 className="font-extrabold text-slate-100 text-sm uppercase tracking-wide">
+                    Trung Tâm Kết Xuất Báo Cáo KCS / OQC
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    Hệ thống trích xuất báo cáo chất lượng thành phẩm chính quy của tổ KCS DKBike
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowExportKcsReportModal(false)}
+                className="text-slate-400 hover:text-white font-extrabold text-sm p-1.5 hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+              
+              {/* Left Panel: Settings Controls */}
+              <div className="w-full md:w-80 bg-slate-900 border-r border-slate-800 p-5 overflow-y-auto space-y-5 text-xs text-slate-300 shrink-0">
+                
+                {/* Selector 1: Template Type */}
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                    Chu kỳ báo cáo (Report Cycle)
+                  </label>
+                  <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-md border border-slate-800">
+                    <button
+                      onClick={() => setExportKcsPeriod('weekly')}
+                      className={`py-1.5 rounded text-center font-bold font-sans transition-all cursor-pointer ${exportKcsPeriod === 'weekly' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                    >
+                      Theo Tuần
+                    </button>
+                    <button
+                      onClick={() => setExportKcsPeriod('monthly')}
+                      className={`py-1.5 rounded text-center font-bold font-sans transition-all cursor-pointer ${exportKcsPeriod === 'monthly' ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                    >
+                      Theo Tháng
+                    </button>
+                  </div>
+                </div>
+
+                {/* Selector 2: Period Controls */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                      Chọn Tháng
+                    </label>
+                    <select
+                      value={exportKcsMonth}
+                      onChange={(e) => setExportKcsMonth(Number(e.target.value))}
+                      className="w-full bg-slate-950 text-white border border-slate-800 p-2 rounded outline-none font-bold focus:border-amber-500 cursor-pointer"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
+                        <option key={m} value={m}>Tháng {m}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {exportKcsPeriod === 'weekly' && (
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                        Chọn Tuần
+                      </label>
+                      <select
+                        value={exportKcsWeek}
+                        onChange={(e) => setExportKcsWeek(e.target.value)}
+                        className="w-full bg-slate-950 text-white border border-slate-800 p-2 rounded outline-none font-bold focus:border-amber-500 cursor-pointer"
+                      >
+                        {[1, 2, 3, 4, 5].map((w) => {
+                          const range = getWeekDatesForReporting(2026, exportKcsMonth, w);
+                          return (
+                            <option key={w} value={`T${w}`}>
+                              Tuần {w} ({range})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className={exportKcsPeriod === 'monthly' ? "col-span-2" : "col-span-2"}>
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                        Chọn Năm
+                      </label>
+                      <select
+                        value={exportKcsYear}
+                        onChange={(e) => setExportKcsYear(Number(e.target.value))}
+                        className="w-full bg-slate-950 text-white border border-slate-800 p-2 rounded outline-none font-bold cursor-pointer"
+                      >
+                        <option value={2026}>Năm 2026</option>
+                        <option value={2025}>Năm 2025</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Selector 3: Model Controls */}
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                    Dòng xe (Model)
+                  </label>
+                  <select
+                    value={exportKcsModel}
+                    onChange={(e) => setExportKcsModel(e.target.value)}
+                    className="w-full bg-slate-950 text-white border border-slate-800 p-2 rounded outline-none font-bold focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="All">Tất cả Dòng xe</option>
+                    {Array.from(new Set(oqcRecords.map(r => r.model))).filter(Boolean).sort().map((mdl, idx) => (
+                      <option key={`${mdl}-${idx}`} value={mdl}>{mdl}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Actions Panel */}
+                <div className="pt-4 border-t border-slate-800 space-y-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 rounded-xl transition-all flex items-center justify-center gap-2 text-xs cursor-pointer shadow-md shadow-amber-900/30"
+                  >
+                    <Printer className="w-4 h-4 text-white" /> In báo cáo (Xuất PDF)
+                  </button>
+                  <button
+                    onClick={() => handleExportKcsReportCSV(exportKcsPeriod, exportKcsMonth, exportKcsWeek, exportKcsYear, exportKcsModel)}
+                    className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold py-2 rounded-xl transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-500" /> Xuất Excel dữ liệu
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Panel: High-fidelity Live Paper A4 Preview */}
+              <div className="flex-1 bg-slate-950 p-6 overflow-y-auto flex justify-center">
+                <div 
+                  id="printable-kcs-report-area"
+                  className="bg-white text-slate-900 p-8 md:p-12 shadow-2xl rounded-lg w-full max-w-[210mm] min-h-[297mm] text-xs leading-relaxed flex flex-col font-sans relative"
+                  style={{
+                    boxShadow: '0 0 24px rgba(0,0,0,0.6)',
+                    color: '#1e293b'
+                  }}
+                >
+                  <style>{`
+                    @media print {
+                      html, body, #root, #app_root, #app_root *, div {
+                        height: auto !important;
+                        min-height: auto !important;
+                        max-height: none !important;
+                        overflow: visible !important;
+                        overflow-y: visible !important;
+                        position: static !important;
+                      }
+                      body * {
+                        visibility: hidden;
+                      }
+                      #printable-kcs-report-area, #printable-kcs-report-area * {
+                        visibility: visible;
+                      }
+                      #printable-kcs-report-area {
+                        position: absolute !important;
+                        left: 0 !important;
+                        top: 0 !important;
+                        width: 100% !important;
+                        max-width: 100% !important;
+                        padding: 10mm !important;
+                      }
+                    }
+                  `}</style>
+
+                  {/* Document Content */}
+                  {(() => {
+                    const filtered = oqcRecords.filter(r => {
+                      if (!r.date) return false;
+                      const info = getWeekAndMonthFromDate(r.date);
+                      const matchesMonth = info.month === exportKcsMonth;
+                      const matchesYear = info.year === exportKcsYear;
+                      const matchesWeek = exportKcsPeriod === 'weekly' ? info.week === exportKcsWeek : true;
+                      const matchesModel = exportKcsModel === 'All' || r.model === exportKcsModel;
+                      return matchesMonth && matchesYear && matchesWeek && matchesModel;
+                    });
+
+                    const total = filtered.length;
+                    const passed = filtered.filter(isOqcRecordPassed).length;
+                    const failed = total - passed;
+                    const yieldRate = total > 0 ? Math.round((passed / total) * 100) : 100;
+
+                    // Group by models
+                    const modelsMap: Record<string, { total: number; passed: number; failed: number; defects: string[] }> = {};
+                    filtered.forEach(r => {
+                      const m = r.model || 'Dòng khác';
+                      if (!modelsMap[m]) modelsMap[m] = { total: 0, passed: 0, failed: 0, defects: [] };
+                      modelsMap[m].total += 1;
+                      if (isOqcRecordPassed(r)) {
+                        modelsMap[m].passed += 1;
+                      } else {
+                        modelsMap[m].failed += 1;
+                        if (r.defectDetail) {
+                          modelsMap[m].defects.push(r.defectDetail);
+                        }
+                      }
+                    });
+
+                    // Get Top 3 defects per model
+                    const modelTopDefectsForReport: Record<string, Array<{ text: string; count: number; evaluation: string; rootCause: string; treatment: string }>> = {};
+                    Object.entries(modelsMap).forEach(([mName, mData]) => {
+                      if (mData.failed === 0) return;
+                      const counts: Record<string, number> = {};
+                      mData.defects.forEach(def => {
+                        const clean = def.trim();
+                        if (clean) {
+                          counts[clean] = (counts[clean] || 0) + 1;
+                        }
+                      });
+                      const sorted = Object.entries(counts)
+                        .map(([text, count]) => {
+                          const capa = getRowCapaData(text);
+                          return {
+                            text,
+                            count,
+                            evaluation: capa.evaluation,
+                            rootCause: capa.rootCause,
+                            treatment: capa.treatment
+                          };
+                        })
+                        .sort((a, b) => b.count - a.count)
+                        .slice(0, 3);
+                      if (sorted.length > 0) {
+                        modelTopDefectsForReport[mName] = sorted;
+                      }
+                    });
+
+                    const periodLabelText = exportKcsPeriod === 'weekly' 
+                      ? `Tuần ${exportKcsWeek} - Tháng ${exportKcsMonth} Năm ${exportKcsYear}` 
+                      : `Tháng ${exportKcsMonth} Năm ${exportKcsYear}`;
+
+                    return (
+                      <div className="space-y-6">
+                        {/* Company Header */}
+                        <div className="flex justify-between items-start border-b border-slate-300 pb-4">
+                          <div>
+                            <h4 className="text-xs font-black uppercase text-slate-800 tracking-wide font-sans">
+                              CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT
+                            </h4>
+                            <p className="text-[10px] text-slate-500 font-semibold uppercase mt-0.5 font-sans">
+                              PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL) - DK QMS
+                            </p>
+                          </div>
+                          <div className="text-right text-[9px] text-slate-400 font-mono">
+                            Mẫu biểu: DK-QMS-OQC-RP<br />
+                            Ban hành: Q1/2026
+                          </div>
+                        </div>
+
+                        {/* Title */}
+                        <div className="text-center py-2">
+                          <h2 className="text-base font-extrabold text-slate-900 uppercase tracking-wider font-sans">
+                            BÁO CÁO KIỂM SOÁT CHẤT LƯỢNG THÀNH PHẨM KCS (OQC)
+                          </h2>
+                          <p className="text-xs font-bold text-amber-700 mt-1 uppercase tracking-wide">
+                            Chu kỳ kiểm soát: {periodLabelText}
+                          </p>
+                        </div>
+
+                        {/* Summary Block */}
+                        <div className="bg-slate-50 rounded-xl p-4 border border-slate-200/80 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                          <div className="space-y-1">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Tổng xe kiểm tra (KCS)</span>
+                            <span className="text-xl font-black text-slate-800 font-mono block">{total} chiếc</span>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Đạt tiêu chuẩn lần 1</span>
+                            <span className="text-xl font-black text-emerald-600 font-mono block">{passed} chiếc</span>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Phát sinh khuyết tật</span>
+                            <span className="text-xl font-black text-red-500 font-mono block">{failed} chiếc</span>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Tỷ lệ Đạt lần 1 (FTR)</span>
+                            <span className="text-xl font-black text-blue-600 font-mono block">{yieldRate}%</span>
+                          </div>
+                        </div>
+
+                        {/* Section I: Performance Table */}
+                        <div className="space-y-2">
+                          <h3 className="text-xs font-black uppercase text-slate-800 tracking-wider flex items-center gap-1.5 border-l-2 border-amber-600 pl-2">
+                            I. ĐÁNH GIÁ CHẤT LƯỢNG CHI TIẾT THEO DÒNG XE
+                          </h3>
+                          <table className="w-full text-left border-collapse border border-slate-200 text-[10px]">
+                            <thead>
+                              <tr className="bg-slate-100 text-slate-700 uppercase font-bold text-[9px] tracking-wide border-b border-slate-200">
+                                <th className="p-2 border border-slate-200">STT</th>
+                                <th className="p-2 border border-slate-200">Dòng xe (Model)</th>
+                                <th className="p-2 border border-slate-200 text-center">Tổng kiểm tra</th>
+                                <th className="p-2 border border-slate-200 text-center text-emerald-700">Số lượng Đạt</th>
+                                <th className="p-2 border border-slate-200 text-center text-red-700">Số lượng Lỗi</th>
+                                <th className="p-2 border border-slate-200 text-center text-blue-700">Tỷ lệ Đạt (FTR)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {Object.keys(modelsMap).length === 0 ? (
+                                <tr>
+                                  <td colSpan={6} className="p-4 text-center text-slate-400 font-bold">
+                                    Không ghi nhận dữ liệu kiểm tra trong chu kỳ này
+                                  </td>
+                                </tr>
+                              ) : (
+                                Object.entries(modelsMap).map(([mName, mData], idx) => {
+                                  const rate = mData.total > 0 ? Math.round((mData.passed / mData.total) * 100) : 100;
+                                  return (
+                                    <tr key={idx} className="hover:bg-slate-50 border-b border-slate-200 font-sans font-medium text-slate-800">
+                                      <td className="p-2 border border-slate-200 text-center font-mono">{idx + 1}</td>
+                                      <td className="p-2 border border-slate-200 font-bold uppercase">{mName}</td>
+                                      <td className="p-2 border border-slate-200 text-center font-mono font-bold">{mData.total} xe</td>
+                                      <td className="p-2 border border-slate-200 text-center font-mono font-bold text-emerald-600">{mData.passed} xe</td>
+                                      <td className="p-2 border border-slate-200 text-center font-mono font-bold text-red-500">{mData.failed} xe</td>
+                                      <td className="p-2 border border-slate-200 text-center font-mono font-black text-blue-600 bg-blue-50/10">{rate}%</td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Section II: Top 3 defects analysis per model */}
+                        <div className="space-y-4 page-break-inside-avoid">
+                          <h3 className="text-xs font-black uppercase text-slate-800 tracking-wider flex items-center gap-1.5 border-l-2 border-amber-600 pl-2">
+                            II. PHÂN TÍCH CHUYÊN SÂU TOP 3 LỖI PHỔ BIẾN NHẤT & BIỆN PHÁP CAPA THEO TỪNG DÒNG XE (MODEL)
+                          </h3>
+                          
+                          {Object.keys(modelTopDefectsForReport).length === 0 ? (
+                            <div className="p-4 border border-dashed border-slate-200 rounded-lg text-center text-slate-400 font-bold text-[10px]">
+                              Không ghi nhận lỗi khuyết tật nào để phân tích trong chu kỳ báo cáo này
+                            </div>
+                          ) : (
+                            Object.entries(modelTopDefectsForReport).map(([mName, defects], mIdx) => (
+                              <div key={mName} className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-1.5">
+                                <div className="text-[10px] font-black text-slate-800 uppercase tracking-wide flex items-center justify-between border-b border-slate-200 pb-1">
+                                  <span>Dòng xe: <span className="text-amber-700">{mName}</span></span>
+                                  <span className="text-[8px] text-slate-500 font-mono">({defects.length} lỗi chính)</span>
+                                </div>
+                                <table className="w-full text-left border-collapse border border-slate-200 text-[9px]">
+                                  <thead>
+                                    <tr className="bg-slate-100/80 text-slate-700 uppercase font-bold text-[8px] tracking-wide border-b border-slate-200">
+                                      <th className="p-1.5 border border-slate-200 w-10 text-center">Hạng</th>
+                                      <th className="p-1.5 border border-slate-200 w-36">Khuyết tật / Lỗi</th>
+                                      <th className="p-1.5 border border-slate-200 w-16 text-center text-red-700">Tần suất</th>
+                                      <th className="p-1.5 border border-slate-200 w-44">Ảnh hưởng chất lượng</th>
+                                      <th className="p-1.5 border border-slate-200 w-44">Nguyên nhân cốt lõi</th>
+                                      <th className="p-1.5 border border-slate-200">Biện pháp xử lý & CAPA</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {defects.map((item, i) => (
+                                      <tr key={i} className="hover:bg-white bg-white border-b border-slate-200 font-sans">
+                                        <td className="p-1.5 border border-slate-200 font-mono text-center font-bold text-slate-600">#{i + 1}</td>
+                                        <td className="p-1.5 border border-slate-200 font-black text-slate-800 text-[9.5px]">{item.text}</td>
+                                        <td className="p-1.5 border border-slate-200 font-mono text-center text-red-600 font-extrabold">{item.count} xe</td>
+                                        <td className="p-1.5 border border-slate-200 text-slate-600 leading-relaxed font-semibold text-[8px]">{item.evaluation}</td>
+                                        <td className="p-1.5 border border-slate-200 text-slate-600 leading-relaxed font-semibold text-[8px]">{item.rootCause}</td>
+                                        <td className="p-1.5 border border-slate-200 text-indigo-950 font-bold leading-relaxed bg-amber-50/20 text-[8px]">{item.treatment}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        {/* Signatures */}
+                        <div className="grid grid-cols-3 gap-4 pt-10 text-center text-[10px] select-none mt-auto">
+                          <div className="space-y-12">
+                            <span className="font-bold uppercase tracking-wider text-slate-500">Người lập biểu</span>
+                            <div className="text-slate-800 font-extrabold uppercase text-[10px]">Tổ trưởng KCS</div>
+                          </div>
+                          <div className="space-y-12">
+                            <span className="font-bold uppercase tracking-wider text-slate-500">Trưởng phòng QLCL</span>
+                            <div className="text-slate-800 font-extrabold uppercase text-[10px]">Nguyễn Xuân Thao</div>
+                          </div>
+                          <div className="space-y-12">
+                            <span className="font-bold uppercase tracking-wider text-slate-500">Xác nhận Ban giám đốc</span>
+                            <div className="text-slate-800 font-extrabold uppercase text-[10px]">Phê duyệt lưu trữ</div>
+                          </div>
+                        </div>
+
+                        {/* Footer info */}
+                        <div className="text-center text-[8px] text-slate-400 pt-8 select-none border-t border-dashed border-slate-200">
+                          Báo cáo được khởi tạo tự động từ hệ thống DKBike Quality Management System (QMS).<br />
+                          Mọi thông tin chỉnh sửa cần tuân thủ quy trình vận hành SOP-QLCL-04.
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LOCAL IMAGE ZOOM PREVIEW MODAL */}
+      {localZoomImage && (
+        <div 
+          onClick={() => setLocalZoomImage(null)}
+          className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-[999] cursor-zoom-out animate-in fade-in duration-200"
+        >
+          <div className="relative max-w-4xl max-h-[85vh] overflow-hidden rounded-xl border border-white/20 shadow-2xl flex items-center justify-center bg-black/45" onClick={(e) => e.stopPropagation()}>
+            <img 
+              src={localZoomImage} 
+              className="max-w-full max-h-[80vh] object-contain select-none shadow-2xl border border-white/10"
+              referrerPolicy="no-referrer" 
+              alt="Bằng chứng hiện trường" 
+            />
+            <div className="absolute top-4 right-4 flex items-center gap-2">
+              <span className="bg-black/50 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider border border-white/10 select-none">
+                Bằng chứng hiện trường QMS
+              </span>
+              <button 
+                onClick={() => setLocalZoomImage(null)}
+                className="bg-black/60 hover:bg-black/80 backdrop-blur text-white font-bold rounded-full h-8 w-8 flex items-center justify-center border border-white/25 transition shadow cursor-pointer text-sm animate-pulse"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

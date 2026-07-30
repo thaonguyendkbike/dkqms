@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e1548" />
+      <stop offset="100%" stop-color="#090d16" />
+    </radialGradient>
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="50%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#cbd5e1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Glowing outer container -->
+  <rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="url(#bgGrad)" stroke="url(#ringGrad)" stroke-width="1.5" />
+
+  <!-- Stylized "DK" text in a futuristic font -->
+  <text x="5" y="18" font-family="'Inter', sans-serif" font-weight="900" font-size="11" fill="url(#textGrad)" letter-spacing="-0.5">DK</text>
+  
+  <!-- Subtle quality gear teeth decoration on the top-right -->
+  <path d="M22 6a4 4 0 0 1 4 4" fill="none" stroke="#38bdf8" stroke-width="1" stroke-linecap="round" stroke-dasharray="1 1" opacity="0.6" />
+
+  <!-- Proud glowing emerald checkmark representing Quality Approved / Passed Audit -->
+  <path d="M14 21.5l3 3 8-8" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" filter="drop-shadow(0px 1px 2px rgba(16,185,129,0.4))" />
+</svg>

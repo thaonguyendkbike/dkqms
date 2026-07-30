@@ -1,0 +1,38 @@
+# GitHub Actions workflow for deploying the React application to Firebase Hosting.
+# This workflow automatically runs when you push changes to the 'main' branch,
+# ensuring your application remains synchronous across all devices.
+
+name: Deploy to Firebase Hosting on push
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout the source code
+      - name: Git Checkout
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Node.js environment
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Step 3: Install all project dependencies cleanly
+      - name: Install dependencies
+        run: npm ci
+
+      # Step 4: Build the production bundle
+      - name: Build production bundle
+        run: npm run build
+
+      # Step 5: Deploy directly to Firebase Hosting using CLI Token
+      # This uses the token you generated to authenticate with Firebase
+      - name: Deploy to Firebase Hosting
+        run: npx firebase-tools deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}"

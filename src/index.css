@@ -1,0 +1,229 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Roboto:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-indigo-50: #f0f2ff;
+  --color-indigo-100: #dbe0ff;
+  --color-indigo-150: #c5ceff;
+  --color-indigo-200: #aab6ff;
+  --color-indigo-300: #8092ff;
+  --color-indigo-400: #5466f9;
+  --color-indigo-500: #2b3ce7;
+  --color-indigo-600: #0213b0;
+  --color-indigo-605: #02119c;
+  --color-indigo-650: #010e8b;
+  --color-indigo-700: #010c7b;
+  --color-indigo-800: #010854;
+  --color-indigo-850: #010641;
+  --color-indigo-900: #00032c;
+  
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-roboto: "Roboto", sans-serif;
+}
+
+@layer base {
+  html, body {
+    font-family: var(--font-sans);
+    font-size: 15px; /* 14px-16px basic legibility, Vietnamese-optimized font scaling */
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* ==========================================================================
+   DASHBOARD & REPORTING TYPOGRAPHY TUNING
+   Optimizes base font sizing (min 14px/0.875rem), line-height (1.5),
+   and distinct sub-headings for superior readability of quality records
+   ========================================================================== */
+
+#view_dashboard_content,
+#view_weekly_reports_content,
+#view_monthly_reports_content,
+#view_quality_inspection_content,
+#view_tasks_content,
+#view_daily_logs_content,
+#view_defects_content,
+#view_capa_detail_content {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+
+#view_dashboard_content table,
+#view_weekly_reports_content table,
+#view_monthly_reports_content table,
+#view_quality_inspection_content table,
+#view_tasks_content table,
+#view_daily_logs_content table,
+#view_defects_content table,
+#view_capa_detail_content table {
+  font-size: 14px !important;
+}
+
+#view_dashboard_content th,
+#view_weekly_reports_content th,
+#view_monthly_reports_content th,
+#view_quality_inspection_content th,
+#view_tasks_content th,
+#view_daily_logs_content th,
+#view_defects_content th,
+#view_capa_detail_content th {
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  line-height: 1.4 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+#view_dashboard_content td,
+#view_weekly_reports_content td,
+#view_monthly_reports_content td,
+#view_quality_inspection_content td,
+#view_tasks_content td,
+#view_daily_logs_content td,
+#view_defects_content td,
+#view_capa_detail_content td {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+
+/* Force standard text scaling for nested helper classes */
+#view_dashboard_content .text-xs,
+#view_weekly_reports_content .text-xs,
+#view_monthly_reports_content .text-xs,
+#view_quality_inspection_content .text-xs,
+#view_tasks_content .text-xs,
+#view_daily_logs_content .text-xs,
+#view_defects_content .text-xs,
+#view_capa_detail_content .text-xs {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+
+#view_dashboard_content .text-\[11px\],
+#view_weekly_reports_content .text-\[11px\],
+#view_monthly_reports_content .text-\[11px\],
+#view_quality_inspection_content .text-\[11px\],
+#view_tasks_content .text-\[11px\],
+#view_daily_logs_content .text-\[11px\],
+#view_defects_content .text-\[11px\],
+#view_capa_detail_content .text-\[11px\],
+#view_dashboard_content .text-\[10px\],
+#view_weekly_reports_content .text-\[10px\],
+#view_monthly_reports_content .text-\[10px\],
+#view_quality_inspection_content .text-\[10px\],
+#view_tasks_content .text-\[10px\],
+#view_daily_logs_content .text-\[10px\],
+#view_defects_content .text-\[10px\],
+#view_capa_detail_content .text-\[10px\] {
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+
+/* Elevate sub-headings representing failure/incident categories (make clearly bold and larger) */
+#view_dashboard_content h3,
+#view_weekly_reports_content h3,
+#view_monthly_reports_content h3,
+#view_quality_inspection_content h3,
+#view_tasks_content h3,
+#view_daily_logs_content h3,
+#view_defects_content h3,
+#view_capa_detail_content h3,
+#view_dashboard_content h4,
+#view_weekly_reports_content h4,
+#view_monthly_reports_content h4,
+#view_quality_inspection_content h4,
+#view_tasks_content h4,
+#view_daily_logs_content h4,
+#view_defects_content h4,
+#view_capa_detail_content h4,
+#view_dashboard_content h5,
+#view_weekly_reports_content h5,
+#view_monthly_reports_content h5,
+#view_quality_inspection_content h5,
+#view_tasks_content h5,
+#view_daily_logs_content h5,
+#view_defects_content h5,
+#view_capa_detail_content h5 {
+  font-weight: 800 !important;
+  font-size: 16px !important;
+  line-height: 1.4 !important;
+  letter-spacing: -0.01em !important;
+  color: #0f172a !important; /* deep slate-900 */
+}
+
+/* ==========================================================================
+   PRINT-FRIENDLY QMS REPORT STYLES
+   Ensures CAPA and Market Defect reports print with high fidelity
+   ========================================================================== */
+@media print {
+  body.printing-capa, body.printing-defect {
+    visibility: hidden !important;
+    background: white !important;
+  }
+
+  body.printing-capa #capa_print_zone,
+  body.printing-capa #capa_print_zone * {
+    visibility: visible !important;
+  }
+
+  body.printing-capa #capa_print_zone {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+    z-index: 99999 !important;
+  }
+
+  body.printing-capa #capa_print_zone > div {
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+  }
+
+  body.printing-defect #defect_print_zone,
+  body.printing-defect #defect_print_zone * {
+    visibility: visible !important;
+  }
+
+  body.printing-defect #defect_print_zone {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+    z-index: 99999 !important;
+  }
+
+  body.printing-defect #defect_print_zone > div {
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+
+

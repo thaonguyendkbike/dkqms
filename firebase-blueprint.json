@@ -1,0 +1,138 @@
+{
+  "entities": {
+    "Task": {
+      "title": "Task",
+      "description": "Quality management business tasks and issue tracking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "week": { "type": "integer" },
+        "month": { "type": "integer" },
+        "assignee": { "type": "string" },
+        "category": { "type": "string" },
+        "content": { "type": "string" },
+        "target": { "type": "integer" },
+        "result": { "type": "integer" },
+        "status": { "type": "string", "enum": ["Completed", "Pending", "Overdue"] },
+        "priority": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "issueCondition": { "type": "string" },
+        "locationOfOrigin": { "type": "string" },
+        "rootCausePending": { "type": "string" },
+        "proposedSolution": { "type": "string" },
+        "nextPlan": { "type": "string" }
+      },
+      "required": ["id", "content", "status"]
+    },
+    "Kpi": {
+      "title": "Kpi",
+      "description": "Key performance indicator metrics and targets.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "target": { "type": "string" },
+        "result": { "type": "string" },
+        "unit": { "type": "string" },
+        "status": { "type": "string" },
+        "trend": { "type": "string" },
+        "rootCause": { "type": "string" }
+      },
+      "required": ["id", "name", "target", "result"]
+    },
+    "Staff": {
+      "title": "Staff",
+      "description": "Quality management staff members.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "email": { "type": "string" }
+      },
+      "required": ["id", "name", "email"]
+    },
+    "Capa": {
+      "title": "Capa",
+      "description": "Corrective and Preventive Actions tracking records.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "issue": { "type": "string" },
+        "rootCause": { "type": "string" },
+        "actions": { "type": "string" },
+        "status": { "type": "string" },
+        "assignee": { "type": "string" }
+      },
+      "required": ["id", "title"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Supplier information and evaluation logs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "score": { "type": "integer" }
+      },
+      "required": ["id", "name"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Real-time communication and assistant messages.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sender": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "sender", "text"]
+    },
+    "ChatNoteMessage": {
+      "title": "ChatNoteMessage",
+      "description": "General chat and shared operational notes among staff.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderEmail": { "type": "string" },
+        "timestamp": { "type": "integer" },
+        "isPinned": { "type": "boolean" }
+      },
+      "required": ["id", "text", "senderName", "senderEmail", "timestamp", "isPinned"]
+    }
+  },
+  "firestore": {
+    "/dk_tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Quality management issues and tasks."
+    },
+    "/dk_kpis/{kpiId}": {
+      "schema": "Kpi",
+      "description": "Quality control performance indicators."
+    },
+    "/dk_staff/{staffId}": {
+      "schema": "Staff",
+      "description": "Quality staff directory."
+    },
+    "/dk_capas/{capaId}": {
+      "schema": "Capa",
+      "description": "Corrective/Preventive Action plans."
+    },
+    "/dk_suppliers/{supplierId}": {
+      "schema": "Supplier",
+      "description": "Supplier quality profiles."
+    },
+    "/qms_chat_messages/{msgId}": {
+      "schema": "ChatMessage",
+      "description": "General assistant chat channels."
+    },
+    "/qms_chat_notes/{noteId}": {
+      "schema": "ChatNoteMessage",
+      "description": "Employee collaborative chat board notes."
+    }
+  }
+}
