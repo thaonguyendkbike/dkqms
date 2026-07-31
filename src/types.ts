@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export type { DailyLogRecord } from './dailyLogsData';
+
 // ==========================================
 // 1. EMPLOYEES TABLE (Nhân viên Phòng QLCL & Nhà Máy)
 // ==========================================
@@ -477,8 +479,10 @@ export interface COPQMetric {
   id: string;
   category: 'Tái chế' | 'Sửa chữa' | 'Bảo hành' | 'Đổi trả' | 'Dừng chuyền' | 'Kiểm tra lại' | string;
   amount: number;
-  trend: 'Tăng' | 'Giảm' | 'Ổn định' | string;
-  details: string;
+  trend?: 'Tăng' | 'Giảm' | 'Ổn định' | string;
+  details?: string;
+  title?: string;
+  model?: string;
   month?: number;
   year?: number;
   costOrigin?: string;
@@ -504,7 +508,10 @@ export interface DKBikeModel {
   id: string;
   name: string;
   status: 'Đang sản xuất' | 'Sắp ra mắt' | 'R&D';
-  releaseYear: number;
+  releaseYear?: number;
+  launchYear?: number;
+  category?: string;
+  code?: string;
 }
 
 export interface Dealer {

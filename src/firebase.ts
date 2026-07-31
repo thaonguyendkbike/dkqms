@@ -62,7 +62,12 @@ try {
   // Safe guard
 }
 
-const app = initializeApp(firebaseConfig);
+const safeFirebaseConfig = {
+  ...firebaseConfig,
+  apiKey: firebaseConfig.apiKey || 'AIzaSyAz6X3rJv4ScGNSoo7fsuFUKyEd4VAQrac'
+};
+
+const app = initializeApp(safeFirebaseConfig);
 export const db = initializeFirestore(app, {
   localCache: memoryLocalCache()
 }, 'ai-studio-24f3ad28-43fa-4e4b-b0ee-f6e3fbdfeee3'); /* CRITICAL: The app will break without this line */

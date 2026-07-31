@@ -10,8 +10,11 @@ import {
 // @ts-ignore
 import firebaseConfig from '../../firebase-applet-config.json';
 
-// Initialize Firebase App securely
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const safeConfig = {
+  ...firebaseConfig,
+  apiKey: firebaseConfig.apiKey || 'AIzaSyAz6X3rJv4ScGNSoo7fsuFUKyEd4VAQrac'
+};
+const app = getApps().length === 0 ? initializeApp(safeConfig) : getApp();
 export const auth = getAuth(app);
 
 const provider = new GoogleAuthProvider();

@@ -10631,7 +10631,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       }
                     }
                   } catch (error: any) {
-                    alert(`Lỗi đăng nhập Google: ${error.message || error}\n\n* Khuyên dùng: Nếu chạy trong iFrame, hãy bấm tiếp nút ĐĂNG NHẬP REDIRECT phía bên phải!`);
+                    alert(`Lỗi đăng nhập Google: ${error.message || error}\n\n* Môi trường Localhost: Vui lòng bấm chọn nút ĐĂNG NHẬP NHANH bên dưới hoặc bấm trực tiếp tên cán bộ trong danh sách!`);
                   }
                 }}
                 className="flex items-center justify-center gap-2 py-3 px-4 bg-indigo-600 hover:bg-indigo-550 text-white rounded-xl font-bold font-sans shadow-lg shadow-indigo-600/25 cursor-pointer active:scale-98 transition duration-150 text-[11px]"
@@ -10659,26 +10659,68 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 ĐĂNG NHẬP REDIRECT
               </button>
             </div>
+
+            {/* Quick Dev/Local Login Option */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const defaultStaff = (staff && staff.length > 0 ? staff : INITIAL_STAFF)[0];
+                  const devUser = {
+                    uid: `dev_${defaultStaff.id}`,
+                    email: defaultStaff.email,
+                    displayName: defaultStaff.name,
+                    photoURL: undefined
+                  };
+                  localStorage.setItem('dk_qms_dev_user', JSON.stringify(devUser));
+                  setFirebaseUser(devUser);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold font-sans shadow-lg shadow-emerald-600/20 cursor-pointer active:scale-98 transition duration-150 text-xs tracking-wide uppercase font-mono"
+                id="btn_quick_dev_login"
+              >
+                ⚡ ĐĂNG NHẬP NHANH LOCAL DEV (Anh Nguyễn Xuân Thao)
+              </button>
+            </div>
           </div>
 
-          {/* Guidelines on authorized personnel */}
+          {/* Guidelines on authorized personnel with Clickable Login */}
           <div className="bg-slate-950/40 rounded-2xl p-4 border border-slate-800/60 relative z-10 space-y-3">
-            <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
-              <User className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Danh sách cán bộ được phê duyệt nội bộ:</span>
+            <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
+              <span className="flex items-center gap-2">
+                <User className="w-3.5 h-3.5 text-indigo-400" />
+                Danh sách cán bộ được phê duyệt nội bộ:
+              </span>
+              <span className="text-emerald-400 font-mono font-normal lowercase">bấm tên để chọn tài khoản</span>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-slate-400 max-h-48 overflow-y-auto">
-              {(staff.length > 0 ? staff : INITIAL_STAFF).map(st => (
-                <div key={st.id} className="flex flex-col bg-slate-900/60 p-2 rounded-lg border border-slate-800/40">
-                  <span className="font-bold text-slate-200">{st.name}</span>
-                  <span className="text-[9px] text-indigo-400 font-mono truncate">{st.email}</span>
-                </div>
+              {(staff && staff.length > 0 ? staff : INITIAL_STAFF).map(st => (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => {
+                    const devUser = {
+                      uid: `dev_${st.id}`,
+                      email: st.email,
+                      displayName: st.name,
+                      photoURL: undefined
+                    };
+                    localStorage.setItem('dk_qms_dev_user', JSON.stringify(devUser));
+                    setFirebaseUser(devUser);
+                  }}
+                  className="flex flex-col bg-slate-900/80 hover:bg-indigo-950 p-2.5 rounded-lg border border-slate-800 hover:border-emerald-500/50 text-left transition cursor-pointer group"
+                >
+                  <div className="flex justify-between items-center w-full">
+                    <span className="font-bold text-slate-200 group-hover:text-emerald-300">${st.name}</span>
+                    <span className="text-[9px] text-emerald-400 font-mono opacity-80 group-hover:opacity-100 transition">▶ Đăng nhập</span>
+                  </div>
+                  <span className="text-[9px] text-indigo-400 font-mono truncate">${st.email}</span>
+                </button>
               ))}
             </div>
             
             <p className="text-[9px] text-slate-500 italic text-center">
-              Tất cả email ngoài danh sách hoặc khách lạ có link mà không đăng nhập bằng tài khoản được cấp quyền thì không thể xem.
+              * Khi chạy môi trường Localhost, anh Thao có thể bấm trực tiếp tên cán bộ ở danh sách trên để đăng nhập tức thì.
             </p>
           </div>
 
