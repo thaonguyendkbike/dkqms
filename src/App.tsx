@@ -2995,6 +2995,11 @@ export function App() {
   const [marketDefectsFilterStatus, setMarketDefectsFilterStatus] = useState('All');
   const [marketDefectsFilterModel, setMarketDefectsFilterModel] = useState('All');
   const [marketDefectsFilterFeedbackType, setMarketDefectsFilterFeedbackType] = useState('All');
+  const [marketDefectsFilterMonth, setMarketDefectsFilterMonth] = useState<number | 'All'>('All');
+  const [marketDefectsFilterYear, setMarketDefectsFilterYear] = useState<number | 'All'>('All');
+  const [marketDefectsFilterStartDate, setMarketDefectsFilterStartDate] = useState('');
+  const [marketDefectsFilterEndDate, setMarketDefectsFilterEndDate] = useState('');
+  const [marketDefectsFilterQuickTime, setMarketDefectsFilterQuickTime] = useState<string>('All');
   const [isDailyLogsFilterExpanded, setIsDailyLogsFilterExpanded] = useState(false);
   const [isMarketDefectsFilterExpanded, setIsMarketDefectsFilterExpanded] = useState(false);
   const [showDefectsDashboard, setShowDefectsDashboard] = useState(false);
@@ -3267,6 +3272,23 @@ export function App() {
   }, [defects]);
 
   const filteredMarketDefects = useMemo(() => {
+    const parseDefectDate = (dateStr?: string) => {
+      if (!dateStr) return null;
+      if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+          return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        }
+      } else if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        if (parts.length === 3) {
+          return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        }
+      }
+      const d = new Date(dateStr);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
     return (defects || []).filter(d => {
       const matchesSearch = !marketDefectsSearch || 
         (d.id || '').toLowerCase().includes(marketDefectsSearch.toLowerCase()) ||
@@ -3281,9 +3303,72 @@ export function App() {
       const matchesModel = marketDefectsFilterModel === 'All' || d.model === marketDefectsFilterModel;
       const matchesFeedbackType = marketDefectsFilterFeedbackType === 'All' || (d.feedbackType || 'Lỗi xe từ khách hàng') === marketDefectsFilterFeedbackType;
 
-      return matchesSearch && matchesSeverity && matchesStatus && matchesModel && matchesFeedbackType;
+      // Time Filtering
+      let matchesTime = true;
+      const dDate = parseDefectDate(d.defectDate || d.sourceDate || d.saleDate);
+
+      if (dDate) {
+        if (marketDefectsFilterMonth !== 'All') {
+          if (dDate.getMonth() + 1 !== Number(marketDefectsFilterMonth)) {
+            matchesTime = false;
+          }
+        }
+
+        if (matchesTime && marketDefectsFilterYear !== 'All') {
+          if (dDate.getFullYear() !== Number(marketDefectsFilterYear)) {
+            matchesTime = false;
+          }
+        }
+
+        if (matchesTime && marketDefectsFilterQuickTime !== 'All') {
+          const now = new Date();
+          if (marketDefectsFilterQuickTime === 'today') {
+            const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+            const endToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            if (dDate < startToday || dDate > endToday) matchesTime = false;
+          } else if (marketDefectsFilterQuickTime === 'this_week') {
+            const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay();
+            const startWeek = new Date(now);
+            startWeek.setDate(now.getDate() - (dayOfWeek - 1));
+            startWeek.setHours(0, 0, 0, 0);
+            const endWeek = new Date(startWeek);
+            endWeek.setDate(startWeek.getDate() + 6);
+            endWeek.setHours(23, 59, 59, 999);
+            if (dDate < startWeek || dDate > endWeek) matchesTime = false;
+          } else if (marketDefectsFilterQuickTime === 'this_month') {
+            const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const endMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+            if (dDate < startMonth || dDate > endMonth) matchesTime = false;
+          } else if (marketDefectsFilterQuickTime === 'this_quarter') {
+            const currentQuarter = Math.floor(now.getMonth() / 3);
+            const startQuarter = new Date(now.getFullYear(), currentQuarter * 3, 1);
+            const endQuarter = new Date(now.getFullYear(), (currentQuarter + 1) * 3, 0, 23, 59, 59);
+            if (dDate < startQuarter || dDate > endQuarter) matchesTime = false;
+          } else if (marketDefectsFilterQuickTime === 'this_year') {
+            const startYear = new Date(now.getFullYear(), 0, 1);
+            const endYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+            if (dDate < startYear || dDate > endYear) matchesTime = false;
+          }
+        }
+      } else if (
+        marketDefectsFilterMonth !== 'All' || 
+        marketDefectsFilterYear !== 'All' || 
+        marketDefectsFilterQuickTime !== 'All'
+      ) {
+        matchesTime = false;
+      }
+
+      return matchesSearch && matchesStatus && matchesModel && matchesTime;
     });
-  }, [defects, marketDefectsSearch, marketDefectsFilterSeverity, marketDefectsFilterStatus, marketDefectsFilterModel, marketDefectsFilterFeedbackType]);
+  }, [
+    defects, 
+    marketDefectsSearch, 
+    marketDefectsFilterStatus, 
+    marketDefectsFilterModel, 
+    marketDefectsFilterMonth,
+    marketDefectsFilterYear,
+    marketDefectsFilterQuickTime
+  ]);
 
   const customerDefects = useMemo(() => {
     return filteredMarketDefects.filter(d => (d.feedbackType || 'Lỗi xe từ khách hàng') === 'Lỗi xe từ khách hàng');
@@ -5254,6 +5339,12 @@ export function App() {
       alert("⚠️ BẢO MẬT: Chỉ anh Thao mới có quyền Thêm/Xóa/Quản lý danh sách nhân sự của phòng!");
       return;
     }
+    if (type === 'defect') {
+      const currentDealer = item.dealer || item.Dealer || '';
+      setEditDefectDealerSearch(currentDealer);
+      const currentModel = item.model || item.VehicleModel || '';
+      setEditDefectModelSearch(currentModel);
+    }
     setGlobalEditModal({
       type,
       data: JSON.parse(JSON.stringify(item))
@@ -6120,7 +6211,7 @@ export function App() {
       const currentModel = globalEditModal.data.model || globalEditModal.data.VehicleModel || '';
       setEditDefectModelSearch(currentModel);
     }
-  }, [globalEditModal]);
+  }, [globalEditModal?.data?.id, globalEditModal?.type]);
 
   const filteredDealersForAdd = useMemo(() => {
     if (!defectDealerSearch) return dealers;
@@ -21967,14 +22058,29 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   </button>
                   <button
                     onClick={() => setIsMarketDefectsFilterExpanded(!isMarketDefectsFilterExpanded)}
-                    className={`font-bold text-xs p-2.5 rounded-lg transition shadow flex items-center justify-center cursor-pointer ${
+                    className={`relative font-bold text-xs p-2.5 rounded-lg transition shadow flex items-center justify-center cursor-pointer ${
                       isMarketDefectsFilterExpanded 
                         ? 'bg-slate-800 text-white ring-2 ring-slate-400' 
-                        : 'bg-slate-700 hover:bg-slate-800 text-white'
+                        : (marketDefectsSearch || 
+                           marketDefectsFilterModel !== 'All' || 
+                           marketDefectsFilterStatus !== 'All' || 
+                           marketDefectsFilterMonth !== 'All' ||
+                           marketDefectsFilterYear !== 'All' ||
+                           marketDefectsFilterQuickTime !== 'All')
+                          ? 'bg-indigo-700 text-white ring-2 ring-indigo-400'
+                          : 'bg-slate-700 hover:bg-slate-800 text-white'
                     }`}
                     title={isMarketDefectsFilterExpanded ? "Thu gọn bộ lọc" : "Mở rộng bộ lọc tìm kiếm"}
                   >
                     <SlidersHorizontal className="w-4.5 h-4.5" />
+                    {(marketDefectsSearch || 
+                       marketDefectsFilterModel !== 'All' || 
+                       marketDefectsFilterStatus !== 'All' || 
+                       marketDefectsFilterMonth !== 'All' ||
+                       marketDefectsFilterYear !== 'All' ||
+                       marketDefectsFilterQuickTime !== 'All') && (
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full border-2 border-white animate-pulse" />
+                    )}
                   </button>
                   <button
                     onClick={() => {
@@ -22229,22 +22335,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           </select>
                         </div>
 
-                        {/* Severity Filter */}
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Cấp lỗi:</span>
-                          <select
-                            value={marketDefectsFilterSeverity}
-                            onChange={(e) => setMarketDefectsFilterSeverity(e.target.value)}
-                            className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
-                          >
-                            <option value="All">Tất cả cấp</option>
-                            <option value="A">Cấp A - Nguy cấp</option>
-                            <option value="B">Cấp B - Nặng</option>
-                            <option value="C">Cấp C - Vừa phải</option>
-                            <option value="D">Cấp D - Nhẹ</option>
-                          </select>
-                        </div>
-
                         {/* Status Filter */}
                         <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
                           <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Xử lý:</span>
@@ -22259,18 +22349,68 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             <option value="Đã xử lý">Đã xử lý</option>
                           </select>
                         </div>
+                      </div>
 
-                        {/* FeedbackType Filter */}
+                      {/* Time Filters Row */}
+                      <div className="pt-2 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {/* Quick Time Filter */}
                         <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Loại phản ánh:</span>
+                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Thời gian:</span>
                           <select
-                            value={marketDefectsFilterFeedbackType}
-                            onChange={(e) => setMarketDefectsFilterFeedbackType(e.target.value)}
+                            value={marketDefectsFilterQuickTime}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setMarketDefectsFilterQuickTime(val);
+                              if (val !== 'All') {
+                                setMarketDefectsFilterMonth('All');
+                                setMarketDefectsFilterYear('All');
+                              }
+                            }}
                             className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
                           >
-                            <option value="All">Tất cả loại</option>
-                            <option value="Lỗi xe từ khách hàng">Lỗi xe từ khách hàng</option>
-                            <option value="Đề xuất cải tiến">Đề xuất cải tiến</option>
+                            <option value="All">Tất cả thời gian</option>
+                            <option value="today">Hôm nay</option>
+                            <option value="this_week">Tuần này</option>
+                            <option value="this_month">Tháng này</option>
+                            <option value="this_quarter">Quý này</option>
+                            <option value="this_year">Năm nay</option>
+                          </select>
+                        </div>
+
+                        {/* Month Filter */}
+                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Tháng:</span>
+                          <select
+                            value={marketDefectsFilterMonth}
+                            onChange={(e) => {
+                              setMarketDefectsFilterMonth(e.target.value === 'All' ? 'All' : Number(e.target.value));
+                              if (e.target.value !== 'All') setMarketDefectsFilterQuickTime('All');
+                            }}
+                            className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
+                          >
+                            <option value="All">Tất cả tháng</option>
+                            {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                              <option key={m} value={m}>Tháng {m}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Year Filter */}
+                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Năm:</span>
+                          <select
+                            value={marketDefectsFilterYear}
+                            onChange={(e) => {
+                              setMarketDefectsFilterYear(e.target.value === 'All' ? 'All' : Number(e.target.value));
+                              if (e.target.value !== 'All') setMarketDefectsFilterQuickTime('All');
+                            }}
+                            className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
+                          >
+                            <option value="All">Tất cả năm</option>
+                            <option value="2024">Năm 2024</option>
+                            <option value="2025">Năm 2025</option>
+                            <option value="2026">Năm 2026</option>
+                            <option value="2027">Năm 2027</option>
                           </select>
                         </div>
                       </div>
@@ -22278,7 +22418,13 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   </div>
 
                   {/* Filter Summary / Reset */}
-                  {(marketDefectsSearch || marketDefectsFilterModel !== 'All' || marketDefectsFilterSeverity !== 'All' || marketDefectsFilterStatus !== 'All' || marketDefectsFilterFeedbackType !== 'All') && (
+                  {(marketDefectsSearch || 
+                    marketDefectsFilterModel !== 'All' || 
+                    marketDefectsFilterStatus !== 'All' || 
+                    marketDefectsFilterMonth !== 'All' ||
+                    marketDefectsFilterYear !== 'All' ||
+                    marketDefectsFilterQuickTime !== 'All'
+                  ) && (
                     <div className="flex items-center justify-between bg-indigo-50/50 border border-indigo-200 rounded-lg px-3 py-2 text-[11px] text-indigo-800">
                       <div>
                         Đang áp dụng bộ lọc: Tìm thấy <span className="font-extrabold text-indigo-700">{filteredMarketDefects.length}</span> / <span className="font-extrabold">{defects.length}</span> phản ánh phù hợp.
@@ -22287,9 +22433,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         onClick={() => {
                           setMarketDefectsSearch('');
                           setMarketDefectsFilterModel('All');
-                          setMarketDefectsFilterSeverity('All');
                           setMarketDefectsFilterStatus('All');
-                          setMarketDefectsFilterFeedbackType('All');
+                          setMarketDefectsFilterMonth('All');
+                          setMarketDefectsFilterYear('All');
+                          setMarketDefectsFilterQuickTime('All');
                         }}
                         className="text-indigo-600 hover:text-indigo-800 font-extrabold flex items-center gap-1.5 cursor-pointer bg-transparent border-none p-0"
                       >
@@ -22714,7 +22861,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                       handleOpenEditModal('defect', d);
                                     }} 
                                     className="text-indigo-650 hover:text-indigo-850 p-1 cursor-pointer"
-                                    title="Sửa lỗi sườn"
+                                    title="Sửa đề xuất cải tiến"
                                   >
                                     <Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                                   </button>
@@ -22724,7 +22871,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                       handleDeleteItem('defect', d.id);
                                     }} 
                                     className="text-rose-600 hover:text-rose-800 p-1 cursor-pointer"
-                                    title="Xóa lỗi sườn"
+                                    title="Xóa đề xuất cải tiến"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -26169,7 +26316,19 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     </div>
                   </div>
 
-                  {globalEditModal.data.feedbackType === 'Lỗi xe từ khách hàng' || !globalEditModal.data.feedbackType ? (
+                  {globalEditModal.data.feedbackType === 'Đề xuất cải tiến' ? (
+                    <div className="grid grid-cols-1 gap-3">
+                      <div>
+                        <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Ngày gửi đề xuất / Ngày phản ánh</label>
+                        <input 
+                          type="date" 
+                          value={globalEditModal.data.defectDate || ''} 
+                          onChange={e => setGlobalEditModal({...globalEditModal, data: {...globalEditModal.data, defectDate: e.target.value}})} 
+                          className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850 font-bold" 
+                        />
+                      </div>
+                    </div>
+                  ) : (
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Ngày mua xe</label>
@@ -26178,7 +26337,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           value={globalEditModal.data.saleDate || ''} 
                           onChange={e => setGlobalEditModal({...globalEditModal, data: {...globalEditModal.data, saleDate: e.target.value}})} 
                           className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850" 
-                          required 
                         />
                       </div>
                       <div>
@@ -26188,11 +26346,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           value={globalEditModal.data.defectDate || ''} 
                           onChange={e => setGlobalEditModal({...globalEditModal, data: {...globalEditModal.data, defectDate: e.target.value}})} 
                           className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850" 
-                          required 
                         />
                       </div>
                     </div>
-                  ) : null}
+                  )}
 
                   <div>
                     <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">
@@ -26259,6 +26416,20 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         <option key={sup.id || sup.SupplierID} value={sup.name || sup.SupplierName}>
                           {sup.name || sup.SupplierName}
                         </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Hồ sơ CAPA liên kết</label>
+                    <select 
+                      value={globalEditModal.data.capaId || ''} 
+                      onChange={e => setGlobalEditModal({...globalEditModal, data: {...globalEditModal.data, capaId: e.target.value}})} 
+                      className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-bold text-xs"
+                    >
+                      <option value="">-- Không liên kết CAPA --</option>
+                      {capas.map(c => (
+                        <option key={c.id} value={c.id}>{c.id} - {c.title}</option>
                       ))}
                     </select>
                   </div>
@@ -33150,12 +33321,12 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                   <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                     <span className="w-3 h-3 rounded-full bg-blue-600 inline-block shrink-0"></span>
                     <h4 className="font-black text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
-                      III. HÀNH ĐỘNG KHẮC PHỤC TẠM THỜI (IMMEDIATE CORRECTION)
+                      III. BIỆN PHÁP KHẮC PHỤC TẠI CHỖ (CORRECTION)
                     </h4>
                   </div>
                   <div className="p-4 bg-slate-50 border-2 border-slate-300 rounded-xl mt-2">
                     <p className="text-base sm:text-lg font-extrabold text-slate-950 leading-relaxed whitespace-pre-wrap">
-                      {selectedDefectForReport.correction || 'Chưa ghi nhận hành động khắc phục tạm thời.'}
+                      {selectedDefectForReport.correction || 'Chưa cập nhật biện pháp xử lý tạm thời.'}
                     </p>
                   </div>
                 </div>
@@ -33165,13 +33336,22 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                   <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                     <span className="w-3 h-3 rounded-full bg-indigo-600 inline-block shrink-0"></span>
                     <h4 className="font-black text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
-                      IV. BIỆN PHÁP KHẮC PHỤC TRIỆT ĐỂ (CORRECTIVE ACTION - CA)
+                      IV. HÀNH ĐỘNG KHẮC PHỤC VÀ PHÒNG NGỪA (CORRECTIVE & PREVENTIVE ACTION)
                     </h4>
                   </div>
-                  <div className="p-4 bg-slate-50 border-2 border-slate-300 rounded-xl mt-2">
-                    <p className="text-base sm:text-lg font-extrabold text-slate-950 leading-relaxed whitespace-pre-wrap">
-                      {selectedDefectForReport.correctiveAction || 'Chưa ghi nhận biện pháp khắc phục triệt để.'}
-                    </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                    <div className="p-4 bg-slate-50 border-2 border-slate-300 rounded-xl space-y-1">
+                      <span className="text-xs font-black text-indigo-700 uppercase tracking-wider block">1. Hành động khắc phục (CAPA)</span>
+                      <p className="text-sm font-bold text-slate-900 leading-relaxed whitespace-pre-wrap">
+                        {selectedDefectForReport.correctiveAction || 'Chưa cập nhật hành động khắc phục.'}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-slate-50 border-2 border-slate-300 rounded-xl space-y-1">
+                      <span className="text-xs font-black text-emerald-700 uppercase tracking-wider block">2. Hành động phòng ngừa</span>
+                      <p className="text-sm font-bold text-slate-900 leading-relaxed whitespace-pre-wrap">
+                        {selectedDefectForReport.preventiveAction || 'Chưa cập nhật hành động phòng ngừa.'}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -33180,104 +33360,32 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                   <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                     <span className="w-3 h-3 rounded-full bg-emerald-600 inline-block shrink-0"></span>
                     <h4 className="font-black text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
-                      V. BIỆN PHÁP PHÒNG NGỪA HỆ THỐNG DIỆN RỘNG (PREVENTIVE ACTION - PA)
+                      V. HỒ SƠ LIÊN KẾT & TIẾN ĐỘ HOÀN THÀNH
                     </h4>
                   </div>
-                  <div className="p-4 bg-slate-50 border-2 border-slate-300 rounded-xl mt-2">
-                    <p className="text-base sm:text-lg font-extrabold text-slate-950 leading-relaxed whitespace-pre-wrap">
-                      {selectedDefectForReport.preventiveAction || 'Chưa ghi nhận biện pháp phòng ngừa diện rộng.'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Attached Images (if available) */}
-                {((selectedDefectForReport.images && selectedDefectForReport.images.length > 0) || selectedDefectForReport.imageUrl) && (
-                  <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-xs space-y-3">
-                    <h4 className="font-black text-xs text-slate-900 uppercase tracking-wide">
-                      HÌNH CẢNH BÁO / HÌNH ẢNH HIỆN TRƯỜNG THỰC TẾ
-                    </h4>
-                    <div className="flex flex-wrap gap-4 pt-1">
-                      {selectedDefectForReport.images && selectedDefectForReport.images.length > 0 ? (
-                        selectedDefectForReport.images.map((img, idx) => (
-                          <div key={idx} className="w-36 h-36 rounded-2xl border border-slate-300 overflow-hidden shadow-xs bg-slate-100">
-                            <img src={img} alt={`Lỗi thực tế ${idx+1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          </div>
-                        ))
-                      ) : selectedDefectForReport.imageUrl ? (
-                        <div className="w-36 h-36 rounded-2xl border border-slate-300 overflow-hidden shadow-xs bg-slate-100">
-                          <img src={selectedDefectForReport.imageUrl} alt="Lỗi thực tế" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        </div>
-                      ) : null}
+                  <div className="p-4 bg-slate-50 border-2 border-slate-300 rounded-xl mt-2 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div>
+                      <span className="text-slate-500 font-bold block">Hồ sơ CAPA liên kết:</span>
+                      <strong className="text-indigo-700 text-sm font-black">{selectedDefectForReport.capaId || 'Chưa gắn mã CAPA'}</strong>
                     </div>
-                  </div>
-                )}
-
-                {/* Signatures Block */}
-                <div className="bg-white p-6 rounded-2xl border border-slate-300 shadow-xs grid grid-cols-3 gap-4 text-center text-xs mt-6">
-                  <div>
-                    <span className="font-extrabold text-slate-800 uppercase block">NGƯỜI BÁO CÁO</span>
-                    <span className="text-[10px] text-slate-400 italic block">(Ký & ghi rõ họ tên)</span>
-                    <div className="h-16 flex items-end justify-center font-bold text-slate-700">
-                      {selectedDefectForReport.dealer || 'Đại lý / Trực ban'}
+                    <div>
+                      <span className="text-slate-500 font-bold block">Hạn hoàn thành (Target Date):</span>
+                      <strong className="text-slate-800 text-sm font-black">{selectedDefectForReport.targetDate || 'Chưa ấn định'}</strong>
                     </div>
-                  </div>
-                  <div>
-                    <span className="font-extrabold text-slate-800 uppercase block">KỸ SƯ GIÁM ĐỊNH QLCL</span>
-                    <span className="text-[10px] text-slate-400 italic block">(Xác nhận kỹ thuật)</span>
-                    <div className="h-16 flex items-end justify-center font-bold text-indigo-900">
-                      {selectedDefectForReport.assignee || 'Kỹ sư QMS'}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="font-extrabold text-slate-800 uppercase block">TRƯỞNG PHÒNG QLCL</span>
-                    <span className="text-[10px] text-slate-400 italic block">(Duyệt báo cáo)</span>
-                    <div className="h-16 flex items-end justify-center font-bold text-slate-700">
-                      DK QMS Approval
+                    <div>
+                      <span className="text-slate-500 font-bold block">Trạng thái báo cáo:</span>
+                      <strong className="text-emerald-700 text-sm font-black">{selectedDefectForReport.status || 'Chưa xử lý'}</strong>
                     </div>
                   </div>
                 </div>
 
               </div>
             </div>
-
-            {/* Bottom Modal Actions */}
-            <div className="p-4 bg-slate-100 border-t border-slate-200 flex justify-between items-center shrink-0 print:hidden">
-              <button
-                type="button"
-                onClick={() => {
-                  const defectToEdit = selectedDefectForReport;
-                  setShowDefectReportModal(false);
-                  setSelectedDefectForReport(null);
-                  setGlobalEditModal({
-                    isOpen: true,
-                    type: 'marketDefect',
-                    data: defectToEdit
-                  });
-                }}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-xl transition cursor-pointer flex items-center gap-2 text-xs"
-              >
-                <Edit className="w-4 h-4" />
-                <span>Chỉnh sửa nội dung báo cáo</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setShowDefectReportModal(false);
-                  setSelectedDefectForReport(null);
-                  setIsEditingDefectReport(false);
-                }}
-                className="px-6 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-extrabold rounded-xl transition cursor-pointer text-xs"
-              >
-                Đóng
-              </button>
-            </div>
           </div>
         </div>
       )}
-
     </div>
   );
-}
+};
 
 export default App;

@@ -56,6 +56,14 @@ function freeUpLocalStorageSpace(currentKey: string): boolean {
     }
 
     for (const otherKey of allKeys) {
+      if (otherKey.startsWith('firestore_')) {
+        try {
+          window.localStorage.removeItem(otherKey);
+          spaceFreed = true;
+          console.log(`🧹 [safeStorage] Đã xóa bỏ khóa cache Firestore cũ: ${otherKey}`);
+        } catch (e) {}
+        continue;
+      }
       // Tránh dọn dẹp khóa hiện tại đang cố ghi, các khóa cấu hình quan trọng hoặc cờ đồng bộ
       if (
         otherKey === currentKey ||
@@ -127,6 +135,73 @@ function purgeNonEssentialLocalStorage(currentKey: string): void {
     }
   } catch (e) {
     // Ignore
+  }
+}
+
+// Global startup sweep for legacy/overflow firestore_ keys
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k && k.startsWith('firestore_')) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach(k => {
+      try { window.localStorage.removeItem(k); } catch (e) {}
+    });
+  }
+} catch (e) {
+  // Safe guard
+}
+
+// Global monkey-patch for window.localStorage.setItem to safely intercept QuotaExceededError from third-party SDKs like Firestore
+if (typeof window !== 'undefined' && window.localStorage) {
+  try {
+    const rawSetItem = window.localStorage.setItem;
+    window.localStorage.setItem = function (key: string, value: string) {
+      try {
+        rawSetItem.call(window.localStorage, key, value);
+      } catch (err: any) {
+        if (
+          err &&
+          (err.name === 'QuotaExceededError' ||
+           err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+           err.code === 22 ||
+           err.code === 1014 ||
+           String(err).includes('quota') ||
+           String(err).includes('setItem'))
+        ) {
+          console.warn(`⚠️ [window.localStorage.setItem] Exceeded quota while setting key "${key}". Auto-cleaning...`);
+          freeUpLocalStorageSpace(key);
+          try {
+            rawSetItem.call(window.localStorage, key, value);
+            return;
+          } catch (retryErr) {
+            if (key.startsWith('firestore_')) {
+              console.warn(`⚠️ [window.localStorage.setItem] Safely ignored quota error for Firestore cache key: ${key}`);
+              return;
+            }
+            purgeNonEssentialLocalStorage(key);
+            try {
+              rawSetItem.call(window.localStorage, key, value);
+              return;
+            } catch (finalErr) {
+              if (key.startsWith('firestore_')) {
+                console.warn(`⚠️ [window.localStorage.setItem] Safely ignored quota error for Firestore cache key: ${key}`);
+                return;
+              }
+              console.warn(`⚠️ [window.localStorage.setItem] Quota exhausted for key "${key}".`);
+            }
+          }
+        } else {
+          throw err;
+        }
+      }
+    };
+  } catch (e) {
+    // Safe guard if window.localStorage is read-only
   }
 }
 

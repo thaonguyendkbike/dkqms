@@ -1,7 +1,25 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
+import { initializeFirestore, memoryLocalCache, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
+
+// Cleanup any legacy firestore cache targets stored in localStorage to free up space
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k && k.startsWith('firestore_')) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach(k => {
+      try { window.localStorage.removeItem(k); } catch (e) {}
+    });
+  }
+} catch (e) {
+  // Safe guard
+}
 
 // Suppress Firestore warning about update times in the future due to slight system clock desynchronization
 try {
@@ -46,9 +64,7 @@ try {
 
 const app = initializeApp(firebaseConfig);
 export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  })
+  localCache: memoryLocalCache()
 }, 'ai-studio-24f3ad28-43fa-4e4b-b0ee-f6e3fbdfeee3'); /* CRITICAL: The app will break without this line */
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
