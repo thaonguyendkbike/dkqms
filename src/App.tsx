@@ -559,7 +559,7 @@ export function mapOldCategoryToStandard(cat: string): string {
 export function sanitizeDailyLogs(raw: any[]): DailyLogRecord[] {
   if (!Array.isArray(raw)) return [];
   
-  // Filter out any Market Defect / Phản ánh thị trường records from Daily Logs per user directive
+  // Filter out any Market Defect / Phản ánh thị trường / Đề xuất cải tiến records from Daily Logs per user directive
   const cleanRaw = raw.filter((log) => {
     if (!log) return false;
     const content = String(log.content || '').toLowerCase();
@@ -569,13 +569,18 @@ export function sanitizeDailyLogs(raw: any[]): DailyLogRecord[] {
     if (
       content.includes('[khai báo lỗi thị trường]') ||
       content.includes('[ghi nhận đề xuất cải tiến thị trường]') ||
+      content.includes('[nhập hàng loạt - đề xuất cải tiến]') ||
+      content.includes('[nhập hàng loạt - phản ánh kh]') ||
       content.includes('lỗi thị trường') ||
       content.includes('phản ánh thị trường') ||
+      content.includes('đề xuất cải tiến') ||
+      category === 'Khách hàng/Bảo hành' ||
       note.includes('tự động tạo lịch sử phản ánh') ||
       note.includes('lỗi thị trường') ||
-      note.includes('phản ánh thị trường')
+      note.includes('phản ánh thị trường') ||
+      note.includes('đề xuất cải tiến')
     ) {
-      return false; // Exclude market defects from Daily Logs
+      return false; // Exclude market defects and customer feedback/improvements from Daily Logs
     }
     return true;
   });
@@ -4506,7 +4511,6 @@ export function App() {
     guardAction(() => {
       let currentIdNum = parseInt(nextDefectId.replace(/DEF-/i, ''), 10) || 4010;
       const newItems: MarketDefect[] = [];
-      const newLogRecords: DailyLogRecord[] = [];
 
       bulkImportParsedPreview.forEach((item, idx) => {
         const generatedId = `DEF-${currentIdNum + idx}`;
@@ -4539,37 +4543,11 @@ export function App() {
         };
 
         newItems.push(newDefect);
-
-        const isImprovement = fType === 'Đề xuất cải tiến';
-        const logContent = isImprovement 
-          ? `[Nhập hàng loạt - Đề xuất cải tiến] Thu thập đề xuất ${generatedId} (${newDefect.type}) gửi từ ${newDefect.dealer}. Ý tưởng: ${newDefect.description}.`
-          : `[Nhập hàng loạt - Phản ánh KH] Ghi nhận phản ánh ${generatedId} (${newDefect.type}) từ KH/Đại lý ${newDefect.dealer} cho model ${newDefect.model}. Triệu chứng: ${newDefect.description}.`;
-
-        newLogRecords.push({
-          id: `LOG-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
-          stt: dailyLogs.length > 0 ? Math.max(...dailyLogs.map(l => l.stt || 0)) + idx + 1 : idx + 1,
-          date: newDefect.defectDate || new Date().toLocaleDateString('vi-VN'),
-          week: "T1",
-          category: "Khách hàng/Bảo hành",
-          content: logContent,
-          target: "1",
-          unit: "Vụ việc",
-          assignee: newDefect.assignee || 'Trưởng nhóm QA/QC',
-          timeWork: ["Ok", "Ok", "", "", "", "", "", ""],
-          result: newDefect.status === 'Đã xử lý' ? "1" : "0",
-          deadline: newDefect.targetDate || new Date().toISOString().split('T')[0],
-          statusPercent: newDefect.status === 'Đã xử lý' ? "100%" : "50%",
-          note: `Nhập hàng loạt từ Excel/CSV cho hồ sơ ${generatedId}. Mức độ: ${newDefect.severity}.`
-        });
       });
 
       const updatedDefects = [...newItems, ...defects];
       setDefects(updatedDefects);
       syncToServer('dk_defects', updatedDefects);
-
-      const updatedDailyLogs = [...newLogRecords, ...dailyLogs];
-      setDailyLogs(updatedDailyLogs);
-      syncToServer('dk_daily_logs', updatedDailyLogs);
 
       setShowBulkImportDefectsModal(false);
       setBulkImportRawText('');
