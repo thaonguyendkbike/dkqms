@@ -9787,6 +9787,226 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     addMerge3(aoaData3.length - 1, 4, aoaData3.length - 1, 6);
 
 
+    // =========================================================================
+    // SHEET EXECUTION: ĐÁNH GIÁ & BÁO CÁO KẾT QUẢ THỰC THI KẾ HOẠCH CHẤT LƯỢNG
+    // =========================================================================
+    const aoaDataExec: any[][] = [];
+    const rowTrackerExec: any[] = [];
+    const mergesExec: any[] = [];
+
+    function addMergeExec(sr: number, sc: number, er: number, ec: number) {
+      mergesExec.push({ s: { r: sr, c: sc }, e: { r: er, c: ec } });
+    }
+
+    // Company Header
+    aoaDataExec.push(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT", "", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "", ""]);
+    rowTrackerExec.push({ type: 'header-company' });
+    addMergeExec(0, 0, 0, 3);
+    addMergeExec(0, 4, 0, 6);
+
+    aoaDataExec.push(["Phòng: Quản lý Chất lượng (QLCL) - DK QMS", "", "", "", "Độc lập - Tự do - Hạnh phúc", "", ""]);
+    rowTrackerExec.push({ type: 'header-slogan' });
+    addMergeExec(1, 0, 1, 3);
+    addMergeExec(1, 4, 1, 6);
+
+    aoaDataExec.push([`Mã biểu mẫu: BM-DKB-EXECUTION-${isWeekly ? 'W' : 'M'}-${month.toString().padStart(2, '0')}`, "", "", "", dateLocStr, "", ""]);
+    rowTrackerExec.push({ type: 'header-meta' });
+    addMergeExec(2, 0, 2, 3);
+    addMergeExec(2, 4, 2, 6);
+
+    // Spacer
+    aoaDataExec.push(["", "", "", "", "", "", ""]);
+    rowTrackerExec.push({ type: 'spacer' });
+
+    // Sheet Title
+    const execTitleText = `ĐÁNH GIÁ & BÁO CÁO KẾT QUẢ THỰC THI KẾ HOẠCH CHẤT LƯỢNG (${isWeekly ? `TUẦN ${week}` : `THÁNG ${month}`})`;
+    aoaDataExec.push([execTitleText, "", "", "", "", "", ""]);
+    rowTrackerExec.push({ type: 'main-title' });
+    addMergeExec(4, 0, 4, 6);
+
+    aoaDataExec.push([`Thời kỳ báo cáo: ${periodLabelText}`, "", "", "", "", "", ""]);
+    rowTrackerExec.push({ type: 'main-subtitle' });
+    addMergeExec(5, 0, 5, 6);
+
+    // Spacer
+    aoaDataExec.push(["", "", "", "", "", "", ""]);
+    rowTrackerExec.push({ type: 'spacer' });
+
+    // Filter tasks for Execution Report Sheet
+    const isActionTrackerTaskForSheet = (t: any): boolean => {
+      if (!t) return false;
+      const sec = (t.section || '').toLowerCase();
+      const cat = (t.category || '').toLowerCase();
+      const type = (t.type || '').toLowerCase();
+      const title = (t.title || t.content || '').toLowerCase();
+      const id = String(t.id || '').toLowerCase();
+
+      if (
+        sec.includes('iqc') || sec.includes('pqc') || sec.includes('sqc') || sec.includes('oqc') ||
+        cat.includes('iqc') || cat.includes('pqc') || cat.includes('sqc') || cat.includes('oqc') ||
+        type.includes('iqc') || type.includes('pqc') || type.includes('sqc') || type.includes('oqc') ||
+        title.includes('[iqc]') || title.includes('[pqc]') || title.includes('[sqc]') || title.includes('[oqc]') ||
+        title.includes('tự động iqc') || title.includes('tự động pqc') ||
+        id.startsWith('iqc') || id.startsWith('pqc') || id.startsWith('t-iqc') || id.startsWith('t-pqc')
+      ) {
+        return false;
+      }
+      const validSections = ['backlog', 'capa', 'ptsp', 'coordination', 'eco'];
+      return (
+        validSections.some(s => sec === s || sec.includes(s)) ||
+        sec.includes('tồn đọng') || sec.includes('phát triển') || sec.includes('phối hợp') || sec.includes('cải tiến')
+      );
+    };
+
+    const filteredExecTasks = planningTasks.filter(t => {
+      if (!isActionTrackerTaskForSheet(t)) return false;
+      const deadlineStr = String(t.deadline || t.dueDate || t.date || '').trim();
+      if (type === 'weekly') {
+        if (deadlineStr) {
+          const dlInfo = getWeekAndMonthFromDate(deadlineStr);
+          const dlWeek = String(dlInfo.week || '').replace('W', 'T');
+          const filterWeek = String(week).replace('W', 'T');
+          return dlWeek === filterWeek && dlInfo.month === month && dlInfo.year === year;
+        }
+        if (t.week) {
+          const taskWeek = String(t.week).replace('W', 'T');
+          const filterWeek = String(week).replace('W', 'T');
+          if (taskWeek !== filterWeek) return false;
+          if (t.month !== undefined && t.month !== month) return false;
+          if (t.year !== undefined && t.year !== year) return false;
+          return true;
+        }
+        return false;
+      } else {
+        if (deadlineStr) {
+          const dlInfo = getWeekAndMonthFromDate(deadlineStr);
+          return dlInfo.month === month && dlInfo.year === year;
+        }
+        if (t.month !== undefined && t.year !== undefined) {
+          return t.month === month && t.year === year;
+        }
+        return false;
+      }
+    });
+
+    const totalExecTasks = filteredExecTasks.length;
+    const completedExecTasks = filteredExecTasks.filter(t => t.status === 'Completed' || t.status === 'Hoàn thành' || t.statusPercent === '100%').length;
+    const inProgressExecTasks = filteredExecTasks.filter(t => t.status === 'In_Progress' || t.status === 'Đang thực hiện').length;
+    const pendingExecTasks = filteredExecTasks.filter(t => t.status === 'Pending' || t.status === 'Chờ xử lý').length;
+    const execPercentage = totalExecTasks > 0 ? Math.round((completedExecTasks / totalExecTasks) * 100) : 0;
+
+    // Summary banner row for execution sheet
+    const summaryBannerText = `TIẾN ĐỘ THỰC THI KẾ HOẠCH: ${completedExecTasks}/${totalExecTasks} việc hoàn thành (${execPercentage}%) | Đang thực hiện: ${inProgressExecTasks} | Chờ xử lý: ${pendingExecTasks}`;
+    aoaDataExec.push([summaryBannerText, "", "", "", "", "", ""]);
+    rowTrackerExec.push({ type: 'conclusion-box' });
+    addMergeExec(aoaDataExec.length - 1, 0, aoaDataExec.length - 1, 6);
+
+    // Header Table
+    aoaDataExec.push(["STT", "Nội dung tác vụ Kế hoạch chất lượng", "Người xử lý", "Hạn định", "Kết quả báo cáo", "Ghi chú kết quả thực tế / Giải trình chi tiết", "Dòng xe / Nhóm tác vụ"]);
+    rowTrackerExec.push({ type: 'table-header' });
+
+    if (filteredExecTasks.length === 0) {
+      aoaDataExec.push(["-", `Chưa ghi nhận tác vụ chất lượng nào được phân công cho chu kỳ ${isWeekly ? `Tuần ${week} - Tháng ${month}/${year}` : `Tháng ${month}/${year}`}.`, "", "", "", "", ""]);
+      rowTrackerExec.push({ type: 'table-data-empty' });
+      addMergeExec(aoaDataExec.length - 1, 1, aoaDataExec.length - 1, 6);
+    } else {
+      const EXEC_SECTIONS = [
+        { key: 'backlog', title: '1. CÔNG VIỆC TỒN ĐỌNG (BACKLOGS)' },
+        { key: 'capa', title: '2. BIÊN BẢN CAPA ĐANG MỞ' },
+        { key: 'ptsp', title: '3. PHÁT TRIỂN SẢN PHẨM (PTSP)' },
+        { key: 'coordination', title: '4. TÁC VỤ PHỐI HỢP LIÊN BAN' },
+        { key: 'eco', title: '5. CẢI TIẾN KỸ THUẬT (ECO)' }
+      ];
+
+      const getTaskSectionKey = (secStr: string | undefined): string => {
+        const s = (secStr || '').toLowerCase();
+        if (s === 'backlog' || s.includes('tồn đọng')) return 'backlog';
+        if (s === 'capa' || s.includes('capa')) return 'capa';
+        if (s === 'ptsp' || s.includes('phát triển') || s.includes('pt')) return 'ptsp';
+        if (s === 'coordination' || s.includes('phối hợp') || s.includes('ph')) return 'coordination';
+        if (s === 'eco' || s.includes('cải tiến')) return 'eco';
+        return 'backlog';
+      };
+
+      EXEC_SECTIONS.forEach((sec) => {
+        const secTasks = filteredExecTasks.filter(t => getTaskSectionKey(t.section) === sec.key);
+        if (secTasks.length === 0) return;
+
+        // Section header row
+        aoaDataExec.push([sec.title, "", "", "", "", "", ""]);
+        rowTrackerExec.push({ type: 'section-heading' });
+        addMergeExec(aoaDataExec.length - 1, 0, aoaDataExec.length - 1, 6);
+
+        // Group tasks by model
+        const tasksByModel: Record<string, typeof secTasks> = {};
+        secTasks.forEach(task => {
+          const rawModel = (task.modelOrSupplier || '').trim();
+          const cleanModel = rawModel.includes('|') ? rawModel.split('|')[0].trim() : rawModel;
+          const modelKey = cleanModel || 'Chung / Các dòng xe';
+          if (!tasksByModel[modelKey]) tasksByModel[modelKey] = [];
+          tasksByModel[modelKey].push(task);
+        });
+
+        const sortedModelKeys = Object.keys(tasksByModel).sort((a, b) => a.localeCompare(b, 'vi'));
+        let globalTaskIdx = 0;
+
+        sortedModelKeys.forEach((mKey) => {
+          const mTasks = tasksByModel[mKey];
+
+          mTasks.forEach((t) => {
+            globalTaskIdx++;
+            const statusLabel = t.status === 'Completed' || t.status === 'Hoàn thành' ? 'Hoàn thành (100%)' :
+                                t.status === 'In_Progress' || t.status === 'Đang thực hiện' ? 'Đang thực hiện' : 'Chờ xử lý';
+            const pctVal = t.status === 'Completed' || t.status === 'Hoàn thành' ? 100 : t.status === 'In_Progress' ? 50 : 0;
+            const assignee = t.assignee || t.collaborator || t.handler || t.owner || "QC KCS";
+            const deadline = t.deadline || t.dueDate || t.date || (isWeekly ? `Tuần ${week}` : `Tháng ${month}`);
+            const notes = t.notes || t.actualResult || t.result || t.explanation || "Đã kiểm soát & nghiệm thu theo quy chuẩn";
+
+            aoaDataExec.push([
+              globalTaskIdx,
+              t.title || t.content || t.description || "Nhiệm vụ chất lượng",
+              assignee,
+              deadline,
+              statusLabel,
+              notes,
+              mKey
+            ]);
+            rowTrackerExec.push({ type: 'table-data-log', pctVal });
+          });
+        });
+      });
+    }
+
+    // Spacer
+    aoaDataExec.push(["", "", "", "", "", "", ""]);
+    rowTrackerExec.push({ type: 'spacer' });
+
+    // Endorsement / Signatures
+    aoaDataExec.push(["Người lập biểu mẫu (QC KCS)", "", "Trưởng phòng QLCL (Thẩm duyệt số liệu)", "", "Ban Giám Đốc Nhà Máy (Ký duyệt)", "", ""]);
+    rowTrackerExec.push({ type: 'signature-label' });
+    addMergeExec(aoaDataExec.length - 1, 0, aoaDataExec.length - 1, 1);
+    addMergeExec(aoaDataExec.length - 1, 2, aoaDataExec.length - 1, 3);
+    addMergeExec(aoaDataExec.length - 1, 4, aoaDataExec.length - 1, 6);
+
+    aoaDataExec.push(["(QC Chuyên viên ký)", "", "(Duyệt dữ liệu hệ thống)", "", "(Phê chuẩn lưu trữ)", "", ""]);
+    rowTrackerExec.push({ type: 'signature-sub' });
+    addMergeExec(aoaDataExec.length - 1, 0, aoaDataExec.length - 1, 1);
+    addMergeExec(aoaDataExec.length - 1, 2, aoaDataExec.length - 1, 3);
+    addMergeExec(aoaDataExec.length - 1, 4, aoaDataExec.length - 1, 6);
+
+    aoaDataExec.push(["", "", "", "", "", "", ""]);
+    rowTrackerExec.push({ type: 'spacer-sig' });
+    addMergeExec(aoaDataExec.length - 1, 0, aoaDataExec.length - 1, 1);
+    addMergeExec(aoaDataExec.length - 1, 2, aoaDataExec.length - 1, 3);
+    addMergeExec(aoaDataExec.length - 1, 4, aoaDataExec.length - 1, 6);
+
+    aoaDataExec.push(["Chuyên viên QMS Core", "", "NGUYỄN XUÂN THAO", "", "BAN GIÁM ĐỐC DKBIKE", "", ""]);
+    rowTrackerExec.push({ type: 'signature-name' });
+    addMergeExec(aoaDataExec.length - 1, 0, aoaDataExec.length - 1, 1);
+    addMergeExec(aoaDataExec.length - 1, 2, aoaDataExec.length - 1, 3);
+    addMergeExec(aoaDataExec.length - 1, 4, aoaDataExec.length - 1, 6);
+
+
     // ==========================================
     // INITIALIZE WORKBOOK & EXCEL SHEETS GENERATOR
     // ==========================================
@@ -9960,15 +10180,17 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       }
     };
 
-    // Apply styling to all 5 worksheets
+    // Apply styling to all 6 worksheets
     styleSheet(ws1, rowTracker1, 8);
     styleSheet(ws2, rowTracker2, 7);
+    styleSheet(wsExec, rowTrackerExec, 7);
     styleSheet(wsIqc, rowTrackerIqc, 10);
     styleSheet(wsOqc, rowTrackerOqc, 10);
     styleSheet(ws3, rowTracker3, 7);
 
     ws1['!merges'] = merges1;
     ws2['!merges'] = merges2;
+    wsExec['!merges'] = mergesExec;
     wsIqc['!merges'] = mergesIqc;
     wsOqc['!merges'] = mergesOqc;
     ws3['!merges'] = merges3;
@@ -9994,11 +10216,12 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
 
     setRowHeights(ws1, rowTracker1);
     setRowHeights(ws2, rowTracker2);
+    setRowHeights(wsExec, rowTrackerExec);
     setRowHeights(wsIqc, rowTrackerIqc);
     setRowHeights(wsOqc, rowTrackerOqc);
     setRowHeights(ws3, rowTracker3);
 
-    // Column widths for all 5 sheets
+    // Column widths for all 6 sheets
     ws1['!cols'] = [
       { wch: 6 },   // Col A: STT
       { wch: 14 },  // Col B: Ngay ghi / Tuan
@@ -10018,6 +10241,16 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       { wch: 24 },  // Col E: Bo phan / Tan suat
       { wch: 22 },  // Col F: Han hoan thanh
       { wch: 26 }   // Col G: Trang thai / Cam ket
+    ];
+
+    wsExec['!cols'] = [
+      { wch: 6 },   // Col A: STT
+      { wch: 48 },  // Col B: Noi dung tac vu Ke hoach chat luong
+      { wch: 18 },  // Col C: Nguoi xu ly
+      { wch: 14 },  // Col D: Han dinh
+      { wch: 18 },  // Col E: Ket qua bao cao
+      { wch: 52 },  // Col F: Ghi chu ket qua thuc te / Giai trinh chi tiet
+      { wch: 24 }   // Col G: Dong xe / Nhom tac vu
     ];
 
     wsIqc['!cols'] = [
@@ -10059,6 +10292,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     // Append sheets to workbook
     XLSXStyle.utils.book_append_sheet(wb, ws1, isWeekly ? `Báo cáo Tuần ${week}` : `Báo cáo Tháng ${month}`);
     XLSXStyle.utils.book_append_sheet(wb, ws2, isWeekly ? `Kế hoạch Tuần ${week}` : `Kế hoạch Tháng ${month}`);
+    XLSXStyle.utils.book_append_sheet(wb, wsExec, "Báo cáo thực thi KH");
     XLSXStyle.utils.book_append_sheet(wb, wsIqc, "Nhật ký IQC (Đầu vào)");
     XLSXStyle.utils.book_append_sheet(wb, wsOqc, "Nhật ký OQC (Đầu ra)");
     XLSXStyle.utils.book_append_sheet(wb, ws3, "Incident & Sự cố Kỹ thuật");
