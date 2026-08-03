@@ -15429,43 +15429,21 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     </div>
                   </div>
 
-                  {/* Context-aware Action Buttons */}
+                  {/* Context-aware Action Buttons - Unified Single Export & Print Button */}
                   <div className="flex flex-wrap items-center gap-2">
                     {selectedReportWeekInsideMonth === 'all' ? (
-                      <>
-                        <button 
-                          onClick={() => {
-                            handleExportHubReportCSV('monthly', selectedMonthlyReportMonth, 'T1', selectedMonthlyReportYear);
-                          }}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-3.5 py-2 rounded-lg transition shadow-xs flex items-center gap-1.5 cursor-pointer"
-                          title="Tải ngay file Excel 5 Sheet tổng hợp Báo cáo Tháng"
-                        >
-                          <Download className="w-4 h-4 text-white" /> Tải Excel Báo Cáo Tháng (.xlsx)
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setExportHubType('monthly');
-                            setExportHubMonth(selectedMonthlyReportMonth);
-                            setExportHubYear(selectedMonthlyReportYear);
-                            setShowExportHubModal(true);
-                          }}
-                          className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition shadow-xs flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <FileSpreadsheet className="w-4 h-4 text-white" /> Mẫu Xuất Báo Cáo & In
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setExportHubType('monthly');
-                            setExportHubMonth(selectedMonthlyReportMonth);
-                            setExportHubYear(selectedMonthlyReportYear);
-                            setShowExportHubModal(true);
-                            setTimeout(() => window.print(), 600);
-                          }}
-                          className="bg-white hover:bg-slate-50 border border-slate-250 text-slate-700 font-bold text-xs px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                        >
-                          <Printer className="w-4 h-4 text-slate-500" /> In Báo cáo Tháng (PDF)
-                        </button>
-                      </>
+                      <button 
+                        onClick={() => {
+                          setExportHubType('monthly');
+                          setExportHubMonth(selectedMonthlyReportMonth);
+                          setExportHubYear(selectedMonthlyReportYear);
+                          setShowExportHubModal(true);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-4 py-2 rounded-lg transition shadow-xs flex items-center gap-2 cursor-pointer"
+                        title="Mở Trung tâm Xuất & In Báo Cáo Tháng (Tải Excel 6-Sheet hoặc In PDF)"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 text-white" /> Xuất & In Báo Cáo Tháng (Excel / PDF)
+                      </button>
                     ) : (
                       <>
                         <button 
@@ -15476,37 +15454,16 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         </button>
                         <button 
                           onClick={() => {
-                            handleExportHubReportCSV('weekly', selectedReportMonth, selectedReportWeek, selectedReportYear);
-                          }}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-                          title="Tải ngay file Excel 5 Sheet tổng hợp Báo cáo Tuần"
-                        >
-                          <Download className="w-4 h-4 text-white" /> Tải Excel Báo Cáo Tuần (.xlsx)
-                        </button>
-                        <button 
-                          onClick={() => {
                             setExportHubType('weekly');
                             setExportHubMonth(selectedReportMonth);
                             setExportHubWeek(selectedReportWeek);
                             setExportHubYear(selectedReportYear);
                             setShowExportHubModal(true);
                           }}
-                          className="bg-amber-600 hover:bg-amber-550 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-4 py-2 rounded-lg transition-all flex items-center gap-2 cursor-pointer shadow-xs"
+                          title="Mở Trung tâm Xuất & In Báo Cáo Tuần (Tải Excel 6-Sheet hoặc In PDF)"
                         >
-                          <FileSpreadsheet className="w-4 h-4 text-white" /> Mẫu Xuất Báo Cáo & In
-                        </button>
-                        <button 
-                          onClick={() => {
-                            setExportHubType('weekly');
-                            setExportHubMonth(selectedReportMonth);
-                            setExportHubWeek(selectedReportWeek);
-                            setExportHubYear(selectedReportYear);
-                            setShowExportHubModal(true);
-                            setTimeout(() => window.print(), 600);
-                          }}
-                          className="bg-white hover:bg-slate-50 border border-slate-250 text-slate-700 font-bold text-xs px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                        >
-                          <Printer className="w-4 h-4 text-slate-500" /> In Báo cáo Tuần (PDF)
+                          <FileSpreadsheet className="w-4 h-4 text-white" /> Xuất & In Báo Cáo Tuần (Excel / PDF)
                         </button>
                       </>
                     )}
