@@ -785,61 +785,42 @@ export function parseDateYearMonth(dateStr: string | undefined, defaultMonth: nu
   return { month: defaultMonth, year: defaultYear };
 }
 
+// Helper to get Monday Date object for a given week number in a month/year according to solar calendar
+export function getMondayOfWeek(year: number, month: number, weekNum: number): Date {
+  const firstDayOfMonth = new Date(year, month - 1, 1);
+  const dow = firstDayOfMonth.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+  
+  let mon1Day: number;
+  if (dow === 1) mon1Day = 1;
+  else if (dow === 2) mon1Day = 0;
+  else if (dow === 3) mon1Day = -1;
+  else if (dow === 4) mon1Day = -2;
+  else if (dow === 5) mon1Day = 4;
+  else if (dow === 6) mon1Day = 3;
+  else if (dow === 0) mon1Day = 2;
+  else mon1Day = 1;
+
+  return new Date(year, month - 1, mon1Day + (weekNum - 1) * 7);
+}
+
 // Helper to get start and end date of a week in a month
 export function getWeekDates(year: number, month: number, weekKey: string): string {
-  const weekNum = parseInt(weekKey.replace(/\D/g, '')) || 1;
-  const firstDayOfMonth = new Date(year, month - 1, 1);
-  const firstDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  const firstSundayDay = firstDayOfWeek === 0 ? 1 : 8 - firstDayOfWeek;
-
-  const totalDays = new Date(year, month, 0).getDate();
-  
-  let startDay = 1;
-  let endDay = 1;
-
-  if (weekNum === 1) {
-    startDay = 1;
-    endDay = Math.min(totalDays, firstSundayDay - 1);
-    if (endDay < 1) {
-      startDay = 1;
-      endDay = 7;
-    }
-  } else {
-    if (firstSundayDay === 1) {
-      startDay = (weekNum - 1) * 7 + 1;
-      endDay = Math.min(totalDays, startDay + 6);
-    } else {
-      startDay = firstSundayDay + (weekNum - 2) * 7;
-      endDay = Math.min(totalDays, startDay + 6);
-    }
-  }
-
-  if (startDay > totalDays) {
-    return "N/A";
-  }
+  const weekNum = parseInt((weekKey || 'W1').replace(/\D/g, '')) || 1;
+  const monTarget = getMondayOfWeek(year, month, weekNum);
+  const sunTarget = new Date(monTarget);
+  sunTarget.setDate(monTarget.getDate() + 6);
 
   const pad = (n: number) => n.toString().padStart(2, '0');
-  return `${pad(startDay)}/${pad(month)} - ${pad(endDay)}/${pad(month)}`;
+  const startStr = `${pad(monTarget.getDate())}/${pad(monTarget.getMonth() + 1)}`;
+  const endStr = `${pad(sunTarget.getDate())}/${pad(sunTarget.getMonth() + 1)}`;
+
+  return `${startStr} - ${endStr}`;
 }
 
 // Helper to get exact date (DD/MM) for a weekday in a given week, month, year
 export function getExactDateForWeekDay(year: number, month: number, weekKey: string, dayIndex: number, timeLabel?: string): string {
   const weekNum = parseInt((weekKey || 'W1').replace(/\D/g, '')) || 1;
-  const firstDayOfMonth = new Date(year, month - 1, 1);
-  const firstDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
-
-  // Calculate Monday of Week 1
-  let monWeek1Day: number;
-  if (firstDayOfWeek === 1) {
-    monWeek1Day = 1;
-  } else if (firstDayOfWeek === 0) {
-    monWeek1Day = -5; // 6 days before Sunday
-  } else {
-    monWeek1Day = 1 - (firstDayOfWeek - 1);
-  }
-
-  // Calculate Monday of target week
-  const monTarget = new Date(year, month - 1, monWeek1Day + (weekNum - 1) * 7);
+  const monTarget = getMondayOfWeek(year, month, weekNum);
 
   // Determine day offset (0 = Mon, 1 = Tue, ..., 6 = Sun)
   let dayOffset = dayIndex;
@@ -866,23 +847,13 @@ export function getExactDateForWeekDay(year: number, month: number, weekKey: str
 
 // Helper to get a sample target YYYY-MM-DD date within a week
 export function getDateInWeek(year: number, month: number, weekKey: string): string {
-  const weekNum = parseInt(weekKey.replace(/\D/g, '')) || 1;
-  const firstDayOfMonth = new Date(year, month - 1, 1);
-  const firstDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sun
-  const firstSundayDay = firstDayOfWeek === 0 ? 1 : 8 - firstDayOfWeek;
-  const totalDays = new Date(year, month, 0).getDate();
-
-  let targetDay = 1;
-  if (weekNum === 1) {
-    targetDay = Math.max(1, Math.floor((firstSundayDay - 1) / 2) || 2);
-  } else if (firstSundayDay === 1) {
-    targetDay = Math.min(totalDays, (weekNum - 1) * 7 + 3);
-  } else {
-    targetDay = Math.min(totalDays, firstSundayDay + (weekNum - 2) * 7 + 3);
-  }
+  const weekNum = parseInt((weekKey || 'W1').replace(/\D/g, '')) || 1;
+  const monTarget = getMondayOfWeek(year, month, weekNum);
+  const targetDate = new Date(monTarget);
+  targetDate.setDate(monTarget.getDate() + 2); // Wednesday of target week
 
   const pad = (n: number) => n.toString().padStart(2, '0');
-  return `${year}-${pad(month)}-${pad(targetDay)}`;
+  return `${targetDate.getFullYear()}-${pad(targetDate.getMonth() + 1)}-${pad(targetDate.getDate())}`;
 }
 
 // Helper to determine week of month (W1-W5) from a date string
@@ -890,7 +861,7 @@ export function getWeekFromDateString(dateStr: string | undefined): string {
   if (!dateStr || typeof dateStr !== 'string') return 'W1';
   const clean = dateStr.trim();
   let day = 1;
-  let month = 6;
+  let month = 8;
   let year = 2026;
 
   const matchesYMD = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
@@ -908,29 +879,29 @@ export function getWeekFromDateString(dateStr: string | undefined): string {
     if (parts.length >= 3) {
       if (parts[0].length === 4) {
         day = Number(parts[2]) || 1;
-        month = Number(parts[1]) || 6;
+        month = Number(parts[1]) || 8;
         year = Number(parts[0]) || 2026;
       } else {
         day = Number(parts[0]) || 1;
-        month = Number(parts[1]) || 6;
+        month = Number(parts[1]) || 8;
         year = Number(parts[2]) || 2026;
       }
     }
   }
 
-  const firstDayOfMonth = new Date(year, month - 1, 1);
-  const firstDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  const firstSundayDay = firstDayOfWeek === 0 ? 1 : 8 - firstDayOfWeek;
+  const target = new Date(year, month - 1, day);
 
-  let weekNum = 1;
-  if (day < firstSundayDay) {
-    weekNum = 1;
-  } else {
-    const diff = day - firstSundayDay;
-    weekNum = 2 + Math.floor(diff / 7);
+  for (let w = 1; w <= 5; w++) {
+    const mon = getMondayOfWeek(year, month, w);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+
+    if (w === 1 && target < mon) return 'W1';
+    if (w === 5 && target > sun) return 'W5';
+    if (target >= mon && target <= sun) return `W${w}`;
   }
 
-  return `W${Math.min(5, weekNum)}`;
+  return 'W1';
 }
 
 export default function QualityPlanning({ 

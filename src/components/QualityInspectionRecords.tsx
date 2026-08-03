@@ -808,37 +808,28 @@ function getWeekAndMonthFromDate(dateStr: string): { week: string; month: number
 
 function getWeekDatesForReporting(year: number, month: number, weekNum: number): string {
   const firstDayOfMonth = new Date(year, month - 1, 1);
-  const firstDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  const firstSundayDay = firstDayOfWeek === 0 ? 1 : 8 - firstDayOfWeek;
-
-  const totalDays = new Date(year, month, 0).getDate();
+  const dow = firstDayOfMonth.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
   
-  let startDay = 1;
-  let endDay = 1;
+  let mon1Day: number;
+  if (dow === 1) mon1Day = 1;
+  else if (dow === 2) mon1Day = 0;
+  else if (dow === 3) mon1Day = -1;
+  else if (dow === 4) mon1Day = -2;
+  else if (dow === 5) mon1Day = 4;
+  else if (dow === 6) mon1Day = 3;
+  else if (dow === 0) mon1Day = 2;
+  else mon1Day = 1;
 
-  if (weekNum === 1) {
-    startDay = 1;
-    endDay = Math.min(totalDays, firstSundayDay - 1);
-    if (endDay < 1) {
-      startDay = 1;
-      endDay = 7;
-    }
-  } else {
-    if (firstSundayDay === 1) {
-      startDay = (weekNum - 1) * 7 + 1;
-      endDay = Math.min(totalDays, startDay + 6);
-    } else {
-      startDay = firstSundayDay + (weekNum - 2) * 7;
-      endDay = Math.min(totalDays, startDay + 6);
-    }
-  }
-
-  if (startDay > totalDays) {
-    return "N/A";
-  }
+  const monTarget = new Date(year, month - 1, mon1Day + (weekNum - 1) * 7);
+  const sunTarget = new Date(monTarget);
+  sunTarget.setDate(monTarget.getDate() + 6);
 
   const pad = (n: number) => n.toString().padStart(2, '0');
-  return `${pad(startDay)}-${pad(endDay)}/${pad(month)}`;
+  const startStr = pad(monTarget.getDate());
+  const endStr = pad(sunTarget.getDate());
+  const mStr = pad(monTarget.getMonth() + 1);
+
+  return `${startStr}-${endStr}/${mStr}`;
 }
 
 export default function QualityInspectionRecords({
