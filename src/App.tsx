@@ -9960,6 +9960,120 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       }
     };
 
+    // Apply styling to all 5 worksheets
+    styleSheet(ws1, rowTracker1, 8);
+    styleSheet(ws2, rowTracker2, 7);
+    styleSheet(wsIqc, rowTrackerIqc, 10);
+    styleSheet(wsOqc, rowTrackerOqc, 10);
+    styleSheet(ws3, rowTracker3, 7);
+
+    ws1['!merges'] = merges1;
+    ws2['!merges'] = merges2;
+    wsIqc['!merges'] = mergesIqc;
+    wsOqc['!merges'] = mergesOqc;
+    ws3['!merges'] = merges3;
+
+    // Define row heights helper
+    const setRowHeights = (ws: any, rowTracker: any[]) => {
+      const heights: any[] = [];
+      for (let r = 0; r < rowTracker.length; r++) {
+        const rType = rowTracker[r]?.type;
+        if (rType === 'header-company' || rType === 'header-slogan' || rType === 'header-meta') heights.push({ hpt: 18 });
+        else if (rType === 'spacer') heights.push({ hpt: 8 });
+        else if (rType === 'main-title') heights.push({ hpt: 30 });
+        else if (rType === 'main-subtitle') heights.push({ hpt: 18 });
+        else if (rType === 'section-heading') heights.push({ hpt: 24 });
+        else if (rType === 'table-header') heights.push({ hpt: 24 });
+        else if (rType === 'conclusion-box') heights.push({ hpt: 65 });
+        else if (rType === 'spacer-sig') heights.push({ hpt: 45 });
+        else if (rType === 'signature-label' || rType === 'signature-name') heights.push({ hpt: 20 });
+        else heights.push({ hpt: 22 });
+      }
+      ws['!rows'] = heights;
+    };
+
+    setRowHeights(ws1, rowTracker1);
+    setRowHeights(ws2, rowTracker2);
+    setRowHeights(wsIqc, rowTrackerIqc);
+    setRowHeights(wsOqc, rowTrackerOqc);
+    setRowHeights(ws3, rowTracker3);
+
+    // Column widths for all 5 sheets
+    ws1['!cols'] = [
+      { wch: 6 },   // Col A: STT
+      { wch: 14 },  // Col B: Ngay ghi / Tuan
+      { wch: 18 },  // Col C: Nhan su / Model xe
+      { wch: 20 },  // Col D: Bo phan / Chi tieu
+      { wch: 50 },  // Col E: Chi tiet hoat dong
+      { wch: 14 },  // Col F: Tien do (%) / Trang thai
+      { wch: 36 },  // Col G: Next action / Cap nhat
+      { wch: 28 }   // Col H: Y kien, ghi chu
+    ];
+
+    ws2['!cols'] = [
+      { wch: 6 },   // Col A: STT
+      { wch: 38 },  // Col B: Chi tieu / Nhiem vu
+      { wch: 24 },  // Col C: Standard / Vat tu
+      { wch: 22 },  // Col D: Phu trach / Nha cung cap
+      { wch: 24 },  // Col E: Bo phan / Tan suat
+      { wch: 22 },  // Col F: Han hoan thanh
+      { wch: 26 }   // Col G: Trang thai / Cam ket
+    ];
+
+    wsIqc['!cols'] = [
+      { wch: 6 },   // Col A: STT
+      { wch: 14 },  // Col B: Ngay kiem
+      { wch: 18 },  // Col C: Ma phieu IQC
+      { wch: 25 },  // Col D: Nha cung cap
+      { wch: 30 },  // Col E: Ten linh kien
+      { wch: 15 },  // Col F: So luong nhap
+      { wch: 12 },  // Col G: So mau loi
+      { wch: 18 },  // Col H: Ket qua
+      { wch: 45 },  // Col I: Mo ta loi & PA
+      { wch: 18 }   // Col J: KCS kiem tra
+    ];
+
+    wsOqc['!cols'] = [
+      { wch: 6 },   // Col A: STT
+      { wch: 14 },  // Col B: Ngay sat hach
+      { wch: 20 },  // Col C: So khung / VIN
+      { wch: 22 },  // Col D: Dong Model xe
+      { wch: 18 },  // Col E: Lo SX / Chuyen
+      { wch: 18 },  // Col F: Ket qua
+      { wch: 45 },  // Col G: Chi tiet diem loi
+      { wch: 12 },  // Col H: So loi
+      { wch: 40 },  // Col I: PA xu ly
+      { wch: 18 }   // Col J: KCS sat hach
+    ];
+
+    ws3['!cols'] = [
+      { wch: 6 },   // Col A: STT
+      { wch: 14 },  // Col B: Ngay
+      { wch: 22 },  // Col C: Model / Linh kien
+      { wch: 24 },  // Col D: NCC / LSX / Dai ly
+      { wch: 50 },  // Col E: Mo ta su co
+      { wch: 16 },  // Col F: Trang thai / Cap do
+      { wch: 30 }   // Col G: Can bo / Giai phap
+    ];
+
+    // Append sheets to workbook
+    XLSXStyle.utils.book_append_sheet(wb, ws1, isWeekly ? `Báo cáo Tuần ${week}` : `Báo cáo Tháng ${month}`);
+    XLSXStyle.utils.book_append_sheet(wb, ws2, isWeekly ? `Kế hoạch Tuần ${week}` : `Kế hoạch Tháng ${month}`);
+    XLSXStyle.utils.book_append_sheet(wb, wsIqc, "Nhật ký IQC (Đầu vào)");
+    XLSXStyle.utils.book_append_sheet(wb, wsOqc, "Nhật ký OQC (Đầu ra)");
+    XLSXStyle.utils.book_append_sheet(wb, ws3, "Incident & Sự cố Kỹ thuật");
+
+    // Save and download with error boundary fallback
+    try {
+      XLSXStyle.writeFile(wb, filename);
+    } catch (err) {
+      console.error("XLSXStyle.writeFile error, falling back:", err);
+      try {
+        XLSXStyle.writeFile(wb, filename, { bookType: 'xlsx', type: 'binary' });
+      } catch (err2) {
+        alert("Lỗi xuất file Excel. Vui lòng thử lại!");
+      }
+    }
   };
 
   const parseLogDate = (dateStr: string): Date | null => {
