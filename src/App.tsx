@@ -8791,45 +8791,9 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     document.body.removeChild(link);
   };
 
-  // Export Weekly Report to CSV
+  // Export Weekly Report to Excel (.xlsx)
   const handleExportWeeklyCSV = () => {
-    const targetW = selectedReportWeek;
-    const targetM = selectedReportMonth;
-    const targetY = selectedReportYear;
-
-    const weeklyLogs = dailyLogs.filter(log => {
-      if (!log.date) return false;
-      const info = getWeekAndMonthFromDate(log.date);
-      const logYear = log.year || info.year || 2026;
-      
-      const isSamePeriod = log.week === targetW && info.month === targetM && logYear === targetY;
-      const isPendingCarryOver = log.statusPercent !== '100%' && isLogBeforeTargetWeek(log.date, log.week, log.year, targetW, targetM, targetY);
-      
-      return isSamePeriod || isPendingCarryOver;
-    });
-
-    const headersList = ["STT", "Ngay", "Phan loai", "Noi dung kiem dinh", "Chi so thuc te", "Tien do", "KCS de xuat", "Nguoi phu trach"];
-    const rows = weeklyLogs.map((log, index) => [
-      index + 1,
-      `"${log.date}"`,
-      `"${log.category}"`,
-      `"${(log.content || '').replace(/"/g, '""')}"`,
-      `"${(log.result || '')} ${log.unit || ''}"`,
-      `"${log.statusPercent || ''}"`,
-      `"${(log.kcsAdvice || '').replace(/"/g, '""')}"`,
-      `"${log.assignee || ''}"`
-    ]);
-
-    const filename = `Bao_cao_nhat_ky_KCS_Tuan_${selectedReportWeek}_Thang_${selectedReportMonth}.csv`;
-    const csvContent = "\uFEFF" + [headersList.join(","), ...rows.map(e => e.join(","))].join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    handleExportHubReportCSV('weekly', selectedReportMonth, selectedReportWeek, selectedReportYear);
   };
 
   const handleExportHubReportCSV = (
@@ -8855,7 +8819,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
 
     const isWeekly = type === 'weekly';
     const periodLabelText = isWeekly ? `Tuần ${week} - Tháng ${month}/${year}` : `Tháng ${month}/${year}`;
-    const filename = `Bao_Cao_Hoac_Dinh_QC_${isWeekly ? `Tuan_${week}_Thang_${month}` : `Thang_${month}`}_${year}.xlsx`;
+    const filename = `Bao_Cao_QMS_${isWeekly ? `Tuan_${week}_Thang_${month}` : `Thang_${month}`}_${year}.xlsx`;
 
     const logCount = logList.length;
     const completedCount = logList.filter(l => l.statusPercent === '100%').length;
@@ -8899,7 +8863,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
 
     const exportOqc = oqcRecords.filter(r => r.date ? filterByExportHubPeriod(r.date) : false);
     const exportOqcTotal = exportOqc.length;
-    const exportOqcPassed = exportOqc.filter(r => r.status === 'Đạt').length;
+    const exportOqcPassed = exportOqc.filter(r => r.status === 'Đạt' || r.result === 'Đạt' || r.result === 'Pass' || r.status === 'Pass').length;
     const exportOqcYield = exportOqcTotal > 0 ? Number((exportOqcPassed / exportOqcTotal * 100).toFixed(1)) : 97.4;
 
     // Compile defects, capas & ECOs
@@ -8922,23 +8886,23 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     // 2. Define colors and layout matching chosen theme
     const themeName = exportHubTheme || 'indigo';
     const ThemeStyling = {
-      indigo: { accent: "4F46E5", bgLight: "EEF2F6", headerText: "FFFFFF" },
+      indigo: { accent: "1E3A8A", bgLight: "F1F5F9", headerText: "FFFFFF" },
       emerald: { accent: "059669", bgLight: "ECFDF5", headerText: "FFFFFF" },
       amber: { accent: "D97706", bgLight: "FFFBEB", headerText: "FFFFFF" },
-      slate: { accent: "475569", bgLight: "F8FAFC", headerText: "FFFFFF" }
+      slate: { accent: "334155", bgLight: "F8FAFC", headerText: "FFFFFF" }
     };
     const activeStyling = ThemeStyling[themeName as keyof typeof ThemeStyling] || ThemeStyling.indigo;
     const COLOR_ACCENT = activeStyling.accent;
     const COLOR_BG_LIGHT = activeStyling.bgLight;
 
-    const borderThinGray = { style: "thin", color: { rgb: "D1D5DB" } };
+    const borderThinGray = { style: "thin", color: { rgb: "CBD5E1" } };
     const borderThinAccent = { style: "thin", color: { rgb: COLOR_ACCENT } };
     const cellBordersNormal = {
       top: borderThinGray, bottom: borderThinGray,
       left: borderThinGray, right: borderThinGray
     };
 
-    const fontNormalArial = { name: "Arial", sz: 9.5, color: { rgb: "111111" } };
+    const fontNormalArial = { name: "Arial", sz: 9.5, color: { rgb: "1E293B" } };
 
     // ==========================================
     // SHEET 1: BÁO CÁO CHẤT LƯỢNG (QUALITY REPORT)
@@ -9030,7 +8994,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     // Data row 3: OQC First pass yield
     aoaData1.push([
       3, 
-      "Kiểm thử sạt hạch đạt chuẩn OQC lần đầu (OQC Yield Rate)", 
+      "Kiểm thử sát hạch đạt chuẩn OQC lần đầu (OQC Yield Rate)", 
       "40%", 
       ">= 96.0%", 
       `${exportOqcYield}%`, 
@@ -9352,194 +9316,212 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     addMerge2(aoaData2.length - 1, 4, aoaData2.length - 1, 6);
 
 
-    // ==========================================
-    // INITIALIZE WORKBOOK & EXCEL SHEETS GENERATOR
-    // ==========================================
-    const wb = XLSXStyle.utils.book_new();
-    const ws1 = XLSXStyle.utils.aoa_to_sheet(aoaData1);
-    const ws2 = XLSXStyle.utils.aoa_to_sheet(aoaData2);
+    // =========================================================================
+    // SHEET 3: BÁO CÁO CHI TIẾT KIỂM ĐỊNH LINH KIỆN ĐẦU VÀO (IQC LOGS)
+    // =========================================================================
+    const aoaDataIqc: any[][] = [];
+    const rowTrackerIqc: any[] = [];
+    const mergesIqc: any[] = [];
 
-    // Apply styles wrapper helper
-    const styleSheet = (ws: any, rowTracker: any[], totalCols: number) => {
-      const decodedRange = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1:G1');
-      const totalRows = decodedRange.e.r + 1;
-      
-      for (let r = 0; r < totalRows; r++) {
-        const rowInfo = rowTracker[r];
-        const type = rowInfo?.type;
-        
-        for (let c = 0; c < totalCols; c++) {
-          const cellRef = XLSXStyle.utils.encode_cell({ r, c });
-          let cell = ws[cellRef];
-          if (!cell) {
-            cell = ws[cellRef] = { t: 's', v: '' };
-          }
+    function addMergeIqc(sr: number, sc: number, er: number, ec: number) {
+      mergesIqc.push({ s: { r: sr, c: sc }, e: { r: er, c: ec } });
+    }
 
-          // Apply font standard defaults
-          cell.s = {
-            font: { ...fontNormalArial },
-            alignment: { horizontal: "left", vertical: "center" }
-          };
+    // Company Header
+    aoaDataIqc.push(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT", "", "", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "", "", "", ""]);
+    rowTrackerIqc.push({ type: 'header-company' });
+    addMergeIqc(0, 0, 0, 4);
+    addMergeIqc(0, 5, 0, 9);
 
-          if (type === 'header-company') {
-            cell.s = {
-              font: { name: "Arial", sz: 9, bold: true, color: { rgb: "4B5563" } },
-              alignment: { horizontal: "left", vertical: "center" }
-            };
-          } else if (type === 'header-slogan') {
-            cell.s = {
-              font: { name: "Arial", sz: 9, bold: true, color: { rgb: "1F2937" } },
-              alignment: { horizontal: c >= 4 ? "center" : "left", vertical: "center" }
-            };
-          } else if (type === 'header-meta') {
-            cell.s = {
-              font: { name: "Arial", sz: 8.5, italic: true, color: { rgb: "6B7280" } },
-              alignment: { horizontal: c >= 4 ? "center" : "left", vertical: "center" }
-            };
-          } else if (type === 'main-title') {
-            cell.s = {
-              font: { name: "Arial", sz: 14, bold: true, color: { rgb: COLOR_ACCENT } },
-              alignment: { horizontal: "center", vertical: "center" }
-            };
-          } else if (type === 'main-subtitle') {
-            cell.s = {
-              font: { name: "Arial", sz: 9.5, bold: true, italic: true, color: { rgb: "374151" } },
-              alignment: { horizontal: "center", vertical: "center" }
-            };
-          } else if (type === 'section-heading') {
-            cell.s = {
-              fill: { fgColor: { rgb: COLOR_ACCENT } },
-              font: { name: "Arial", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
-              alignment: { horizontal: "left", vertical: "center", indent: 1 },
-              border: cellBordersNormal
-            };
-          } else if (type === 'table-header') {
-            cell.s = {
-              fill: { fgColor: { rgb: COLOR_BG_LIGHT } },
-              font: { name: "Arial", sz: 9.5, bold: true, color: { rgb: COLOR_ACCENT } },
-              alignment: { horizontal: "center", vertical: "center", wrapText: true },
-              border: cellBordersNormal
-            };
-          } else if (type === 'table-data-kpi') {
-            cell.s = {
-              font: { name: "Arial", sz: 9.5 },
-              alignment: (c === 0 || c === 2 || c === 3 || c === 4 || c === 5) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center" },
-              border: cellBordersNormal
-            };
-            if (c === 6 || c === 7) {
-              const state = rowInfo?.status;
-              cell.s.fill = { fgColor: { rgb: state === 'pass' ? "D1FAE5" : "FEF3C7" } };
-              cell.s.font = { name: "Arial", sz: 9.5, bold: true, color: { rgb: state === 'pass' ? "065F46" : "92400E" } };
-            }
-          } else if (type === 'table-data-log') {
-            cell.s = {
-              font: { name: "Arial", sz: 9.5 },
-              alignment: (c === 0 || c === 1 || c === 2 || c === 3 || c === 5) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
-              border: cellBordersNormal
-            };
-            if (c === 5) {
-              const val = rowInfo?.pctVal || 0;
-              cell.s.fill = { fgColor: { rgb: val === 100 ? "D1FAE5" : "FEF3C7" } };
-              cell.s.font = { name: "Arial", sz: 9.1, bold: true, color: { rgb: val === 100 ? "065F46" : "92400E" } };
-            }
-          } else if (type === 'table-data-bottleneck') {
-            cell.s = {
-              font: { name: "Arial", sz: 9 },
-              alignment: (c === 0 || c === 1 || c === 2 || c === 4 || c === 5) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
-              border: cellBordersNormal
-            };
-            if (c === 4) {
-              cell.s.fill = { fgColor: { rgb: "FEE2E2" } };
-              cell.s.font = { name: "Arial", sz: 9, bold: true, color: { rgb: "991B1B" } };
-            }
-          } else if (type === 'conclusion-box') {
-            cell.s = {
-              fill: { fgColor: { rgb: COLOR_BG_LIGHT } },
-              font: { name: "Arial", sz: 9.5, italic: true, color: { rgb: "1F2937" } },
-              alignment: { horizontal: "left", vertical: "center", wrapText: true },
-              border: cellBordersNormal
-            };
-          } else if (type === 'table-data-plan-target') {
-            cell.s = {
-              font: { name: "Arial", sz: 9.5 },
-              alignment: (c === 0 || c === 2 || c === 3 || c === 4 || c === 5 || c === 6) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
-              border: cellBordersNormal
-            };
-            if (c === 6) {
-              const achieved = rowInfo?.achieved;
-              cell.s.fill = { fgColor: { rgb: achieved ? "D1FAE5" : "FEF3C7" } };
-              cell.s.font = { name: "Arial", sz: 9.2, bold: true, color: { rgb: achieved ? "065F46" : "92400E" } };
-            }
-          } else if (type === 'table-data-model-plan') {
-            cell.s = {
-              font: { name: "Arial", sz: 9.5 },
-              alignment: (c === 0 || c === 2 || c === 3 || c === 4 || c === 5) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
-              border: cellBordersNormal
-            };
-            if (c === 2) {
-              cell.s.fill = { fgColor: { rgb: "ECFDF5" } };
-              cell.s.font = { name: "Arial", sz: 9.5, bold: true, color: { rgb: "047857" } };
-            }
-          } else if (type === 'table-data-supplier-plan') {
-            cell.s = {
-              font: { name: "Arial", sz: 9.5 },
-              alignment: (c === 0 || c === 3 || c === 4 || c === 5) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
-              border: cellBordersNormal
-            };
-          } else if (type === 'signature-label') {
-            cell.s = {
-              font: { name: "Arial", sz: 10, bold: true, color: { rgb: "111827" } },
-              alignment: { horizontal: "center", vertical: "center" }
-            };
-          } else if (type === 'signature-sub') {
-            cell.s = {
-              font: { name: "Arial", sz: 8.5, italic: true, color: { rgb: "6B7280" } },
-              alignment: { horizontal: "center", vertical: "center" }
-            };
-          } else if (type === 'signature-name') {
-            cell.s = {
-              font: { name: "Arial", sz: 10.5, bold: true, color: { rgb: "111827" } },
-              alignment: { horizontal: "center", vertical: "center" }
-            };
-          } else if (type === 'table-data-empty') {
-            cell.s = {
-              font: { name: "Arial", sz: 9.5, italic: true, color: { rgb: "6B7280" } },
-              alignment: { horizontal: "center", vertical: "center" },
-              border: cellBordersNormal
-            };
-          }
-        }
-      }
-    };
+    aoaDataIqc.push(["Phòng: Quản lý Chất lượng (QLCL) - DK QMS", "", "", "", "", "Độc lập - Tự do - Hạnh phúc", "", "", "", ""]);
+    rowTrackerIqc.push({ type: 'header-slogan' });
+    addMergeIqc(1, 0, 1, 4);
+    addMergeIqc(1, 5, 1, 9);
 
-    // Styling ws1 and ws2
-    styleSheet(ws1, rowTracker1, 8);
-    styleSheet(ws2, rowTracker2, 7);
+    aoaDataIqc.push([`Mã biểu mẫu: BM-DKB-IQC-${isWeekly ? 'W' : 'M'}-${month.toString().padStart(2, '0')}`, "", "", "", "", dateLocStr, "", "", "", ""]);
+    rowTrackerIqc.push({ type: 'header-meta' });
+    addMergeIqc(2, 0, 2, 4);
+    addMergeIqc(2, 5, 2, 9);
 
-    ws1['!merges'] = merges1;
-    ws2['!merges'] = merges2;
+    // Spacer
+    aoaDataIqc.push(["", "", "", "", "", "", "", "", "", ""]);
+    rowTrackerIqc.push({ type: 'spacer' });
 
-    // Define beautiful row heights
-    const setRowHeights = (ws: any, rowTracker: any[]) => {
-      const heights: any[] = [];
-      for (let r = 0; r < rowTracker.length; r++) {
-        const rType = rowTracker[r]?.type;
-        if (rType === 'header-company' || rType === 'header-slogan' || rType === 'header-meta') heights.push({ hpt: 18 });
-        else if (rType === 'spacer') heights.push({ hpt: 8 });
-        else if (rType === 'main-title') heights.push({ hpt: 30 });
-        else if (rType === 'main-subtitle') heights.push({ hpt: 18 });
-        else if (rType === 'section-heading') heights.push({ hpt: 24 });
-        else if (rType === 'table-header') heights.push({ hpt: 24 });
-        else if (rType === 'conclusion-box') heights.push({ hpt: 65 }); // generous wrapping height
-        else if (rType === 'spacer-sig') heights.push({ hpt: 50 }); // hand written signature pad
-        else if (rType === 'signature-label' || rType === 'signature-name') heights.push({ hpt: 20 });
-        else heights.push({ hpt: 20 });
-      }
-      ws['!rows'] = heights;
-    };
+    // Title
+    const titleTextIqc = `BÁO CÁO CHI TIẾT KIỂM ĐỊNH LINH KIỆN NHẬP KHO (IQC) - ${periodLabelText.toUpperCase()}`;
+    aoaDataIqc.push([titleTextIqc, "", "", "", "", "", "", "", "", ""]);
+    rowTrackerIqc.push({ type: 'main-title' });
+    addMergeIqc(4, 0, 4, 9);
+
+    aoaDataIqc.push([`Dữ liệu tổng hợp linh kiện nhà cung cấp | Tổng số lô kiểm: ${exportIqcTotal} | Thông quan: ${exportIqcPassed} | Tỷ lệ đạt: ${exportIqcPassRate}%`, "", "", "", "", "", "", "", "", ""]);
+    rowTrackerIqc.push({ type: 'main-subtitle' });
+    addMergeIqc(5, 0, 5, 9);
+
+    // Spacer
+    aoaDataIqc.push(["", "", "", "", "", "", "", "", "", ""]);
+    rowTrackerIqc.push({ type: 'spacer' });
+
+    // Table Header
+    aoaDataIqc.push(["STT", "Ngày kiểm", "Mã lô / Phiếu IQC", "Nhà cung cấp", "Tên linh kiện / Vật tư", "Số lượng nhập", "Số mẫu lỗi", "Kết quả kiểm định", "Mô tả lỗi & Phương án", "KCS Kiểm tra"]);
+    rowTrackerIqc.push({ type: 'table-header' });
+
+    if (exportIqc.length === 0) {
+      aoaDataIqc.push(["-", "Không phát sinh phiếu kiểm định linh kiện IQC nào trong kỳ này.", "", "", "", "", "", "", "", ""]);
+      rowTrackerIqc.push({ type: 'table-data-empty' });
+      addMergeIqc(aoaDataIqc.length - 1, 1, aoaDataIqc.length - 1, 9);
+    } else {
+      exportIqc.forEach((item, idx) => {
+        const isPass = item.result === 'Đạt' || item.status === 'Thông quan' || item.status === 'Pass' || item.result === 'Pass';
+        aoaDataIqc.push([
+          idx + 1,
+          item.date || "-",
+          item.code || item.id || `IQC-${idx+1}`,
+          item.supplierName || item.supplierCode || "N/A",
+          item.partName || item.component || item.partCode || "Linh kiện",
+          item.totalQuantity || item.sampleSize || item.quantity || 1,
+          item.failedCount || item.defectCount || 0,
+          isPass ? "THÔNG QUAN" : "BÁC BỎ (LỖI)",
+          item.defectDetail || item.notes || (isPass ? "Đạt tiêu chuẩn kỹ thuật nhập kho" : "Cần trả lại nhà cung cấp"),
+          item.inspector || item.checkedBy || "KCS Kiểm kho"
+        ]);
+        rowTrackerIqc.push({ type: 'table-data-iqc', isPass });
+      });
+    }
+
+    // Spacer
+    aoaDataIqc.push(["", "", "", "", "", "", "", "", "", ""]);
+    rowTrackerIqc.push({ type: 'spacer' });
+
+    // Signatures
+    aoaDataIqc.push(["KCS Kiểm kho IQC", "", "Trưởng phòng QLCL", "", "", "Ban Giám Đốc DKBIKE", "", "", "", ""]);
+    rowTrackerIqc.push({ type: 'signature-label' });
+    addMergeIqc(aoaDataIqc.length - 1, 0, aoaDataIqc.length - 1, 2);
+    addMergeIqc(aoaDataIqc.length - 1, 3, aoaDataIqc.length - 1, 5);
+    addMergeIqc(aoaDataIqc.length - 1, 6, aoaDataIqc.length - 1, 9);
+
+    aoaDataIqc.push(["(Đã ký xác nhận)", "", "(Đã duyệt)", "", "", "(Phê chuẩn)", "", "", "", ""]);
+    rowTrackerIqc.push({ type: 'signature-sub' });
+    addMergeIqc(aoaDataIqc.length - 1, 0, aoaDataIqc.length - 1, 2);
+    addMergeIqc(aoaDataIqc.length - 1, 3, aoaDataIqc.length - 1, 5);
+    addMergeIqc(aoaDataIqc.length - 1, 6, aoaDataIqc.length - 1, 9);
+
+    aoaDataIqc.push(["", "", "", "", "", "", "", "", "", ""]);
+    rowTrackerIqc.push({ type: 'spacer-sig' });
+    addMergeIqc(aoaDataIqc.length - 1, 0, aoaDataIqc.length - 1, 2);
+    addMergeIqc(aoaDataIqc.length - 1, 3, aoaDataIqc.length - 1, 5);
+    addMergeIqc(aoaDataIqc.length - 1, 6, aoaDataIqc.length - 1, 9);
+
+    aoaDataIqc.push(["Chuyên viên IQC", "", "NGUYỄN XUÂN THAO", "", "", "BAN GIÁM ĐỐC DKBIKE", "", "", "", ""]);
+    rowTrackerIqc.push({ type: 'signature-name' });
+    addMergeIqc(aoaDataIqc.length - 1, 0, aoaDataIqc.length - 1, 2);
+    addMergeIqc(aoaDataIqc.length - 1, 3, aoaDataIqc.length - 1, 5);
+    addMergeIqc(aoaDataIqc.length - 1, 6, aoaDataIqc.length - 1, 9);
+
 
     // =========================================================================
-    // SHEET 3: NHẬT KÝ SỰ CỐ & BÁO CÁO KỸ THUẬT TỔNG HỢP (INCIDENTS & TECH REPORT)
+    // SHEET 4: BÁO CÁO CHI TIẾT KIỂM ĐỊNH XE THÀNH PHẨM XUẤT XƯỞNG (OQC LOGS)
+    // =========================================================================
+    const aoaDataOqc: any[][] = [];
+    const rowTrackerOqc: any[] = [];
+    const mergesOqc: any[] = [];
+
+    function addMergeOqc(sr: number, sc: number, er: number, ec: number) {
+      mergesOqc.push({ s: { r: sr, c: sc }, e: { r: er, c: ec } });
+    }
+
+    // Company Header
+    aoaDataOqc.push(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT", "", "", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "", "", "", ""]);
+    rowTrackerOqc.push({ type: 'header-company' });
+    addMergeOqc(0, 0, 0, 4);
+    addMergeOqc(0, 5, 0, 9);
+
+    aoaDataOqc.push(["Phòng: Quản lý Chất lượng (QLCL) - DK QMS", "", "", "", "", "Độc lập - Tự do - Hạnh phúc", "", "", "", ""]);
+    rowTrackerOqc.push({ type: 'header-slogan' });
+    addMergeOqc(1, 0, 1, 4);
+    addMergeOqc(1, 5, 1, 9);
+
+    aoaDataOqc.push([`Mã biểu mẫu: BM-DKB-OQC-${isWeekly ? 'W' : 'M'}-${month.toString().padStart(2, '0')}`, "", "", "", "", dateLocStr, "", "", "", ""]);
+    rowTrackerOqc.push({ type: 'header-meta' });
+    addMergeOqc(2, 0, 2, 4);
+    addMergeOqc(2, 5, 2, 9);
+
+    // Spacer
+    aoaDataOqc.push(["", "", "", "", "", "", "", "", "", ""]);
+    rowTrackerOqc.push({ type: 'spacer' });
+
+    // Title
+    const titleTextOqc = `BÁO CÁO CHI TIẾT SÁT HẠCH KCS THÀNH PHẨM XUẤT XƯỞNG (OQC) - ${periodLabelText.toUpperCase()}`;
+    aoaDataOqc.push([titleTextOqc, "", "", "", "", "", "", "", "", ""]);
+    rowTrackerOqc.push({ type: 'main-title' });
+    addMergeOqc(4, 0, 4, 9);
+
+    aoaDataOqc.push([`Sát hạch đầu ra | Tổng số xe kiểm: ${exportOqcTotal} | Xe đạt xuất xưởng: ${exportOqcPassed} | Tỷ lệ FPY Composite: ${exportOqcYield}%`, "", "", "", "", "", "", "", "", ""]);
+    rowTrackerOqc.push({ type: 'main-subtitle' });
+    addMergeOqc(5, 0, 5, 9);
+
+    // Spacer
+    aoaDataOqc.push(["", "", "", "", "", "", "", "", "", ""]);
+    rowTrackerOqc.push({ type: 'spacer' });
+
+    // Table Header
+    aoaDataOqc.push(["STT", "Ngày sát hạch", "Số khung / VIN", "Dòng Model xe", "Lô SX / Chuyền", "Kết quả sát hạch", "Chi tiết điểm lỗi KCS", "Số lỗi", "Phương án xử lý tại chỗ", "KCS Sát hạch"]);
+    rowTrackerOqc.push({ type: 'table-header' });
+
+    if (exportOqc.length === 0) {
+      aoaDataOqc.push(["-", "Không phát sinh bản ghi kiểm định OQC nào trong kỳ này.", "", "", "", "", "", "", "", ""]);
+      rowTrackerOqc.push({ type: 'table-data-empty' });
+      addMergeOqc(aoaDataOqc.length - 1, 1, aoaDataOqc.length - 1, 9);
+    } else {
+      exportOqc.forEach((item, idx) => {
+        const isPass = item.status === 'Đạt' || item.result === 'Đạt' || item.result === 'Pass' || item.status === 'Pass';
+        aoaDataOqc.push([
+          idx + 1,
+          item.date || "-",
+          item.frameNo || item.vin || item.code || `FRM-${idx+1}`,
+          item.model || "DK Model",
+          item.batch || item.line || item.lsx || "Chuyền Ráp 1",
+          isPass ? "ĐẠT (PASS)" : "LỖI (FAIL)",
+          item.defectDetail || item.findings || item.defectType || (isPass ? "Không phát hiện lỗi" : "Lỗi kiểm chuẩn"),
+          item.failedCount || item.defectCount || (isPass ? 0 : 1),
+          item.solution || (isPass ? "Cho phép nhập kho thành phẩm" : "Căn chỉnh lại gá ráp / Tăng siết lực"),
+          item.inspector || item.checkedBy || "KCS Đầu Ra"
+        ]);
+        rowTrackerOqc.push({ type: 'table-data-oqc', isPass });
+      });
+    }
+
+    // Spacer
+    aoaDataOqc.push(["", "", "", "", "", "", "", "", "", ""]);
+    rowTrackerOqc.push({ type: 'spacer' });
+
+    // Signatures
+    aoaDataOqc.push(["KCS Sát hạch OQC", "", "Trưởng phòng QLCL", "", "", "Ban Giám Đốc DKBIKE", "", "", "", ""]);
+    rowTrackerOqc.push({ type: 'signature-label' });
+    addMergeOqc(aoaDataOqc.length - 1, 0, aoaDataOqc.length - 1, 2);
+    addMergeOqc(aoaDataOqc.length - 1, 3, aoaDataOqc.length - 1, 5);
+    addMergeOqc(aoaDataOqc.length - 1, 6, aoaDataOqc.length - 1, 9);
+
+    aoaDataOqc.push(["(Đã ký xác nhận)", "", "(Đã duyệt)", "", "", "(Phê chuẩn)", "", "", "", ""]);
+    rowTrackerOqc.push({ type: 'signature-sub' });
+    addMergeOqc(aoaDataOqc.length - 1, 0, aoaDataOqc.length - 1, 2);
+    addMergeOqc(aoaDataOqc.length - 1, 3, aoaDataOqc.length - 1, 5);
+    addMergeOqc(aoaDataOqc.length - 1, 6, aoaDataOqc.length - 1, 9);
+
+    aoaDataOqc.push(["", "", "", "", "", "", "", "", "", ""]);
+    rowTrackerOqc.push({ type: 'spacer-sig' });
+    addMergeOqc(aoaDataOqc.length - 1, 0, aoaDataOqc.length - 1, 2);
+    addMergeOqc(aoaDataOqc.length - 1, 3, aoaDataOqc.length - 1, 5);
+    addMergeOqc(aoaDataOqc.length - 1, 6, aoaDataOqc.length - 1, 9);
+
+    aoaDataOqc.push(["Chuyên viên OQC", "", "NGUYỄN XUÂN THAO", "", "", "BAN GIÁM ĐỐC DKBIKE", "", "", "", ""]);
+    rowTrackerOqc.push({ type: 'signature-name' });
+    addMergeOqc(aoaDataOqc.length - 1, 0, aoaDataOqc.length - 1, 2);
+    addMergeOqc(aoaDataOqc.length - 1, 3, aoaDataOqc.length - 1, 5);
+    addMergeOqc(aoaDataOqc.length - 1, 6, aoaDataOqc.length - 1, 9);
+
+
+    // =========================================================================
+    // SHEET 5: NHẬT KÝ SỰ CỐ & BÁO CÁO KỸ THUẬT TỔNG HỢP (INCIDENTS & TECH REPORT)
     // =========================================================================
     const aoaData3: any[][] = [];
     const rowTracker3: any[] = [];
@@ -9583,32 +9565,16 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     aoaData3.push(["", "", "", "", "", "", ""]);
     rowTracker3.push({ type: 'spacer' });
 
-    // Filters for Sheet 3
-    const sheet3Iqc = iqcRecords.filter(r => r.date ? filterByExportHubPeriod(r.date) : false)
-      .filter(item => item.result === 'Lỗi' || item.status === 'Bác bỏ' || item.status === 'Fail' || item.result === 'Fail');
-
-    const sheet3Pqc = pqcRecords.filter(r => r.date ? filterByExportHubPeriod(r.date) : false);
-
-    const sheet3Oqc = oqcRecords.filter(r => r.date ? filterByExportHubPeriod(r.date) : false);
+    // Filters for Sheet 5
+    const sheet3Iqc = exportIqc.filter(item => item.result === 'Lỗi' || item.status === 'Bác bỏ' || item.status === 'Fail' || item.result === 'Fail');
+    const sheet3Pqc = exportPqc;
+    const sheet3Oqc = exportOqc;
     const sheet3OqcTotal = sheet3Oqc.length;
     const sheet3OqcPassed = sheet3Oqc.filter(r => r.status === 'Đạt' || r.result === 'Đạt' || r.result === 'Pass' || r.status === 'Pass').length;
     const sheet3OqcYield = sheet3OqcTotal > 0 ? Number((sheet3OqcPassed / sheet3OqcTotal * 100).toFixed(1)) : 100.0;
-    const parsedOqcYieldVal = sheet3OqcYield > 100 ? 100 : sheet3OqcYield; // cap at 100%
-
-    // Calculate Top 3 defects for OQC in this period
-    const oqcFailures = sheet3Oqc.filter(o => o.status === 'Lỗi' || o.result === 'Lối' || o.result === 'Lỗi' || o.result === 'Fail');
-    const defectCounts: Record<string, number> = {};
-    oqcFailures.forEach(o => {
-      const detail = (o.defectDetail || 'Lỗi kiểm chuẩn khác').trim();
-      defectCounts[detail] = (defectCounts[detail] || 0) + (o.failedCount || 1);
-    });
-    const sheet3Top3Defects = Object.entries(defectCounts)
-      .map(([defect, count]) => ({ defect, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
+    const parsedOqcYieldVal = sheet3OqcYield > 100 ? 100 : sheet3OqcYield;
 
     const sheet3Defects = defects.filter(r => r.defectDate ? filterByExportHubPeriod(r.defectDate) : r.saleDate ? filterByExportHubPeriod(r.saleDate) : false);
-
     const sheet3Sqc = logList.filter(log => log.category && log.category.toUpperCase().includes('SQC'));
 
     // Section 1: IQC
@@ -9678,7 +9644,6 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     rowTracker3.push({ type: 'section-heading' });
     addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 6);
 
-    // Yield statistical banner row
     aoaData3.push([`CHỈ SỐ ĐẠT COMPOSITE OQC: ${parsedOqcYieldVal}% (${sheet3OqcPassed}/${sheet3OqcTotal} xe đạt chuẩn xuất xưởng)`, "", "", "", "", "", ""]);
     rowTracker3.push({ type: 'conclusion-box' });
     addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 6);
@@ -9688,61 +9653,53 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
 
     const activePeriodModels = Array.from(new Set(sheet3Oqc.map(r => r.model).filter(Boolean)));
     const modelsToProcess = activePeriodModels.length > 0 ? activePeriodModels : ['DK Roma SX V2', 'DK Gogo Smart', 'DK Nova', 'DK V2'];
-    const oqcFailuresList = sheet3Oqc.filter(o => o.status === 'Lỗi' || o.result === 'Lối' || o.result === 'Lỗi' || o.result === 'Fail');
 
-    if (oqcFailuresList.length === 0) {
-      aoaData3.push(["-", "Xuất sắc! 100% xe kiểm chuẩn OQC từ tất cả các dòng model đều đạt chất lượng xuất xưởng tuyệt đối.", "", "", "", "", ""]);
-      rowTracker3.push({ type: 'table-data-empty' });
-      addMerge3(aoaData3.length - 1, 1, aoaData3.length - 1, 6);
-    } else {
-      modelsToProcess.forEach(modelName => {
-        const modelChecks = sheet3Oqc.filter(o => o.model === modelName);
-        const totalChecksForModel = modelChecks.length;
-        const modelFailures = modelChecks.filter(o => o.status === 'Lỗi' || o.result === 'Lối' || o.result === 'Lỗi' || o.result === 'Fail');
+    modelsToProcess.forEach(modelName => {
+      const modelChecks = sheet3Oqc.filter(o => o.model === modelName);
+      const totalChecksForModel = modelChecks.length;
+      const modelFailures = modelChecks.filter(o => o.status === 'Lỗi' || o.result === 'Lối' || o.result === 'Lỗi' || o.result === 'Fail');
 
-        const modelDefectCounts: Record<string, number> = {};
-        modelFailures.forEach(o => {
-          const detail = (o.defectDetail || 'Lỗi kiểm chuẩn khác').trim();
-          modelDefectCounts[detail] = (modelDefectCounts[detail] || 0) + (o.failedCount || 1);
-        });
-
-        const sortedModelDefects = Object.entries(modelDefectCounts)
-          .map(([defect, count]) => ({ defect, count }))
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 3);
-
-        // Add a merged row to introduce the model
-        aoaData3.push([`DÒNG MODEL XE: ${String(modelName).toUpperCase()} (${totalChecksForModel} xe kiểm thử)`, "", "", "", "", "", ""]);
-        rowTracker3.push({ type: 'table-header' });
-        addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 6);
-
-        if (sortedModelDefects.length === 0) {
-          aoaData3.push(["-", `Không phát sinh lỗi khuyết tật kiểm chuẩn KCS nào ở dòng xe ${modelName}.`, "", "", "", "", ""]);
-          rowTracker3.push({ type: 'table-data-empty' });
-          addMerge3(aoaData3.length - 1, 1, aoaData3.length - 1, 6);
-        } else {
-          sortedModelDefects.forEach((item, idx) => {
-            const percentage = totalChecksForModel > 0 ? Number(((item.count / totalChecksForModel) * 100).toFixed(1)) : 0;
-            aoaData3.push([
-              `Top ${idx + 1}`,
-              item.defect,
-              item.count,
-              `${percentage}%`,
-              "Ngoại quan / Lắp ráp / Hộp điện",
-              "Tăng siết mô-men, kiểm chỉnh gá đặt, quấn bọc bọt khí bảo vệ sườn",
-              modelName
-            ]);
-            rowTracker3.push({ type: 'table-data-kpi', status: 'warn' });
-          });
-        }
+      const modelDefectCounts: Record<string, number> = {};
+      modelFailures.forEach(o => {
+        const detail = (o.defectDetail || 'Lỗi kiểm chuẩn khác').trim();
+        modelDefectCounts[detail] = (modelDefectCounts[detail] || 0) + (o.failedCount || 1);
       });
-    }
+
+      const sortedModelDefects = Object.entries(modelDefectCounts)
+        .map(([defect, count]) => ({ defect, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+
+      aoaData3.push([`DÒNG MODEL XE: ${String(modelName).toUpperCase()} (${totalChecksForModel} xe kiểm thử)`, "", "", "", "", "", ""]);
+      rowTracker3.push({ type: 'table-header' });
+      addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 6);
+
+      if (sortedModelDefects.length === 0) {
+        aoaData3.push(["-", `Không phát sinh lỗi khuyết tật kiểm chuẩn KCS nào ở dòng xe ${modelName}.`, "", "", "", "", ""]);
+        rowTracker3.push({ type: 'table-data-empty' });
+        addMerge3(aoaData3.length - 1, 1, aoaData3.length - 1, 6);
+      } else {
+        sortedModelDefects.forEach((item, idx) => {
+          const percentage = totalChecksForModel > 0 ? Number(((item.count / totalChecksForModel) * 100).toFixed(1)) : 0;
+          aoaData3.push([
+            `Top ${idx + 1}`,
+            item.defect,
+            item.count,
+            `${percentage}%`,
+            "Ngoại quan / Lắp ráp / Hộp điện",
+            "Tăng siết mô-men, kiểm chỉnh gá đặt, quấn bọc bọt khí bảo vệ sườn",
+            modelName
+          ]);
+          rowTracker3.push({ type: 'table-data-kpi', status: 'warn' });
+        });
+      }
+    });
 
     // Spacer
     aoaData3.push(["", "", "", "", "", "", ""]);
     rowTracker3.push({ type: 'spacer' });
 
-    // Section 4: Market defects (Khiếu nại lỗi thị trường)
+    // Section 4: Market defects
     aoaData3.push(["IV. KHIẾU NẠI SỰ CỐ & BẢO HÀNH TỪ THỊ TRƯỜNG DỊCH VỤ (MARKET QUALITY CLAIMS)", "", "", "", "", "", ""]);
     rowTracker3.push({ type: 'section-heading' });
     addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 6);
@@ -9829,46 +9786,180 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     addMerge3(aoaData3.length - 1, 2, aoaData3.length - 1, 3);
     addMerge3(aoaData3.length - 1, 4, aoaData3.length - 1, 6);
 
-    // Apply styles to Sheet 3
+
+    // ==========================================
+    // INITIALIZE WORKBOOK & EXCEL SHEETS GENERATOR
+    // ==========================================
+    const wb = XLSXStyle.utils.book_new();
+    const ws1 = XLSXStyle.utils.aoa_to_sheet(aoaData1);
+    const ws2 = XLSXStyle.utils.aoa_to_sheet(aoaData2);
+    const wsIqc = XLSXStyle.utils.aoa_to_sheet(aoaDataIqc);
+    const wsOqc = XLSXStyle.utils.aoa_to_sheet(aoaDataOqc);
     const ws3 = XLSXStyle.utils.aoa_to_sheet(aoaData3);
-    styleSheet(ws3, rowTracker3, 7);
-    ws3['!merges'] = merges3;
 
-    setRowHeights(ws1, rowTracker1);
-    setRowHeights(ws2, rowTracker2);
-    setRowHeights(ws3, rowTracker3);
+    // Apply styles wrapper helper
+    const styleSheet = (ws: any, rowTracker: any[], totalCols: number) => {
+      const decodedRange = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1:J1');
+      const totalRows = decodedRange.e.r + 1;
+      
+      for (let r = 0; r < totalRows; r++) {
+        const rowInfo = rowTracker[r];
+        const type = rowInfo?.type;
+        
+        for (let c = 0; c < totalCols; c++) {
+          const cellRef = XLSXStyle.utils.encode_cell({ r, c });
+          let cell = ws[cellRef];
+          if (!cell) {
+            cell = ws[cellRef] = { t: 's', v: '' };
+          }
 
-    // Premium Column widths so that there is absolutely zero truncation issues
-    const colWidths1 = [
-      { wch: 6 },   // Col A: STT
-      { wch: 14 },  // Col B: Ngay ghi / Tuan
-      { wch: 16 },  // Col C: Nhan su / Model xe
-      { wch: 18 },  // Col D: Bo phan / Chi tieu
-      { wch: 48 },  // Col E: Chi tiet hoat dong / Mo ta loi
-      { wch: 12 },  // Col F: Tien do (%) / Trang thai
-      { wch: 32 },  // Col G: Next action / Cap nhat
-      { wch: 32 }   // Col H: Y kien, ghi chu
-    ];
-    const colWidths = [
-      { wch: 6 },   // Col A: STT
-      { wch: 14 },  // Col B: Ngay ghi / Tuan / Ma su co
-      { wch: 16 },  // Col C: Nhan su / Model xe
-      { wch: 18 },  // Col D: Bo phan / Chi tieu
-      { wch: 48 },  // Col E: Chi tiet hoat dong / Mo ta loi / Nhiem vu ke hoa
-      { wch: 12 },  // Col F: Tien do (%) / Trang thai
-      { wch: 32 }   // Col G: Next action / Cap nhat / Bien phap
-    ];
-    ws1['!cols'] = colWidths1;
-    ws2['!cols'] = colWidths;
-    ws3['!cols'] = colWidths;
+          cell.s = {
+            font: { ...fontNormalArial },
+            alignment: { horizontal: "left", vertical: "center" }
+          };
 
-    // Append sheets to workbook
-    XLSXStyle.utils.book_append_sheet(wb, ws1, isWeekly ? `Báo cáo Tuần ${week}` : `Báo cáo Tháng ${month}`);
-    XLSXStyle.utils.book_append_sheet(wb, ws2, isWeekly ? `Kế hoạch Tuần ${week}` : `Kế hoạch Tháng ${month}`);
-    XLSXStyle.utils.book_append_sheet(wb, ws3, "Incident & Nhật ký Sự cố");
+          if (type === 'header-company') {
+            cell.s = {
+              font: { name: "Arial", sz: 9.5, bold: true, color: { rgb: "1E293B" } },
+              alignment: { horizontal: "left", vertical: "center" }
+            };
+          } else if (type === 'header-slogan') {
+            cell.s = {
+              font: { name: "Arial", sz: 9, bold: true, color: { rgb: "334155" } },
+              alignment: { horizontal: c >= 4 ? "center" : "left", vertical: "center" }
+            };
+          } else if (type === 'header-meta') {
+            cell.s = {
+              font: { name: "Arial", sz: 8.5, italic: true, color: { rgb: "64748B" } },
+              alignment: { horizontal: c >= 4 ? "center" : "left", vertical: "center" }
+            };
+          } else if (type === 'main-title') {
+            cell.s = {
+              font: { name: "Arial", sz: 13.5, bold: true, color: { rgb: COLOR_ACCENT } },
+              alignment: { horizontal: "center", vertical: "center" }
+            };
+          } else if (type === 'main-subtitle') {
+            cell.s = {
+              font: { name: "Arial", sz: 9.5, bold: true, italic: true, color: { rgb: "334155" } },
+              alignment: { horizontal: "center", vertical: "center" }
+            };
+          } else if (type === 'section-heading') {
+            cell.s = {
+              fill: { fgColor: { rgb: COLOR_ACCENT } },
+              font: { name: "Arial", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
+              alignment: { horizontal: "left", vertical: "center", indent: 1 },
+              border: cellBordersNormal
+            };
+          } else if (type === 'table-header') {
+            cell.s = {
+              fill: { fgColor: { rgb: COLOR_ACCENT } },
+              font: { name: "Arial", sz: 9.5, bold: true, color: { rgb: "FFFFFF" } },
+              alignment: { horizontal: "center", vertical: "center", wrapText: true },
+              border: cellBordersNormal
+            };
+          } else if (type === 'table-data-kpi') {
+            cell.s = {
+              font: { name: "Arial", sz: 9.5 },
+              alignment: (c === 0 || c === 2 || c === 3 || c === 4 || c === 5) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center" },
+              border: cellBordersNormal
+            };
+            if (c === 6 || c === 7) {
+              const state = rowInfo?.status;
+              cell.s.fill = { fgColor: { rgb: state === 'pass' ? "D1FAE5" : "FEF3C7" } };
+              cell.s.font = { name: "Arial", sz: 9.5, bold: true, color: { rgb: state === 'pass' ? "065F46" : "92400E" } };
+            }
+          } else if (type === 'table-data-log') {
+            cell.s = {
+              font: { name: "Arial", sz: 9.5 },
+              alignment: (c === 0 || c === 1 || c === 2 || c === 3 || c === 5) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
+              border: cellBordersNormal
+            };
+            if (c === 5) {
+              const val = rowInfo?.pctVal || 0;
+              cell.s.fill = { fgColor: { rgb: val === 100 ? "D1FAE5" : "FEF3C7" } };
+              cell.s.font = { name: "Arial", sz: 9.1, bold: true, color: { rgb: val === 100 ? "065F46" : "92400E" } };
+            }
+          } else if (type === 'table-data-bottleneck') {
+            cell.s = {
+              font: { name: "Arial", sz: 9 },
+              alignment: (c === 0 || c === 1 || c === 2 || c === 4 || c === 5) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
+              border: cellBordersNormal
+            };
+            if (c === 4) {
+              cell.s.fill = { fgColor: { rgb: "FEE2E2" } };
+              cell.s.font = { name: "Arial", sz: 9, bold: true, color: { rgb: "991B1B" } };
+            }
+          } else if (type === 'table-data-iqc' || type === 'table-data-oqc') {
+            const isPass = rowInfo?.isPass;
+            cell.s = {
+              font: { name: "Arial", sz: 9.5 },
+              alignment: (c === 0 || c === 1 || c === 2 || c === 5 || c === 6 || c === 7 || c === 9) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
+              border: cellBordersNormal
+            };
+            if (c === 7 || c === 5) {
+              cell.s.fill = { fgColor: { rgb: isPass ? "D1FAE5" : "FEE2E2" } };
+              cell.s.font = { name: "Arial", sz: 9.5, bold: true, color: { rgb: isPass ? "065F46" : "991B1B" } };
+            }
+          } else if (type === 'conclusion-box') {
+            cell.s = {
+              fill: { fgColor: { rgb: COLOR_BG_LIGHT } },
+              font: { name: "Arial", sz: 9.5, italic: true, color: { rgb: "1E293B" } },
+              alignment: { horizontal: "left", vertical: "center", wrapText: true },
+              border: cellBordersNormal
+            };
+          } else if (type === 'table-data-plan-target') {
+            cell.s = {
+              font: { name: "Arial", sz: 9.5 },
+              alignment: (c === 0 || c === 2 || c === 3 || c === 4 || c === 5 || c === 6) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
+              border: cellBordersNormal
+            };
+            if (c === 6) {
+              const achieved = rowInfo?.achieved;
+              cell.s.fill = { fgColor: { rgb: achieved ? "D1FAE5" : "FEF3C7" } };
+              cell.s.font = { name: "Arial", sz: 9.2, bold: true, color: { rgb: achieved ? "065F46" : "92400E" } };
+            }
+          } else if (type === 'table-data-model-plan') {
+            cell.s = {
+              font: { name: "Arial", sz: 9.5 },
+              alignment: (c === 0 || c === 2 || c === 3 || c === 4 || c === 5) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
+              border: cellBordersNormal
+            };
+            if (c === 2) {
+              cell.s.fill = { fgColor: { rgb: "ECFDF5" } };
+              cell.s.font = { name: "Arial", sz: 9.5, bold: true, color: { rgb: "047857" } };
+            }
+          } else if (type === 'table-data-supplier-plan') {
+            cell.s = {
+              font: { name: "Arial", sz: 9.5 },
+              alignment: (c === 0 || c === 3 || c === 4 || c === 5) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
+              border: cellBordersNormal
+            };
+          } else if (type === 'signature-label') {
+            cell.s = {
+              font: { name: "Arial", sz: 10, bold: true, color: { rgb: "0F172A" } },
+              alignment: { horizontal: "center", vertical: "center" }
+            };
+          } else if (type === 'signature-sub') {
+            cell.s = {
+              font: { name: "Arial", sz: 8.5, italic: true, color: { rgb: "64748B" } },
+              alignment: { horizontal: "center", vertical: "center" }
+            };
+          } else if (type === 'signature-name') {
+            cell.s = {
+              font: { name: "Arial", sz: 10.5, bold: true, color: { rgb: "0F172A" } },
+              alignment: { horizontal: "center", vertical: "center" }
+            };
+          } else if (type === 'table-data-empty') {
+            cell.s = {
+              font: { name: "Arial", sz: 9.5, italic: true, color: { rgb: "6B7280" } },
+              alignment: { horizontal: "center", vertical: "center" },
+              border: cellBordersNormal
+            };
+          }
+        }
+      }
+    };
 
-    // Save and download
-    XLSXStyle.writeFile(wb, filename);
   };
 
   const parseLogDate = (dateStr: string): Date | null => {
