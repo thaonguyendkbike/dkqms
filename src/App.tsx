@@ -17429,11 +17429,11 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
 
               {/* ExportHubModal - globally accessible modal for Weekly and Monthly Reports */}
               {showExportHubModal && (
-                <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] overflow-y-auto no-print animate-in fade-in duration-200">
-                  <div className="bg-slate-900 text-slate-100 rounded-2xl border border-slate-700 shadow-2xl max-w-6xl w-full h-[90vh] flex flex-col overflow-hidden">
+                <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] overflow-y-auto animate-in fade-in duration-200 print:p-0 print:bg-transparent print:static print:block print:overflow-visible">
+                  <div className="bg-slate-900 text-slate-100 rounded-2xl border border-slate-700 shadow-2xl max-w-6xl w-full h-[90vh] flex flex-col overflow-hidden print:bg-transparent print:border-none print:shadow-none print:h-auto print:overflow-visible">
                     
                     {/* Header */}
-                    <div className="flex justify-between items-center bg-slate-950 px-6 py-4 border-b border-slate-800">
+                    <div className="flex justify-between items-center bg-slate-950 px-6 py-4 border-b border-slate-800 no-print">
                       <div className="flex items-center gap-3">
                         <span className="p-2.5 bg-indigo-650/30 text-indigo-400 rounded-xl border border-indigo-500/30">
                           <FileSpreadsheet className="w-5 h-5 text-indigo-400 animate-pulse" />
@@ -17455,10 +17455,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       </button>
                     </div>
 
-                    <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                    <div className="flex-1 flex flex-col md:flex-row overflow-hidden print:overflow-visible print:block">
                       
                       {/* Left Panel: Settings Controls */}
-                      <div className="w-full md:w-80 bg-slate-900 border-r border-slate-800 p-5 overflow-y-auto space-y-5 text-xs text-slate-300">
+                      <div className="w-full md:w-80 bg-slate-900 border-r border-slate-800 p-5 overflow-y-auto space-y-5 text-xs text-slate-300 no-print">
                         
                         {/* Selector 1: Template Type */}
                         <div className="space-y-1.5">
@@ -17652,10 +17652,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       </div>
 
                       {/* Right Panel: High-fidelity Live Paper A4 Preview */}
-                      <div className="flex-1 bg-slate-950 p-6 overflow-y-auto flex justify-center">
+                      <div className="flex-1 bg-slate-950 p-6 overflow-y-auto flex justify-center print:bg-transparent print:p-0 print:overflow-visible print:block">
                         <div 
                           id="printable-report-area"
-                          className="bg-white text-slate-900 p-8 md:p-12 shadow-2xl rounded-lg w-full max-w-[210mm] min-h-[297mm] text-sm leading-relaxed flex flex-col font-sans relative"
+                          className="bg-white text-slate-900 p-8 md:p-12 shadow-2xl rounded-lg w-full max-w-[210mm] min-h-[297mm] text-sm leading-relaxed flex flex-col font-sans relative print:p-4 print:shadow-none print:max-w-full print:w-full print:min-h-0"
                           style={{
                             boxShadow: '0 0 24px rgba(0,0,0,0.6)',
                             color: '#1e293b'
@@ -17663,35 +17663,96 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         >
                           <style>{`
                             @media print {
-                              html, body, #root, #app_root, #app_root *, div {
+                              @page {
+                                size: A4 portrait;
+                                margin: 10mm 8mm 10mm 8mm;
+                              }
+
+                              html, body {
                                 height: auto !important;
                                 min-height: auto !important;
                                 max-height: none !important;
                                 overflow: visible !important;
-                                overflow-y: visible !important;
-                                position: static !important;
+                                background: #ffffff !important;
+                                color: #000000 !important;
+                                margin: 0 !important;
+                                padding: 0 !important;
                               }
+
                               body * {
-                                visibility: hidden;
+                                visibility: hidden !important;
                               }
-                              #printable-report-area, #printable-report-area * {
-                                visibility: visible;
+
+                              .no-print, .no-print * {
+                                display: none !important;
+                                visibility: hidden !important;
+                                height: 0 !important;
+                                margin: 0 !important;
+                                padding: 0 !important;
                               }
+
+                              #printable-report-area, 
+                              #printable-report-area * {
+                                visibility: visible !important;
+                              }
+
                               #printable-report-area {
-                                position: absolute !important;
-                                left: 0 !important;
-                                top: 0 !important;
+                                position: static !important;
                                 width: 100% !important;
                                 max-width: 100% !important;
                                 height: auto !important;
                                 min-height: auto !important;
-                                margin: 0 !important;
-                                padding: 1.2cm !important;
+                                margin: 0 auto !important;
+                                padding: 0 !important;
                                 box-shadow: none !important;
                                 border: none !important;
-                                background: white !important;
-                                color: black !important;
+                                background: #ffffff !important;
+                                color: #0f172a !important;
                                 display: block !important;
+                                overflow: visible !important;
+                              }
+
+                              #printable-report-area table {
+                                width: 100% !important;
+                                max-width: 100% !important;
+                                table-layout: fixed !important;
+                                border-collapse: collapse !important;
+                                font-size: 10px !important;
+                                margin-bottom: 8px !important;
+                              }
+
+                              #printable-report-area th, 
+                              #printable-report-area td {
+                                word-wrap: break-word !important;
+                                word-break: break-word !important;
+                                overflow-wrap: break-word !important;
+                                white-space: normal !important;
+                                padding: 4px 6px !important;
+                                font-size: 10px !important;
+                                line-height: 1.3 !important;
+                              }
+
+                              #printable-report-area .grid {
+                                display: flex !important;
+                                flex-direction: row !important;
+                                flex-wrap: wrap !important;
+                                gap: 8px !important;
+                              }
+
+                              #printable-report-area .grid > * {
+                                flex: 1 1 22% !important;
+                                min-width: 0 !important;
+                              }
+
+                              #printable-report-area tr {
+                                page-break-inside: avoid !important;
+                                break-inside: avoid !important;
+                              }
+
+                              #printable-report-area .space-y-6 > div,
+                              #printable-report-area .space-y-2\.5 {
+                                page-break-inside: avoid !important;
+                                break-inside: avoid !important;
                               }
                             }
                           `}</style>
@@ -18051,7 +18112,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     </div>
 
                     {/* Footer */}
-                    <div className="bg-slate-950 px-6 py-4 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400">
+                    <div className="bg-slate-950 px-6 py-4 border-t border-slate-800 flex justify-between items-center text-xs text-slate-400 no-print">
                       <span>✓ Dữ liệu hoạt nghiệm đồng bộ khép kín ISO QMS DKBike v1.2</span>
                       <div className="flex gap-2">
                         <button
