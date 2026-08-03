@@ -9858,7 +9858,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       );
     };
 
-    const filteredExecTasks = planningTasks.filter(t => {
+    const filteredExecTasks = (planningTasks || []).filter(t => {
       if (!isActionTrackerTaskForSheet(t)) return false;
       const deadlineStr = String(t.deadline || t.dueDate || t.date || '').trim();
       if (type === 'weekly') {
@@ -10013,12 +10013,14 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     const wb = XLSXStyle.utils.book_new();
     const ws1 = XLSXStyle.utils.aoa_to_sheet(aoaData1);
     const ws2 = XLSXStyle.utils.aoa_to_sheet(aoaData2);
+    const wsExec = XLSXStyle.utils.aoa_to_sheet(aoaDataExec);
     const wsIqc = XLSXStyle.utils.aoa_to_sheet(aoaDataIqc);
     const wsOqc = XLSXStyle.utils.aoa_to_sheet(aoaDataOqc);
     const ws3 = XLSXStyle.utils.aoa_to_sheet(aoaData3);
 
     // Apply styles wrapper helper
     const styleSheet = (ws: any, rowTracker: any[], totalCols: number) => {
+      if (!ws) return;
       const decodedRange = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1:J1');
       const totalRows = decodedRange.e.r + 1;
       
