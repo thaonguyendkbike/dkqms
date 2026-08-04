@@ -10907,271 +10907,323 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
   };
 
   const handleExportCustomerFeedbackToExcel = () => {
-    const dataToExport = filteredMarketDefects.length > 0 ? filteredMarketDefects : defects;
-    if (!dataToExport || dataToExport.length === 0) {
-      alert("Không có bản ghi phản ánh khách hàng nào để tải về.");
-      return;
-    }
-
-    const wb = XLSXStyle.utils.book_new();
-    const nowStr = new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-    const dateFileStr = new Date().toISOString().split('T')[0];
-
-    const headers = [
-      'STT',
-      'Mã Phản Ánh / Sự Cố',
-      'Loại Phản Ánh',
-      'Loại Phản Ánh Gốc',
-      'Dòng Xe (Model)',
-      'Đại Lý / Nguồn Phản Ánh',
-      'Tên Khách Hàng / Đại Lý',
-      'Ngày Phát Sinh Lỗi',
-      'Ngày Tiếp Nhận',
-      'Ngày Bán Xe',
-      'Số Khung',
-      'Số Máy',
-      'Phân Loại Lỗi / Lĩnh Vực',
-      'Mô Tả Triệu Chứng / Nội Dung Phản Ánh',
-      'Mức Độ Nghiêm Trọng',
-      'Cơ Sở Phân Loại Mức Độ',
-      'Đánh Giá Khách Hàng',
-      'Nguyên Nhân Cốt Lõi',
-      'Phương Án Xử Lý / Tạm Thời',
-      'Hành Động Khắc Phục (CAPA)',
-      'Hành Động Phòng Ngừa',
-      'Nhà Cung Cấp Liên Quan',
-      'Người Phụ Trách',
-      'Hạn Hoàn Thành',
-      'Nơi Phát Sinh',
-      'Mã CAPA / ECO Liên Kết',
-      'Trạng Thái Xử Lý',
-      'Ghi Chú Dữ Liệu',
-      'Link / Ảnh Đính Kèm'
-    ];
-
-    const aoaData: any[][] = [];
-
-    aoaData.push(['CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT - PHÒNG QUẢN LÝ CHẤT LƯỢNG (DK QMS)']);
-    aoaData.push(['BÁO CÁO TOÀN BỘ BẢN GHI PHẢN ÁNH KHÁCH HÀNG & SỰ CỐ THỊ TRƯỜNG']);
-    aoaData.push([`Thời điểm xuất file: ${nowStr} | Số bản ghi: ${dataToExport.length} | Thương hiệu: DKBike - Xe cho cả gia đình`]);
-    aoaData.push([]); // Spacer row
-    aoaData.push(headers);
-
-    dataToExport.forEach((item, index) => {
-      const imgList: string[] = [];
-      if (item.imageUrl) imgList.push(item.imageUrl);
-      if (item.images && Array.isArray(item.images)) {
-        item.images.forEach(img => {
-          if (img && !imgList.includes(img)) imgList.push(img);
-        });
+    try {
+      const dataToExport = filteredMarketDefects.length > 0 ? filteredMarketDefects : defects;
+      if (!dataToExport || dataToExport.length === 0) {
+        alert("Không có bản ghi phản ánh khách hàng nào để tải về.");
+        return;
       }
-      const imgStr = imgList.join(' ; ');
 
-      aoaData.push([
-        index + 1,
-        item.id || '',
-        item.feedbackType || 'Lỗi xe từ khách hàng',
-        item.originalCategory || '',
-        item.model || '',
-        item.dealer || '',
-        item.customerName || '',
-        item.defectDate || '',
-        item.sourceDate || '',
-        item.saleDate || '',
-        item.chassisNo || '',
-        item.engineNo || '',
-        item.type || '',
-        item.description || '',
-        item.severity || 'C',
-        item.severityRationale || '',
-        item.customerRating || '',
-        item.rootCause || '',
-        item.correction || '',
-        item.correctiveAction || '',
-        item.preventiveAction || '',
-        item.supplierName || '',
-        item.assignee || '',
-        item.targetDate || '',
-        item.locationOfOrigin || '',
-        item.capaId || '',
-        item.status || 'Chưa xử lý',
-        item.dataNotes || '',
-        imgStr
-      ]);
-    });
+      const wb = XLSXStyle.utils.book_new();
+      const nowStr = new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      const dateFileStr = new Date().toISOString().split('T')[0];
 
-    const ws = XLSXStyle.utils.aoa_to_sheet(aoaData);
+      const headers = [
+        'STT',
+        'Mã Phản Ánh / Sự Cố',
+        'Loại Phản Ánh',
+        'Loại Phản Ánh Gốc',
+        'Dòng Xe (Model)',
+        'Đại Lý / Nguồn Phản Ánh',
+        'Tên Khách Hàng / Đại Lý',
+        'Ngày Phát Sinh Lỗi',
+        'Ngày Tiếp Nhận',
+        'Ngày Bán Xe',
+        'Số Khung',
+        'Số Máy',
+        'Phân Loại Lỗi / Lĩnh Vực',
+        'Mô Tả Triệu Chứng / Nội Dung Phản Ánh',
+        'Mức Độ Nghiêm Trọng',
+        'Cơ Sở Phân Loại Mức Độ',
+        'Đánh Giá Khách Hàng',
+        'Nguyên Nhân Cốt Lõi',
+        'Phương Án Xử Lý / Tạm Thời',
+        'Hành Động Khắc Phục (CAPA)',
+        'Hành Động Phòng Ngừa',
+        'Nhà Cung Cấp Liên Quan',
+        'Người Phụ Trách',
+        'Hạn Hoàn Thành',
+        'Nơi Phát Sinh',
+        'Mã CAPA / ECO Liên Kết',
+        'Trạng Thái Xử Lý',
+        'Ghi Chú Dữ Liệu',
+        'Link / Ảnh Đính Kèm'
+      ];
 
-    ws['!cols'] = [
-      { wch: 6 },   // STT
-      { wch: 16 },  // Mã Phản Ánh
-      { wch: 22 },  // Loại Phản Ánh
-      { wch: 20 },  // Loại Phản Ánh Gốc
-      { wch: 18 },  // Dòng Xe
-      { wch: 25 },  // Đại Lý
-      { wch: 22 },  // Tên KH / Đại lý
-      { wch: 15 },  // Ngày Phát Sinh
-      { wch: 15 },  // Ngày Tiếp Nhận
-      { wch: 15 },  // Ngày Bán Xe
-      { wch: 20 },  // Số Khung
-      { wch: 20 },  // Số Máy
-      { wch: 22 },  // Phân Loại Lỗi
-      { wch: 45 },  // Mô Tả Triệu Chứng
-      { wch: 18 },  // Mức Độ Nghiêm Trọng
-      { wch: 30 },  // Cơ Sở Phân Loại
-      { wch: 20 },  // Đánh Giá KH
-      { wch: 35 },  // Nguyên Nhân Cốt Lõi
-      { wch: 35 },  // Phương Án Xử Lý
-      { wch: 35 },  // Hành Động Khắc Phục
-      { wch: 35 },  // Hành Động Phòng Ngừa
-      { wch: 25 },  // NCC
-      { wch: 20 },  // Người Phụ Trách
-      { wch: 15 },  // Hạn Hoàn Thành
-      { wch: 25 },  // Nơi Phát Sinh
-      { wch: 18 },  // Mã CAPA
-      { wch: 16 },  // Trạng Thái Xử Lý
-      { wch: 25 },  // Ghi Chú Dữ Liệu
-      { wch: 30 }   // Link / Ảnh Đính Kèm
-    ];
+      const emptyPad = Array(headers.length - 1).fill('');
 
-    ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
-      { s: { r: 2, c: 0 }, e: { r: 2, c: headers.length - 1 } }
-    ];
+      const cleanVal = (val: any): string => {
+        if (val === null || val === undefined) return '';
+        if (typeof val === 'object') return JSON.stringify(val);
+        return String(val);
+      };
 
-    const heights = [
-      { hpt: 26 },
-      { hpt: 22 },
-      { hpt: 18 },
-      { hpt: 10 },
-      { hpt: 26 }
-    ];
-    for (let i = 0; i < dataToExport.length; i++) {
-      heights.push({ hpt: 22 });
-    }
-    ws['!rows'] = heights;
+      const aoaData: any[][] = [];
 
-    const range = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1:AC5');
+      // Row 0: Banner Title
+      aoaData.push(['CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT - PHÒNG QUẢN LÝ CHẤT LƯỢNG (DK QMS)', ...emptyPad]);
+      // Row 1: Subtitle
+      aoaData.push(['BÁO CÁO TOÀN BỘ BẢN GHI PHẢN ÁNH KHÁCH HÀNG & SỰ CỐ THỊ TRƯỜNG', ...emptyPad]);
+      // Row 2: Metadata
+      aoaData.push([`Thời điểm xuất file: ${nowStr} | Số bản ghi: ${dataToExport.length} | Thương hiệu: DKBike - Xe cho cả gia đình`, ...emptyPad]);
+      // Row 3: Spacer
+      aoaData.push(Array(headers.length).fill(''));
+      // Row 4: Column Headers
+      aoaData.push(headers);
 
-    // Title Row
-    for (let C = range.s.c; C <= range.e.c; C++) {
-      const cellAddr = XLSXStyle.utils.encode_cell({ r: 0, c: C });
-      if (ws[cellAddr]) {
-        ws[cellAddr].s = {
-          font: { name: "Arial", sz: 12, bold: true, color: { rgb: "FFFFFF" } },
-          fill: { fgColor: { rgb: "0213B0" } },
-          alignment: { horizontal: "center", vertical: "center" }
-        };
+      // Rows 5+: Data
+      dataToExport.forEach((item, index) => {
+        const imgList: string[] = [];
+        if (item.imageUrl) imgList.push(cleanVal(item.imageUrl));
+        if (item.images && Array.isArray(item.images)) {
+          item.images.forEach(img => {
+            if (img && !imgList.includes(String(img))) imgList.push(cleanVal(img));
+          });
+        }
+        const imgStr = imgList.join(' ; ');
+
+        aoaData.push([
+          index + 1,
+          cleanVal(item.id),
+          cleanVal(item.feedbackType || 'Lỗi xe từ khách hàng'),
+          cleanVal(item.originalCategory),
+          cleanVal(item.model),
+          cleanVal(item.dealer),
+          cleanVal(item.customerName),
+          cleanVal(item.defectDate),
+          cleanVal(item.sourceDate),
+          cleanVal(item.saleDate),
+          cleanVal(item.chassisNo),
+          cleanVal(item.engineNo),
+          cleanVal(item.type),
+          cleanVal(item.description),
+          cleanVal(item.severity || 'C'),
+          cleanVal(item.severityRationale),
+          cleanVal(item.customerRating),
+          cleanVal(item.rootCause),
+          cleanVal(item.correction),
+          cleanVal(item.correctiveAction),
+          cleanVal(item.preventiveAction),
+          cleanVal(item.supplierName),
+          cleanVal(item.assignee),
+          cleanVal(item.targetDate),
+          cleanVal(item.locationOfOrigin),
+          cleanVal(item.capaId),
+          cleanVal(item.status || 'Chưa xử lý'),
+          cleanVal(item.dataNotes),
+          imgStr
+        ]);
+      });
+
+      const ws = XLSXStyle.utils.aoa_to_sheet(aoaData);
+
+      ws['!cols'] = [
+        { wch: 6 },   // STT
+        { wch: 16 },  // Mã Phản Ánh
+        { wch: 22 },  // Loại Phản Ánh
+        { wch: 20 },  // Loại Phản Ánh Gốc
+        { wch: 18 },  // Dòng Xe
+        { wch: 25 },  // Đại Lý
+        { wch: 22 },  // Tên KH / Đại lý
+        { wch: 15 },  // Ngày Phát Sinh
+        { wch: 15 },  // Ngày Tiếp Nhận
+        { wch: 15 },  // Ngày Bán Xe
+        { wch: 20 },  // Số Khung
+        { wch: 20 },  // Số Máy
+        { wch: 22 },  // Phân Loại Lỗi
+        { wch: 45 },  // Mô Tả Triệu Chứng
+        { wch: 18 },  // Mức Độ Nghiêm Trọng
+        { wch: 30 },  // Cơ Sở Phân Loại
+        { wch: 20 },  // Đánh Giá KH
+        { wch: 35 },  // Nguyên Nhân Cốt Lõi
+        { wch: 35 },  // Phương Án Xử Lý
+        { wch: 35 },  // Hành Động Khắc Phục
+        { wch: 35 },  // Hành Động Phòng Ngừa
+        { wch: 25 },  // NCC
+        { wch: 20 },  // Người Phụ Trách
+        { wch: 15 },  // Hạn Hoàn Thành
+        { wch: 25 },  // Nơi Phát Sinh
+        { wch: 18 },  // Mã CAPA
+        { wch: 16 },  // Trạng Thái Xử Lý
+        { wch: 25 },  // Ghi Chú Dữ Liệu
+        { wch: 30 }   // Link / Ảnh Đính Kèm
+      ];
+
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: headers.length - 1 } }
+      ];
+
+      const heights = [
+        { hpt: 26 },
+        { hpt: 22 },
+        { hpt: 18 },
+        { hpt: 10 },
+        { hpt: 26 }
+      ];
+      for (let i = 0; i < dataToExport.length; i++) {
+        heights.push({ hpt: 22 });
       }
-    }
+      ws['!rows'] = heights;
 
-    // Subtitle Row
-    for (let C = range.s.c; C <= range.e.c; C++) {
-      const cellAddr = XLSXStyle.utils.encode_cell({ r: 1, c: C });
-      if (ws[cellAddr]) {
-        ws[cellAddr].s = {
-          font: { name: "Arial", sz: 11, bold: true, color: { rgb: "0213B0" } },
-          fill: { fgColor: { rgb: "EEF2FF" } },
-          alignment: { horizontal: "center", vertical: "center" }
-        };
-      }
-    }
+      const range = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1:AC5');
 
-    // Meta Row
-    for (let C = range.s.c; C <= range.e.c; C++) {
-      const cellAddr = XLSXStyle.utils.encode_cell({ r: 2, c: C });
-      if (ws[cellAddr]) {
-        ws[cellAddr].s = {
-          font: { name: "Arial", sz: 9, italic: true, color: { rgb: "475569" } },
-          fill: { fgColor: { rgb: "F8FAFC" } },
-          alignment: { horizontal: "center", vertical: "center" }
-        };
-      }
-    }
-
-    // Headers Row (4)
-    for (let C = range.s.c; C <= range.e.c; C++) {
-      const cellAddr = XLSXStyle.utils.encode_cell({ r: 4, c: C });
-      if (ws[cellAddr]) {
-        ws[cellAddr].s = {
-          font: { name: "Arial", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
-          fill: { fgColor: { rgb: "1E293B" } },
-          alignment: { horizontal: "center", vertical: "center", wrapText: true },
-          border: {
-            top: { style: "thin", color: { rgb: "94A3B8" } },
-            bottom: { style: "thin", color: { rgb: "94A3B8" } },
-            left: { style: "thin", color: { rgb: "94A3B8" } },
-            right: { style: "thin", color: { rgb: "94A3B8" } }
-          }
-        };
-      }
-    }
-
-    // Data Rows
-    for (let R = 5; R <= range.e.r; R++) {
-      const isEven = R % 2 === 0;
-      const bgRgb = isEven ? "F8FAFC" : "FFFFFF";
-
+      // Title Row (0)
       for (let C = range.s.c; C <= range.e.c; C++) {
-        const cellAddr = XLSXStyle.utils.encode_cell({ r: R, c: C });
+        const cellAddr = XLSXStyle.utils.encode_cell({ r: 0, c: C });
         if (ws[cellAddr]) {
-          let align: any = { vertical: "center", wrapText: true };
-          if ([0, 1, 7, 8, 9, 14, 23, 25, 26].includes(C)) {
-            align.horizontal = "center";
-          } else {
-            align.horizontal = "left";
-          }
-
-          let fillRgb = bgRgb;
-          let fontColorRgb = "1E293B";
-          let isBold = false;
-
-          const cellValue = String(ws[cellAddr].v || '');
-          if (C === 26) {
-            isBold = true;
-            if (cellValue === 'Đã xử lý') {
-              fillRgb = "DCFCE7";
-              fontColorRgb = "15803D";
-            } else if (cellValue === 'Đang xử lý') {
-              fillRgb = "DBEAFE";
-              fontColorRgb = "1E40AF";
-            } else {
-              fillRgb = "FEF3C7";
-              fontColorRgb = "B45309";
-            }
-          } else if (C === 1) {
-            fontColorRgb = "0213B0";
-            isBold = true;
-          }
-
           ws[cellAddr].s = {
-            font: { name: "Arial", sz: 9.5, color: { rgb: fontColorRgb }, bold: isBold },
-            fill: { fgColor: { rgb: fillRgb } },
-            alignment: align,
+            font: { name: "Arial", sz: 12, bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "0213B0" } },
+            alignment: { horizontal: "center", vertical: "center" }
+          };
+        }
+      }
+
+      // Subtitle Row (1)
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddr = XLSXStyle.utils.encode_cell({ r: 1, c: C });
+        if (ws[cellAddr]) {
+          ws[cellAddr].s = {
+            font: { name: "Arial", sz: 11, bold: true, color: { rgb: "0213B0" } },
+            fill: { fgColor: { rgb: "EEF2FF" } },
+            alignment: { horizontal: "center", vertical: "center" }
+          };
+        }
+      }
+
+      // Meta Row (2)
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddr = XLSXStyle.utils.encode_cell({ r: 2, c: C });
+        if (ws[cellAddr]) {
+          ws[cellAddr].s = {
+            font: { name: "Arial", sz: 9, italic: true, color: { rgb: "475569" } },
+            fill: { fgColor: { rgb: "F8FAFC" } },
+            alignment: { horizontal: "center", vertical: "center" }
+          };
+        }
+      }
+
+      // Headers Row (4)
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddr = XLSXStyle.utils.encode_cell({ r: 4, c: C });
+        if (ws[cellAddr]) {
+          ws[cellAddr].s = {
+            font: { name: "Arial", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
+            fill: { fgColor: { rgb: "1E293B" } },
+            alignment: { horizontal: "center", vertical: "center", wrapText: true },
             border: {
-              top: { style: "thin", color: { rgb: "E2E8F0" } },
-              bottom: { style: "thin", color: { rgb: "E2E8F0" } },
-              left: { style: "thin", color: { rgb: "E2E8F0" } },
-              right: { style: "thin", color: { rgb: "E2E8F0" } }
+              top: { style: "thin", color: { rgb: "94A3B8" } },
+              bottom: { style: "thin", color: { rgb: "94A3B8" } },
+              left: { style: "thin", color: { rgb: "94A3B8" } },
+              right: { style: "thin", color: { rgb: "94A3B8" } }
             }
           };
         }
       }
-    }
 
-    XLSXStyle.utils.book_append_sheet(wb, ws, "Phản Ánh Khách Hàng");
+      // Data Rows (5 to end)
+      for (let R = 5; R <= range.e.r; R++) {
+        const isEven = R % 2 === 0;
+        const bgRgb = isEven ? "F8FAFC" : "FFFFFF";
 
-    const fileName = `DKBike_Bao_Cao_Phan_Anh_Khach_Hang_${dateFileStr}.xlsx`;
-    try {
-      XLSXStyle.writeFile(wb, fileName);
-    } catch (err) {
-      console.error("XLSXStyle.writeFile error, falling back:", err);
-      try {
-        XLSXStyle.writeFile(wb, fileName, { bookType: 'xlsx', type: 'binary' });
-      } catch (err2) {
-        alert("Không thể tạo file Excel. Vui lòng thử lại!");
+        for (let C = range.s.c; C <= range.e.c; C++) {
+          const cellAddr = XLSXStyle.utils.encode_cell({ r: R, c: C });
+          if (ws[cellAddr]) {
+            let align: any = { vertical: "center", wrapText: true };
+            if ([0, 1, 7, 8, 9, 14, 23, 25, 26].includes(C)) {
+              align.horizontal = "center";
+            } else {
+              align.horizontal = "left";
+            }
+
+            let fillRgb = bgRgb;
+            let fontColorRgb = "1E293B";
+            let isBold = false;
+
+            const cellValue = String(ws[cellAddr].v || '');
+            if (C === 26) {
+              isBold = true;
+              if (cellValue === 'Đã xử lý') {
+                fillRgb = "DCFCE7";
+                fontColorRgb = "15803D";
+              } else if (cellValue === 'Đang xử lý') {
+                fillRgb = "DBEAFE";
+                fontColorRgb = "1E40AF";
+              } else {
+                fillRgb = "FEF3C7";
+                fontColorRgb = "B45309";
+              }
+            } else if (C === 1) {
+              fontColorRgb = "0213B0";
+              isBold = true;
+            }
+
+            ws[cellAddr].s = {
+              font: { name: "Arial", sz: 9.5, color: { rgb: fontColorRgb }, bold: isBold },
+              fill: { fgColor: { rgb: fillRgb } },
+              alignment: align,
+              border: {
+                top: { style: "thin", color: { rgb: "E2E8F0" } },
+                bottom: { style: "thin", color: { rgb: "E2E8F0" } },
+                left: { style: "thin", color: { rgb: "E2E8F0" } },
+                right: { style: "thin", color: { rgb: "E2E8F0" } }
+              }
+            };
+          }
+        }
       }
+
+      XLSXStyle.utils.book_append_sheet(wb, ws, "Phản Ánh Khách Hàng");
+
+      const fileName = `DKBike_Bao_Cao_Phan_Anh_Khach_Hang_${dateFileStr}.xlsx`;
+
+      // Download helper with multi-fallback (writeFile -> Blob binary -> Blob array)
+      try {
+        XLSXStyle.writeFile(wb, fileName);
+      } catch (err1) {
+        console.warn("XLSXStyle.writeFile failed, trying Blob binary download:", err1);
+        try {
+          const wbout = XLSXStyle.write(wb, { bookType: 'xlsx', type: 'binary' });
+          const buf = new ArrayBuffer(wbout.length);
+          const view = new Uint8Array(buf);
+          for (let i = 0; i < wbout.length; i++) view[i] = wbout.charCodeAt(i) & 0xFF;
+          const blob = new Blob([buf], { type: 'application/octet-stream' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }, 100);
+        } catch (err2) {
+          console.warn("Blob binary download failed, trying Blob array download:", err2);
+          try {
+            const wbout = XLSXStyle.write(wb, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            }, 100);
+          } catch (err3) {
+            console.error("All export fallbacks failed:", err3);
+            alert("Lỗi xuất file Excel: " + (err3 instanceof Error ? err3.message : String(err3)));
+          }
+        }
+      }
+    } catch (globalErr) {
+      console.error("Error generating Customer Feedback Excel:", globalErr);
+      alert("Lỗi tạo dữ liệu Excel: " + (globalErr instanceof Error ? globalErr.message : String(globalErr)));
     }
   };
 
