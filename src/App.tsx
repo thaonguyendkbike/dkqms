@@ -10906,6 +10906,275 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     XLSXStyle.writeFile(wb, `QLCL - Báo cáo ngày - ${todayStr.replace(/\//g, "-")}.xlsx`);
   };
 
+  const handleExportCustomerFeedbackToExcel = () => {
+    const dataToExport = filteredMarketDefects.length > 0 ? filteredMarketDefects : defects;
+    if (!dataToExport || dataToExport.length === 0) {
+      alert("Không có bản ghi phản ánh khách hàng nào để tải về.");
+      return;
+    }
+
+    const wb = XLSXStyle.utils.book_new();
+    const nowStr = new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const dateFileStr = new Date().toISOString().split('T')[0];
+
+    const headers = [
+      'STT',
+      'Mã Phản Ánh / Sự Cố',
+      'Loại Phản Ánh',
+      'Loại Phản Ánh Gốc',
+      'Dòng Xe (Model)',
+      'Đại Lý / Nguồn Phản Ánh',
+      'Tên Khách Hàng / Đại Lý',
+      'Ngày Phát Sinh Lỗi',
+      'Ngày Tiếp Nhận',
+      'Ngày Bán Xe',
+      'Số Khung',
+      'Số Máy',
+      'Phân Loại Lỗi / Lĩnh Vực',
+      'Mô Tả Triệu Chứng / Nội Dung Phản Ánh',
+      'Mức Độ Nghiêm Trọng',
+      'Cơ Sở Phân Loại Mức Độ',
+      'Đánh Giá Khách Hàng',
+      'Nguyên Nhân Cốt Lõi',
+      'Phương Án Xử Lý / Tạm Thời',
+      'Hành Động Khắc Phục (CAPA)',
+      'Hành Động Phòng Ngừa',
+      'Nhà Cung Cấp Liên Quan',
+      'Người Phụ Trách',
+      'Hạn Hoàn Thành',
+      'Nơi Phát Sinh',
+      'Mã CAPA / ECO Liên Kết',
+      'Trạng Thái Xử Lý',
+      'Ghi Chú Dữ Liệu',
+      'Link / Ảnh Đính Kèm'
+    ];
+
+    const aoaData: any[][] = [];
+
+    aoaData.push(['CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT - PHÒNG QUẢN LÝ CHẤT LƯỢNG (DK QMS)']);
+    aoaData.push(['BÁO CÁO TOÀN BỘ BẢN GHI PHẢN ÁNH KHÁCH HÀNG & SỰ CỐ THỊ TRƯỜNG']);
+    aoaData.push([`Thời điểm xuất file: ${nowStr} | Số bản ghi: ${dataToExport.length} | Thương hiệu: DKBike - Xe cho cả gia đình`]);
+    aoaData.push([]); // Spacer row
+    aoaData.push(headers);
+
+    dataToExport.forEach((item, index) => {
+      const imgList: string[] = [];
+      if (item.imageUrl) imgList.push(item.imageUrl);
+      if (item.images && Array.isArray(item.images)) {
+        item.images.forEach(img => {
+          if (img && !imgList.includes(img)) imgList.push(img);
+        });
+      }
+      const imgStr = imgList.join(' ; ');
+
+      aoaData.push([
+        index + 1,
+        item.id || '',
+        item.feedbackType || 'Lỗi xe từ khách hàng',
+        item.originalCategory || '',
+        item.model || '',
+        item.dealer || '',
+        item.customerName || '',
+        item.defectDate || '',
+        item.sourceDate || '',
+        item.saleDate || '',
+        item.chassisNo || '',
+        item.engineNo || '',
+        item.type || '',
+        item.description || '',
+        item.severity || 'C',
+        item.severityRationale || '',
+        item.customerRating || '',
+        item.rootCause || '',
+        item.correction || '',
+        item.correctiveAction || '',
+        item.preventiveAction || '',
+        item.supplierName || '',
+        item.assignee || '',
+        item.targetDate || '',
+        item.locationOfOrigin || '',
+        item.capaId || '',
+        item.status || 'Chưa xử lý',
+        item.dataNotes || '',
+        imgStr
+      ]);
+    });
+
+    const ws = XLSXStyle.utils.aoa_to_sheet(aoaData);
+
+    ws['!cols'] = [
+      { wch: 6 },   // STT
+      { wch: 16 },  // Mã Phản Ánh
+      { wch: 22 },  // Loại Phản Ánh
+      { wch: 20 },  // Loại Phản Ánh Gốc
+      { wch: 18 },  // Dòng Xe
+      { wch: 25 },  // Đại Lý
+      { wch: 22 },  // Tên KH / Đại lý
+      { wch: 15 },  // Ngày Phát Sinh
+      { wch: 15 },  // Ngày Tiếp Nhận
+      { wch: 15 },  // Ngày Bán Xe
+      { wch: 20 },  // Số Khung
+      { wch: 20 },  // Số Máy
+      { wch: 22 },  // Phân Loại Lỗi
+      { wch: 45 },  // Mô Tả Triệu Chứng
+      { wch: 18 },  // Mức Độ Nghiêm Trọng
+      { wch: 30 },  // Cơ Sở Phân Loại
+      { wch: 20 },  // Đánh Giá KH
+      { wch: 35 },  // Nguyên Nhân Cốt Lõi
+      { wch: 35 },  // Phương Án Xử Lý
+      { wch: 35 },  // Hành Động Khắc Phục
+      { wch: 35 },  // Hành Động Phòng Ngừa
+      { wch: 25 },  // NCC
+      { wch: 20 },  // Người Phụ Trách
+      { wch: 15 },  // Hạn Hoàn Thành
+      { wch: 25 },  // Nơi Phát Sinh
+      { wch: 18 },  // Mã CAPA
+      { wch: 16 },  // Trạng Thái Xử Lý
+      { wch: 25 },  // Ghi Chú Dữ Liệu
+      { wch: 30 }   // Link / Ảnh Đính Kèm
+    ];
+
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: headers.length - 1 } }
+    ];
+
+    const heights = [
+      { hpt: 26 },
+      { hpt: 22 },
+      { hpt: 18 },
+      { hpt: 10 },
+      { hpt: 26 }
+    ];
+    for (let i = 0; i < dataToExport.length; i++) {
+      heights.push({ hpt: 22 });
+    }
+    ws['!rows'] = heights;
+
+    const range = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1:AC5');
+
+    // Title Row
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cellAddr = XLSXStyle.utils.encode_cell({ r: 0, c: C });
+      if (ws[cellAddr]) {
+        ws[cellAddr].s = {
+          font: { name: "Arial", sz: 12, bold: true, color: { rgb: "FFFFFF" } },
+          fill: { fgColor: { rgb: "0213B0" } },
+          alignment: { horizontal: "center", vertical: "center" }
+        };
+      }
+    }
+
+    // Subtitle Row
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cellAddr = XLSXStyle.utils.encode_cell({ r: 1, c: C });
+      if (ws[cellAddr]) {
+        ws[cellAddr].s = {
+          font: { name: "Arial", sz: 11, bold: true, color: { rgb: "0213B0" } },
+          fill: { fgColor: { rgb: "EEF2FF" } },
+          alignment: { horizontal: "center", vertical: "center" }
+        };
+      }
+    }
+
+    // Meta Row
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cellAddr = XLSXStyle.utils.encode_cell({ r: 2, c: C });
+      if (ws[cellAddr]) {
+        ws[cellAddr].s = {
+          font: { name: "Arial", sz: 9, italic: true, color: { rgb: "475569" } },
+          fill: { fgColor: { rgb: "F8FAFC" } },
+          alignment: { horizontal: "center", vertical: "center" }
+        };
+      }
+    }
+
+    // Headers Row (4)
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cellAddr = XLSXStyle.utils.encode_cell({ r: 4, c: C });
+      if (ws[cellAddr]) {
+        ws[cellAddr].s = {
+          font: { name: "Arial", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
+          fill: { fgColor: { rgb: "1E293B" } },
+          alignment: { horizontal: "center", vertical: "center", wrapText: true },
+          border: {
+            top: { style: "thin", color: { rgb: "94A3B8" } },
+            bottom: { style: "thin", color: { rgb: "94A3B8" } },
+            left: { style: "thin", color: { rgb: "94A3B8" } },
+            right: { style: "thin", color: { rgb: "94A3B8" } }
+          }
+        };
+      }
+    }
+
+    // Data Rows
+    for (let R = 5; R <= range.e.r; R++) {
+      const isEven = R % 2 === 0;
+      const bgRgb = isEven ? "F8FAFC" : "FFFFFF";
+
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddr = XLSXStyle.utils.encode_cell({ r: R, c: C });
+        if (ws[cellAddr]) {
+          let align: any = { vertical: "center", wrapText: true };
+          if ([0, 1, 7, 8, 9, 14, 23, 25, 26].includes(C)) {
+            align.horizontal = "center";
+          } else {
+            align.horizontal = "left";
+          }
+
+          let fillRgb = bgRgb;
+          let fontColorRgb = "1E293B";
+          let isBold = false;
+
+          const cellValue = String(ws[cellAddr].v || '');
+          if (C === 26) {
+            isBold = true;
+            if (cellValue === 'Đã xử lý') {
+              fillRgb = "DCFCE7";
+              fontColorRgb = "15803D";
+            } else if (cellValue === 'Đang xử lý') {
+              fillRgb = "DBEAFE";
+              fontColorRgb = "1E40AF";
+            } else {
+              fillRgb = "FEF3C7";
+              fontColorRgb = "B45309";
+            }
+          } else if (C === 1) {
+            fontColorRgb = "0213B0";
+            isBold = true;
+          }
+
+          ws[cellAddr].s = {
+            font: { name: "Arial", sz: 9.5, color: { rgb: fontColorRgb }, bold: isBold },
+            fill: { fgColor: { rgb: fillRgb } },
+            alignment: align,
+            border: {
+              top: { style: "thin", color: { rgb: "E2E8F0" } },
+              bottom: { style: "thin", color: { rgb: "E2E8F0" } },
+              left: { style: "thin", color: { rgb: "E2E8F0" } },
+              right: { style: "thin", color: { rgb: "E2E8F0" } }
+            }
+          };
+        }
+      }
+    }
+
+    XLSXStyle.utils.book_append_sheet(wb, ws, "Phản Ánh Khách Hàng");
+
+    const fileName = `DKBike_Bao_Cao_Phan_Anh_Khach_Hang_${dateFileStr}.xlsx`;
+    try {
+      XLSXStyle.writeFile(wb, fileName);
+    } catch (err) {
+      console.error("XLSXStyle.writeFile error, falling back:", err);
+      try {
+        XLSXStyle.writeFile(wb, fileName, { bookType: 'xlsx', type: 'binary' });
+      } catch (err2) {
+        alert("Không thể tạo file Excel. Vui lòng thử lại!");
+      }
+    }
+  };
+
   if (!authInitialized) {
     return (
       <div className="bg-slate-900 min-h-screen w-full flex flex-col items-center justify-center text-slate-100 font-sans animate-pulse" id="sec_loading">
@@ -22581,6 +22850,15 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   >
                     <FileSpreadsheet className="w-4.5 h-4.5" />
                   </button>
+                  <button
+                    type="button"
+                    onClick={handleExportCustomerFeedbackToExcel}
+                    className="bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs px-3 py-2.5 rounded-lg transition shadow flex items-center justify-center gap-1.5 cursor-pointer"
+                    title="Tải về file Excel chứa đầy đủ danh sách và các trường phản ánh khách hàng"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span className="hidden sm:inline">Tải về Excel ({filteredMarketDefects.length})</span>
+                  </button>
                 </div>
               </div>
 
@@ -22942,23 +23220,34 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     <span className="text-xs font-extrabold text-red-700 uppercase flex items-center gap-1.5">🚗 Bảng 1: Lỗi thị trường ({customerDefects.length})</span>
                     <span className="text-[11px] text-slate-500 mt-0.5">Mục tiêu dập lỗi triệt để và liên kết hồ sơ CAPA phòng vệ</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDefectDealerSearch('');
-                      setSelectedDefectDealer('');
-                      setIsDefectDealerDropdownOpen(false);
-                      setDefectModelSearch('');
-                      setSelectedDefectModel('');
-                      setIsDefectModelDropdownOpen(false);
-                      setAddDefectFeedbackType('Lỗi xe từ khách hàng');
-                      setShowAddDefectModal(true);
-                    }}
-                    className="bg-[#0213b0] hover:bg-blue-800 text-white font-bold text-xs p-2 rounded-lg transition shadow flex items-center justify-center cursor-pointer"
-                    title="Khai báo Phản ánh Thị trường"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleExportCustomerFeedbackToExcel}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-2.5 py-2 rounded-lg transition shadow flex items-center justify-center gap-1 cursor-pointer"
+                      title="Tải về toàn bộ bản ghi phản ánh khách hàng thành 1 bảng Excel"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Tải về Excel</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDefectDealerSearch('');
+                        setSelectedDefectDealer('');
+                        setIsDefectDealerDropdownOpen(false);
+                        setDefectModelSearch('');
+                        setSelectedDefectModel('');
+                        setIsDefectModelDropdownOpen(false);
+                        setAddDefectFeedbackType('Lỗi xe từ khách hàng');
+                        setShowAddDefectModal(true);
+                      }}
+                      className="bg-[#0213b0] hover:bg-blue-800 text-white font-bold text-xs p-2 rounded-lg transition shadow flex items-center justify-center cursor-pointer"
+                      title="Khai báo Phản ánh Thị trường"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left font-sans text-xs border-collapse border border-slate-300">
