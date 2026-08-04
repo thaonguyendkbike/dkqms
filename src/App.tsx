@@ -10954,8 +10954,14 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
 
       const cleanVal = (val: any): string => {
         if (val === null || val === undefined) return '';
-        if (typeof val === 'object') return JSON.stringify(val);
-        return String(val);
+        let str = typeof val === 'object' ? JSON.stringify(val) : String(val);
+        if (str.startsWith('data:image/')) {
+          return '[Có ảnh Base64 đính kèm]';
+        }
+        if (str.length > 32000) {
+          return str.substring(0, 32000) + '... [Nội dung quá dài đã được rút gọn]';
+        }
+        return str;
       };
 
       const aoaData: any[][] = [];
@@ -10974,13 +10980,25 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       // Rows 5+: Data
       dataToExport.forEach((item, index) => {
         const imgList: string[] = [];
-        if (item.imageUrl) imgList.push(cleanVal(item.imageUrl));
+        const processImg = (imgUrl?: string) => {
+          if (!imgUrl) return;
+          const s = String(imgUrl).trim();
+          if (!s) return;
+          if (s.startsWith('data:image/')) {
+            imgList.push('[Có ảnh Base64 đính kèm]');
+          } else if (s.startsWith('http://') || s.startsWith('https://')) {
+            imgList.push(s);
+          } else {
+            imgList.push(s.length > 200 ? '[Ảnh đính kèm]' : s);
+          }
+        };
+
+        processImg(item.imageUrl);
         if (item.images && Array.isArray(item.images)) {
-          item.images.forEach(img => {
-            if (img && !imgList.includes(String(img))) imgList.push(cleanVal(img));
-          });
+          item.images.forEach(img => processImg(img));
         }
-        const imgStr = imgList.join(' ; ');
+        const uniqueImgs = Array.from(new Set(imgList));
+        const imgStr = cleanVal(uniqueImgs.join(' ; '));
 
         aoaData.push([
           index + 1,
