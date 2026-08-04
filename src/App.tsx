@@ -9347,7 +9347,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     rowTrackerIqc.push({ type: 'main-title' });
     addMergeIqc(4, 0, 4, 9);
 
-    aoaDataIqc.push([`Dữ liệu tổng hợp linh kiện nhà cung cấp | Tổng số lô kiểm: ${exportIqcTotal} | Thông quan: ${exportIqcPassed} | Tỷ lệ đạt: ${exportIqcPassRate}%`, "", "", "", "", "", "", "", "", ""]);
+    aoaDataIqc.push([`Dữ liệu tổng hợp linh kiện nhà cung cấp | Tổng số lô kiểm: ${exportIqcTotal} | Đạt (PASS): ${exportIqcPassed} | Tỷ lệ đạt: ${exportIqcPassRate}%`, "", "", "", "", "", "", "", "", ""]);
     rowTrackerIqc.push({ type: 'main-subtitle' });
     addMergeIqc(5, 0, 5, 9);
 
@@ -9374,7 +9374,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
           item.partName || item.component || item.partCode || "Linh kiện",
           item.totalQuantity || item.sampleSize || item.quantity || 1,
           item.failedCount || item.defectCount || 0,
-          isPass ? "THÔNG QUAN" : "BÁC BỎ (LỖI)",
+          isPass ? "ĐẠT (PASS)" : "LỖI (FAIL)",
           item.defectDetail || item.notes || (isPass ? "Đạt tiêu chuẩn kỹ thuật nhập kho" : "Cần trả lại nhà cung cấp"),
           item.inspector || item.checkedBy || "KCS Kiểm kho"
         ]);
@@ -9854,6 +9854,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
 
     const filteredExecTasks = (planningTasks || []).filter(t => {
       if (!isActionTrackerTaskForSheet(t)) return false;
+      if (t.isSample || (typeof t.id === 'string' && t.id.startsWith('T-PL-'))) return false;
       const deadlineStr = String(t.deadline || t.dueDate || t.date || '').trim();
       if (type === 'weekly') {
         if (deadlineStr) {
@@ -9954,7 +9955,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
             const pctVal = t.status === 'Completed' || t.status === 'Hoàn thành' ? 100 : t.status === 'In_Progress' ? 50 : 0;
             const assignee = t.assignee || t.collaborator || t.handler || t.owner || "QC KCS";
             const deadline = t.deadline || t.dueDate || t.date || (isWeekly ? `Tuần ${week}` : `Tháng ${month}`);
-            const notes = t.notes || t.actualResult || t.result || t.explanation || "Đã kiểm soát & nghiệm thu theo quy chuẩn";
+            const notes = t.notes || t.actualResult || t.result || t.explanation || "";
 
             aoaDataExec.push([
               globalTaskIdx,
@@ -10287,7 +10288,6 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
 
     // Append sheets to workbook
     XLSXStyle.utils.book_append_sheet(wb, ws1, isWeekly ? `Báo cáo Tuần ${week}` : `Báo cáo Tháng ${month}`);
-    XLSXStyle.utils.book_append_sheet(wb, ws2, isWeekly ? `Kế hoạch Tuần ${week}` : `Kế hoạch Tháng ${month}`);
     XLSXStyle.utils.book_append_sheet(wb, wsExec, "Báo cáo thực thi KH");
     XLSXStyle.utils.book_append_sheet(wb, wsIqc, "Nhật ký IQC (Đầu vào)");
     XLSXStyle.utils.book_append_sheet(wb, wsOqc, "Nhật ký OQC (Đầu ra)");
