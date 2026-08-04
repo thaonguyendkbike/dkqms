@@ -6008,13 +6008,13 @@ export function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.filter((t: any) => !(t.isSample || (typeof t.id === 'string' && t.id.startsWith('T-PL-'))));
         }
       }
     } catch (e) {
       console.error(e);
     }
-    return getInitialQmsPlanningTasks(7, 2026);
+    return [];
   });
 
   useEffect(() => {
