@@ -3871,17 +3871,8 @@ export default function QualityPlanning({
     }
 
     const finalDeadline = newTaskDeadline || (planningMode === 'weekly' ? getDateInWeek(selectedYear, selectedMonth, selectedWeek) : `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-28`);
+    const { month: taskM, year: taskY } = parseDateYearMonth(finalDeadline, selectedMonth, selectedYear);
     const calculatedWeek = getWeekFromDateString(finalDeadline);
-
-    let taskM = selectedMonth;
-    let taskY = selectedYear;
-    if (finalDeadline) {
-      const parts = finalDeadline.split('-');
-      if (parts.length === 3) {
-        taskY = Number(parts[0]) || selectedYear;
-        taskM = Number(parts[1]) || selectedMonth;
-      }
-    }
 
     const newTask: QualityTask = {
       id: `T-USER-${Math.floor(100+Math.random()*900)}`,
@@ -3894,7 +3885,7 @@ export default function QualityPlanning({
       modelOrSupplier: refStr || undefined,
       month: taskM,
       year: taskY,
-      week: planningMode === 'weekly' ? selectedWeek : calculatedWeek
+      week: calculatedWeek
     };
 
     setTasks(prev => [newTask, ...prev]);
@@ -4068,6 +4059,8 @@ export default function QualityPlanning({
       // Custom task
       setTasks(prev => prev.map(t => {
         if (t.id === id) {
+          const { month: dMonth, year: dYear } = parseDateYearMonth(newTaskDeadline, selectedMonth, selectedYear);
+          const dWeek = getWeekFromDateString(newTaskDeadline);
           return {
             ...t,
             title: newTaskTitle,
@@ -4076,7 +4069,10 @@ export default function QualityPlanning({
             priority: newTaskPriority,
             deadline: newTaskDeadline,
             modelOrSupplier: refStr || undefined,
-            status: newTaskStatus
+            status: newTaskStatus,
+            month: dMonth,
+            year: dYear,
+            week: dWeek
           };
         }
         return t;
@@ -4374,16 +4370,18 @@ export default function QualityPlanning({
 
   const prevUncompletedTasks = useMemo(() => {
     return tasks.filter(t => {
-      const m = t.month !== undefined ? t.month : (t.deadline ? Number(t.deadline.split('-')[1]) : undefined);
-      const y = t.year !== undefined ? t.year : (t.deadline ? Number(t.deadline.split('-')[0]) : undefined);
+      const parsed = parseDateYearMonth(t.deadline, t.month || prevMonth, t.year || prevYear);
+      const m = parsed.month;
+      const y = parsed.year;
       return m === prevMonth && y === prevYear && t.status !== 'Completed';
     });
   }, [tasks, prevMonth, prevYear]);
 
   const prevCompletedTasks = useMemo(() => {
     return tasks.filter(t => {
-      const m = t.month !== undefined ? t.month : (t.deadline ? Number(t.deadline.split('-')[1]) : undefined);
-      const y = t.year !== undefined ? t.year : (t.deadline ? Number(t.deadline.split('-')[0]) : undefined);
+      const parsed = parseDateYearMonth(t.deadline, t.month || prevMonth, t.year || prevYear);
+      const m = parsed.month;
+      const y = parsed.year;
       return m === prevMonth && y === prevYear && t.status === 'Completed';
     });
   }, [tasks, prevMonth, prevYear]);
@@ -4395,6 +4393,7 @@ export default function QualityPlanning({
     }
 
     const clonedTasks = prevUncompletedTasks.map(t => {
+      const dline = `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-28`;
       return {
         ...t,
         id: `T-CARRY-${Math.floor(100 + Math.random() * 900)}`,
@@ -4402,7 +4401,8 @@ export default function QualityPlanning({
         status: 'Pending' as const,
         month: selectedMonth,
         year: selectedYear,
-        deadline: `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-28`
+        week: getWeekFromDateString(dline),
+        deadline: dline
       };
     });
 
@@ -4453,17 +4453,19 @@ export default function QualityPlanning({
       return;
     }
 
+    const finalDeadline = `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-28`;
     const newTask: QualityTask = {
       id: `T-REC-${Math.floor(100 + Math.random() * 900)}`,
       section,
       title,
       assignee,
-      deadline: `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-28`,
+      deadline: finalDeadline,
       status: 'Pending',
       priority,
       modelOrSupplier,
       month: selectedMonth,
-      year: selectedYear
+      year: selectedYear,
+      week: getWeekFromDateString(finalDeadline)
     };
 
     setTasks(prev => [newTask, ...prev]);
@@ -4482,22 +4484,16 @@ export default function QualityPlanning({
         if (Array.isArray(parsed)) {
           parsed.forEach((c: any, index: number) => {
             const capId = c.CAPAID || c.id || `CAPA-LK-${index}`;
-            let mValue = selectedMonth;
-            let yValue = selectedYear;
             const due = c.DueDate || c.targetDate;
-            if (due && typeof due === 'string') {
-              const matchesYMD = due.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-              const matchesDMY = due.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-              if (matchesYMD) {
-                mValue = Number(matchesYMD[2]);
-                yValue = Number(matchesYMD[1]);
-              } else if (matchesDMY) {
-                mValue = Number(matchesDMY[2]);
-                yValue = Number(matchesDMY[3]);
-              }
+            const { month: mValue, year: yValue } = parseDateYearMonth(due, selectedMonth, selectedYear);
+            const capaWeek = getWeekFromDateString(due);
+
+            let isMatch = (mValue === selectedMonth && yValue === selectedYear);
+            if (planningMode === 'weekly') {
+              isMatch = isMatch && (capaWeek === selectedWeek);
             }
 
-            if (mValue === selectedMonth && yValue === selectedYear) {
+            if (isMatch) {
               const statusStr = (c.Status || c.status || '').toLowerCase();
               const isCompleted = statusStr.includes('closed') || statusStr.includes('đóng') || statusStr.includes('xong');
               const isProgress = statusStr.includes('tiến_hành') || statusStr.includes('mở') || statusStr.includes('process');
@@ -4510,8 +4506,9 @@ export default function QualityPlanning({
                 status: isCompleted ? 'Completed' : (isProgress ? 'In_Progress' : 'Pending'),
                 priority: c.isRepeated ? 'High' : 'Medium',
                 modelOrSupplier: c.modelName || c.supplierName || '',
-                month: selectedMonth,
-                year: selectedYear
+                month: mValue,
+                year: yValue,
+                week: capaWeek
               });
             }
           });
@@ -4520,31 +4517,6 @@ export default function QualityPlanning({
     } catch (_) {}
 
     // 2. Đồng bộ từ dk_projects / dk_ptsp_tasks - ĐÃ HỦY ĐỒNG BỘ theo yêu cầu của anh Thao để nhập thủ công
-    /*
-    try {
-      const savedProjects = localStorage.getItem('dk_projects');
-      if (savedProjects) {
-        const parsedProj = JSON.parse(savedProjects);
-        if (Array.isArray(parsedProj)) {
-          parsedProj.forEach((p: any, index: number) => {
-            const projId = p.id || `PROJ-LK-${index}`;
-            list.push({
-              id: `LINK-PTSP-${projId}`,
-              section: 'ptsp',
-              title: `[Dự án PTSP] Thử nghiệm mẫu xe mới: ${p.name} - Tiến độ: ${p.progress || 0}%`,
-              assignee: p.manager || 'Nguyễn Xuân Thao',
-              deadline: p.massProductionDate || p.regCertDate || `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-20`,
-              status: (p.progress >= 100) ? 'Completed' : (p.progress > 0 ? 'In_Progress' : 'Pending'),
-              priority: p.status === 'Chậm tiến độ' ? 'High' : 'Medium',
-              modelOrSupplier: p.name,
-              month: selectedMonth,
-              year: selectedYear
-            });
-          });
-        }
-      }
-    } catch (_) {}
-    */
 
     // 3. Đồng bộ từ tác vụ phòng ban phòng QLCL chung 'dk_tasks'
     try {
@@ -4553,8 +4525,9 @@ export default function QualityPlanning({
         const parsedTasks = JSON.parse(savedTasks);
         if (Array.isArray(parsedTasks)) {
           parsedTasks.forEach((t: any, index: number) => {
-            const taskMonth = t.month || (t.date ? Number(t.date.split('-')[1]) : selectedMonth);
-            const taskYear = t.year || (t.date ? Number(t.date.split('-')[0]) : selectedYear);
+            const taskDue = t.DueDate || t.date;
+            const { month: taskMonth, year: taskYear } = parseDateYearMonth(taskDue, selectedMonth, selectedYear);
+            const taskWeek = t.week || (taskDue ? getWeekFromDateString(taskDue) : 'W1');
             const catStr = (t.category || t.Category || '').toLowerCase();
             let section: 'backlog' | 'capa' | 'ptsp' | 'coordination' = 'backlog';
             if (catStr.includes('coordination') || catStr.includes('phối hợp') || catStr.includes('liên ban') || catStr.includes('audit')) {
@@ -4571,7 +4544,6 @@ export default function QualityPlanning({
                 isMatch = (taskMonth === prevMonth && taskYear === prevYear);
               } else {
                 // planningMode === 'weekly'
-                const taskWeek = t.week || (t.date ? getWeekFromDateString(t.date) : (t.DueDate ? getWeekFromDateString(t.DueDate) : 'W1'));
                 let prevWeek = 'W1';
                 let prevWeekMonth = selectedMonth;
                 let prevWeekYear = selectedYear;
@@ -4595,7 +4567,6 @@ export default function QualityPlanning({
               if (planningMode === 'monthly') {
                 isMatch = (taskMonth === selectedMonth && taskYear === selectedYear);
               } else {
-                const taskWeek = t.week || (t.date ? getWeekFromDateString(t.date) : (t.DueDate ? getWeekFromDateString(t.DueDate) : 'W1'));
                 isMatch = (taskMonth === selectedMonth && taskYear === selectedYear && taskWeek === selectedWeek);
               }
             }
@@ -4610,12 +4581,13 @@ export default function QualityPlanning({
                 section,
                 title: `${t.TaskDescription || t.content || 'Nhiệm vụ kiểm soát chất lượng'}`,
                 assignee: t.Owner || t.assignee || 'Đoàn Anh Hùng',
-                deadline: t.DueDate || t.date || `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-28`,
+                deadline: taskDue || `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-28`,
                 status: isCompleted ? 'Completed' : (isProgress ? 'In_Progress' : 'Pending'),
                 priority: (t.priority || '').toUpperCase() === 'HIGH' ? 'High' : ((t.priority || '').toUpperCase() === 'MEDIUM' ? 'Medium' : 'Low'),
                 modelOrSupplier: t.SupplierReference || t.modelOrSupplier || '',
-                month: selectedMonth,
-                year: selectedYear
+                month: taskMonth,
+                year: taskYear,
+                week: taskWeek
               });
             }
           });
@@ -4630,30 +4602,15 @@ export default function QualityPlanning({
       if (Array.isArray(dailyLogsArray)) {
         dailyLogsArray.forEach((item: any, index: number) => {
           if (item.statusPercent !== "100%") {
-            let logMonth = selectedMonth;
-            let logYear = selectedYear;
-            if (item.date && typeof item.date === 'string') {
-              if (item.date.includes('/')) {
-                const parts = item.date.split('/');
-                if (parts.length === 3) {
-                  logMonth = Number(parts[1]);
-                  logYear = Number(parts[2]);
-                }
-              } else if (item.date.includes('-')) {
-                const parts = item.date.split('-');
-                if (parts.length === 3) {
-                  logMonth = Number(parts[1]);
-                  logYear = Number(parts[0]);
-                }
-              }
-            }
+            const logDate = item.deadline || item.date;
+            const { month: logMonth, year: logYear } = parseDateYearMonth(logDate, selectedMonth, selectedYear);
+            const logWeek = item.week || (logDate ? getWeekFromDateString(logDate) : 'W1');
 
             let isMatch = false;
             if (planningMode === 'monthly') {
               isMatch = (logMonth === prevMonth && logYear === prevYear);
             } else {
               // planningMode === 'weekly'
-              const logWeek = item.week || (item.date ? getWeekFromDateString(item.date) : 'W1');
               let prevWeek = 'W1';
               let prevWeekMonth = selectedMonth;
               let prevWeekYear = selectedYear;
@@ -4675,27 +4632,18 @@ export default function QualityPlanning({
             }
 
             if (isMatch) {
-              const contentLower = (item.content || '').toLowerCase().trim();
-              const categoryLower = (item.category || '').toLowerCase().trim();
-              
-              const isPtsp = categoryLower.includes('ptsp') || 
-                             categoryLower.includes('phát triển') || 
-                             contentLower.includes('ptsp') || 
-                             contentLower.includes('phát triển') || 
-                             contentLower.includes('mẫu xe') || 
-                             contentLower.includes('xe mẫu');
-
               list.push({
                 id: `LINK-DAILYLOG-${index}-${(item.date || '').replace(/\//g, '-')}`,
-                section: 'backlog', // Chuyển sang backlog thay vì ptsp để giữ ptsp hoàn toàn thủ công
+                section: 'backlog',
                 title: item.content || '',
                 assignee: item.assignee || 'Đoàn Anh Hùng',
-                deadline: item.deadline || item.date || `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-28`,
+                deadline: logDate || `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-28`,
                 status: item.statusPercent === '100%' ? 'Completed' : (item.statusPercent === '0%' ? 'Pending' : 'In_Progress'),
                 priority: item.statusPercent === '0%' ? 'High' : 'Medium',
                 modelOrSupplier: item.category || 'Hành động QLCL',
-                month: selectedMonth,
-                year: selectedYear
+                month: logMonth,
+                year: logYear,
+                week: logWeek
               });
             }
           }
@@ -4712,8 +4660,14 @@ export default function QualityPlanning({
           parsedEcos.forEach((eco: any) => {
             const applyD = eco.applyDate || eco.ImplementationDate;
             const { month: ecoMonth, year: ecoYear } = parseDateYearMonth(applyD, selectedMonth, selectedYear);
+            const ecoWeek = getWeekFromDateString(applyD);
 
-            if (ecoMonth === selectedMonth && ecoYear === selectedYear) {
+            let isMatch = (ecoMonth === selectedMonth && ecoYear === selectedYear);
+            if (planningMode === 'weekly') {
+              isMatch = isMatch && (ecoWeek === selectedWeek);
+            }
+
+            if (isMatch) {
               const mappedStatus = eco.status === 'Đã áp dụng' ? 'Completed' : (eco.status === 'Đang thử nghiệm' ? 'In_Progress' : 'Pending');
               list.push({
                 id: `LINK-ECO-${eco.id}`,
@@ -4724,8 +4678,9 @@ export default function QualityPlanning({
                 status: mappedStatus,
                 priority: eco.category === 'Thiết kế' || eco.category === 'Vật liệu' ? 'High' : 'Medium',
                 modelOrSupplier: eco.model || '',
-                month: selectedMonth,
-                year: selectedYear
+                month: ecoMonth,
+                year: ecoYear,
+                week: ecoWeek
               });
             }
           });
@@ -4744,22 +4699,18 @@ export default function QualityPlanning({
       let taskWeek = t.week;
 
       if (t.deadline && typeof t.deadline === 'string') {
-        const parts = t.deadline.split('-');
-        if (parts.length === 3) {
-          taskYear = Number(parts[0]) || taskYear;
-          taskMonth = Number(parts[1]) || taskMonth;
-        }
-        if (!taskWeek) {
-          taskWeek = getWeekFromDateString(t.deadline);
-        }
+        const parsed = parseDateYearMonth(t.deadline, taskMonth || selectedMonth, taskYear || selectedYear);
+        taskYear = parsed.year;
+        taskMonth = parsed.month;
+        taskWeek = getWeekFromDateString(t.deadline);
       }
 
-      const isMonthMatch = (taskMonth === undefined || taskMonth === selectedMonth) && (taskYear === undefined || taskYear === selectedYear);
+      const isMonthMatch = (taskMonth === selectedMonth) && (taskYear === selectedYear);
       if (!isMonthMatch) return false;
 
       // Filter by week strictly when planningMode === 'weekly'
       if (planningMode === 'weekly') {
-        if (taskWeek && taskWeek !== selectedWeek) {
+        if (taskWeek !== selectedWeek) {
           return false;
         }
       }
