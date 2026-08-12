@@ -392,8 +392,116 @@ const renderOqcHtmlSection = (oqcList: any[], titleText: string) => {
   `;
 };
 
+// HELPER TO RENDER CONSOLIDATED COLOR CHANGE SECTION IN EMAILS
+const renderColorChangeHtmlSection = (colorChanges: any[], titleText: string) => {
+  if (!colorChanges || colorChanges.length === 0) {
+    return '';
+  }
+
+  // Group by model + oldColor + newColor
+  const groupedMap = new Map<string, {
+    model: string;
+    oldColor: string;
+    newColor: string;
+    count: number;
+    serials: string[];
+    date: string;
+  }>();
+
+  colorChanges.forEach(item => {
+    const model = (item.model || 'Dòng xe khác').trim();
+    const oldColor = (item.oldColor || 'Màu cũ').trim();
+    const newColor = (item.newColor || 'Màu mới').trim();
+    const key = `${model}___${oldColor}___${newColor}`;
+    
+    if (!groupedMap.has(key)) {
+      groupedMap.set(key, {
+        model,
+        oldColor,
+        newColor,
+        count: 0,
+        serials: [],
+        date: item.date || ''
+      });
+    }
+    const group = groupedMap.get(key)!;
+    group.count++;
+    if (item.serialNo) {
+      group.serials.push(item.serialNo.trim());
+    }
+  });
+
+  const groupList = Array.from(groupedMap.values());
+  const totalCount = groupList.reduce((acc, curr) => acc + curr.count, 0);
+
+  const summaryBullets = groupList.map(g => 
+    `<strong>${g.count} xe ${g.model}</strong> (${g.oldColor} ➔ ${g.newColor})`
+  );
+
+  const rowsHtml = groupList.map((g, idx) => {
+    return `
+      <tr style="border-bottom: 1px solid #e9d5ff; font-size: 12px; background-color: #ffffff;">
+        <td style="padding: 10px 8px; font-weight: bold; color: #6b21a8; font-family: monospace; text-align: center; width: 5%; min-width: 35px;">${idx + 1}</td>
+        <td style="padding: 10px 8px; font-weight: 800; color: #1e1b4b; width: 22%; min-width: 110px;">
+          <span style="display: inline-block; padding: 2px 8px; background-color: #f3e8ff; border-radius: 4px; border-left: 3px solid #9333ea;">
+            ${g.model}
+          </span>
+        </td>
+        <td style="padding: 10px 8px; text-align: center; font-weight: 900; color: #7e22ce; width: 12%; min-width: 70px; font-size: 13px;">
+          ${g.count} xe
+        </td>
+        <td style="padding: 10px 8px; width: 26%; min-width: 140px;">
+          <span style="background-color: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px;">${g.oldColor}</span>
+          <span style="color: #9333ea; font-weight: 900; margin: 0 4px;">➔</span>
+          <span style="background-color: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px;">${g.newColor}</span>
+        </td>
+        <td style="padding: 10px 8px; font-size: 11px; color: #475569; width: 35%; min-width: 180px; line-height: 1.4; word-break: break-all;">
+          ${g.serials.length > 0 ? g.serials.slice(0, 10).join(', ') + (g.serials.length > 10 ? ` và ${g.serials.length - 10} xe khác` : '') : 'N/A'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <!-- COLOR CHANGE SECTION -->
+    <div style="margin-top: 20px; margin-bottom: 25px; border: 1px solid #c084fc; border-radius: 10px; overflow: hidden; background-color: #ffffff; box-shadow: 0 4px 10px rgba(168, 85, 247, 0.08); font-family: system-ui, -apple-system, sans-serif;">
+      <div style="background-image: linear-gradient(135deg, #9333ea 0%, #6b21a8 100%); padding: 12px 18px; color: #ffffff; display: flex; align-items: center; justify-content: space-between;">
+        <strong style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.02em; display: flex; align-items: center; gap: 6px;">
+          🎨 ${titleText}
+        </strong>
+        <span style="font-size: 11px; background-color: rgba(255,255,255,0.25); padding: 3px 10px; border-radius: 20px; font-weight: 800;">
+          Tổng: ${totalCount} xe đổi màu
+        </span>
+      </div>
+
+      <div style="padding: 14px;">
+        <div style="margin-bottom: 10px; font-size: 12px; color: #6b21a8; font-weight: 600;">
+          ✦ Tóm lược: ${summaryBullets.join('; ')}
+        </div>
+
+        <div style="width: 100%; overflow-x: auto;">
+          <table class="responsive-table" width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;">
+            <thead>
+              <tr style="background-color: #f3e8ff; border-bottom: 2px solid #d8b4fe; color: #581c87; font-weight: 800; font-size: 10.5px; text-transform: uppercase;">
+                <th style="padding: 8px; width: 5%; text-align: center;">STT</th>
+                <th style="padding: 8px; width: 22%;">Dòng xe (Model)</th>
+                <th style="padding: 8px; width: 12%; text-align: center;">Số lượng</th>
+                <th style="padding: 8px; width: 26%;">Đổi màu</th>
+                <th style="padding: 8px; width: 35%;">Số khung / Seri xe</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
 // Generate Template layouts
-export const generateDailyLogEmailTemplate = (logs: any[], dateStr: string, senderName: string, oqcRecords?: any[]) => {
+export const generateDailyLogEmailTemplate = (logs: any[], dateStr: string, senderName: string, oqcRecords?: any[], colorChanges?: any[]) => {
   const rows = logs.map((log, idx) => `
     <tr style="border-bottom: 1px solid #e1e8ed;">
       <td data-label="STT" style="padding: 10px; font-weight: bold; font-family: monospace; color: #475569; white-space: nowrap; width: 4%; min-width: 40px; max-width: 40px;">${idx + 1}</td>
@@ -567,7 +675,10 @@ export const generateDailyLogEmailTemplate = (logs: any[], dateStr: string, send
           </div>
 
           <!-- OQC Dynamic Section -->
-          ${oqcRecords ? renderOqcHtmlSection(oqcRecords, `TỔNG HỢP KẾT QUẢ NGHIỆM THU OQC XUẤX XƯỞNG NGÀY ${dateStr}`) : ''}
+          ${oqcRecords ? renderOqcHtmlSection(oqcRecords, `TỔNG HỢP KẾT QUẢ NGHIỆM THU OQC XUẤT XƯỞNG NGÀY ${dateStr}`) : ''}
+
+          <!-- Color Change Dynamic Section -->
+          ${colorChanges && colorChanges.length > 0 ? renderColorChangeHtmlSection(colorChanges, `DANH SÁCH XE THÀNH PHẨM KCS ĐỔI MÀU TRONG NGÀY (${dateStr})`) : ''}
 
           <!-- Bottom Summary Status -->
           <div style="margin-top: 25px; padding: 15px; background-color: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; font-size: 13px;">
@@ -782,7 +893,9 @@ export const generateTodayAndTomorrowEmailTemplate = (
   tomorrowStr: string, 
   senderName: string,
   oqcRecordsToday?: any[],
-  oqcRecordsTomorrow?: any[]
+  oqcRecordsTomorrow?: any[],
+  colorChangesToday?: any[],
+  colorChangesTomorrow?: any[]
 ) => {
   const makeRows = (logs: any[]) => {
     if (logs.length === 0) {
@@ -975,6 +1088,9 @@ export const generateTodayAndTomorrowEmailTemplate = (
           <!-- OQC Dynamic Section Today -->
           ${oqcRecordsToday ? renderOqcHtmlSection(oqcRecordsToday, `KẾT QUẢ NGHIỆM THU OQC XUẤT XƯỞNG HÔM NAY (${todayStr})`) : ''}
 
+          <!-- Color Change Dynamic Section Today -->
+          ${colorChangesToday && colorChangesToday.length > 0 ? renderColorChangeHtmlSection(colorChangesToday, `DANH SÁCH XE THÀNH PHẨM KCS ĐỔI MÀU HÔM NAY (${todayStr})`) : ''}
+
           <!-- SECTION 2: TOMORROW PLANS -->
           <div style="margin-bottom: 25px; border: 1px solid #fecdd3; border-radius: 8px; overflow: hidden;">
             <div style="background-color: #ffe4e6; padding: 10px 15px; border-bottom: 1px solid #fecdd3;">
@@ -1004,6 +1120,9 @@ export const generateTodayAndTomorrowEmailTemplate = (
 
           <!-- OQC Dynamic Section Tomorrow -->
           ${oqcRecordsTomorrow && oqcRecordsTomorrow.length > 0 ? renderOqcHtmlSection(oqcRecordsTomorrow, `KẾT QUẢ NGHIỆM THU OQC XUẤT XƯỞNG DỰ KIẾN NGÀY MAI (${tomorrowStr})`) : ''}
+
+          <!-- Color Change Dynamic Section Tomorrow -->
+          ${colorChangesTomorrow && colorChangesTomorrow.length > 0 ? renderColorChangeHtmlSection(colorChangesTomorrow, `KẾ HOẠCH XE THÀNH PHẨM KCS ĐỔI MÀU DỰ KIẾN NGÀY MAI (${tomorrowStr})`) : ''}
 
           <!-- Note -->
           <div style="padding: 15px; background-color: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; font-size: 12px; color: #475569;">

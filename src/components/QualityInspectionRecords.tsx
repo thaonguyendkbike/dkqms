@@ -38,7 +38,8 @@ import {
   ChevronUp,
   SlidersHorizontal
 } from 'lucide-react';
-import { IQCRecord, PQCRecord, OQCRecord } from '../qualityTestData';
+import { IQCRecord, PQCRecord, OQCRecord, OqcColorChangeRecord } from '../qualityTestData';
+import { safeStorage } from '../safeStorage';
 import { compressImageFile } from '../imageCompressor';
 import { Supplier, PTSPTask, MarketDefect, CAPA, SupplierProductionAudit, MonthlyPlan } from '../types';
 import { DailyLogRecord } from '../dailyLogsData';
@@ -346,6 +347,8 @@ interface QualityInspectionRecordsProps {
   initialOqcSearch?: string;
   initialPqcSearch?: string;
   onClearInitialValues?: () => void;
+  oqcColorChanges?: OqcColorChangeRecord[];
+  setOqcColorChanges?: (changes: OqcColorChangeRecord[]) => void;
 }
 
 /* ==================== SUB-COMPONENTS FOR KCS/OQC SCREENSHOT-PERFECT DASHBOARD ==================== */
@@ -855,7 +858,9 @@ export default function QualityInspectionRecords({
   initialSubTab,
   initialOqcSearch,
   initialPqcSearch,
-  onClearInitialValues
+  onClearInitialValues,
+  oqcColorChanges = [],
+  setOqcColorChanges
 }: QualityInspectionRecordsProps) {
   const [qcMainSubTab, setQcMainSubTab] = useState<'iqc' | 'pqc' | 'oqc' | 'supplier_monitoring' | 'reports'>('iqc');
   const [selectedDashboardDefect, setSelectedDashboardDefect] = useState<{ name: string; count: number; modelName: string } | null>(null);
@@ -2023,6 +2028,32 @@ export default function QualityInspectionRecords({
   const [showImportOqcModal, setShowImportOqcModal] = useState(false);
   const [oqcImportText, setOqcImportText] = useState('');
   const [oqcImportError, setOqcImportError] = useState('');
+
+  // OQC Color Change Import states & persistence
+  const [showColorChangeModal, setShowColorChangeModal] = useState(false);
+  const [colorChangeText, setColorChangeText] = useState('');
+  const [colorChangeError, setColorChangeError] = useState('');
+  const [colorChangeDefaultDate, setColorChangeDefaultDate] = useState(() => new Date().toLocaleDateString('vi-VN'));
+  const [localColorChanges, setLocalColorChanges] = useState<OqcColorChangeRecord[]>(() => {
+    if (oqcColorChanges && oqcColorChanges.length > 0) return oqcColorChanges;
+    const saved = safeStorage.getItem('dk_oqc_color_changes');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  const activeColorChanges = oqcColorChanges && oqcColorChanges.length > 0 ? oqcColorChanges : localColorChanges;
+  const updateColorChanges = (newChanges: OqcColorChangeRecord[]) => {
+    if (setOqcColorChanges) {
+      setOqcColorChanges(newChanges);
+    }
+    setLocalColorChanges(newChanges);
+    safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(newChanges));
+  };
 
   // IQC Import & Edit states
   const [showImportIqcModal, setShowImportIqcModal] = useState(false);
@@ -3612,6 +3643,219 @@ export default function QualityInspectionRecords({
     document.body.removeChild(link);
   };
 
+  // Parser helper for Color Change rows (Số seri | Model | Màu cũ | Màu mới | Ngày đổi màu)
+  const parseColorChangeRows = useCallback((text: string, defaultDate: string) => {
+    if (!text || !text.trim()) return [];
+    const lines = text.split('\n');
+    const results: Array<{
+      serialNo: string;
+      model: string;
+      oldColor: string;
+      newColor: string;
+      date: string;
+      flag: string | boolean;
+      isValid: boolean;
+      error?: string;
+    }> = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const rawLine = lines[i].trim();
+      if (!rawLine) continue;
+
+      const lower = rawLine.toLowerCase();
+      if (
+        (lower.includes('seri') || lower.includes('sêri') || lower.includes('serial')) && 
+        (lower.includes('model') || lower.includes('màu') || lower.includes('color') || lower.includes('ngày'))
+      ) {
+        continue;
+      }
+
+      let cols: string[] = [];
+      if (rawLine.includes('\t')) {
+        cols = rawLine.split('\t').map(c => c.trim());
+      } else if (rawLine.includes('|')) {
+        cols = rawLine.split('|').map(c => c.trim());
+      } else if (rawLine.includes(';') && (rawLine.match(/;/g) || []).length >= 3) {
+        cols = rawLine.split(';').map(c => c.trim());
+      } else if (rawLine.includes(',') && (rawLine.match(/,/g) || []).length >= 3) {
+        cols = rawLine.split(',').map(c => c.trim());
+      } else {
+        cols = rawLine.split(/\s{2,}|\t/).map(c => c.trim());
+      }
+
+      if (cols.length < 3) {
+        const spaceParts = rawLine.split(/\s+/).map(c => c.trim());
+        if (spaceParts.length >= 4) {
+          cols = spaceParts;
+        }
+      }
+
+      const serialNo = (cols[0] || '').trim();
+      let model = (cols[1] || '').trim();
+      let oldColor = (cols[2] || '').trim();
+      let newColor = (cols[3] || '').trim();
+
+      let dateVal = defaultDate || new Date().toLocaleDateString('vi-VN');
+      let flagVal: string | boolean = true;
+
+      const dateRegex = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/;
+      const dateColIdx = cols.findIndex((c, idx) => idx >= 3 && dateRegex.test(c));
+      
+      if (dateColIdx !== -1) {
+        const match = cols[dateColIdx].match(dateRegex);
+        if (match) {
+          const d = match[1].padStart(2, '0');
+          const m = match[2].padStart(2, '0');
+          const y = match[3];
+          dateVal = `${d}/${m}/${y}`;
+        }
+      }
+
+      for (let cIdx = 4; cIdx < cols.length; cIdx++) {
+        if (cIdx !== dateColIdx) {
+          const val = cols[cIdx].toUpperCase();
+          if (val === 'TRUE' || val === 'FALSE' || val === 'OK') {
+            flagVal = val === 'TRUE' || val === 'OK';
+          }
+        }
+      }
+
+      if (!model) {
+        const existingOqc = oqcRecords.find(r => r.serialNo.trim().toUpperCase() === serialNo.toUpperCase());
+        model = existingOqc ? existingOqc.model : 'DK Nova';
+      }
+
+      if (!oldColor) {
+        const existingOqc = oqcRecords.find(r => r.serialNo.trim().toUpperCase() === serialNo.toUpperCase());
+        oldColor = existingOqc ? existingOqc.color : 'Đỏ';
+      }
+
+      const isValid = Boolean(serialNo && newColor);
+
+      results.push({
+        serialNo,
+        model,
+        oldColor,
+        newColor,
+        date: dateVal,
+        flag: flagVal,
+        isValid,
+        error: !serialNo ? 'Thiếu số sêri' : (!newColor ? 'Thiếu màu mới' : undefined)
+      });
+    }
+
+    return results;
+  }, [oqcRecords]);
+
+  const liveParsedColorChanges = useMemo(() => {
+    return parseColorChangeRows(colorChangeText, colorChangeDefaultDate);
+  }, [colorChangeText, colorChangeDefaultDate, parseColorChangeRows]);
+
+  const handleImportColorChangeSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setColorChangeError('');
+
+    const validItems = liveParsedColorChanges.filter(p => p.isValid);
+    if (validItems.length === 0) {
+      setColorChangeError('Không tìm thấy dòng dữ liệu đổi màu hợp lệ nào. Vui lòng kiểm tra lại định dạng: Số seri | Model | Màu cũ | Màu mới | Ngày đổi màu');
+      return;
+    }
+
+    try {
+      const serialChangeMap = new Map<string, typeof validItems[0]>();
+      validItems.forEach(item => {
+        serialChangeMap.set(item.serialNo.trim().toUpperCase(), item);
+      });
+
+      // 1. Update OQC records
+      const existingSerials = new Set<string>();
+      const updatedOqc = oqcRecords.map(r => {
+        const sUpper = r.serialNo.trim().toUpperCase();
+        existingSerials.add(sUpper);
+        const change = serialChangeMap.get(sUpper);
+        if (change) {
+          return {
+            ...r,
+            color: change.newColor,
+            oldColor: change.oldColor || r.color,
+            isColorChanged: true,
+            colorChangeDate: change.date,
+            model: change.model || r.model
+          };
+        }
+        return r;
+      });
+
+      // Insert any serials that did not exist yet in OQC
+      const newOqcFromChanges: OQCRecord[] = [];
+      validItems.forEach(item => {
+        const sUpper = item.serialNo.trim().toUpperCase();
+        if (!existingSerials.has(sUpper)) {
+          newOqcFromChanges.push({
+            id: `OQC-${sUpper.replace(/[\/\s.#$\[\]]/g, '_')}`,
+            partCode: 'TEMDV11202',
+            serialNo: item.serialNo.trim(),
+            model: item.model,
+            color: item.newColor,
+            oldColor: item.oldColor,
+            isColorChanged: true,
+            colorChangeDate: item.date,
+            status: 'Đạt',
+            defectDetail: '',
+            failedCount: 0,
+            rootCause: '',
+            lsx: '26-10',
+            checkTime: '08:30',
+            date: item.date,
+            month: parseInt(item.date.split('/')[1] || '5', 10),
+            year: parseInt(item.date.split('/')[2] || '2026', 10),
+            totalLlr: 1
+          });
+        }
+      });
+
+      setOqcRecords([...newOqcFromChanges, ...updatedOqc]);
+
+      // 2. Add records to oqcColorChanges
+      const newColorChangeRecords: OqcColorChangeRecord[] = validItems.map(item => ({
+        id: `CC-${item.serialNo.trim().toUpperCase()}-${item.date.replace(/\//g, '')}-${Date.now()}`,
+        serialNo: item.serialNo.trim(),
+        model: item.model,
+        oldColor: item.oldColor,
+        newColor: item.newColor,
+        date: item.date,
+        flag: item.flag,
+        createdAt: new Date().toISOString()
+      }));
+
+      const mergedChanges = [
+        ...newColorChangeRecords,
+        ...activeColorChanges.filter(c => 
+          !validItems.some(v => v.serialNo.trim().toUpperCase() === c.serialNo.trim().toUpperCase() && v.date === c.date)
+        )
+      ];
+
+      updateColorChanges(mergedChanges);
+
+      // 3. Summaries for alert
+      const groups: Record<string, { model: string; oldColor: string; newColor: string; count: number }> = {};
+      validItems.forEach(item => {
+        const k = `${item.model}___${item.oldColor}___${item.newColor}`;
+        if (!groups[k]) {
+          groups[k] = { model: item.model, oldColor: item.oldColor, newColor: item.newColor, count: 0 };
+        }
+        groups[k].count++;
+      });
+      const summaryParts = Object.values(groups).map(g => `${g.count} xe ${g.model} ${g.oldColor} đổi màu thành ${g.count} xe ${g.model} ${g.newColor}`);
+
+      setShowColorChangeModal(false);
+      setColorChangeText('');
+      alert(`✓ Đã nhập đổi màu thành công cho ${validItems.length} xe!\n\nChi tiết:\n• ${summaryParts.join('\n• ')}\n\n(Dữ liệu đã tự động cập nhật vào OQC và Báo cáo ngày email)`);
+    } catch (err: any) {
+      setColorChangeError(`Lỗi khi xử lý dữ liệu đổi màu: ${err.message || err}`);
+    }
+  };
+
   return (
     <div className="space-y-6 overflow-y-auto max-h-[calc(100vh-10rem)] pr-2 animate-in fade-in duration-300" id="view_quality_inspection_content">
       
@@ -3678,6 +3922,16 @@ export default function QualityInspectionRecords({
                 className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-indigo-150 cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5" /> Nhập Excel KCS
+              </button>
+              <button 
+                onClick={() => {
+                  setColorChangeError('');
+                  setShowColorChangeModal(true);
+                }}
+                className="bg-purple-650 hover:bg-purple-600 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-purple-200 cursor-pointer border border-purple-500/40"
+                title="Nhập danh sách xe đổi màu hàng loạt (Số seri | Model | Màu cũ | Màu mới | Ngày đổi màu)"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-purple-200" /> Nhập Đổi Màu Xe
               </button>
               <button 
                 onClick={() => {
@@ -7137,6 +7391,168 @@ export default function QualityInspectionRecords({
                   className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition shadow shadow-indigo-200"
                 >
                   Bắt đầu Import ({oqcImportText.split('\n').filter(Boolean).length} dòng dán)
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: BATCH COLOR CHANGE IMPORT FOR OQC */}
+      {showColorChangeModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-4 sm:p-6 border border-purple-200 text-xs text-slate-800 space-y-4 max-h-[92vh] flex flex-col">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-purple-50 text-purple-700 rounded-xl border border-purple-200">
+                  <RefreshCw className="w-5 h-5 text-purple-600" />
+                </span>
+                <div>
+                  <h3 className="font-black text-slate-800 text-sm sm:text-base uppercase">
+                    Nhập Danh Sách Xe Đổi Màu Hàng Loạt (KCS OQC)
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Cập nhật màu sắc mới cho xe KCS và tự động liên kết vào Báo cáo ngày Email
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowColorChangeModal(false);
+                  setColorChangeError('');
+                }}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Instruction Guide */}
+            <div className="bg-purple-50/50 p-3 rounded-xl border border-purple-150 text-[11px] text-purple-950 space-y-1.5 leading-relaxed">
+              <div className="font-extrabold flex items-center justify-between">
+                <span>📋 Thứ tự các cột dữ liệu theo chuẩn:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setColorChangeText("24DK12161\tDK Nova\tĐỏ\tĐen\tTRUE\t12/08/2026\n24DK12162\tDK Nova\tĐỏ\tĐen\tTRUE\t12/08/2026\n24DK12163\tDK Nova\tĐỏ\tĐen\tTRUE\t12/08/2026\n24DK12164\tDK Nova\tĐỏ\tĐen\tTRUE\t12/08/2026\n24DK12165\tDK Nova\tĐỏ\tĐen\tTRUE\t12/08/2026\n24DK12166\tDK Nova\tĐỏ\tĐen\tTRUE\t12/08/2026");
+                  }}
+                  className="text-purple-700 hover:text-purple-900 bg-purple-100 hover:bg-purple-200 px-2 py-0.5 rounded-md font-bold text-[10px] transition cursor-pointer border border-purple-300"
+                >
+                  ⚡ Dán mẫu ví dụ (6 xe DK Nova)
+                </button>
+              </div>
+              <div className="font-mono bg-white px-2.5 py-1.5 rounded-lg border border-purple-200 text-[10.5px] text-purple-800 font-bold">
+                Số seri &nbsp;|&nbsp; Model &nbsp;|&nbsp; Màu cũ &nbsp;|&nbsp; Màu mới &nbsp;|&nbsp; Ngày đổi màu (dd/mm/yyyy)
+              </div>
+              <div className="text-slate-500 italic text-[10px]">
+                * Hỗ trợ copy-paste trực tiếp từ Excel (Tab-separated) hoặc dán phân tách bằng dấu gạch đứng | / dấu phẩy.
+              </div>
+            </div>
+
+            <form onSubmit={handleImportColorChangeSubmit} className="space-y-3.5 flex-1 flex flex-col min-h-0 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-slate-600 block text-[11px] mb-1">
+                    Ngày đổi màu mặc định (nếu dòng dán không có ngày):
+                  </label>
+                  <input
+                    type="text"
+                    value={colorChangeDefaultDate}
+                    onChange={(e) => setColorChangeDefaultDate(e.target.value)}
+                    placeholder="dd/mm/yyyy (Ví dụ: 12/08/2026)"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg py-1.5 px-2.5 text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:border-purple-600 font-mono"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <div className="text-[11px] text-purple-700 bg-purple-50 p-1.5 px-2.5 rounded-lg border border-purple-200 w-full font-bold">
+                    ✨ Đã phân tích: <strong className="text-purple-900 font-mono font-black">{liveParsedColorChanges.filter(p => p.isValid).length}</strong> xe hợp lệ
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 min-h-[140px] flex flex-col space-y-1">
+                <label className="font-extrabold text-slate-700 block">Dán nội dung từ Excel tại đây:</label>
+                <textarea
+                  value={colorChangeText}
+                  onChange={(e) => setColorChangeText(e.target.value)}
+                  placeholder="24DK12161&#9;DK Nova&#9;Đỏ&#9;Đen&#9;TRUE&#9;12/08/2026&#10;24DK12162&#9;DK Nova&#9;Đỏ&#9;Đen&#9;TRUE&#9;12/08/2026"
+                  className="w-full flex-1 min-h-[120px] bg-slate-50 border p-2.5 font-mono text-[11px] focus:bg-white rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none resize-none overflow-y-auto border-slate-300"
+                />
+              </div>
+
+              {/* Live Preview Table */}
+              {liveParsedColorChanges.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="font-extrabold text-[11px] text-slate-700 uppercase">
+                      Xem trước ({liveParsedColorChanges.length} dòng):
+                    </span>
+                  </div>
+                  <div className="max-h-[120px] overflow-y-auto rounded-lg border border-slate-200 bg-slate-50">
+                    <table className="w-full text-left text-[11px] border-collapse">
+                      <thead className="bg-purple-100/70 text-purple-900 sticky top-0 font-bold text-[10px] uppercase">
+                        <tr>
+                          <th className="p-1.5 w-8 text-center">STT</th>
+                          <th className="p-1.5">Số Seri</th>
+                          <th className="p-1.5">Model</th>
+                          <th className="p-1.5">Màu cũ</th>
+                          <th className="p-1.5 text-center">➔</th>
+                          <th className="p-1.5">Màu mới</th>
+                          <th className="p-1.5 text-center">Ngày</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200/60 font-medium">
+                        {liveParsedColorChanges.map((item, idx) => (
+                          <tr key={idx} className={item.isValid ? "hover:bg-white" : "bg-red-50 text-red-700"}>
+                            <td className="p-1.5 text-center text-slate-400 font-bold">{idx + 1}</td>
+                            <td className="p-1.5 font-mono font-bold">{item.serialNo || '<Thiếu>'}</td>
+                            <td className="p-1.5 font-extrabold text-slate-800">{item.model}</td>
+                            <td className="p-1.5">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 font-bold border border-rose-200">
+                                {item.oldColor}
+                              </span>
+                            </td>
+                            <td className="p-1.5 text-center text-purple-600 font-black">➔</td>
+                            <td className="p-1.5">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700 font-bold border border-blue-200">
+                                {item.newColor}
+                              </span>
+                            </td>
+                            <td className="p-1.5 text-center font-mono text-[10px] text-slate-500">{item.date}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {colorChangeError && (
+                <div className="p-2.5 bg-red-50 text-red-700 rounded-lg border border-red-200 font-bold text-[11px]">
+                  ⚠️ {colorChangeError}
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end border-t pt-3">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowColorChangeModal(false);
+                    setColorChangeError('');
+                    setColorChangeText('');
+                  }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button 
+                  type="submit"
+                  disabled={liveParsedColorChanges.filter(p => p.isValid).length === 0}
+                  className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl transition shadow shadow-purple-200 cursor-pointer flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Xác nhận đổi màu ({liveParsedColorChanges.filter(p => p.isValid).length} xe)
                 </button>
               </div>
             </form>

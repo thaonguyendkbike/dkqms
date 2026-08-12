@@ -53,6 +53,21 @@ export interface OQCRecord {
   imageUrl?: string;
   evaluation?: string;
   treatment?: string;
+  oldColor?: string;
+  colorChangeDate?: string;
+  isColorChanged?: boolean;
+}
+
+export interface OqcColorChangeRecord {
+  id: string;
+  serialNo: string;
+  model: string;
+  oldColor: string;
+  newColor: string;
+  date: string; // dd/mm/yyyy
+  flag?: string | boolean;
+  createdAt?: string;
+  note?: string;
 }
 
 export const INITIAL_IQC_DATA: IQCRecord[] = [];

@@ -38,6 +38,7 @@ interface GmailManagerProps {
   initialSenderName?: string;
   initialSenderEmail?: string;
   oqcRecords?: any[];
+  oqcColorChanges?: any[];
 }
 
 export default function GmailManager({ 
@@ -46,7 +47,8 @@ export default function GmailManager({
   capas,
   initialSenderName = "Nguyễn Xuân Thao",
   initialSenderEmail = "thaonguyendkbike@gmail.com",
-  oqcRecords = []
+  oqcRecords = [],
+  oqcColorChanges = []
 }: GmailManagerProps) {
   const [googleUser, setGoogleUser] = useState<any>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -345,6 +347,16 @@ export default function GmailManager({
         return rDate ? sameDay(rDate, tomorrow) : false;
       });
 
+      const colorChangesToday = (oqcColorChanges || []).filter(item => {
+        const cDate = parseLogDate(item.date || '');
+        return cDate ? sameDay(cDate, today) : false;
+      });
+
+      const colorChangesTomorrow = (oqcColorChanges || []).filter(item => {
+        const cDate = parseLogDate(item.date || '');
+        return cDate ? sameDay(cDate, tomorrow) : false;
+      });
+
       const todayStr = today.toLocaleDateString('vi-VN');
       const tomorrowStr = tomorrow.toLocaleDateString('vi-VN');
 
@@ -357,7 +369,9 @@ export default function GmailManager({
         tomorrowStr, 
         senderName, 
         oqcToday, 
-        oqcTomorrow
+        oqcTomorrow,
+        colorChangesToday,
+        colorChangesTomorrow
       );
 
       return { 
@@ -388,9 +402,14 @@ export default function GmailManager({
         return rDate && logsDate ? rDate.getFullYear() === logsDate.getFullYear() && rDate.getMonth() === logsDate.getMonth() && rDate.getDate() === logsDate.getDate() : false;
       });
 
+      const colorChangesSelected = (oqcColorChanges || []).filter(item => {
+        const cDate = parseLogDate(item.date || '');
+        return cDate && logsDate ? (cDate.getFullYear() === logsDate.getFullYear() && cDate.getMonth() === logsDate.getMonth() && cDate.getDate() === logsDate.getDate()) : (item.date === selectedLogDate || item.date === ddmmyyyy);
+      });
+
       const subject = `[DKBike QMS] Báo cáo công việc QA/QC ngày ${ddmmyyyy}`;
       const senderName = googleUser?.displayName || initialSenderName;
-      const htmlBody = generateDailyLogEmailTemplate(filteredLogs, ddmmyyyy, senderName, oqcSelected);
+      const htmlBody = generateDailyLogEmailTemplate(filteredLogs, ddmmyyyy, senderName, oqcSelected, colorChangesSelected);
       
       return { subject, htmlBody, count: filteredLogs.length, formattedDate: ddmmyyyy };
     } 
@@ -424,14 +443,14 @@ export default function GmailManager({
       const preview = getPreviewEmailContent();
       setEmailSubject(preview.subject);
     }
-  }, [isThreaded, presetMode, selectedLogDate, selectedReportDate, selectedPlanDate, selectedCapaId, dailyLogs, googleUser, selectedThread]);
+  }, [isThreaded, presetMode, selectedLogDate, selectedReportDate, selectedPlanDate, selectedCapaId, dailyLogs, googleUser, selectedThread, oqcColorChanges]);
 
   useEffect(() => {
     if (presetMode !== 'custom') {
       const preview = getPreviewEmailContent();
       setEmailBody(preview.htmlBody);
     }
-  }, [presetMode, selectedLogDate, selectedReportDate, selectedPlanDate, selectedCapaId, dailyLogs, googleUser]);
+  }, [presetMode, selectedLogDate, selectedReportDate, selectedPlanDate, selectedCapaId, dailyLogs, googleUser, oqcColorChanges]);
 
   // Load saved recipients when selectedThread changes
   useEffect(() => {

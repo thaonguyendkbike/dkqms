@@ -100,7 +100,8 @@ import {
   INITIAL_SUPPLIER_AUDITS,
   IQCRecord, 
   PQCRecord, 
-  OQCRecord 
+  OQCRecord,
+  OqcColorChangeRecord 
 } from './qualityTestData';
 import { 
   PROD_OVERVIEW_TARGETS, 
@@ -5533,6 +5534,7 @@ export function App() {
   const [iqcRecords, setIqcRecords] = useState<IQCRecord[]>(() => getSavedState('dk_iqc_records', INITIAL_IQC_DATA));
   const [pqcRecords, setPqcRecords] = useState<PQCRecord[]>(() => getSavedState('dk_pqc_records', INITIAL_PQC_DATA));
   const [oqcRecords, setOqcRecords] = useState<OQCRecord[]>(() => getSavedState('dk_oqc_records', INITIAL_OQC_DATA));
+  const [oqcColorChanges, setOqcColorChanges] = useState<OqcColorChangeRecord[]>(() => getSavedState('dk_oqc_color_changes', []));
   const [supplierProductionAudits, setSupplierProductionAudits] = useState<SupplierProductionAudit[]>(() => getSavedState('dk_supplier_production_audits', INITIAL_SUPPLIER_AUDITS));
 
   useEffect(() => {
@@ -5673,6 +5675,11 @@ export function App() {
   useEffect(() => {
     syncToServer('dk_oqc_records', oqcRecords);
   }, [oqcRecords]);
+
+  useEffect(() => {
+    localStorage.setItem('dk_oqc_color_changes', JSON.stringify(oqcColorChanges));
+    syncToServer('dk_oqc_color_changes', oqcColorChanges);
+  }, [oqcColorChanges]);
 
   // Tự động giải phóng dung lượng & nén background các ảnh quá nặng của OQC, IQC, PQC cũ khi khởi chạy ứng dụng
   useEffect(() => {
@@ -20359,6 +20366,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
               setPqcRecords={setPqcRecords}
               oqcRecords={oqcRecords}
               setOqcRecords={setOqcRecords}
+              oqcColorChanges={oqcColorChanges}
+              setOqcColorChanges={setOqcColorChanges}
               supplierProductionAudits={supplierProductionAudits}
               setSupplierProductionAudits={setSupplierProductionAudits}
               suppliers={suppliers}
@@ -24938,6 +24947,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 staff={staff}
                 capas={capas}
                 oqcRecords={oqcRecords}
+                oqcColorChanges={oqcColorChanges}
                 initialSenderName={currentUser.name}
                 initialSenderEmail={currentUser.email}
               />
