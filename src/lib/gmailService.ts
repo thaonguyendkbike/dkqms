@@ -447,13 +447,13 @@ const renderColorChangeHtmlSection = (colorChanges: any[], titleText: string) =>
             ${g.model}
           </span>
         </td>
-        <td style="padding: 10px 8px; text-align: center; font-weight: 900; color: #7e22ce; width: 22%; min-width: 90px; font-size: 13px;">
-          ${g.count} xe
-        </td>
-        <td style="padding: 10px 8px; width: 34%; min-width: 160px;">
+        <td style="padding: 10px 8px; width: 36%; min-width: 160px;">
           <span style="background-color: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 11.5px;">${g.oldColor}</span>
           <span style="color: #9333ea; font-weight: 900; margin: 0 6px;">➔</span>
           <span style="background-color: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 11.5px;">${g.newColor}</span>
+        </td>
+        <td style="padding: 10px 8px; text-align: center; font-weight: 900; color: #7e22ce; width: 20%; min-width: 80px; font-size: 13px;">
+          ${g.count} xe
         </td>
       </tr>
     `;
@@ -482,8 +482,8 @@ const renderColorChangeHtmlSection = (colorChanges: any[], titleText: string) =>
               <tr style="background-color: #f3e8ff; border-bottom: 2px solid #d8b4fe; color: #581c87; font-weight: 800; font-size: 10.5px; text-transform: uppercase;">
                 <th style="padding: 8px; width: 8%; text-align: center;">STT</th>
                 <th style="padding: 8px; width: 36%;">Dòng xe (Model)</th>
-                <th style="padding: 8px; width: 22%; text-align: center;">Số lượng đổi màu</th>
-                <th style="padding: 8px; width: 34%;">Quy cách đổi màu</th>
+                <th style="padding: 8px; width: 36%;">Quy cách đổi màu</th>
+                <th style="padding: 8px; width: 20%; text-align: center;">Số lượng xe</th>
               </tr>
             </thead>
             <tbody>
