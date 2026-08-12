@@ -13604,14 +13604,14 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   <div className="bg-red-50/40 hover:bg-red-50 p-3.5 rounded-xl border border-red-100 transition-all">
                     <span className="text-[10px] text-red-600 font-extrabold uppercase tracking-wider block">CAPA Đang Mở (Chờ xử lý)</span>
                     <div className="flex items-baseline gap-2 mt-1">
-                      <p className="text-2xl font-black text-red-650 font-mono">{capas.filter(c => (c.status || c.Status) === 'Mở').length}</p>
+                      <p className="text-2xl font-black text-red-600 font-mono">{capas.filter(c => (c.status || c.Status) === 'Mở').length}</p>
                       <span className="text-[10px] text-red-500 font-bold animate-pulse">● Đang Khắc phục</span>
                     </div>
                   </div>
                   <div className="bg-emerald-50/40 hover:bg-emerald-50 p-3.5 rounded-xl border border-emerald-100 transition-all">
-                    <span className="text-[10px] text-emerald-650 font-extrabold uppercase tracking-wider block">CAPA Đã Đóng (Kết thúc)</span>
+                    <span className="text-[10px] text-emerald-600 font-extrabold uppercase tracking-wider block">CAPA Đã Đóng (Kết thúc)</span>
                     <div className="flex items-baseline gap-2 mt-1">
-                      <p className="text-2xl font-black text-emerald-750 font-mono">{capas.filter(c => (c.status || c.Status) === 'Đóng' || (c.status || c.Status) === 'Đã đóng').length}</p>
+                      <p className="text-2xl font-black text-emerald-700 font-mono">{capas.filter(c => (c.status || c.Status) === 'Đóng' || (c.status || c.Status) === 'Đã đóng').length}</p>
                       <span className="text-[10px] text-emerald-600 font-bold">✓ Đạt hiệu quả</span>
                     </div>
                   </div>
@@ -14403,7 +14403,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                   <span className={`inline-block px-2 py-1 text-[9px] font-black rounded uppercase text-center min-w-[70px] ${
                                     (cap.status || cap.Status) === 'Mở' ? 'bg-red-600 text-white animate-pulse' :
                                     (cap.status || cap.Status) === 'Quá hạn' ? 'bg-amber-500 text-white' :
-                                    'bg-emerald-650 text-white'
+                                    'bg-emerald-600 text-white'
                                   }`}>
                                     {cap.status || cap.Status}
                                   </span>
@@ -15657,7 +15657,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       >
                         <ChevronLeft className="w-3.5 h-3.5" />
                       </button>
-                      <span className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-150 rounded font-bold">
+                      <span className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded font-bold">
                         Trang {logPage} / {Math.ceil(filteredDailyLogs.length / logLimit) || 1}
                       </span>
                       <button
@@ -18868,7 +18868,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           </div>
                           <div className="text-[10px] text-slate-500 flex justify-between border-t pt-2 mt-1">
                             <span>Model đang chạy: <strong>{ptspTasks.length}</strong></span>
-                            <span className="text-purple-650 font-bold">Chưa xong: {activePtsp.length}</span>
+                            <span className="text-purple-600 font-bold">Chưa xong: {activePtsp.length}</span>
                           </div>
                         </div>
 

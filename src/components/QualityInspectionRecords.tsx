@@ -3880,9 +3880,9 @@ export default function QualityInspectionRecords({
             <div className="flex flex-wrap gap-1.5">
               <button 
                 onClick={() => setShowAddIqcModal(true)}
-                className="bg-emerald-650 hover:bg-emerald-600 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-emerald-150 cursor-pointer border border-emerald-500"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] sm:text-xs px-3 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-emerald-200 cursor-pointer border border-emerald-600"
               >
-                <Plus className="w-3.5 h-3.5" /> ➕ Thêm Phiếu IQC Mới
+                <Plus className="w-3.5 h-3.5 text-white" /> Thêm Phiếu IQC Mới
               </button>
               <button 
                 onClick={() => setShowAqlCalculator(!showAqlCalculator)}
@@ -3894,7 +3894,7 @@ export default function QualityInspectionRecords({
               </button>
               <button 
                 onClick={() => setShowEcountSyncModal(true)}
-                className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-indigo-150 animate-pulse cursor-pointer border border-indigo-400"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-indigo-200 animate-pulse cursor-pointer border border-indigo-500"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-ping"></span>
                 🔗 Nhập từ Ecount.com
@@ -3904,7 +3904,7 @@ export default function QualityInspectionRecords({
           {qcMainSubTab === 'pqc' && (
             <button 
               onClick={() => setShowAddPqcModal(true)}
-              className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-indigo-200 cursor-pointer"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-indigo-200 cursor-pointer border border-indigo-600"
             >
               <Plus className="w-3.5 h-3.5" /> Ghi Nhận Sự Cố PQC
             </button>
@@ -3913,13 +3913,13 @@ export default function QualityInspectionRecords({
             <div className="flex flex-wrap gap-1.5">
               <button 
                 onClick={() => setShowAddOqcModal(true)}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-blue-200 cursor-pointer"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-blue-200 cursor-pointer border border-blue-600"
               >
                 <Plus className="w-3.5 h-3.5" /> Thêm Nghiệm Thu KCS
               </button>
               <button 
                 onClick={() => setShowImportOqcModal(true)}
-                className="bg-indigo-650 hover:bg-indigo-600 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-indigo-150 cursor-pointer"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-indigo-200 cursor-pointer border border-indigo-600"
               >
                 <Upload className="w-3.5 h-3.5" /> Nhập Excel KCS
               </button>
@@ -3928,10 +3928,10 @@ export default function QualityInspectionRecords({
                   setColorChangeError('');
                   setShowColorChangeModal(true);
                 }}
-                className="bg-purple-650 hover:bg-purple-600 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-purple-200 cursor-pointer border border-purple-500/40"
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] sm:text-xs px-3 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-purple-200 cursor-pointer border border-purple-600"
                 title="Nhập danh sách xe đổi màu hàng loạt (Số seri | Model | Màu cũ | Màu mới | Ngày đổi màu)"
               >
-                <RefreshCw className="w-3.5 h-3.5 text-purple-200" /> Nhập Đổi Màu Xe
+                <RefreshCw className="w-3.5 h-3.5 text-purple-100" /> Nhập Đổi Màu Xe
               </button>
               <button 
                 onClick={() => {
@@ -3944,7 +3944,7 @@ export default function QualityInspectionRecords({
                   setExportKcsModel(oqcFilterModel);
                   setShowExportKcsReportModal(true);
                 }}
-                className="bg-amber-600 hover:bg-amber-550 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-amber-200 cursor-pointer"
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-amber-200 cursor-pointer border border-amber-600"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-white" /> Báo Cáo KCS Tuần/Tháng
               </button>
@@ -3958,7 +3958,7 @@ export default function QualityInspectionRecords({
                 }
                 setShowAddSupplierAuditModal(true);
               }}
-              className="bg-orange-600 hover:bg-orange-500 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-orange-200 animate-pulse cursor-pointer"
+              className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-orange-200 animate-pulse cursor-pointer border border-orange-600"
             >
               <Plus className="w-3.5 h-3.5" /> Kích hoạt Giám sát NCC
             </button>
@@ -4175,7 +4175,7 @@ export default function QualityInspectionRecords({
                   <p className="text-[10px] text-slate-500 mt-1 flex justify-between items-center">
                     <span>Quy mô: <strong className="font-mono text-slate-700">{totalQtySum.toLocaleString('vi-VN')}</strong> sp</span>
                     {isIqcFiltered && (
-                      <span className="text-[9.5px] text-emerald-650 font-bold">({totalFilteredLots}/{totalLotsAll} tổng lô)</span>
+                      <span className="text-[9.5px] text-emerald-600 font-bold">({totalFilteredLots}/{totalLotsAll} tổng lô)</span>
                     )}
                   </p>
                 </div>
@@ -4252,7 +4252,7 @@ export default function QualityInspectionRecords({
             {/* Elegant QC Filter Controls Header */}
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
               <div className="flex items-center gap-1.5">
-                <Filter className="w-3.5 h-3.5 text-emerald-650" />
+                <Filter className="w-3.5 h-3.5 text-emerald-600" />
                 <h4 className="text-[11px] font-black uppercase text-slate-700 tracking-wider">Bộ lọc tìm kiếm IQC</h4>
               </div>
               <div className="flex items-center gap-2">
