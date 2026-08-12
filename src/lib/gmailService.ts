@@ -441,22 +441,19 @@ const renderColorChangeHtmlSection = (colorChanges: any[], titleText: string) =>
   const rowsHtml = groupList.map((g, idx) => {
     return `
       <tr style="border-bottom: 1px solid #e9d5ff; font-size: 12px; background-color: #ffffff;">
-        <td style="padding: 10px 8px; font-weight: bold; color: #6b21a8; font-family: monospace; text-align: center; width: 5%; min-width: 35px;">${idx + 1}</td>
-        <td style="padding: 10px 8px; font-weight: 800; color: #1e1b4b; width: 22%; min-width: 110px;">
-          <span style="display: inline-block; padding: 2px 8px; background-color: #f3e8ff; border-radius: 4px; border-left: 3px solid #9333ea;">
+        <td style="padding: 10px 8px; font-weight: bold; color: #6b21a8; font-family: monospace; text-align: center; width: 8%; min-width: 40px;">${idx + 1}</td>
+        <td style="padding: 10px 8px; font-weight: 800; color: #1e1b4b; width: 36%; min-width: 140px;">
+          <span style="display: inline-block; padding: 2px 10px; background-color: #f3e8ff; border-radius: 4px; border-left: 3px solid #9333ea;">
             ${g.model}
           </span>
         </td>
-        <td style="padding: 10px 8px; text-align: center; font-weight: 900; color: #7e22ce; width: 12%; min-width: 70px; font-size: 13px;">
+        <td style="padding: 10px 8px; text-align: center; font-weight: 900; color: #7e22ce; width: 22%; min-width: 90px; font-size: 13px;">
           ${g.count} xe
         </td>
-        <td style="padding: 10px 8px; width: 26%; min-width: 140px;">
-          <span style="background-color: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px;">${g.oldColor}</span>
-          <span style="color: #9333ea; font-weight: 900; margin: 0 4px;">➔</span>
-          <span style="background-color: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px;">${g.newColor}</span>
-        </td>
-        <td style="padding: 10px 8px; font-size: 11px; color: #475569; width: 35%; min-width: 180px; line-height: 1.4; word-break: break-all;">
-          ${g.serials.length > 0 ? g.serials.slice(0, 10).join(', ') + (g.serials.length > 10 ? ` và ${g.serials.length - 10} xe khác` : '') : 'N/A'}
+        <td style="padding: 10px 8px; width: 34%; min-width: 160px;">
+          <span style="background-color: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 11.5px;">${g.oldColor}</span>
+          <span style="color: #9333ea; font-weight: 900; margin: 0 6px;">➔</span>
+          <span style="background-color: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 11.5px;">${g.newColor}</span>
         </td>
       </tr>
     `;
@@ -483,11 +480,10 @@ const renderColorChangeHtmlSection = (colorChanges: any[], titleText: string) =>
           <table class="responsive-table" width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;">
             <thead>
               <tr style="background-color: #f3e8ff; border-bottom: 2px solid #d8b4fe; color: #581c87; font-weight: 800; font-size: 10.5px; text-transform: uppercase;">
-                <th style="padding: 8px; width: 5%; text-align: center;">STT</th>
-                <th style="padding: 8px; width: 22%;">Dòng xe (Model)</th>
-                <th style="padding: 8px; width: 12%; text-align: center;">Số lượng</th>
-                <th style="padding: 8px; width: 26%;">Đổi màu</th>
-                <th style="padding: 8px; width: 35%;">Số khung / Seri xe</th>
+                <th style="padding: 8px; width: 8%; text-align: center;">STT</th>
+                <th style="padding: 8px; width: 36%;">Dòng xe (Model)</th>
+                <th style="padding: 8px; width: 22%; text-align: center;">Số lượng đổi màu</th>
+                <th style="padding: 8px; width: 34%;">Quy cách đổi màu</th>
               </tr>
             </thead>
             <tbody>
