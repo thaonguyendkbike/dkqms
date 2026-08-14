@@ -5582,52 +5582,277 @@ export default function QualityInspectionRecords({
               }
               const today = new Date().toLocaleDateString('vi-VN');
               const aoaData: any[][] = [];
+              const rowTracker: { type: string; isZebra?: boolean }[] = [];
+              const merges: any[] = [];
 
-              aoaData.push(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT - PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL)"]);
-              aoaData.push(["DKBike - Xe cho cả gia đình | DK QMS System"]);
-              aoaData.push(["BẢNG THỐNG KÊ DANH SÁCH BÀN GIAO XE THÀNH PHẨM CHO BỘ PHẬN KHO"]);
-              aoaData.push([`Ngày bàn giao: ${today}`, `Tổng số lượng xe: ${handoverScannedList.length} xe`]);
-              aoaData.push([]);
+              const addRow = (row: any[], type: string, isZebra: boolean = false) => {
+                const fullRow = [...row];
+                while (fullRow.length < 10) {
+                  fullRow.push("");
+                }
+                aoaData.push(fullRow);
+                rowTracker.push({ type, isZebra });
+                return aoaData.length - 1;
+              };
 
-              aoaData.push(["TỔNG HỢP SỐ LƯỢNG THEO DÒNG XE & MÀU SẮC"]);
-              aoaData.push(["STT", "Dòng xe (Model)", "Màu sơn", "Số lượng (Xe)"]);
+              // 1. Header Company & Title
+              const r0 = addRow(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT - PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL)"], 'header-company');
+              merges.push({ s: { r: r0, c: 0 }, e: { r: r0, c: 9 } });
+
+              const r1 = addRow(["DKBike - Xe cho cả gia đình | Hệ thống Quản lý Chất lượng DK QMS"], 'header-department');
+              merges.push({ s: { r: r1, c: 0 }, e: { r: r1, c: 9 } });
+
+              const r2 = addRow(["BẢNG BÀN GIAO XE THÀNH PHẨM CHO BỘ PHẬN KHO"], 'header-title');
+              merges.push({ s: { r: r2, c: 0 }, e: { r: r2, c: 9 } });
+
+              const r3 = addRow([`Ngày bàn giao: ${today}   |   Tổng số lượng: ${handoverScannedList.length} xe   |   Số dòng xe (Model): ${handoverModelSummary.length}`], 'header-date');
+              merges.push({ s: { r: r3, c: 0 }, e: { r: r3, c: 9 } });
+
+              addRow([], 'empty');
+
+              // 2. Section 1: Summary by Model & Color
+              const rSec1 = addRow(["I. TỔNG HỢP SỐ LƯỢNG BÀN GIAO THEO DÒNG XE & MÀU SẮC"], 'section-header');
+              merges.push({ s: { r: rSec1, c: 0 }, e: { r: rSec1, c: 9 } });
+
+              addRow(["STT", "Dòng xe (Model)", "Màu sơn", "Số lượng bàn giao", "Ghi chú đối soát", "", "", "", "", ""], 'summary-header');
+
               handoverModelSummary.forEach((s, idx) => {
-                aoaData.push([idx + 1, s.model, s.color, s.count]);
+                addRow([
+                  idx + 1,
+                  s.model,
+                  s.color,
+                  `${s.count} xe`,
+                  "",
+                  "", "", "", "", ""
+                ], 'summary-row', idx % 2 === 1);
               });
-              aoaData.push([]);
 
-              aoaData.push(["CHI TIẾT DANH SÁCH SỐ KHUNG / SÊRI BÀN GIAO"]);
-              aoaData.push(["STT", "Seri Tem ĐT (Số Sêri)", "Số Khung", "Số Động Cơ", "Mã Quy Cách TEM", "Dòng xe (Model)", "Màu sơn", "Lệnh Sản Xuất", "Tình trạng KCS", "Giờ kiểm KCS", "Giờ bàn giao"]);
+              const rTotal = addRow([
+                "TỔNG CỘNG",
+                "",
+                "",
+                `${handoverScannedList.length} xe`,
+                "Hoàn tất kiểm tra KCS",
+                "", "", "", "", ""
+              ], 'summary-total');
+              merges.push({ s: { r: rTotal, c: 0 }, e: { r: rTotal, c: 2 } });
+
+              addRow([], 'empty');
+
+              // 3. Section 2: Detailed List of Handed-over Vehicles (BỎ CỘT TÌNH TRẠNG)
+              const rSec2 = addRow(["II. CHI TIẾT DANH SÁCH SỐ KHUNG / SÊRI BÀN GIAO (ĐỐI SOÁT & ĐÓNG DẤU NHẬN)"], 'section-header');
+              merges.push({ s: { r: rSec2, c: 0 }, e: { r: rSec2, c: 9 } });
+
+              addRow([
+                "STT",
+                "Số Sêri (Tem ĐT)",
+                "Số Khung",
+                "Số Động Cơ",
+                "Mã Quy Cách",
+                "Dòng xe (Model)",
+                "Màu Sắc",
+                "Lệnh Sản Xuất",
+                "Giờ Kiểm KCS",
+                "Giờ Bàn Giao"
+              ], 'detail-header');
+
               handoverScannedList.forEach((item, idx) => {
-                aoaData.push([
+                addRow([
                   idx + 1,
                   item.serialNo,
-                  item.chassisNo || '--',
-                  item.engineNo || '--',
-                  item.partCode,
+                  item.chassisNo && item.chassisNo !== '--' ? item.chassisNo : '--',
+                  item.engineNo && item.engineNo !== '--' ? item.engineNo : '--',
+                  item.partCode || 'TEM-GEN',
                   item.model,
                   item.color,
                   item.lsx,
-                  item.status,
-                  item.checkTime,
+                  item.checkTime || '--:--',
                   item.scannedAt
-                ]);
+                ], 'detail-row', idx % 2 === 1);
               });
 
-              aoaData.push([]);
-              aoaData.push(["ĐẠI DIỆN PHÒNG QLCL (BÀN GIAO)", "", "", "", "", "", "ĐẠI DIỆN BỘ PHẬN KHO (ĐÓNG DẤU NHẬN)"]);
-              aoaData.push(["(Ký & ghi rõ họ tên)", "", "", "", "", "", "(Ký, ghi rõ họ tên & Đóng dấu đỏ)"]);
+              addRow([], 'empty');
+
+              // 4. Section 3: Signatures & Stamping
+              const rSig1 = addRow([
+                "ĐẠI DIỆN PHÒNG QUẢN LÝ CHẤT LƯỢNG (BÀN GIAO)", "", "", "",
+                "", "",
+                "ĐẠI DIỆN BỘ PHẬN KHO (ĐÓNG DẤU NHẬN)", "", "", ""
+              ], 'sig-header');
+              merges.push({ s: { r: rSig1, c: 0 }, e: { r: rSig1, c: 3 } });
+              merges.push({ s: { r: rSig1, c: 6 }, e: { r: rSig1, c: 9 } });
+
+              const rSig2 = addRow([
+                "(Ký, ghi rõ họ tên)", "", "", "",
+                "", "",
+                "(Ký, ghi rõ họ tên & Đóng dấu đỏ)", "", "", ""
+              ], 'sig-sub');
+              merges.push({ s: { r: rSig2, c: 0 }, e: { r: rSig2, c: 3 } });
+              merges.push({ s: { r: rSig2, c: 6 }, e: { r: rSig2, c: 9 } });
+
+              addRow([], 'empty-sig');
+              addRow([], 'empty-sig');
+              addRow([], 'empty-sig');
 
               const wb = XLSXStyle.utils.book_new();
               const ws = XLSXStyle.utils.aoa_to_sheet(aoaData);
+
+              // Styling Engine
+              const decodedRange = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1:A1');
+              const totalRows = decodedRange.e.r + 1;
+              const totalCols = decodedRange.e.c + 1;
+
+              const borderThin = { style: "thin", color: { rgb: "CBD5E1" } };
+              const borderThick = { style: "medium", color: { rgb: "64748B" } };
+              const cellBordersNormal = {
+                top: borderThin, bottom: borderThin,
+                left: borderThin, right: borderThin
+              };
+
+              for (let r = 0; r < totalRows; r++) {
+                const tracker = rowTracker[r];
+                const rType = tracker?.type;
+                const isZebra = tracker?.isZebra;
+
+                for (let c = 0; c < totalCols; c++) {
+                  const cellRef = XLSXStyle.utils.encode_cell({ r, c });
+                  let cell = ws[cellRef];
+                  if (!cell) {
+                    cell = ws[cellRef] = { t: 's', v: '' };
+                  }
+
+                  if (rType === 'header-company') {
+                    cell.s = {
+                      font: { name: "Segoe UI", sz: 11, bold: true, color: { rgb: "1E3A8A" } },
+                      alignment: { horizontal: "left", vertical: "center" }
+                    };
+                  } else if (rType === 'header-department') {
+                    cell.s = {
+                      font: { name: "Segoe UI", sz: 9.5, italic: true, color: { rgb: "475569" } },
+                      alignment: { horizontal: "left", vertical: "center" }
+                    };
+                  } else if (rType === 'header-title') {
+                    cell.s = {
+                      font: { name: "Segoe UI", sz: 15, bold: true, color: { rgb: "1E3A8A" } },
+                      alignment: { horizontal: "center", vertical: "center" }
+                    };
+                  } else if (rType === 'header-date') {
+                    cell.s = {
+                      font: { name: "Segoe UI", sz: 10, bold: true, color: { rgb: "475569" } },
+                      alignment: { horizontal: "center", vertical: "center" }
+                    };
+                  } else if (rType === 'section-header') {
+                    cell.s = {
+                      fill: { fgColor: { rgb: "F1F5F9" } },
+                      font: { name: "Segoe UI", sz: 11, bold: true, color: { rgb: "1E3A8A" } },
+                      alignment: { horizontal: "left", vertical: "center" },
+                      border: { bottom: borderThick, top: borderThin }
+                    };
+                  } else if (rType === 'summary-header') {
+                    cell.s = {
+                      fill: { fgColor: { rgb: "1E3A8A" } },
+                      font: { name: "Segoe UI", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
+                      alignment: { horizontal: "center", vertical: "center" },
+                      border: cellBordersNormal
+                    };
+                  } else if (rType === 'summary-row') {
+                    cell.s = {
+                      fill: isZebra ? { fgColor: { rgb: "F8FAFC" } } : undefined,
+                      font: { name: "Segoe UI", sz: 10, color: { rgb: "1E293B" } },
+                      alignment: { 
+                        horizontal: c === 0 || c === 3 ? "center" : "left", 
+                        vertical: "center" 
+                      },
+                      border: cellBordersNormal
+                    };
+                  } else if (rType === 'summary-total') {
+                    cell.s = {
+                      fill: { fgColor: { rgb: "E2E8F0" } },
+                      font: { name: "Segoe UI", sz: 10.5, bold: true, color: { rgb: "0F172A" } },
+                      alignment: { 
+                        horizontal: c === 0 ? "left" : (c === 3 ? "center" : "left"), 
+                        vertical: "center" 
+                      },
+                      border: { top: borderThick, bottom: borderThick, left: borderThin, right: borderThin }
+                    };
+                  } else if (rType === 'detail-header') {
+                    cell.s = {
+                      fill: { fgColor: { rgb: "1E3A8A" } },
+                      font: { name: "Segoe UI", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
+                      alignment: { horizontal: "center", vertical: "center", wrapText: true },
+                      border: cellBordersNormal
+                    };
+                  } else if (rType === 'detail-row') {
+                    cell.s = {
+                      fill: isZebra ? { fgColor: { rgb: "F8FAFC" } } : undefined,
+                      font: { 
+                        name: (c === 1 || c === 2 || c === 3 || c === 4 || c === 7) ? "Consolas" : "Segoe UI", 
+                        sz: 10, 
+                        bold: c === 1,
+                        color: c === 1 ? { rgb: "1E3A8A" } : { rgb: "1E293B" } 
+                      },
+                      alignment: { 
+                        horizontal: (c === 5 || c === 6) ? "left" : "center", 
+                        vertical: "center" 
+                      },
+                      border: cellBordersNormal
+                    };
+                  } else if (rType === 'sig-header') {
+                    cell.s = {
+                      font: { name: "Segoe UI", sz: 10.5, bold: true, color: { rgb: "1E3A8A" } },
+                      alignment: { horizontal: "center", vertical: "center" }
+                    };
+                  } else if (rType === 'sig-sub') {
+                    cell.s = {
+                      font: { name: "Segoe UI", sz: 9.5, italic: true, color: { rgb: "64748B" } },
+                      alignment: { horizontal: "center", vertical: "center" }
+                    };
+                  }
+                }
+              }
+
+              ws['!merges'] = merges;
+
+              // Row Heights
+              const rowHeights: any[] = [];
+              rowTracker.forEach(t => {
+                if (t.type === 'header-company') rowHeights.push({ hpt: 20 });
+                else if (t.type === 'header-department') rowHeights.push({ hpt: 16 });
+                else if (t.type === 'header-title') rowHeights.push({ hpt: 28 });
+                else if (t.type === 'header-date') rowHeights.push({ hpt: 18 });
+                else if (t.type === 'section-header') rowHeights.push({ hpt: 24 });
+                else if (t.type === 'summary-header' || t.type === 'detail-header') rowHeights.push({ hpt: 24 });
+                else if (t.type === 'summary-total') rowHeights.push({ hpt: 22 });
+                else if (t.type === 'summary-row' || t.type === 'detail-row') rowHeights.push({ hpt: 20 });
+                else if (t.type === 'sig-header') rowHeights.push({ hpt: 22 });
+                else if (t.type === 'sig-sub') rowHeights.push({ hpt: 18 });
+                else if (t.type === 'empty-sig') rowHeights.push({ hpt: 24 });
+                else rowHeights.push({ hpt: 12 });
+              });
+              ws['!rows'] = rowHeights;
+
+              // Column Widths (10 columns)
+              ws['!cols'] = [
+                { wch: 6 },   // 0: STT
+                { wch: 18 },  // 1: Số Sêri
+                { wch: 22 },  // 2: Số Khung
+                { wch: 18 },  // 3: Số Động Cơ
+                { wch: 15 },  // 4: Mã Quy Cách
+                { wch: 22 },  // 5: Model
+                { wch: 16 },  // 6: Màu Sắc
+                { wch: 16 },  // 7: LSX
+                { wch: 14 },  // 8: Giờ Kiểm KCS
+                { wch: 14 }   // 9: Giờ Bàn Giao
+              ];
+
               XLSXStyle.utils.book_append_sheet(wb, ws, "Ban_Giao_Kho");
-              XLSXStyle.writeFile(wb, `DKBike_Danh_Sach_Ban_Giao_Kho_${today.replace(/\//g, '_')}.xlsx`);
+              XLSXStyle.writeFile(wb, `DKBike_Ban_Giao_Kho_${today.replace(/\//g, '_')}.xlsx`);
             };
 
             const handleCopyHandoverTextLocal = () => {
               if (handoverScannedList.length === 0) return;
-              const headers = "STT\tSeri Tem ĐT\tSố Khung\tSố Động Cơ\tMã TEM\tModel\tMàu Sắc\tLSX\tGiờ Bàn Giao";
-              const rows = handoverScannedList.map((item, i) => `${i + 1}\t${item.serialNo}\t${item.chassisNo || '--'}\t${item.engineNo || '--'}\t${item.partCode}\t${item.model}\t${item.color}\t${item.lsx}\t${item.scannedAt}`).join('\n');
+              const headers = "STT\tSố Sêri (Tem ĐT)\tSố Khung\tSố Động Cơ\tMã Quy Cách\tDòng xe (Model)\tMàu Sắc\tLệnh Sản Xuất\tGiờ Bàn Giao";
+              const rows = handoverScannedList.map((item, i) => `${i + 1}\t${item.serialNo}\t${item.chassisNo || '--'}\t${item.engineNo || '--'}\t${item.partCode || 'TEM-GEN'}\t${item.model}\t${item.color}\t${item.lsx}\t${item.scannedAt}`).join('\n');
               const text = `${headers}\n${rows}`;
               navigator.clipboard.writeText(text).then(() => {
                 alert(`Đã sao chép danh sách ${handoverScannedList.length} xe bàn giao vào clipboard!`);
