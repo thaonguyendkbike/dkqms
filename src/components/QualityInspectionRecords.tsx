@@ -4199,6 +4199,7 @@ export default function QualityInspectionRecords({
           {qcMainSubTab === 'oqc' && (
             <div className="flex items-center gap-2">
               <button 
+                id="btn-import-lsx"
                 onClick={() => {
                   setLsxImportDefaultLsx(kcsSelectedLsx || '26-10');
                   setLsxImportError('');
@@ -4210,6 +4211,18 @@ export default function QualityInspectionRecords({
                 <Upload className="w-3.5 h-3.5" /> Nạp từ LSX
               </button>
               <button 
+                id="btn-import-oqc-excel"
+                onClick={() => {
+                  setOqcImportError('');
+                  setShowImportOqcModal(true);
+                }}
+                className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="Nhập dữ liệu KCS hàng loạt từ bảng tính Excel"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Nhập KCS từ Excel
+              </button>
+              <button 
+                id="btn-color-change"
                 onClick={() => {
                   setColorChangeError('');
                   setShowColorChangeModal(true);
@@ -5289,8 +5302,20 @@ export default function QualityInspectionRecords({
                         setShowImportLsxModal(true);
                       }}
                       className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                      title="Nạp danh sách xe từ file Lệnh Sản Xuất vào QMS để KCS kiểm tra"
                     >
                       <Upload className="w-3.5 h-3.5" /> Nạp từ LSX
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOqcImportError('');
+                        setShowImportOqcModal(true);
+                      }}
+                      className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer shadow-xs"
+                      title="Nhập dữ liệu KCS hàng loạt từ bảng tính Excel"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Nhập Excel
                     </button>
                     <button
                       type="button"
