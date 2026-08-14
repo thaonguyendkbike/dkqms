@@ -36,12 +36,16 @@ export interface OQCRecord {
   id: string;
   partCode: string;
   serialNo: string;
+  chassisNo?: string;
+  engineNo?: string;
   model: string;
   color: string;
   status: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra';
+  passFlag?: number;
   defectDetail: string;
   failedCount: number;
   rootCause: string;
+  defectCauseDetail?: string;
   lsx: string;
   checkTime: string;
   date: string;

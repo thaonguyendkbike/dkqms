@@ -44,8 +44,13 @@ function stripBase64Images(obj: any): any {
   return obj;
 }
 
+let isCleaningInProgress = false;
+const rawSetItem = typeof window !== 'undefined' && window.localStorage ? window.localStorage.setItem : null;
+
 // Global function to sweep all other keys in localStorage and remove their base64 images to free up space
 function freeUpLocalStorageSpace(currentKey: string): boolean {
+  if (isCleaningInProgress || !rawSetItem) return false;
+  isCleaningInProgress = true;
   try {
     console.warn("🧹 [safeStorage] Đang dọn dẹp các khóa khác trong localStorage để giải phóng bộ nhớ...");
     let spaceFreed = false;
@@ -60,7 +65,6 @@ function freeUpLocalStorageSpace(currentKey: string): boolean {
         try {
           window.localStorage.removeItem(otherKey);
           spaceFreed = true;
-          console.log(`🧹 [safeStorage] Đã xóa bỏ khóa cache Firestore cũ: ${otherKey}`);
         } catch (e) {}
         continue;
       }
@@ -81,9 +85,10 @@ function freeUpLocalStorageSpace(currentKey: string): boolean {
           const cleaned = stripBase64Images(parsed);
           const cleanedValue = JSON.stringify(cleaned);
           if (cleanedValue.length < rawValue.length) {
-            window.localStorage.setItem(otherKey, cleanedValue);
-            console.log(`🧹 [safeStorage] Đã dọn dẹp và loại bỏ ảnh của khóa: ${otherKey} (Từ ${rawValue.length} xuống ${cleanedValue.length} ký tự)`);
-            spaceFreed = true;
+            try {
+              rawSetItem.call(window.localStorage, otherKey, cleanedValue);
+              spaceFreed = true;
+            } catch (e) {}
           }
         }
       } catch (err) {
@@ -92,13 +97,16 @@ function freeUpLocalStorageSpace(currentKey: string): boolean {
     }
     return spaceFreed;
   } catch (globalErr) {
-    console.warn("⚠️ Lỗi khi dọn dẹp localStorage:", globalErr);
     return false;
+  } finally {
+    isCleaningInProgress = false;
   }
 }
 
 // Purge non-essential keys if localStorage is completely exhausted
 function purgeNonEssentialLocalStorage(currentKey: string): void {
+  if (isCleaningInProgress || !rawSetItem) return;
+  isCleaningInProgress = true;
   try {
     const allKeys: string[] = [];
     for (let i = 0; i < window.localStorage.length; i++) {
@@ -122,11 +130,11 @@ function purgeNonEssentialLocalStorage(currentKey: string): void {
         if (raw) {
           if (!k.startsWith('dk_')) {
             // Remove third-party / legacy temp keys
-            window.localStorage.removeItem(k);
+            try { window.localStorage.removeItem(k); } catch (e) {}
           } else {
             const parsed = JSON.parse(raw);
             const cleaned = stripBase64Images(parsed);
-            window.localStorage.setItem(k, JSON.stringify(cleaned));
+            try { rawSetItem.call(window.localStorage, k, JSON.stringify(cleaned)); } catch (e) {}
           }
         }
       } catch (e) {
@@ -135,6 +143,8 @@ function purgeNonEssentialLocalStorage(currentKey: string): void {
     }
   } catch (e) {
     // Ignore
+  } finally {
+    isCleaningInProgress = false;
   }
 }
 
@@ -157,9 +167,8 @@ try {
 }
 
 // Global monkey-patch for window.localStorage.setItem to safely intercept QuotaExceededError from third-party SDKs like Firestore
-if (typeof window !== 'undefined' && window.localStorage) {
+if (typeof window !== 'undefined' && window.localStorage && rawSetItem) {
   try {
-    const rawSetItem = window.localStorage.setItem;
     window.localStorage.setItem = function (key: string, value: string) {
       try {
         rawSetItem.call(window.localStorage, key, value);
@@ -173,30 +182,27 @@ if (typeof window !== 'undefined' && window.localStorage) {
            String(err).includes('quota') ||
            String(err).includes('setItem'))
         ) {
-          console.warn(`⚠️ [window.localStorage.setItem] Exceeded quota while setting key "${key}". Auto-cleaning...`);
-          freeUpLocalStorageSpace(key);
-          try {
-            rawSetItem.call(window.localStorage, key, value);
-            return;
-          } catch (retryErr) {
-            if (key.startsWith('firestore_')) {
-              console.warn(`⚠️ [window.localStorage.setItem] Safely ignored quota error for Firestore cache key: ${key}`);
-              return;
-            }
-            purgeNonEssentialLocalStorage(key);
+          if (!isCleaningInProgress) {
+            freeUpLocalStorageSpace(key);
             try {
               rawSetItem.call(window.localStorage, key, value);
               return;
-            } catch (finalErr) {
-              if (key.startsWith('firestore_')) {
-                console.warn(`⚠️ [window.localStorage.setItem] Safely ignored quota error for Firestore cache key: ${key}`);
+            } catch (retryErr) {
+              if (key.startsWith('firestore_')) return;
+              purgeNonEssentialLocalStorage(key);
+              try {
+                rawSetItem.call(window.localStorage, key, value);
                 return;
+              } catch (finalErr) {
+                // Fallback to memoryStore
+                memoryStore[key] = String(value);
               }
-              console.warn(`⚠️ [window.localStorage.setItem] Quota exhausted for key "${key}".`);
             }
+          } else {
+            memoryStore[key] = String(value);
           }
         } else {
-          throw err;
+          memoryStore[key] = String(value);
         }
       }
     };
@@ -213,7 +219,6 @@ export const safeStorage = {
     try {
       const val = window.localStorage.getItem(key);
       if (val !== null) return val;
-      // Fallback if saved in memoryStore during quota overload
       return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : null;
     } catch (e) {
       return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : null;
@@ -221,60 +226,56 @@ export const safeStorage = {
   },
 
   setItem(key: string, value: string): void {
-    if (isInMemory) {
-      memoryStore[key] = String(value);
-      return;
-    }
+    memoryStore[key] = String(value);
+    if (isInMemory) return;
+
     try {
-      window.localStorage.setItem(key, value);
-      // Synchronize into memoryStore as backup
-      memoryStore[key] = String(value);
+      if (rawSetItem) {
+        rawSetItem.call(window.localStorage, key, value);
+      } else {
+        window.localStorage.setItem(key, value);
+      }
     } catch (e) {
-      console.warn(`⚠️ LocalStorage đầy hoặc lỗi khi ghi khóa: ${key}. Đang tiến hành dọn dẹp giải phóng dung lượng...`, e);
-      
-      // Bước 1: Thử giải phóng dung lượng bằng cách quét sạch ảnh ở các khóa khác
+      // Step 1: Clean other keys
       const spaceFreed = freeUpLocalStorageSpace(key);
-      
       if (spaceFreed) {
         try {
-          window.localStorage.setItem(key, value);
-          memoryStore[key] = String(value);
-          console.log(`✅ Đã ghi thành công khóa: ${key} sau khi dọn dẹp giải phóng dung lượng từ các khóa khác!`);
+          if (rawSetItem) {
+            rawSetItem.call(window.localStorage, key, value);
+          } else {
+            window.localStorage.setItem(key, value);
+          }
           return;
-        } catch (retryErr) {
-          console.warn(`⚠️ Vẫn không thể ghi khóa: ${key} sau khi dọn dẹp các khóa khác. Đang tiến hành lọc ảnh cho chính khóa hiện tại...`, retryErr);
-        }
+        } catch (retryErr) {}
       }
 
-      // Bước 2: Tách bỏ ảnh Base64 của chính khóa này để cứu dữ liệu chữ (Text)
+      // Step 2: Strip images from current key
       let cleanedValue = value;
       try {
         const parsed = JSON.parse(value);
         const cleaned = stripBase64Images(parsed);
         cleanedValue = JSON.stringify(cleaned);
-      } catch (parseErr) {
-        // keep original if not JSON
-      }
+      } catch (parseErr) {}
 
       try {
-        window.localStorage.setItem(key, cleanedValue);
-        memoryStore[key] = cleanedValue;
-        console.log(`✅ Đã cứu dữ liệu chữ thành công (lọc bỏ ảnh) cho khóa: ${key}`);
+        if (rawSetItem) {
+          rawSetItem.call(window.localStorage, key, cleanedValue);
+        } else {
+          window.localStorage.setItem(key, cleanedValue);
+        }
         return;
-      } catch (cleanErr) {
-        console.warn(`⚠️ Vẫn không thể ghi khóa ${key} sau khi lọc ảnh. Tiến hành dọn dẹp mở rộng...`, cleanErr);
-      }
+      } catch (cleanErr) {}
 
-      // Bước 3: Dọn dẹp mở rộng loại bỏ các dữ liệu rác/ảnh của tất cả khóa và thử lại
+      // Step 3: Purge other non-essentials
       try {
         purgeNonEssentialLocalStorage(key);
-        window.localStorage.setItem(key, cleanedValue);
-        memoryStore[key] = cleanedValue;
-        console.log(`✅ Đã dọn dẹp mở rộng và lưu thành công dữ liệu chữ cho khóa: ${key}`);
-        return;
+        if (rawSetItem) {
+          rawSetItem.call(window.localStorage, key, cleanedValue);
+        } else {
+          window.localStorage.setItem(key, cleanedValue);
+        }
       } catch (purgeErr) {
-        console.warn(`⚠️ LocalStorage hoàn toàn không đủ dung lượng cho khóa: ${key}. Đã lưu an toàn vào RAM để không mất dữ liệu phiên làm việc.`);
-        memoryStore[key] = String(cleanedValue);
+        // Saved in memoryStore, no error thrown to caller
       }
     }
   },

@@ -2772,19 +2772,6 @@ export function App() {
             }
           }
 
-          // Check if legacy data exists and auto-migrate if subcollection is empty
-          if (['dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records', 'dk_defects', 'dk_fmea', 'dk_ecos', 'dk_capas', 'dk_daily_logs', 'dk_tasks', 'dk_ptsp_tasks', 'dk_weekly_plans', 'dk_monthly_plans', 'dk_qms_quality_planning_tasks'].includes(key)) {
-            if (finalDisplayData.length === 0 && legacyRootData[key] && legacyRootData[key].length > 0) {
-              if (!attemptedMigrations.current.has(key)) {
-                attemptedMigrations.current.add(key);
-                console.warn(`[Auto-Migration Recovery]: Khôi phục ${legacyRootData[key].length} bản ghi ${key} từ Root Document.`);
-                setTimeout(() => {
-                  syncToServer(key, legacyRootData[key]);
-                }, 1000);
-              }
-            }
-          }
-
           // Mark this listener as initialized
           listenersInitialized++;
           if (listenersInitialized >= totalListeners) {

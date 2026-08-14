@@ -36,7 +36,12 @@ import {
   List,
   ChevronDown,
   ChevronUp,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Zap,
+  Copy,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { IQCRecord, PQCRecord, OQCRecord, OqcColorChangeRecord } from '../qualityTestData';
 import { safeStorage } from '../safeStorage';
@@ -557,6 +562,161 @@ function ModelDefectCard({ modelName, defects, onDefectClick }: ModelDefectCardP
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+interface AutocompleteInputProps {
+  value: string;
+  onChange: (val: string) => void;
+  options: string[];
+  placeholder?: string;
+  className?: string;
+  onCommit?: (val: string) => void;
+  onFocus?: () => void;
+  disabled?: boolean;
+}
+
+function AutocompleteInput({
+  value,
+  onChange,
+  options,
+  placeholder = '',
+  className = '',
+  onCommit,
+  onFocus,
+  disabled = false
+}: AutocompleteInputProps) {
+  const [localValue, setLocalValue] = useState(value || '');
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(-1);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    setLocalValue(value || '');
+  }, [value]);
+
+  const normalize = (str: string) =>
+    (str || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[đĐ]/g, 'd');
+
+  const filteredOptions = useMemo(() => {
+    if (!localValue || !localValue.trim()) return options.slice(0, 10);
+    const normQuery = normalize(localValue.trim());
+    const queryTokens = normQuery.split(/\s+/).filter(Boolean);
+    return options
+      .filter(opt => {
+        const normOpt = normalize(opt);
+        return queryTokens.every(token => normOpt.includes(token));
+      })
+      .slice(0, 10);
+  }, [localValue, options]);
+
+  const handleSelect = (opt: string) => {
+    setLocalValue(opt);
+    onChange(opt);
+    if (onCommit) onCommit(opt);
+    setIsOpen(false);
+    setHighlightIndex(-1);
+  };
+
+  const handleBlur = () => {
+    if (localValue !== value) {
+      onChange(localValue);
+      if (onCommit) onCommit(localValue);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      setIsOpen(true);
+      return;
+    }
+    if (isOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlightIndex(prev => (prev + 1 < filteredOptions.length ? prev + 1 : 0));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlightIndex(prev => (prev - 1 >= 0 ? prev - 1 : filteredOptions.length - 1));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (highlightIndex >= 0 && highlightIndex < filteredOptions.length) {
+          handleSelect(filteredOptions[highlightIndex]);
+        } else {
+          setIsOpen(false);
+          onChange(localValue);
+          if (onCommit) onCommit(localValue);
+        }
+      } else if (e.key === 'Escape') {
+        setIsOpen(false);
+      }
+    } else if (e.key === 'Enter') {
+      onChange(localValue);
+      if (onCommit) onCommit(localValue);
+    }
+  };
+
+  React.useEffect(() => {
+    const handleClickOutside = (ev: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(ev.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <input
+        ref={inputRef}
+        type="text"
+        value={localValue}
+        disabled={disabled}
+        placeholder={placeholder}
+        onChange={e => {
+          setLocalValue(e.target.value);
+          setIsOpen(true);
+          setHighlightIndex(-1);
+        }}
+        onBlur={handleBlur}
+        onFocus={() => {
+          setIsOpen(true);
+          if (onFocus) onFocus();
+        }}
+        onKeyDown={handleKeyDown}
+        className={className}
+      />
+      {isOpen && filteredOptions.length > 0 && !disabled && (
+        <div className="absolute left-0 top-full mt-1 w-full min-w-[200px] max-w-[340px] bg-white rounded-lg shadow-xl border border-slate-200 z-50 max-h-52 overflow-y-auto py-1 animate-in fade-in duration-100">
+          <div className="px-2 py-1 text-[9px] font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 flex justify-between items-center bg-slate-50/80 select-none">
+            <span>Gợi ý lỗi / nguyên nhân</span>
+            <span className="font-mono">{filteredOptions.length} kết quả</span>
+          </div>
+          {filteredOptions.map((opt, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onMouseDown={e => {
+                e.preventDefault();
+                handleSelect(opt);
+              }}
+              onMouseEnter={() => setHighlightIndex(idx)}
+              className={`w-full text-left px-2.5 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                highlightIndex === idx ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <span className="text-slate-400 text-[10px]">✦</span>
+              <span className="truncate">{opt}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1359,7 +1519,7 @@ export default function QualityInspectionRecords({
     }
     if (initialOqcSearch) {
       setOqcSearch(initialOqcSearch);
-      setOqcTabMode('history');
+      setOqcSubView('station');
       setOqcListFilter('all');
       changed = true;
     }
@@ -1607,6 +1767,72 @@ export default function QualityInspectionRecords({
   });
   const uniqueOqcMonths = Array.from(new Set(oqcRecords.map(r => r.month))).filter(Boolean).sort((a, b) => Number(a) - Number(b));
   const uniqueOqcYears = Array.from(new Set(oqcRecords.map(r => r.year))).filter(Boolean).sort((a, b) => Number(a) - Number(b));
+  
+  // Unique LSX list for OQC Line Station
+  const uniqueOqcLsxs = useMemo(() => {
+    const set = new Set<string>();
+    oqcRecords.forEach(r => {
+      if (r.lsx && r.lsx.trim()) set.add(r.lsx.trim());
+    });
+    const list = Array.from(set).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+    return list.length > 0 ? list : ['26-10', '26-15', '26-20'];
+  }, [oqcRecords]);
+
+  // Defect autocomplete dictionary (aggregated from OQC, PQC, CAPA, and standard industry defects)
+  const defectDictionary = useMemo(() => {
+    const set = new Set<string>();
+    oqcRecords.forEach(r => {
+      if (r.defectDetail && r.defectDetail.trim()) {
+        r.defectDetail.split(/[,;\n+]/).forEach(d => {
+          const clean = d.trim();
+          if (clean.length >= 2) set.add(clean);
+        });
+      }
+    });
+    pqcRecords.forEach(r => {
+      if (r.findings && r.findings.trim()) {
+        r.findings.split(/[,;\n+]/).forEach(d => {
+          const clean = d.trim();
+          if (clean.length >= 2) set.add(clean);
+        });
+      }
+    });
+    const standardDefects = [
+      "Xước sơn sườn xe", "Xước dàn áo nhựa", "Lệch ngàm nhựa ốp sườn",
+      "Hở khe lắp ráp cụm đèn", "Độ rơ tay ga lớn", "Kẹt phanh đĩa trước",
+      "Kẹt phanh cơ sau", "Lệch tâm bánh xe trước", "Lỏng ốc gá động cơ",
+      "Tiếng kêu bất thường giảm xóc", "Lỏng giắc cắm dây điện", "Đèn pha không sáng",
+      "Đèn xi nhan không nháy", "Còi không kêu", "Khóa smartkey không nhận",
+      "Lỗi màn hình LCD đồng hồ", "Chảy dầu giảm xóc", "Lệch ghi đông lái",
+      "Bọt sơn / trầy xước tem dán", "Thiếu ốc cố định tấm sàn", "Chân chống nghiêng cạ sườn",
+      "Yên xe đóng không khít", "Lắp ngược lốp xe", "Áp suất lốp không chuẩn",
+      "Chưa siết chặt ốc phanh", "Lỗi cổng sạc ắc quy / pin", "Mất tín hiệu cảm biến phanh ngắt điện"
+    ];
+    standardDefects.forEach(d => set.add(d));
+    return Array.from(set);
+  }, [oqcRecords, pqcRecords]);
+
+  // Root cause autocomplete dictionary
+  const causeDictionary = useMemo(() => {
+    const set = new Set<string>();
+    oqcRecords.forEach(r => {
+      if (r.rootCause && r.rootCause.trim()) {
+        r.rootCause.split(/[,;\n+]/).forEach(c => {
+          const clean = c.trim();
+          if (clean.length >= 2) set.add(clean);
+        });
+      }
+    });
+    const standardCauses = [
+      "Công nhân lắp ráp sai cữ gá", "Bốc xếp va đập trong chuyền", "Lỗi linh kiện nhà cung cấp",
+      "Khuôn ép nhựa sai dung sai", "Sơn dặm lại chưa khô", "Chưa siết đủ lực siết ốc",
+      "Luồn dây điện cọ xát khung", "Gá kẹp phanh bị nghiêng", "Tem dán bị bọt khí do thao tác tay",
+      "Lỗi module điều khiển ECU", "Dây cáp phanh bị căng quá mức", "Lắp ráp ép khớp nhựa quá lực làm gãy chấu",
+      "Công nhân thao tác cẩu thả", "Không bọc xốp đệm chống trầy sườn", "Sai quy trình lắp ráp"
+    ];
+    standardCauses.forEach(c => set.add(c));
+    return Array.from(set);
+  }, [oqcRecords]);
 
   // Helper to compare dates of IQC records
   const parseDateToNumber = (dateStr: string): number => {
@@ -1629,75 +1855,82 @@ export default function QualityInspectionRecords({
   };
 
   // Filtered lists (automatically sorted from newest to oldest)
-  const filteredIqc = iqcRecords.filter(r => {
-    const matchesSearch = iqcSearch === '' || 
-      (r.supplierName || '').toLowerCase().includes(iqcSearch.toLowerCase()) ||
-      (r.content || '').toLowerCase().includes(iqcSearch.toLowerCase()) ||
-      (r.checkedBy || '').toLowerCase().includes(iqcSearch.toLowerCase()) ||
-      (r.id || '').toLowerCase().includes(iqcSearch.toLowerCase());
+  const filteredIqc = useMemo(() => {
+    return iqcRecords.filter(r => {
+      const matchesSearch = iqcSearch === '' || 
+        (r.supplierName || '').toLowerCase().includes(iqcSearch.toLowerCase()) ||
+        (r.content || '').toLowerCase().includes(iqcSearch.toLowerCase()) ||
+        (r.checkedBy || '').toLowerCase().includes(iqcSearch.toLowerCase()) ||
+        (r.id || '').toLowerCase().includes(iqcSearch.toLowerCase());
+        
+      const matchesSupplier = iqcFilterSupplier === 'All' || r.supplierName === iqcFilterSupplier;
+      const matchesResult = iqcFilterResult === 'All' || r.result === iqcFilterResult;
       
-    const matchesSupplier = iqcFilterSupplier === 'All' || r.supplierName === iqcFilterSupplier;
-    const matchesResult = iqcFilterResult === 'All' || r.result === iqcFilterResult;
-    
-    // Week filter
-    const recordWeek = r.date ? getWeekAndMonthFromDate(r.date).week : 'T1';
-    const matchesWeek = iqcFilterWeek === 'All' || recordWeek === iqcFilterWeek;
+      // Week filter
+      const recordWeek = r.date ? getWeekAndMonthFromDate(r.date).week : 'T1';
+      const matchesWeek = iqcFilterWeek === 'All' || recordWeek === iqcFilterWeek;
 
-    // Month filter
-    const recordMonth = r.date ? getWeekAndMonthFromDate(r.date).month : 1;
-    const matchesMonth = iqcFilterMonth === 'All' || String(recordMonth) === iqcFilterMonth;
-    
-    return matchesSearch && matchesSupplier && matchesResult && matchesWeek && matchesMonth;
-  }).sort((a, b) => {
-    const dateA = parseDateToNumber(a.date);
-    const dateB = parseDateToNumber(b.date);
-    if (dateA !== dateB) {
-      return dateB - dateA;
-    }
-    return (b.id || '').localeCompare(a.id || '');
-  });
-
-  const filteredPqc = pqcRecords.filter(r => {
-    const matchesSearch = pqcSearch === '' || 
-      (r.lsx || '').toLowerCase().includes(pqcSearch.toLowerCase()) ||
-      (r.model || '').toLowerCase().includes(pqcSearch.toLowerCase()) ||
-      (r.findings || '').toLowerCase().includes(pqcSearch.toLowerCase()) ||
-      (r.checkedBy || '').toLowerCase().includes(pqcSearch.toLowerCase());
+      // Month filter
+      const recordMonth = r.date ? getWeekAndMonthFromDate(r.date).month : 1;
+      const matchesMonth = iqcFilterMonth === 'All' || String(recordMonth) === iqcFilterMonth;
       
-    const matchesStatus = pqcFilterStatus === 'All' || r.status === pqcFilterStatus;
-    const matchesModel = pqcFilterModel === 'All' || r.model === pqcFilterModel;
-    
-    // Week filter
-    const recordWeek = r.date ? getWeekAndMonthFromDate(r.date).week : 'T1';
-    const matchesWeek = pqcFilterWeek === 'All' || recordWeek === pqcFilterWeek;
+      return matchesSearch && matchesSupplier && matchesResult && matchesWeek && matchesMonth;
+    }).sort((a, b) => {
+      const dateA = parseDateToNumber(a.date);
+      const dateB = parseDateToNumber(b.date);
+      if (dateA !== dateB) {
+        return dateB - dateA;
+      }
+      return (b.id || '').localeCompare(a.id || '');
+    });
+  }, [iqcRecords, iqcSearch, iqcFilterSupplier, iqcFilterResult, iqcFilterWeek, iqcFilterMonth]);
 
-    // Month filter
-    const recordMonth = r.date ? getWeekAndMonthFromDate(r.date).month : 1;
-    const matchesMonth = pqcFilterMonth === 'All' || String(recordMonth) === pqcFilterMonth;
-    
-    return matchesSearch && matchesStatus && matchesModel && matchesWeek && matchesMonth;
-  });
-
-  const filteredOqc = oqcRecords.filter(r => {
-    const matchesSearch = oqcSearch === '' || 
-      (r.serialNo || '').toLowerCase().includes(oqcSearch.toLowerCase()) ||
-      (r.partCode || '').toLowerCase().includes(oqcSearch.toLowerCase()) ||
-      (r.model || '').toLowerCase().includes(oqcSearch.toLowerCase()) ||
-      (r.color || '').toLowerCase().includes(oqcSearch.toLowerCase()) ||
-      (r.defectDetail || '').toLowerCase().includes(oqcSearch.toLowerCase());
+  const filteredPqc = useMemo(() => {
+    return pqcRecords.filter(r => {
+      const matchesSearch = pqcSearch === '' || 
+        (r.lsx || '').toLowerCase().includes(pqcSearch.toLowerCase()) ||
+        (r.model || '').toLowerCase().includes(pqcSearch.toLowerCase()) ||
+        (r.findings || '').toLowerCase().includes(pqcSearch.toLowerCase()) ||
+        (r.checkedBy || '').toLowerCase().includes(pqcSearch.toLowerCase());
+        
+      const matchesStatus = pqcFilterStatus === 'All' || r.status === pqcFilterStatus;
+      const matchesModel = pqcFilterModel === 'All' || r.model === pqcFilterModel;
       
-    const matchesModel = oqcFilterModel === 'All' || r.model === oqcFilterModel;
-    const matchesColor = oqcFilterColor === 'All' || r.color === oqcFilterColor;
-    const matchesDate = oqcFilterDate === 'All' || r.date === oqcFilterDate;
-    const matchesMonth = oqcFilterMonth === 'All' || String(r.month) === oqcFilterMonth;
-    const matchesYear = oqcFilterYear === 'All' || String(r.year) === oqcFilterYear;
-    
-    // Week filter
-    const recordWeek = r.date ? getWeekAndMonthFromDate(r.date).week : 'T1';
-    const matchesWeek = oqcFilterWeek === 'All' || recordWeek === oqcFilterWeek;
-    
-    return matchesSearch && matchesModel && matchesColor && matchesDate && matchesMonth && matchesYear && matchesWeek;
-  });
+      // Week filter
+      const recordWeek = r.date ? getWeekAndMonthFromDate(r.date).week : 'T1';
+      const matchesWeek = pqcFilterWeek === 'All' || recordWeek === pqcFilterWeek;
+
+      // Month filter
+      const recordMonth = r.date ? getWeekAndMonthFromDate(r.date).month : 1;
+      const matchesMonth = pqcFilterMonth === 'All' || String(recordMonth) === pqcFilterMonth;
+      
+      return matchesSearch && matchesStatus && matchesModel && matchesWeek && matchesMonth;
+    });
+  }, [pqcRecords, pqcSearch, pqcFilterStatus, pqcFilterModel, pqcFilterWeek, pqcFilterMonth]);
+
+  const filteredOqc = useMemo(() => {
+    const sLower = oqcSearch.toLowerCase();
+    return oqcRecords.filter(r => {
+      const matchesSearch = oqcSearch === '' || 
+        (r.serialNo && r.serialNo.toLowerCase().includes(sLower)) ||
+        (r.partCode && r.partCode.toLowerCase().includes(sLower)) ||
+        (r.model && r.model.toLowerCase().includes(sLower)) ||
+        (r.color && r.color.toLowerCase().includes(sLower)) ||
+        (r.defectDetail && r.defectDetail.toLowerCase().includes(sLower));
+        
+      const matchesModel = oqcFilterModel === 'All' || r.model === oqcFilterModel;
+      const matchesColor = oqcFilterColor === 'All' || r.color === oqcFilterColor;
+      const matchesDate = oqcFilterDate === 'All' || r.date === oqcFilterDate;
+      const matchesMonth = oqcFilterMonth === 'All' || String(r.month) === oqcFilterMonth;
+      const matchesYear = oqcFilterYear === 'All' || String(r.year) === oqcFilterYear;
+      
+      // Week filter
+      const recordWeek = r.date ? getWeekAndMonthFromDate(r.date).week : 'T1';
+      const matchesWeek = oqcFilterWeek === 'All' || recordWeek === oqcFilterWeek;
+      
+      return matchesSearch && matchesModel && matchesColor && matchesDate && matchesMonth && matchesYear && matchesWeek;
+    });
+  }, [oqcRecords, oqcSearch, oqcFilterModel, oqcFilterColor, oqcFilterDate, oqcFilterMonth, oqcFilterYear, oqcFilterWeek]);
 
   const isOqcRecordPassed = useCallback((r: OQCRecord) => {
     if (r.status === 'Đạt') return true;
@@ -2106,6 +2339,60 @@ export default function QualityInspectionRecords({
   const [exportKcsWeek, setExportKcsWeek] = useState<string>('T1');
   const [exportKcsYear, setExportKcsYear] = useState<number>(2026);
   const [exportKcsModel, setExportKcsModel] = useState<string>('All');
+
+  // OQC Sub-view state: 'station' (Trạm KCS) | 'handover' (Báo phẩm bàn giao) | 'dashboard' (Đồ thị báo cáo)
+  const [oqcSubView, setOqcSubView] = useState<'station' | 'handover' | 'dashboard'>('station');
+
+  // KCS Realtime Line Station states
+  const [kcsSelectedLsx, setKcsSelectedLsx] = useState<string>(() => uniqueOqcLsxs[0] || '26-10');
+  const [kcsSearch, setKcsSearch] = useState('');
+  const [kcsStatusFilter, setKcsStatusFilter] = useState<'All' | 'Chưa kiểm tra' | 'Đạt' | 'Lỗi'>('All');
+  const [kcsCurrentPage, setKcsCurrentPage] = useState<number>(1);
+  const [showImportLsxModal, setShowImportLsxModal] = useState(false);
+  const [lsxImportText, setLsxImportText] = useState('');
+  const [lsxImportDefaultLsx, setLsxImportDefaultLsx] = useState('26-10');
+  const [lsxImportError, setLsxImportError] = useState('');
+  const [showAddCarToLsxModal, setShowAddCarToLsxModal] = useState(false);
+  const [newCarLsx, setNewCarLsx] = useState('26-10');
+  const [newCarSerialNo, setNewCarSerialNo] = useState('');
+  const [newCarPartCode, setNewCarPartCode] = useState('TEM-GEN');
+  const [newCarModel, setNewCarModel] = useState('DK Gogo');
+  const [newCarColor, setNewCarColor] = useState('Trắng');
+
+  // Finished Goods Handover (Báo phẩm bàn giao kho) states
+  const [handoverScanInput, setHandoverScanInput] = useState('');
+  const [showPasteHandoverModal, setShowPasteHandoverModal] = useState(false);
+  const [handoverPasteText, setHandoverPasteText] = useState('');
+  const [handoverFilterModel, setHandoverFilterModel] = useState('All');
+  const [handoverSearch, setHandoverSearch] = useState('');
+  const [handoverScannedList, setHandoverScannedList] = useState<Array<{
+    id: string;
+    serialNo: string;
+    chassisNo?: string;
+    engineNo?: string;
+    partCode: string;
+    model: string;
+    color: string;
+    lsx: string;
+    status: string;
+    checkTime: string;
+    date: string;
+    scannedAt: string;
+  }>>(() => {
+    try {
+      const saved = safeStorage.getItem('dk_oqc_handover_list');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  const saveHandoverList = (list: any[]) => {
+    setHandoverScannedList(list);
+    safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(list));
+  };
 
   const handleExportKcsReportCSV = (
     type: 'weekly' | 'monthly',
@@ -3910,43 +4197,27 @@ export default function QualityInspectionRecords({
             </button>
           )}
           {qcMainSubTab === 'oqc' && (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex items-center gap-2">
               <button 
-                onClick={() => setShowAddOqcModal(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-blue-200 cursor-pointer border border-blue-600"
+                onClick={() => {
+                  setLsxImportDefaultLsx(kcsSelectedLsx || '26-10');
+                  setLsxImportError('');
+                  setShowImportLsxModal(true);
+                }}
+                className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="Nạp danh sách xe từ file Lệnh Sản Xuất vào QMS để KCS kiểm tra"
               >
-                <Plus className="w-3.5 h-3.5" /> Thêm Nghiệm Thu KCS
-              </button>
-              <button 
-                onClick={() => setShowImportOqcModal(true)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-indigo-200 cursor-pointer border border-indigo-600"
-              >
-                <Upload className="w-3.5 h-3.5" /> Nhập Excel KCS
+                <Upload className="w-3.5 h-3.5" /> Nạp từ LSX
               </button>
               <button 
                 onClick={() => {
                   setColorChangeError('');
                   setShowColorChangeModal(true);
                 }}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] sm:text-xs px-3 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-purple-200 cursor-pointer border border-purple-600"
-                title="Nhập danh sách xe đổi màu hàng loạt (Số seri | Model | Màu cũ | Màu mới | Ngày đổi màu)"
+                className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="Nhập danh sách xe đổi màu hàng loạt"
               >
-                <RefreshCw className="w-3.5 h-3.5 text-purple-100" /> Nhập Đổi Màu Xe
-              </button>
-              <button 
-                onClick={() => {
-                  if (oqcFilterMonth !== 'All') setExportKcsMonth(parseInt(oqcFilterMonth, 10));
-                  if (oqcFilterWeek !== 'All') {
-                    setExportKcsPeriod('weekly');
-                    setExportKcsWeek(oqcFilterWeek);
-                  }
-                  if (oqcFilterYear !== 'All') setExportKcsYear(parseInt(oqcFilterYear, 10));
-                  setExportKcsModel(oqcFilterModel);
-                  setShowExportKcsReportModal(true);
-                }}
-                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-amber-200 cursor-pointer border border-amber-600"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-white" /> Báo Cáo KCS Tuần/Tháng
+                <RefreshCw className="w-3.5 h-3.5 text-slate-500" /> Đổi màu xe
               </button>
             </div>
           )}
@@ -3981,6 +4252,7 @@ export default function QualityInspectionRecords({
       {/* Navigation Sub-Tabs Switch */}
       <div className="flex border-b border-slate-200 gap-0.5 sm:gap-1 bg-slate-100 p-0.5 sm:p-1 rounded-md sm:rounded-lg">
         <button
+          id="subtab-btn-iqc"
           onClick={() => setQcMainSubTab('iqc')}
           className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'iqc' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-emerald-955 hover:bg-white/30'}`}
         >
@@ -3988,6 +4260,7 @@ export default function QualityInspectionRecords({
           IQC ({iqcRecords.length})
         </button>
         <button
+          id="subtab-btn-pqc"
           onClick={() => setQcMainSubTab('pqc')}
           className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'pqc' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-indigo-950 hover:bg-white/30'}`}
         >
@@ -3995,6 +4268,7 @@ export default function QualityInspectionRecords({
           PQC ({pqcRecords.length})
         </button>
         <button
+          id="subtab-btn-oqc"
           onClick={() => setQcMainSubTab('oqc')}
           className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'oqc' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-blue-955 hover:bg-white/30'}`}
         >
@@ -4002,6 +4276,7 @@ export default function QualityInspectionRecords({
           OQC ({oqcRecords.length})
         </button>
         <button
+          id="subtab-btn-sqc"
           onClick={() => setQcMainSubTab('supplier_monitoring')}
           className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'supplier_monitoring' ? 'bg-white text-orange-750 shadow-sm' : 'text-slate-600 hover:text-orange-955 hover:bg-white/30'}`}
         >
@@ -4009,6 +4284,7 @@ export default function QualityInspectionRecords({
           SQC ({supplierProductionAudits.length})
         </button>
         <button
+          id="subtab-btn-reports"
           onClick={() => setQcMainSubTab('reports')}
           className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'reports' ? 'bg-indigo-650 text-white shadow-sm' : 'text-slate-600 hover:text-indigo-950 hover:bg-white/30'}`}
         >
@@ -4762,8 +5038,763 @@ export default function QualityInspectionRecords({
         <div className="space-y-4">
           {renderActivePlanTargetsBanner('OQC')}
           
-          {/* ================================== VISUAL KCS/OQC DASHBOARD ================================== */}
-          {(() => {
+          {/* Sub-view switcher bar inside OQC */}
+          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              <button
+                id="oqc-subview-station"
+                type="button"
+                onClick={() => setOqcSubView('station')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  oqcSubView === 'station'
+                    ? 'bg-white text-slate-900 shadow-xs font-black'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-blue-600" />
+                Trạm KCS (LSX)
+              </button>
+              <button
+                id="oqc-subview-handover"
+                type="button"
+                onClick={() => setOqcSubView('handover')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  oqcSubView === 'handover'
+                    ? 'bg-white text-slate-900 shadow-xs font-black'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                Báo phẩm bàn giao
+                {handoverScannedList.length > 0 && (
+                  <span className="ml-1 bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded-full text-[10px] font-mono">
+                    {handoverScannedList.length}
+                  </span>
+                )}
+              </button>
+              <button
+                id="oqc-subview-dashboard"
+                type="button"
+                onClick={() => setOqcSubView('dashboard')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  oqcSubView === 'dashboard'
+                    ? 'bg-white text-slate-900 shadow-xs font-black'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" />
+                Báo cáo &amp; Đồ thị
+              </button>
+            </div>
+          </div>
+
+          {/* ================================== 1. TRẠM KIỂM ĐỊNH KCS REALTIME THEO LSX ================================== */}
+          {oqcSubView === 'station' && (() => {
+            const currentLsxRecords = oqcRecords.filter(r => (r.lsx || '26-10').trim() === (kcsSelectedLsx || '26-10').trim());
+            const totalLsxCars = currentLsxRecords.length;
+            const passedLsxCars = currentLsxRecords.filter(r => r.status === 'Đạt').length;
+            const failedLsxCars = currentLsxRecords.filter(r => r.status === 'Lỗi').length;
+            const pendingLsxCars = currentLsxRecords.filter(r => r.status !== 'Đạt' && r.status !== 'Lỗi').length;
+            const lsxYield = totalLsxCars > 0 ? Math.round((passedLsxCars / totalLsxCars) * 100) : 100;
+
+            const displayLsxRecords = currentLsxRecords.filter(r => {
+              if (kcsStatusFilter !== 'All') {
+                if (kcsStatusFilter === 'Chưa kiểm tra' && (r.status === 'Đạt' || r.status === 'Lỗi')) return false;
+                if (kcsStatusFilter === 'Đạt' && r.status !== 'Đạt') return false;
+                if (kcsStatusFilter === 'Lỗi' && r.status !== 'Lỗi') return false;
+              }
+              if (kcsSearch.trim()) {
+                const s = kcsSearch.trim().toLowerCase();
+                const matchSerial = (r.serialNo || '').toLowerCase().includes(s);
+                const matchChassis = (r.chassisNo || '').toLowerCase().includes(s);
+                const matchEngine = (r.engineNo || '').toLowerCase().includes(s);
+                const matchModel = (r.model || '').toLowerCase().includes(s);
+                const matchColor = (r.color || '').toLowerCase().includes(s);
+                const matchDefect = (r.defectDetail || '').toLowerCase().includes(s);
+                return matchSerial || matchChassis || matchEngine || matchModel || matchColor || matchDefect;
+              }
+              return true;
+            });
+
+            const pageSize = 50;
+            const totalPages = Math.max(1, Math.ceil(displayLsxRecords.length / pageSize));
+            const safeCurrentPage = Math.min(kcsCurrentPage, totalPages);
+            const paginatedRecords = displayLsxRecords.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
+
+            const handleQuickPass = (record: OQCRecord, nextIndex?: number) => {
+              const nowTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+              const nowDate = new Date().toLocaleDateString('vi-VN');
+              const nowMonth = new Date().getMonth() + 1;
+              const nowYear = new Date().getFullYear();
+
+              const updated = oqcRecords.map(r => {
+                if (r.id === record.id || r.serialNo.trim().toUpperCase() === record.serialNo.trim().toUpperCase()) {
+                  return {
+                    ...r,
+                    status: 'Đạt' as const,
+                    defectDetail: '',
+                    rootCause: '',
+                    failedCount: 0,
+                    checkTime: nowTime,
+                    date: nowDate,
+                    month: nowMonth,
+                    year: nowYear,
+                    checkedBy: 'Liễu Tùng Lâm'
+                  };
+                }
+                return r;
+              });
+
+              setOqcRecords(updated);
+              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+
+              if (typeof nextIndex === 'number' && nextIndex < paginatedRecords.length) {
+                const nextInput = document.getElementById(`kcs-pass-input-${nextIndex}`);
+                if (nextInput) nextInput.focus();
+              }
+            };
+
+            const handleQuickFail = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
+              const nowTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+              const nowDate = new Date().toLocaleDateString('vi-VN');
+              const nowMonth = new Date().getMonth() + 1;
+              const nowYear = new Date().getFullYear();
+
+              const updated = oqcRecords.map(r => {
+                if (r.id === record.id || r.serialNo.trim().toUpperCase() === record.serialNo.trim().toUpperCase()) {
+                  return {
+                    ...r,
+                    status: 'Lỗi' as const,
+                    defectDetail: defectDetail || 'Lỗi KCS',
+                    rootCause: rootCause || '',
+                    failedCount: 1,
+                    checkTime: nowTime,
+                    date: nowDate,
+                    month: nowMonth,
+                    year: nowYear,
+                    checkedBy: 'Liễu Tùng Lâm'
+                  };
+                }
+                return r;
+              });
+
+              setOqcRecords(updated);
+              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+            };
+
+            const handleDeleteCar = (record: OQCRecord) => {
+              if (!window.confirm(`Xóa xe Sêri ${record.serialNo} khỏi hệ thống?`)) return;
+              const updated = oqcRecords.filter(r => r.id !== record.id && r.serialNo.trim().toUpperCase() !== record.serialNo.trim().toUpperCase());
+              setOqcRecords(updated);
+              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+            };
+
+            const handleBatchPassAllPending = () => {
+              if (pendingLsxCars === 0) {
+                alert(`Tất cả xe trong LSX ${kcsSelectedLsx} đều đã được kiểm tra!`);
+                return;
+              }
+              if (!window.confirm(`Xác nhận đánh dấu tất cả ${pendingLsxCars} xe chưa kiểm trong LSX ${kcsSelectedLsx} thành ĐẠT?`)) return;
+              const nowTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+              const nowDate = new Date().toLocaleDateString('vi-VN');
+              const nowMonth = new Date().getMonth() + 1;
+              const nowYear = new Date().getFullYear();
+
+              const updated = oqcRecords.map(r => {
+                if ((r.lsx || '26-10').trim() === (kcsSelectedLsx || '26-10').trim() && r.status !== 'Đạt' && r.status !== 'Lỗi') {
+                  return {
+                    ...r,
+                    status: 'Đạt' as const,
+                    defectDetail: '',
+                    rootCause: '',
+                    failedCount: 0,
+                    checkTime: nowTime,
+                    date: nowDate,
+                    month: nowMonth,
+                    year: nowYear,
+                    checkedBy: 'Liễu Tùng Lâm'
+                  };
+                }
+                return r;
+              });
+              setOqcRecords(updated);
+              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+            };
+
+            return (
+              <div className="space-y-3 animate-in fade-in duration-150">
+                {/* Clean Toolbar */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-slate-500">Lệnh SX:</span>
+                    <select
+                      value={kcsSelectedLsx}
+                      onChange={e => {
+                        setKcsSelectedLsx(e.target.value);
+                        setKcsCurrentPage(1);
+                      }}
+                      className="bg-slate-50 border border-slate-300 text-slate-900 font-bold text-xs rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-slate-400 outline-hidden cursor-pointer"
+                    >
+                      {uniqueOqcLsxs.map(lsx => {
+                        const count = oqcRecords.filter(r => (r.lsx || '26-10').trim() === lsx.trim()).length;
+                        return (
+                          <option key={lsx} value={lsx}>
+                            LSX {lsx} ({count} xe)
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    <div className="relative w-48 sm:w-60">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={kcsSearch}
+                        onChange={e => {
+                          setKcsSearch(e.target.value);
+                          setKcsCurrentPage(1);
+                        }}
+                        placeholder="Tìm sêri, số khung, model..."
+                        className="w-full pl-8 pr-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-slate-400 outline-hidden"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      {(['All', 'Chưa kiểm tra', 'Đạt', 'Lỗi'] as const).map(st => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => {
+                            setKcsStatusFilter(st);
+                            setKcsCurrentPage(1);
+                          }}
+                          className={`px-2.5 py-1 text-xs font-semibold rounded-md transition cursor-pointer ${
+                            kcsStatusFilter === st
+                              ? 'bg-slate-900 text-white'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {st === 'All' ? 'Tất cả' : st === 'Chưa kiểm tra' ? 'Chưa kiểm' : st}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLsxImportDefaultLsx(kcsSelectedLsx || '26-10');
+                        setLsxImportError('');
+                        setShowImportLsxModal(true);
+                      }}
+                      className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Nạp từ LSX
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBatchPassAllPending}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                      title="Đánh dấu tất cả xe chưa kiểm tra thành ĐẠT"
+                    >
+                      <CheckSquare className="w-3.5 h-3.5 text-slate-600" /> ✓ Đạt toàn bộ
+                    </button>
+                  </div>
+                </div>
+
+                {/* Minimalist Summary Strip */}
+                <div className="bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-4">
+                    <span className="text-slate-600">Tổng: <strong className="text-slate-900 font-mono font-bold">{totalLsxCars}</strong> xe</span>
+                    <span className="text-emerald-700">Đạt: <strong className="font-mono font-bold">{passedLsxCars}</strong></span>
+                    <span className="text-rose-700">Lỗi: <strong className="font-mono font-bold">{failedLsxCars}</strong></span>
+                    <span className="text-slate-500">Chờ: <strong className="font-mono font-bold">{pendingLsxCars}</strong></span>
+                    <span className="text-blue-700 font-bold">Tỉ lệ đạt: <strong className="font-mono font-bold">{lsxYield}%</strong></span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">
+                    Gõ <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-[10px]">1</kbd> = Đạt • Tự động nhảy dòng
+                  </span>
+                </div>
+
+                {/* Table */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                  {paginatedRecords.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400 text-xs">
+                      Không có xe nào khớp bộ lọc.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-200 text-xs">
+                        <thead className="bg-slate-800 text-white font-bold text-[10.5px] uppercase tracking-wider select-none">
+                          <tr>
+                            <th scope="col" className="px-3 py-2.5 text-center w-10">STT</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Mã quy cách</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Số Sêri</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Số khung</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Model</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Màu sắc</th>
+                            <th scope="col" className="px-3 py-2.5 text-center w-32">KCS (Phím 1)</th>
+                            <th scope="col" className="px-3 py-2.5 text-left min-w-[200px]">Chi tiết lỗi</th>
+                            <th scope="col" className="px-3 py-2.5 text-left min-w-[160px]">Nguyên nhân</th>
+                            <th scope="col" className="px-3 py-2.5 text-center w-20">Giờ</th>
+                            <th scope="col" className="px-3 py-2.5 text-center w-14">Xóa</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white font-medium text-slate-700">
+                          {paginatedRecords.map((r, rowIdx) => {
+                            const globalIdx = (safeCurrentPage - 1) * pageSize + rowIdx + 1;
+                            const isPassed = r.status === 'Đạt';
+                            const isFailed = r.status === 'Lỗi';
+
+                            return (
+                              <tr
+                                key={r.id || r.serialNo || rowIdx}
+                                className={`hover:bg-slate-50 transition-colors ${
+                                  isPassed ? 'bg-emerald-50/20' : isFailed ? 'bg-rose-50/25' : ''
+                                }`}
+                              >
+                                <td className="px-3 py-2 text-center font-mono text-slate-400">{globalIdx}</td>
+                                <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{r.partCode || '--'}</td>
+                                <td className="px-3 py-2">
+                                  <span className="font-mono font-bold text-xs text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 select-all">
+                                    {r.serialNo}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{r.chassisNo || '--'}</td>
+                                <td className="px-3 py-2 font-bold text-slate-850">{r.model}</td>
+                                <td className="px-3 py-2 text-slate-600">{r.color}</td>
+
+                                {/* Pass input [1] */}
+                                <td className="px-3 py-2 text-center">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <input
+                                      id={`kcs-pass-input-${rowIdx}`}
+                                      type="text"
+                                      maxLength={2}
+                                      defaultValue={isPassed ? '1' : isFailed ? '2' : ''}
+                                      key={`${r.id}-${r.status}`}
+                                      placeholder="1"
+                                      onKeyDown={e => {
+                                        if (e.key === '1' || e.key === 'Enter') {
+                                          e.preventDefault();
+                                          handleQuickPass(r, rowIdx + 1);
+                                        } else if (e.key === '2') {
+                                          e.preventDefault();
+                                          handleQuickFail(r, r.defectDetail || 'Lỗi KCS');
+                                        } else if (e.key === 'ArrowDown') {
+                                          e.preventDefault();
+                                          const next = document.getElementById(`kcs-pass-input-${rowIdx + 1}`);
+                                          if (next) next.focus();
+                                        } else if (e.key === 'ArrowUp') {
+                                          e.preventDefault();
+                                          const prev = document.getElementById(`kcs-pass-input-${rowIdx - 1}`);
+                                          if (prev) prev.focus();
+                                        }
+                                      }}
+                                      className={`w-9 h-7 text-center font-mono font-bold text-xs rounded border transition outline-hidden ${
+                                        isPassed
+                                          ? 'bg-emerald-600 text-white border-emerald-700'
+                                          : isFailed
+                                          ? 'bg-rose-600 text-white border-rose-700'
+                                          : 'bg-slate-50 text-slate-800 border-slate-300 focus:bg-white focus:ring-1 focus:ring-slate-500'
+                                      }`}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleQuickPass(r, rowIdx + 1)}
+                                      className={`text-[11px] font-bold px-2 py-1 rounded transition cursor-pointer ${
+                                        isPassed
+                                          ? 'bg-emerald-100 text-emerald-800'
+                                          : 'bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700'
+                                      }`}
+                                    >
+                                      Đạt
+                                    </button>
+                                  </div>
+                                </td>
+
+                                {/* Defect Autocomplete */}
+                                <td className="px-3 py-2">
+                                  <AutocompleteInput
+                                    value={r.defectDetail || ''}
+                                    placeholder={isPassed ? '-- Không lỗi --' : 'Gõ từ khóa lỗi...'}
+                                    disabled={isPassed}
+                                    options={defectDictionary}
+                                    onCommit={val => handleQuickFail(r, val, r.rootCause || '')}
+                                    onChange={() => {}}
+                                    className={`w-full text-xs px-2 py-1 rounded border outline-hidden transition ${
+                                      isPassed
+                                        ? 'bg-slate-50 text-slate-300 border-transparent cursor-not-allowed text-center'
+                                        : isFailed
+                                        ? 'bg-rose-50 text-rose-900 border-rose-300 focus:bg-white font-semibold'
+                                        : 'bg-slate-50 text-slate-700 border-slate-200 focus:bg-white'
+                                    }`}
+                                  />
+                                </td>
+
+                                {/* Root Cause Autocomplete */}
+                                <td className="px-3 py-2">
+                                  <AutocompleteInput
+                                    value={r.rootCause || ''}
+                                    placeholder={isPassed ? '--' : 'Nguyên nhân...'}
+                                    disabled={isPassed}
+                                    options={causeDictionary}
+                                    onCommit={val => handleQuickFail(r, r.defectDetail || 'Lỗi KCS', val)}
+                                    onChange={() => {}}
+                                    className={`w-full text-xs px-2 py-1 rounded border outline-hidden transition ${
+                                      isPassed
+                                        ? 'bg-slate-50 text-slate-300 border-transparent cursor-not-allowed text-center'
+                                        : 'bg-slate-50 text-slate-700 border-slate-200 focus:bg-white'
+                                    }`}
+                                  />
+                                </td>
+
+                                {/* Check Time & Date */}
+                                <td className="px-3 py-2.5 text-center">
+                                  {r.checkTime || r.date ? (
+                                    <div className="text-[10.5px] font-mono leading-tight">
+                                      <strong className="text-blue-900 block font-black">{r.checkTime || '--:--'}</strong>
+                                      <span className="text-slate-400 text-[9.5px]">{r.date}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-300 text-[10px] italic">Chưa kiểm</span>
+                                  )}
+                                </td>
+
+                                {/* Photo & Delete */}
+                                <td className="px-3 py-2.5 text-center">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <label className="cursor-pointer text-slate-400 hover:text-blue-600 transition p-1 rounded hover:bg-blue-50" title="Chụp / đính kèm ảnh lỗi">
+                                      <Camera className={`w-3.5 h-3.5 ${r.imageUrl ? 'text-blue-600 fill-blue-100' : ''}`} />
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={async e => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) return;
+                                          const compressed = await compressImageFile(file, 500, 500, 0.4);
+                                          const updated = oqcRecords.map(item => {
+                                            if (item.id === r.id || item.serialNo.toUpperCase() === r.serialNo.toUpperCase()) {
+                                              return { ...item, imageUrl: compressed };
+                                            }
+                                            return item;
+                                          });
+                                          setOqcRecords(updated);
+                                          safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+                                        }}
+                                      />
+                                    </label>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteCar(r)}
+                                      className="text-slate-300 hover:text-rose-600 transition p-1 rounded hover:bg-rose-50"
+                                      title="Xóa xe khỏi danh sách"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="p-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs">
+                      <span className="font-medium text-slate-500">
+                        Trang <strong>{safeCurrentPage}</strong> / <strong>{totalPages}</strong> ({displayLsxRecords.length} xe)
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={safeCurrentPage <= 1}
+                          onClick={() => setKcsCurrentPage(prev => Math.max(1, prev - 1))}
+                          className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={safeCurrentPage >= totalPages}
+                          onClick={() => setKcsCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ================================== 2. KHÔNG GIAN BÁO PHẨM BÀN GIAO KHO ================================== */}
+          {oqcSubView === 'handover' && (() => {
+            const handoverModelSummary = (() => {
+              const map: Record<string, { model: string; color: string; count: number }> = {};
+              handoverScannedList.forEach(item => {
+                const key = `${item.model}___${item.color}`;
+                if (!map[key]) {
+                  map[key] = { model: item.model, color: item.color, count: 0 };
+                }
+                map[key].count++;
+              });
+              return Object.values(map).sort((a, b) => b.count - a.count);
+            })();
+
+            const handleExportHandoverExcelLocal = () => {
+              if (handoverScannedList.length === 0) {
+                alert('Danh sách quét bàn giao hiện đang trống!');
+                return;
+              }
+              const today = new Date().toLocaleDateString('vi-VN');
+              const aoaData: any[][] = [];
+
+              aoaData.push(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT - PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL)"]);
+              aoaData.push(["DKBike - Xe cho cả gia đình | DK QMS System"]);
+              aoaData.push(["BẢNG THỐNG KÊ DANH SÁCH BÀN GIAO XE THÀNH PHẨM CHO BỘ PHẬN KHO"]);
+              aoaData.push([`Ngày bàn giao: ${today}`, `Tổng số lượng xe: ${handoverScannedList.length} xe`]);
+              aoaData.push([]);
+
+              aoaData.push(["TỔNG HỢP SỐ LƯỢNG THEO DÒNG XE & MÀU SẮC"]);
+              aoaData.push(["STT", "Dòng xe (Model)", "Màu sơn", "Số lượng (Xe)"]);
+              handoverModelSummary.forEach((s, idx) => {
+                aoaData.push([idx + 1, s.model, s.color, s.count]);
+              });
+              aoaData.push([]);
+
+              aoaData.push(["CHI TIẾT DANH SÁCH SỐ KHUNG / SÊRI BÀN GIAO"]);
+              aoaData.push(["STT", "Seri Tem ĐT (Số Sêri)", "Số Khung", "Số Động Cơ", "Mã Quy Cách TEM", "Dòng xe (Model)", "Màu sơn", "Lệnh Sản Xuất", "Tình trạng KCS", "Giờ kiểm KCS", "Giờ bàn giao"]);
+              handoverScannedList.forEach((item, idx) => {
+                aoaData.push([
+                  idx + 1,
+                  item.serialNo,
+                  item.chassisNo || '--',
+                  item.engineNo || '--',
+                  item.partCode,
+                  item.model,
+                  item.color,
+                  item.lsx,
+                  item.status,
+                  item.checkTime,
+                  item.scannedAt
+                ]);
+              });
+
+              aoaData.push([]);
+              aoaData.push(["ĐẠI DIỆN PHÒNG QLCL (BÀN GIAO)", "", "", "", "", "", "ĐẠI DIỆN BỘ PHẬN KHO (ĐÓNG DẤU NHẬN)"]);
+              aoaData.push(["(Ký & ghi rõ họ tên)", "", "", "", "", "", "(Ký, ghi rõ họ tên & Đóng dấu đỏ)"]);
+
+              const wb = XLSXStyle.utils.book_new();
+              const ws = XLSXStyle.utils.aoa_to_sheet(aoaData);
+              XLSXStyle.utils.book_append_sheet(wb, ws, "Ban_Giao_Kho");
+              XLSXStyle.writeFile(wb, `DKBike_Danh_Sach_Ban_Giao_Kho_${today.replace(/\//g, '_')}.xlsx`);
+            };
+
+            const handleCopyHandoverTextLocal = () => {
+              if (handoverScannedList.length === 0) return;
+              const headers = "STT\tSeri Tem ĐT\tSố Khung\tSố Động Cơ\tMã TEM\tModel\tMàu Sắc\tLSX\tGiờ Bàn Giao";
+              const rows = handoverScannedList.map((item, i) => `${i + 1}\t${item.serialNo}\t${item.chassisNo || '--'}\t${item.engineNo || '--'}\t${item.partCode}\t${item.model}\t${item.color}\t${item.lsx}\t${item.scannedAt}`).join('\n');
+              const text = `${headers}\n${rows}`;
+              navigator.clipboard.writeText(text).then(() => {
+                alert(`Đã sao chép danh sách ${handoverScannedList.length} xe bàn giao vào clipboard!`);
+              });
+            };
+
+            return (
+              <div className="space-y-3 animate-in fade-in duration-150">
+                {/* Clean Scanner Toolbar */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
+                  <form
+                    onSubmit={e => {
+                      e.preventDefault();
+                      const raw = handoverScanInput.trim();
+                      if (!raw) return;
+                      const serial = raw.toUpperCase();
+                      const found = oqcRecords.find(r => 
+                        (r.serialNo && r.serialNo.trim().toUpperCase() === serial) ||
+                        (r.chassisNo && r.chassisNo.trim().toUpperCase() === serial) ||
+                        (r.engineNo && r.engineNo.trim().toUpperCase() === serial)
+                      );
+
+                      const newItem = {
+                        id: `HO-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                        serialNo: found ? found.serialNo : serial,
+                        chassisNo: found ? (found.chassisNo || '--') : '--',
+                        engineNo: found ? (found.engineNo || '--') : '--',
+                        partCode: found ? (found.partCode || 'TEM-GEN') : 'TEM-GEN',
+                        model: found ? (found.model || 'Chưa rõ') : 'Chưa có trong OQC',
+                        color: found ? (found.color || 'Chưa rõ') : 'Chưa rõ',
+                        lsx: found ? (found.lsx || 'Ngoại bảng') : 'Ngoại bảng',
+                        status: found ? (found.status || 'Chưa kiểm tra') : 'Chưa có dữ liệu KCS',
+                        checkTime: found ? (found.checkTime || '--:--') : '--:--',
+                        date: found ? (found.date || new Date().toLocaleDateString('vi-VN')) : new Date().toLocaleDateString('vi-VN'),
+                        scannedAt: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+                      };
+
+                      const filtered = handoverScannedList.filter(x => x.serialNo.toUpperCase() !== (found ? found.serialNo.toUpperCase() : serial));
+                      saveHandoverList([newItem, ...filtered]);
+                      setHandoverScanInput('');
+                    }}
+                    className="flex items-center gap-2 flex-1 min-w-[280px] max-w-lg"
+                  >
+                    <div className="relative flex-1">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        id="handover-barcode-scanner-input"
+                        type="text"
+                        value={handoverScanInput}
+                        onChange={e => setHandoverScanInput(e.target.value)}
+                        placeholder="Quét mã hoặc nhập sêri / số khung rồi Enter..."
+                        className="w-full pl-8 pr-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:ring-1 focus:ring-slate-400 outline-hidden"
+                        autoFocus
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition shrink-0 cursor-pointer"
+                    >
+                      Thêm
+                    </button>
+                  </form>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHandoverPasteText('');
+                        setShowPasteHandoverModal(true);
+                      }}
+                      className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Dán sêri
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyHandoverTextLocal}
+                      className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" /> Sao chép
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportHandoverExcelLocal}
+                      className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Xuất Excel
+                    </button>
+                    {handoverScannedList.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm('Xóa sạch danh sách để bắt đầu đợt mới?')) {
+                            saveHandoverList([]);
+                          }
+                        }}
+                        className="text-xs text-rose-600 hover:bg-rose-50 px-2 py-1.5 rounded-lg transition cursor-pointer"
+                        title="Làm mới đợt bàn giao"
+                      >
+                        Làm mới
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Minimal Summary Strip */}
+                <div className="bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-4">
+                    <span className="text-slate-600">Đã quét: <strong className="text-slate-900 font-mono font-bold">{handoverScannedList.length}</strong> xe</span>
+                    <span className="text-slate-600">Dòng xe: <strong className="font-mono font-bold">{new Set(handoverScannedList.map(x => x.model)).size}</strong></span>
+                    <span className="text-slate-600">Lệnh SX: <strong className="font-mono font-bold">{new Set(handoverScannedList.map(x => x.lsx)).size}</strong></span>
+                  </div>
+                  {handoverModelSummary.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {handoverModelSummary.slice(0, 4).map((item, i) => (
+                        <span key={i} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px]">
+                          {item.model} ({item.color}): <strong>{item.count}</strong>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Table */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                  {handoverScannedList.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400 text-xs">
+                      Chưa có số Sêri / Số khung nào được quét. Bắn mã vạch vào ô trên để bắt đầu.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto max-h-[500px]">
+                      <table className="min-w-full divide-y divide-slate-200 text-xs">
+                        <thead className="bg-slate-800 text-white font-bold uppercase text-[10px] tracking-wider sticky top-0 z-10 select-none">
+                          <tr>
+                            <th scope="col" className="px-3 py-2.5 text-center w-10">STT</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Số Sêri</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Số Khung</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Mã Quy Cách</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Model</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Màu Sắc</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">LSX</th>
+                            <th scope="col" className="px-3 py-2.5 text-center">Tình Trạng</th>
+                            <th scope="col" className="px-3 py-2.5 text-center">Giờ Quét</th>
+                            <th scope="col" className="px-3 py-2.5 text-center w-12">Xóa</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white font-medium text-slate-700">
+                          {handoverScannedList.map((item, idx) => (
+                            <tr key={item.id || idx} className="hover:bg-slate-50 transition-colors">
+                              <td className="px-3 py-2 text-center font-mono text-slate-400">{idx + 1}</td>
+                              <td className="px-3 py-2 font-mono font-bold text-slate-900">{item.serialNo}</td>
+                              <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{item.chassisNo || '--'}</td>
+                              <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{item.partCode}</td>
+                              <td className="px-3 py-2 font-bold text-slate-850">{item.model}</td>
+                              <td className="px-3 py-2 text-slate-600">{item.color}</td>
+                              <td className="px-3 py-2 font-mono text-slate-600">{item.lsx}</td>
+                              <td className="px-3 py-2 text-center">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                  item.status === 'Đạt'
+                                    ? 'bg-emerald-50 text-emerald-700'
+                                    : item.status === 'Lỗi'
+                                    ? 'bg-rose-50 text-rose-700'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {item.status}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-center font-mono text-slate-500">{item.scannedAt}</td>
+                              <td className="px-3 py-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    saveHandoverList(handoverScannedList.filter(x => x.id !== item.id));
+                                  }}
+                                  className="text-slate-300 hover:text-rose-600 transition p-1 rounded cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ================================== 3. VISUAL KCS/OQC DASHBOARD ================================== */}
+          {oqcSubView === 'dashboard' && (() => {
               // Real-world dynamic live coordinates
               const liveLapRapTotal = filteredOqc.length;
               const datVal = filteredOqc.filter(isOqcRecordPassed).length;
@@ -4940,7 +5971,7 @@ export default function QualityInspectionRecords({
               });
 
               // Get unique models dynamically from filtered OQC records
-              const assembledModels = Array.from(new Set(filteredOqc.map(r => r.model))).filter(Boolean).sort();
+              const assembledModels: string[] = Array.from(new Set(filteredOqc.map(r => r.model))).filter((m): m is string => Boolean(m)).sort();
 
               const currentAssembled = liveLapRapTotal;
 
@@ -7115,6 +8146,581 @@ export default function QualityInspectionRecords({
                   id="pqc_edit_submit_btn"
                 >
                   Lưu thay đổi
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Nạp danh sách xe từ LSX */}
+      {showImportLsxModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border shadow-2xl max-w-2xl w-full p-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-extrabold text-slate-850 text-sm uppercase text-emerald-700 flex items-center gap-2">
+                <Upload className="w-4 h-4" /> 📥 NẠP DANH SÁCH XE TỪ LỆNH SẢN XUẤT (LSX)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowImportLsxModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setLsxImportError('');
+                if (!lsxImportText.trim()) {
+                  setLsxImportError('Vui lòng dán danh sách xe từ file LSX!');
+                  return;
+                }
+
+                try {
+                  const lines = lsxImportText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                  const newRecords: OQCRecord[] = [];
+                  const defaultLsx = lsxImportDefaultLsx.trim() || '26-10';
+
+                  let partCodeIdx = -1;
+                  let serialNoIdx = -1;
+                  let chassisNoIdx = -1;
+                  let engineNoIdx = -1;
+                  let colorIdx = -1;
+                  let lsxIdx = -1;
+                  let modelIdx = -1;
+                  let statusIdx = -1;
+                  let passFlagIdx = -1;
+                  let defectIdx = -1;
+                  let failedCountIdx = -1;
+                  let causeIdx = -1;
+                  let causeDetailIdx = -1;
+                  let timeIdx = -1;
+                  let dayIdx = -1;
+                  let monthIdx = -1;
+                  let yearIdx = -1;
+
+                  // Check header row
+                  const firstLine = lines[0];
+                  const firstCols = firstLine.includes('\t') ? firstLine.split('\t') : firstLine.split(',');
+                  const isHeader = firstCols.some(col => {
+                    const l = col.toLowerCase();
+                    return l.includes('mã') || l.includes('sêri') || l.includes('seri') || l.includes('khung') || l.includes('động cơ') || l.includes('model') || l.includes('mẫu') || l.includes('lsx') || l.includes('lệnh') || l.includes('tình trạng') || l.includes('đạt');
+                  });
+
+                  if (isHeader) {
+                    firstCols.forEach((col, idx) => {
+                      const clean = col.trim().toLowerCase();
+                      if (clean.includes('mã quy cách') || clean.includes('mã qc') || clean === 'mã' || clean.includes('part')) {
+                        partCodeIdx = idx;
+                      } else if (clean.includes('seri tem') || clean.includes('số sêri') || clean.includes('số seri') || clean === 'seri' || clean === 'serial') {
+                        serialNoIdx = idx;
+                      } else if (clean.includes('số khung') || clean.includes('khung') || clean.includes('chassis') || clean.includes('vin')) {
+                        chassisNoIdx = idx;
+                      } else if (clean.includes('số động cơ') || clean.includes('số máy') || clean.includes('động cơ') || clean.includes('engine')) {
+                        engineNoIdx = idx;
+                      } else if (clean.includes('màu') || clean.includes('màu xe') || clean.includes('màu sắc') || clean.includes('color')) {
+                        colorIdx = idx;
+                      } else if (clean.includes('model') || clean.includes('dòng xe') || clean.includes('mẫu')) {
+                        modelIdx = idx;
+                      } else if (clean.includes('lsx') || clean.includes('lệnh sản xuất') || clean.includes('lệnh')) {
+                        lsxIdx = idx;
+                      } else if (clean.includes('tình trạng') || clean.includes('trạng thái') || clean.includes('status')) {
+                        statusIdx = idx;
+                      } else if (clean === 'đạt' || clean === 'pass') {
+                        passFlagIdx = idx;
+                      } else if (clean.includes('chi tiết lỗi') || clean.includes('lỗi') || clean.includes('defect')) {
+                        defectIdx = idx;
+                      } else if (clean.includes('số lỗi')) {
+                        failedCountIdx = idx;
+                      } else if (clean === 'nguyên nhân' || clean.includes('nguyên nhân')) {
+                        causeIdx = idx;
+                      } else if (clean.includes('chi tiết nguyên nhân')) {
+                        causeDetailIdx = idx;
+                      } else if (clean.includes('giờ') || clean.includes('thời gian') || clean.includes('time')) {
+                        timeIdx = idx;
+                      } else if (clean === 'ngày' || clean.includes('ngày')) {
+                        dayIdx = idx;
+                      } else if (clean === 'tháng') {
+                        monthIdx = idx;
+                      } else if (clean === 'năm') {
+                        yearIdx = idx;
+                      }
+                    });
+                  } else {
+                    // Fallback based on column count
+                    if (firstCols.length >= 7) {
+                      // LSX Master Format: STT, Mã quy cách, Seri tem ĐT, Số khung, Số động cơ, Màu sắc, LSX
+                      partCodeIdx = 1;
+                      serialNoIdx = 2;
+                      chassisNoIdx = 3;
+                      engineNoIdx = 4;
+                      colorIdx = 5;
+                      lsxIdx = 6;
+                    } else if (firstCols.length >= 5) {
+                      partCodeIdx = 0;
+                      serialNoIdx = 1;
+                      colorIdx = 2;
+                      modelIdx = 3;
+                      lsxIdx = 4;
+                    } else {
+                      partCodeIdx = 0;
+                      serialNoIdx = 1;
+                      colorIdx = 2;
+                    }
+                  }
+
+                  const startRow = isHeader ? 1 : 0;
+                  const todayStr = new Date().toLocaleDateString('vi-VN');
+                  const todayMonth = new Date().getMonth() + 1;
+                  const todayYear = new Date().getFullYear();
+
+                  for (let i = startRow; i < lines.length; i++) {
+                    const line = lines[i];
+                    const cols = line.includes('\t') ? line.split('\t') : line.split(',');
+                    if (cols.length < 2) continue;
+
+                    let serialNoVal = (serialNoIdx !== -1 && cols[serialNoIdx] ? cols[serialNoIdx] : (cols[1] || cols[0] || '')).trim();
+                    let chassisNoVal = (chassisNoIdx !== -1 && cols[chassisNoIdx] ? cols[chassisNoIdx] : '').trim();
+                    let engineNoVal = (engineNoIdx !== -1 && cols[engineNoIdx] ? cols[engineNoIdx] : '').trim();
+                    let partCodeVal = (partCodeIdx !== -1 && cols[partCodeIdx] ? cols[partCodeIdx] : (cols[0] || 'TEMDV11202')).trim();
+                    let colorVal = (colorIdx !== -1 && cols[colorIdx] ? cols[colorIdx] : (cols[2] || 'Đỏ')).trim();
+                    let modelVal = (modelIdx !== -1 && cols[modelIdx] ? cols[modelIdx] : '').trim();
+                    let lsxVal = (lsxIdx !== -1 && cols[lsxIdx] ? cols[lsxIdx] : defaultLsx).trim();
+
+                    if (!serialNoVal && chassisNoVal) {
+                      serialNoVal = chassisNoVal;
+                    }
+                    if (!serialNoVal) continue;
+
+                    // Deduce model from color if color contains "Model - Color" (e.g. "DK D2 - Ghi đen", "DK ROMA SX v2_App - Cafe")
+                    if (!modelVal && colorVal.includes(' - ')) {
+                      const colorParts = colorVal.split(' - ');
+                      modelVal = colorParts[0].trim();
+                      colorVal = colorParts.slice(1).join(' - ').trim();
+                    }
+
+                    // Deduce model from PartCode
+                    if (!modelVal) {
+                      const pUpper = partCodeVal.toUpperCase();
+                      if (pUpper.includes('ROM')) modelVal = 'DK Roma SX';
+                      else if (pUpper.includes('TEMDD') || pUpper.includes('D2')) modelVal = 'DK D2';
+                      else if (pUpper.includes('TEMDV') || pUpper.includes('V2')) modelVal = 'DK V2';
+                      else if (pUpper.includes('GOGO') || pUpper.includes('GG')) modelVal = 'DK Gogo';
+                      else if (pUpper.includes('SAM')) modelVal = 'DK Samurai';
+                      else if (pUpper.includes('XMEN') || pUpper.includes('XMAN')) modelVal = 'DK Xman';
+                      else if (pUpper.includes('CRETA')) modelVal = 'DK Creta';
+                      else if (pUpper.includes('POKE')) modelVal = 'DK Poke';
+                      else if (pUpper.includes('SPARK')) modelVal = 'DK Spark';
+                      else modelVal = 'DK Gogo';
+                    }
+
+                    // Status & defect details
+                    let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Chưa kiểm tra';
+                    const passColVal = passFlagIdx !== -1 && cols[passFlagIdx] ? cols[passFlagIdx].trim() : '';
+                    const statusColVal = statusIdx !== -1 && cols[statusIdx] ? cols[statusIdx].trim() : '';
+                    const defectColVal = defectIdx !== -1 && cols[defectIdx] ? cols[defectIdx].trim() : '';
+                    const causeColVal = causeIdx !== -1 && cols[causeIdx] ? cols[causeIdx].trim() : '';
+                    const causeDetailColVal = causeDetailIdx !== -1 && cols[causeDetailIdx] ? cols[causeDetailIdx].trim() : '';
+                    const failedCountVal = failedCountIdx !== -1 && cols[failedCountIdx] ? parseInt(cols[failedCountIdx], 10) || 0 : (defectColVal ? 1 : 0);
+
+                    if (passColVal === '1' || statusColVal.toLowerCase() === 'đạt' || statusColVal.toLowerCase() === 'pass') {
+                      statusVal = 'Đạt';
+                    } else if (defectColVal || statusColVal.toLowerCase() === 'lỗi' || statusColVal.toLowerCase() === 'fail') {
+                      statusVal = 'Lỗi';
+                    }
+
+                    // Date & Time
+                    let timeVal = timeIdx !== -1 && cols[timeIdx] ? cols[timeIdx].trim() : '';
+                    let dateVal = todayStr;
+                    let mVal = todayMonth;
+                    let yVal = todayYear;
+
+                    if (dayIdx !== -1 && cols[dayIdx]) {
+                      const d = cols[dayIdx].trim().padStart(2, '0');
+                      const m = monthIdx !== -1 && cols[monthIdx] ? cols[monthIdx].trim().padStart(2, '0') : todayMonth.toString().padStart(2, '0');
+                      const y = yearIdx !== -1 && cols[yearIdx] ? cols[yearIdx].trim() : todayYear.toString();
+                      dateVal = `${d}/${m}/${y}`;
+                      mVal = parseInt(m, 10) || todayMonth;
+                      yVal = parseInt(y, 10) || todayYear;
+                    }
+
+                    newRecords.push({
+                      id: `OQC-${serialNoVal.toUpperCase().replace(/[\/\s.#$\[\]]/g, '_')}`,
+                      partCode: partCodeVal,
+                      serialNo: serialNoVal,
+                      chassisNo: chassisNoVal,
+                      engineNo: engineNoVal,
+                      model: modelVal,
+                      color: colorVal,
+                      status: statusVal,
+                      defectDetail: defectColVal,
+                      failedCount: failedCountVal,
+                      rootCause: causeColVal,
+                      defectCauseDetail: causeDetailColVal,
+                      lsx: lsxVal,
+                      checkTime: timeVal,
+                      date: dateVal,
+                      month: mVal,
+                      year: yVal,
+                      totalLlr: 1
+                    });
+                  }
+
+                  if (newRecords.length === 0) {
+                    setLsxImportError('Không nhận diện được xe nào! Vui lòng kiểm tra lại định dạng copy.');
+                    return;
+                  }
+
+                  // Merge with existing oqcRecords (preserve checked status if already in system)
+                  const existingMap = new Map<string, OQCRecord>();
+                  oqcRecords.forEach(r => {
+                    if (r.serialNo) existingMap.set(r.serialNo.trim().toUpperCase(), r);
+                  });
+
+                  const finalRecords = [...oqcRecords];
+                  let addedCount = 0;
+
+                  newRecords.forEach(newRec => {
+                    const key = newRec.serialNo.trim().toUpperCase();
+                    if (!existingMap.has(key)) {
+                      finalRecords.unshift(newRec);
+                      existingMap.set(key, newRec);
+                      addedCount++;
+                    } else {
+                      const existing = existingMap.get(key)!;
+                      if (existing.status !== 'Đạt' && existing.status !== 'Lỗi') {
+                        existing.lsx = newRec.lsx;
+                        existing.model = newRec.model;
+                        existing.color = newRec.color;
+                        existing.partCode = newRec.partCode;
+                        if (newRec.chassisNo) existing.chassisNo = newRec.chassisNo;
+                        if (newRec.engineNo) existing.engineNo = newRec.engineNo;
+                      }
+                    }
+                  });
+
+                  setOqcRecords(finalRecords);
+                  safeStorage.setItem('dk_oqc_records', JSON.stringify(finalRecords));
+                  setKcsSelectedLsx(defaultLsx);
+                  setLsxImportText('');
+                  setShowImportLsxModal(false);
+                  alert(`Nạp thành công ${addedCount} xe mới vào Lệnh Sản Xuất ${defaultLsx}! Trạm KCS đã sẵn sàng kiểm định.`);
+                } catch (err: any) {
+                  setLsxImportError(`Lỗi phân tách dữ liệu LSX: ${err.message || err}`);
+                }
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Lệnh Sản Xuất (LSX) gán mặc định:
+                  </label>
+                  <input
+                    type="text"
+                    value={lsxImportDefaultLsx}
+                    onChange={e => setLsxImportDefaultLsx(e.target.value)}
+                    placeholder="Ví dụ: 26-10"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-black font-mono text-blue-900 text-xs"
+                    required
+                  />
+                </div>
+                <div className="flex flex-col justify-end">
+                  <span className="text-[10.5px] text-slate-400 font-medium leading-relaxed">
+                    💡 Dán danh sách xe từ file LSX (Copy cột từ Excel/Lark). Hệ thống tự nhận diện: Mã TEM, Số Khung/Sêri, Model, Màu sắc.
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                  Dán dữ liệu từ file LSX (Excel / Tab / Phẩy):
+                </label>
+                <textarea
+                  value={lsxImportText}
+                  onChange={e => setLsxImportText(e.target.value)}
+                  rows={8}
+                  placeholder={`Mã TEM\tSố Sêri\tMàu sắc\tModel\tLSX\nTEMDV11202\t26DK00101\tĐỏ tươi\tDK Gogo\t26-10\nTEMDV11202\t26DK00102\tĐen bóng\tDK Gogo\t26-10...`}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-xs focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-hidden"
+                />
+              </div>
+
+              {lsxImportError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-rose-700 font-bold text-xs">
+                  ⚠️ {lsxImportError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 border-t pt-3 font-bold">
+                <button
+                  type="button"
+                  onClick={() => setShowImportLsxModal(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs transition cursor-pointer"
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2 rounded-xl text-xs transition shadow-md shadow-emerald-200 cursor-pointer font-black"
+                >
+                  Nạp Danh Sách Vào LSX
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Thêm 1 xe lẻ vào LSX */}
+      {showAddCarToLsxModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-extrabold text-slate-850 text-sm uppercase text-blue-700 flex items-center gap-2">
+                <Plus className="w-4 h-4" /> ➕ THÊM XE VÀO LSX {newCarLsx}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddCarToLsxModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newCarSerialNo.trim()) return;
+
+                const serial = newCarSerialNo.trim();
+                const todayStr = new Date().toLocaleDateString('vi-VN');
+                const todayMonth = new Date().getMonth() + 1;
+                const todayYear = new Date().getFullYear();
+
+                const newRec: OQCRecord = {
+                  id: `OQC-${serial.toUpperCase().replace(/[\/\s.#$\[\]]/g, '_')}`,
+                  partCode: newCarPartCode.trim() || 'TEMDV11202',
+                  serialNo: serial,
+                  model: newCarModel,
+                  color: newCarColor.trim() || 'Đỏ',
+                  status: 'Chưa kiểm tra',
+                  defectDetail: '',
+                  failedCount: 0,
+                  rootCause: '',
+                  lsx: newCarLsx.trim() || '26-10',
+                  checkTime: '',
+                  date: todayStr,
+                  month: todayMonth,
+                  year: todayYear,
+                  totalLlr: 1
+                };
+
+                const existingIndex = oqcRecords.findIndex(r => r.serialNo.trim().toUpperCase() === serial.toUpperCase());
+                let updated: OQCRecord[];
+                if (existingIndex > -1) {
+                  updated = [...oqcRecords];
+                  updated[existingIndex] = { ...updated[existingIndex], ...newRec };
+                } else {
+                  updated = [newRec, ...oqcRecords];
+                }
+
+                setOqcRecords(updated);
+                safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+                setKcsSelectedLsx(newRec.lsx);
+                setNewCarSerialNo('');
+                setShowAddCarToLsxModal(false);
+                alert(`Đã thêm xe số khung ${serial} vào LSX ${newRec.lsx}!`);
+              }}
+              className="space-y-3.5 text-xs"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Số Khung / Sêri:
+                  </label>
+                  <input
+                    type="text"
+                    value={newCarSerialNo}
+                    onChange={e => setNewCarSerialNo(e.target.value)}
+                    placeholder="Ví dụ: 26DK00123"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-black font-mono text-xs focus:bg-white focus:ring-2 focus:ring-blue-500 outline-hidden"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Mã TEM / Quy Cách:
+                  </label>
+                  <input
+                    type="text"
+                    value={newCarPartCode}
+                    onChange={e => setNewCarPartCode(e.target.value)}
+                    placeholder="TEMDV11202"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold font-mono text-xs focus:bg-white focus:ring-2 focus:ring-blue-500 outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Dòng xe (Model):
+                  </label>
+                  <select
+                    value={newCarModel}
+                    onChange={e => setNewCarModel(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-xs focus:bg-white focus:ring-2 focus:ring-blue-500 outline-hidden"
+                  >
+                    {modelNames.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Màu Sơn:
+                  </label>
+                  <input
+                    type="text"
+                    value={newCarColor}
+                    onChange={e => setNewCarColor(e.target.value)}
+                    placeholder="Đỏ, Đen, Trắng..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-xs focus:bg-white focus:ring-2 focus:ring-blue-500 outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                  Lệnh Sản Xuất (LSX):
+                </label>
+                <input
+                  type="text"
+                  value={newCarLsx}
+                  onChange={e => setNewCarLsx(e.target.value)}
+                  placeholder="26-10"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-black font-mono text-xs focus:bg-white focus:ring-2 focus:ring-blue-500 outline-hidden"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t pt-3 font-bold">
+                <button
+                  type="button"
+                  onClick={() => setShowAddCarToLsxModal(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs transition cursor-pointer"
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-xl text-xs transition shadow-md shadow-blue-200 cursor-pointer font-black"
+                >
+                  Thêm Vào LSX
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Dán danh sách Số Sêri Bàn Giao */}
+      {showPasteHandoverModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border shadow-2xl max-w-xl w-full p-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-extrabold text-slate-850 text-sm uppercase text-amber-700 flex items-center gap-2">
+                <Upload className="w-4 h-4" /> 📋 DÁN DANH SÁCH SỐ SÊRI BÀN GIAO CHO KHO
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPasteHandoverModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!handoverPasteText.trim()) return;
+
+                const lines = handoverPasteText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                const newItems: any[] = [];
+                const existingSerials = new Set(handoverScannedList.map(x => x.serialNo.toUpperCase()));
+
+                lines.forEach(line => {
+                  const parts = line.includes('\t') ? line.split('\t') : (line.includes(',') ? line.split(',') : [line]);
+                  const serial = parts[0].trim().toUpperCase();
+                  if (!serial) return;
+                  if (existingSerials.has(serial)) return;
+                  existingSerials.add(serial);
+
+                  const found = oqcRecords.find(r => 
+                    (r.serialNo && r.serialNo.trim().toUpperCase() === serial) ||
+                    (r.chassisNo && r.chassisNo.trim().toUpperCase() === serial) ||
+                    (r.engineNo && r.engineNo.trim().toUpperCase() === serial)
+                  );
+                  newItems.push({
+                    id: `HO-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                    serialNo: found ? found.serialNo : serial,
+                    chassisNo: found ? (found.chassisNo || '--') : '--',
+                    engineNo: found ? (found.engineNo || '--') : '--',
+                    partCode: found ? (found.partCode || 'TEM-GEN') : 'TEM-GEN',
+                    model: found ? (found.model || 'Chưa rõ') : 'Chưa có trong OQC',
+                    color: found ? (found.color || 'Chưa rõ') : 'Chưa rõ',
+                    lsx: found ? (found.lsx || 'Ngoại bảng') : 'Ngoại bảng',
+                    status: found ? (found.status || 'Chưa kiểm tra') : 'Chưa có dữ liệu KCS',
+                    checkTime: found ? (found.checkTime || '--:--') : '--:--',
+                    date: found ? (found.date || new Date().toLocaleDateString('vi-VN')) : new Date().toLocaleDateString('vi-VN'),
+                    scannedAt: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+                  });
+                });
+
+                const updatedList = [...newItems, ...handoverScannedList];
+                saveHandoverList(updatedList);
+                setHandoverPasteText('');
+                setShowPasteHandoverModal(false);
+                alert(`Đã nạp ${newItems.length} xe vào Không Gian Báo Phẩm Bàn Giao!`);
+              }}
+              className="space-y-3.5 text-xs"
+            >
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                  Dán danh sách các Số Sêri (Mỗi số 1 dòng):
+                </label>
+                <textarea
+                  value={handoverPasteText}
+                  onChange={e => setHandoverPasteText(e.target.value)}
+                  rows={8}
+                  placeholder={`26DK00101\n26DK00102\n26DK00103\n...`}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-xs focus:bg-white focus:ring-2 focus:ring-amber-500 outline-hidden"
+                  autoFocus
+                />
+                <span className="text-[10.5px] text-slate-400 font-medium mt-1 block">
+                  💡 Hệ thống tự động tra cứu Model, Màu sắc, Lệnh Sản Xuất từ cơ sở dữ liệu đã nạp.
+                </span>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t pt-3 font-bold">
+                <button
+                  type="button"
+                  onClick={() => setShowPasteHandoverModal(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs transition cursor-pointer"
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="bg-amber-600 hover:bg-amber-500 text-white px-5 py-2 rounded-xl text-xs transition shadow-md shadow-amber-200 cursor-pointer font-black"
+                >
+                  Báo Phẩm Bàn Giao
                 </button>
               </div>
             </form>
