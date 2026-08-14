@@ -319,6 +319,48 @@ function resequencePtspTasks(tasksList: PTSPTask[]): PTSPTask[] {
   return finalTasks;
 }
 
+export function mergeMasterModels(currentList: any[], baseList: any[] = INITIAL_MODELS): any[] {
+  if (!Array.isArray(currentList)) return Array.isArray(baseList) ? baseList : [];
+  if (!Array.isArray(baseList)) return currentList;
+
+  const normalizeKey = (str: string) => (str || '').trim().toLowerCase().replace(/[_s-]+/g, ' ');
+  const map = new Map<string, any>();
+
+  // 1. Existing models take priority
+  currentList.forEach(m => {
+    if (!m || !m.name) return;
+    const key = normalizeKey(m.name);
+    if (!map.has(key)) {
+      map.set(key, m);
+    }
+  });
+
+  // 2. Compute max ID
+  let maxIdNum = 0;
+  map.forEach(m => {
+    const num = parseInt(String(m.id || '').replace('MDL-', ''), 10);
+    if (!isNaN(num) && num > maxIdNum) maxIdNum = num;
+  });
+
+  // 3. Add any missing models from OQC Master (baseList)
+  baseList.forEach(m => {
+    if (!m || !m.name) return;
+    const key = normalizeKey(m.name);
+    if (!map.has(key)) {
+      maxIdNum++;
+      const newId = `MDL-${String(maxIdNum).padStart(2, '0')}`;
+      map.set(key, {
+        id: newId,
+        name: m.name.trim(),
+        status: m.status || 'Đang sản xuất',
+        releaseYear: m.releaseYear || 2026
+      });
+    }
+  });
+
+  return Array.from(map.values());
+}
+
 function getSavedState<T>(key: string, baseData: T): T {
   try {
     const saved = localStorage.getItem(key);
@@ -329,6 +371,9 @@ function getSavedState<T>(key: string, baseData: T): T {
       }
       if (Array.isArray(baseData) && !Array.isArray(parsed)) {
         return baseData;
+      }
+      if (key === 'dk_models' && Array.isArray(parsed)) {
+        return mergeMasterModels(parsed, baseData as any) as any;
       }
       if (key === 'dk_oqc_records' && Array.isArray(parsed)) {
         return deduplicateOqcRecords(parsed) as any;
@@ -1160,7 +1205,7 @@ export function App() {
         else if (key === 'dk_projects') setProjects(serverRecords);
         else if (key === 'dk_copqs') setCopqs(serverRecords);
         else if (key === 'dk_custom_forms') setCustomForms(serverRecords);
-        else if (key === 'dk_models') setModels(serverRecords);
+        else if (key === 'dk_models') setModels(mergeMasterModels(serverRecords, INITIAL_MODELS));
         else if (key === 'dk_dealers') setDealers(serverRecords);
         else if (key === 'dk_equipments') setEquipments(serverRecords);
         else if (key === 'dk_maintenance_logs') setMaintenanceLogs(serverRecords);
@@ -1246,7 +1291,7 @@ export function App() {
         else if (key === 'dk_projects') setProjects(mergedList);
         else if (key === 'dk_copqs') setCopqs(mergedList);
         else if (key === 'dk_custom_forms') setCustomForms(mergedList);
-        else if (key === 'dk_models') setModels(mergedList);
+        else if (key === 'dk_models') setModels(mergeMasterModels(mergedList, INITIAL_MODELS));
         else if (key === 'dk_dealers') setDealers(mergedList);
         else if (key === 'dk_equipments') setEquipments(mergedList);
         else if (key === 'dk_maintenance_logs') setMaintenanceLogs(mergedList);
@@ -2517,7 +2562,7 @@ export function App() {
       if (serverData.dk_copqs !== undefined) setCopqs(serverData.dk_copqs);
       if (serverData.dk_fmea !== undefined) setFmea(serverData.dk_fmea);
       if (serverData.dk_custom_forms !== undefined) setCustomForms(serverData.dk_custom_forms);
-      if (serverData.dk_models !== undefined && Array.isArray(serverData.dk_models)) setModels(serverData.dk_models);
+      if (serverData.dk_models !== undefined && Array.isArray(serverData.dk_models)) setModels(mergeMasterModels(serverData.dk_models, INITIAL_MODELS));
       if (serverData.dk_dealers !== undefined && Array.isArray(serverData.dk_dealers)) setDealers(serverData.dk_dealers);
       if (serverData.dk_equipments !== undefined) setEquipments(ensureUniqueIds(serverData.dk_equipments, 'EQP'));
       if (serverData.dk_maintenance_logs !== undefined) setMaintenanceLogs(ensureUniqueIds(serverData.dk_maintenance_logs, 'MNL'));

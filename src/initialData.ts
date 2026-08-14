@@ -11,14 +11,408 @@ export const INITIAL_STAFF: QualityStaff[] = [
 ];
 
 export const INITIAL_MODELS: DKBikeModel[] = [
-  { id: 'MDL-01', name: 'DK D2', status: 'Đang sản xuất', releaseYear: 2025 },
-  { id: 'MDL-02', name: 'DK EZ3', status: 'Đang sản xuất', releaseYear: 2025 },
-  { id: 'MDL-03', name: 'DK Gogo Smart', status: 'Đang sản xuất', releaseYear: 2026 },
-  { id: 'MDL-04', name: 'DK Nova', status: 'Đang sản xuất', releaseYear: 2026 },
-  { id: 'MDL-05', name: 'DK Roma SX V2', status: 'Đang sản xuất', releaseYear: 2026 },
-  { id: 'MDL-06', name: 'DK S3', status: 'Đang sản xuất', releaseYear: 2025 },
-  { id: 'MDL-07', name: 'DK V1', status: 'Đang sản xuất', releaseYear: 2024 },
-  { id: 'MDL-08', name: 'DK V2', status: 'Đang sản xuất', releaseYear: 2025 }
+  {
+    "id": "MDL-01",
+    "name": "DK D2",
+    "status": "Đang sản xuất",
+    "releaseYear": 2025
+  },
+  {
+    "id": "MDL-02",
+    "name": "DK EZ3",
+    "status": "Đang sản xuất",
+    "releaseYear": 2025
+  },
+  {
+    "id": "MDL-03",
+    "name": "DK Gogo Smart",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-04",
+    "name": "DK Nova",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-05",
+    "name": "DK Roma SX V2",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-06",
+    "name": "DK S3",
+    "status": "Đang sản xuất",
+    "releaseYear": 2025
+  },
+  {
+    "id": "MDL-07",
+    "name": "DK V1",
+    "status": "Đang sản xuất",
+    "releaseYear": 2024
+  },
+  {
+    "id": "MDL-08",
+    "name": "DK V2",
+    "status": "Đang sản xuất",
+    "releaseYear": 2025
+  },
+  {
+    "id": "MDL-09",
+    "name": "DK Apollo",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-10",
+    "name": "DK Cola",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-11",
+    "name": "DK Crea Mono",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-12",
+    "name": "DK Crea Mono 50CC",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-13",
+    "name": "DK D1",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-14",
+    "name": "DK EC5",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-15",
+    "name": "DK ET1",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-16",
+    "name": "DK EZ1",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-17",
+    "name": "DK EZ1-App",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-18",
+    "name": "DK EZ2_App",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-19",
+    "name": "DK EZ3 _ App",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-20",
+    "name": "DK EZ5",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-21",
+    "name": "DK EZ5+",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-22",
+    "name": "DK Gogo",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-23",
+    "name": "DK Gogo New",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-24",
+    "name": "DK Gogo NewS",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-25",
+    "name": "DK Gogo S",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-26",
+    "name": "DK Miku",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-27",
+    "name": "DK Moda",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-28",
+    "name": "DK Retro 50CC",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-29",
+    "name": "DK ROMA GT",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-30",
+    "name": "DK Roma GT 50cc",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-31",
+    "name": "DK ROMA GT_App",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-32",
+    "name": "DK Roma Lite S",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-33",
+    "name": "DK Roma Lite S (v)",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-34",
+    "name": "DK Roma Lite S (V) 50CC",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-35",
+    "name": "DK Roma SX",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-36",
+    "name": "DK Roma SX v2 50cc",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-37",
+    "name": "DK ROMA SX v2_App",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-38",
+    "name": "DK RomaSE 50CC",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-39",
+    "name": "DK RomaSX (V) 50CC",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-40",
+    "name": "DK RomaSX 50CC",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-41",
+    "name": "DK RomaSX II (V) NFC",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-42",
+    "name": "DK RomaSX II 50CC",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-43",
+    "name": "DK RomaSX New (V)",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-44",
+    "name": "DK RomaSX New (V) NFC",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-45",
+    "name": "DK S1",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-46",
+    "name": "DK S2",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-47",
+    "name": "DK S2 App",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-48",
+    "name": "DK S2.1",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-49",
+    "name": "DK S3 App",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-50",
+    "name": "DK S5",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-51",
+    "name": "DK S5 +",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-52",
+    "name": "DK Samurai",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-53",
+    "name": "DK Siri 50CC",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-54",
+    "name": "DK Sparta",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-55",
+    "name": "DK Tron",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-56",
+    "name": "DK V1_App",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-57",
+    "name": "DK V1_App.2Y",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-58",
+    "name": "DK V1.2Y",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-59",
+    "name": "DK Xman X1",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-60",
+    "name": "DK Xmen",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-61",
+    "name": "DK Xmen NFC",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-62",
+    "name": "DK Xmen v1",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-63",
+    "name": "DK Xmen v2",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-64",
+    "name": "DK Z-Buff",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-65",
+    "name": "DK Z-Buff v2",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-66",
+    "name": "DK Z-MTP",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  },
+  {
+    "id": "MDL-67",
+    "name": "Xe mẫu",
+    "status": "Đang sản xuất",
+    "releaseYear": 2026
+  }
 ];
 
 export const INITIAL_TASKS: Task[] = [

@@ -1769,6 +1769,57 @@ export default function QualityInspectionRecords({
   const uniqueOqcMonths = Array.from(new Set(oqcRecords.map(r => r.month))).filter(Boolean).sort((a, b) => Number(a) - Number(b));
   const uniqueOqcYears = Array.from(new Set(oqcRecords.map(r => r.year))).filter(Boolean).sort((a, b) => Number(a) - Number(b));
   
+  // Unique inspection dates for KCS Line Station (sorted newest to oldest)
+  const uniqueKcsDates = useMemo(() => {
+    const set = new Set<string>();
+    oqcRecords.forEach(r => {
+      if (r.date && r.date.trim()) {
+        set.add(standardizeDate(r.date.trim()));
+      }
+    });
+    return Array.from(set).sort((a, b) => {
+      const partsA = a.split('/');
+      const partsB = b.split('/');
+      const da = parseInt(partsA[0], 10) || 1;
+      const ma = parseInt(partsA[1], 10) || 1;
+      const ya = parseInt(partsA[2], 10) || 2026;
+      const db = parseInt(partsB[0], 10) || 1;
+      const mb = parseInt(partsB[1], 10) || 1;
+      const yb = parseInt(partsB[2], 10) || 2026;
+      if (ya !== yb) return yb - ya;
+      if (ma !== mb) return mb - ma;
+      return db - da;
+    });
+  }, [oqcRecords]);
+
+  const uniqueKcsMonths = useMemo(() => {
+    const set = new Set<number>();
+    oqcRecords.forEach(r => {
+      if (r.month) {
+        set.add(Number(r.month));
+      } else if (r.date && r.date.includes('/')) {
+        const m = Number(r.date.split('/')[1]);
+        if (m >= 1 && m <= 12) set.add(m);
+      }
+    });
+    const arr = Array.from(set).sort((a, b) => a - b);
+    return arr.length > 0 ? arr : Array.from({ length: 12 }, (_, i) => i + 1);
+  }, [oqcRecords]);
+
+  const uniqueKcsYears = useMemo(() => {
+    const set = new Set<number>();
+    oqcRecords.forEach(r => {
+      if (r.year) {
+        set.add(Number(r.year));
+      } else if (r.date && r.date.includes('/')) {
+        const y = Number(r.date.split('/')[2]);
+        if (y >= 2020) set.add(y);
+      }
+    });
+    const arr = Array.from(set).sort((a, b) => b - a);
+    return arr.length > 0 ? arr : [2026];
+  }, [oqcRecords]);
+  
   // Unique LSX list for OQC Line Station
   const uniqueOqcLsxs = useMemo(() => {
     const set = new Set<string>();
@@ -2387,9 +2438,13 @@ export default function QualityInspectionRecords({
   const [pastePartCodesError, setPastePartCodesError] = useState('');
 
   // KCS Realtime Line Station states
-  const [kcsSelectedLsx, setKcsSelectedLsx] = useState<string>(() => uniqueOqcLsxs[0] || '26-10');
+  const [kcsSelectedLsx, setKcsSelectedLsx] = useState<string>('All');
   const [kcsSearch, setKcsSearch] = useState('');
   const [kcsStatusFilter, setKcsStatusFilter] = useState<'All' | 'Chưa kiểm tra' | 'Đạt' | 'Lỗi'>('All');
+  const [kcsFilterDate, setKcsFilterDate] = useState<string>('All');
+  const [kcsFilterMonth, setKcsFilterMonth] = useState<string>('All');
+  const [kcsFilterYear, setKcsFilterYear] = useState<string>('All');
+  const [isKcsFilterExpanded, setIsKcsFilterExpanded] = useState<boolean>(false);
   const [kcsCurrentPage, setKcsCurrentPage] = useState<number>(1);
   const [showImportLsxModal, setShowImportLsxModal] = useState(false);
   const [lsxImportText, setLsxImportText] = useState('');
@@ -5137,14 +5192,24 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
 
           {/* ================================== 1. TRẠM KIỂM ĐỊNH KCS REALTIME THEO LSX ================================== */}
           {oqcSubView === 'station' && (() => {
-            const currentLsxRecords = oqcRecords.filter(r => (r.lsx || '26-10').trim() === (kcsSelectedLsx || '26-10').trim());
-            const totalLsxCars = currentLsxRecords.length;
-            const passedLsxCars = currentLsxRecords.filter(r => r.status === 'Đạt').length;
-            const failedLsxCars = currentLsxRecords.filter(r => r.status === 'Lỗi').length;
-            const pendingLsxCars = currentLsxRecords.filter(r => r.status !== 'Đạt' && r.status !== 'Lỗi').length;
-            const lsxYield = totalLsxCars > 0 ? Math.round((passedLsxCars / totalLsxCars) * 100) : 100;
+            const isAllLsx = kcsSelectedLsx === 'All';
+            const baseLsxRecords = isAllLsx 
+              ? oqcRecords 
+              : oqcRecords.filter(r => (r.lsx || '26-10').trim() === (kcsSelectedLsx || '26-10').trim());
 
-            const displayLsxRecords = currentLsxRecords.filter(r => {
+            // Active filter count
+            let activeKcsFilterCount = 0;
+            if (kcsFilterDate !== 'All') activeKcsFilterCount++;
+            if (kcsFilterMonth !== 'All') activeKcsFilterCount++;
+            if (kcsFilterYear !== 'All') activeKcsFilterCount++;
+            if (kcsStatusFilter !== 'All') activeKcsFilterCount++;
+            if (kcsSelectedLsx !== 'All') activeKcsFilterCount++;
+
+            const displayLsxRecords = baseLsxRecords.filter(r => {
+              if (kcsFilterDate !== 'All' && (r.date ? standardizeDate(r.date) : '') !== kcsFilterDate) return false;
+              if (kcsFilterMonth !== 'All' && String(r.month) !== kcsFilterMonth) return false;
+              if (kcsFilterYear !== 'All' && String(r.year) !== kcsFilterYear) return false;
+
               if (kcsStatusFilter !== 'All') {
                 if (kcsStatusFilter === 'Chưa kiểm tra' && (r.status === 'Đạt' || r.status === 'Lỗi')) return false;
                 if (kcsStatusFilter === 'Đạt' && r.status !== 'Đạt') return false;
@@ -5158,10 +5223,17 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                 const matchModel = (r.model || '').toLowerCase().includes(s);
                 const matchColor = (r.color || '').toLowerCase().includes(s);
                 const matchDefect = (r.defectDetail || '').toLowerCase().includes(s);
-                return matchSerial || matchChassis || matchEngine || matchModel || matchColor || matchDefect;
+                const matchLsx = (r.lsx || '').toLowerCase().includes(s);
+                return matchSerial || matchChassis || matchEngine || matchModel || matchColor || matchDefect || matchLsx;
               }
               return true;
             });
+
+            const totalLsxCars = displayLsxRecords.length;
+            const passedLsxCars = displayLsxRecords.filter(r => r.status === 'Đạt').length;
+            const failedLsxCars = displayLsxRecords.filter(r => r.status === 'Lỗi').length;
+            const pendingLsxCars = displayLsxRecords.filter(r => r.status !== 'Đạt' && r.status !== 'Lỗi').length;
+            const lsxYield = totalLsxCars > 0 ? Math.round((passedLsxCars / totalLsxCars) * 100) : 100;
 
             const pageSize = 50;
             const totalPages = Math.max(1, Math.ceil(displayLsxRecords.length / pageSize));
@@ -5238,17 +5310,23 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
 
             const handleBatchPassAllPending = () => {
               if (pendingLsxCars === 0) {
-                alert(`Tất cả xe trong LSX ${kcsSelectedLsx} đều đã được kiểm tra!`);
+                alert(isAllLsx ? 'Tất cả xe trong danh sách lọc đều đã được kiểm tra!' : `Tất cả xe trong LSX ${kcsSelectedLsx} đều đã được kiểm tra!`);
                 return;
               }
-              if (!window.confirm(`Xác nhận đánh dấu tất cả ${pendingLsxCars} xe chưa kiểm trong LSX ${kcsSelectedLsx} thành ĐẠT?`)) return;
+              const confirmMsg = isAllLsx 
+                ? `Xác nhận đánh dấu tất cả ${pendingLsxCars} xe chưa kiểm tra đang lọc thành ĐẠT?`
+                : `Xác nhận đánh dấu tất cả ${pendingLsxCars} xe chưa kiểm trong LSX ${kcsSelectedLsx} thành ĐẠT?`;
+              if (!window.confirm(confirmMsg)) return;
+
               const nowTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
               const nowDate = new Date().toLocaleDateString('vi-VN');
               const nowMonth = new Date().getMonth() + 1;
               const nowYear = new Date().getFullYear();
 
+              const pendingIds = new Set(displayLsxRecords.filter(r => r.status !== 'Đạt' && r.status !== 'Lỗi').map(r => r.id));
+
               const updated = oqcRecords.map(r => {
-                if ((r.lsx || '26-10').trim() === (kcsSelectedLsx || '26-10').trim() && r.status !== 'Đạt' && r.status !== 'Lỗi') {
+                if (pendingIds.has(r.id)) {
                   return {
                     ...r,
                     status: 'Đạt' as const,
@@ -5282,6 +5360,7 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                       }}
                       className="bg-slate-50 border border-slate-300 text-slate-900 font-bold text-xs rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-slate-400 outline-hidden cursor-pointer"
                     >
+                      <option value="All">Tất cả Lệnh SX ({oqcRecords.length} xe)</option>
                       {uniqueOqcLsxs.map(lsx => {
                         const count = oqcRecords.filter(r => (r.lsx || '26-10').trim() === lsx.trim()).length;
                         return (
@@ -5292,7 +5371,7 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                       })}
                     </select>
 
-                    <div className="relative w-48 sm:w-60">
+                    <div className="relative w-44 sm:w-56">
                       <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                       <input
                         type="text"
@@ -5317,7 +5396,7 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                           }}
                           className={`px-2.5 py-1 text-xs font-semibold rounded-md transition cursor-pointer ${
                             kcsStatusFilter === st
-                              ? 'bg-slate-900 text-white'
+                              ? 'bg-slate-900 text-white shadow-2xs'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
                         >
@@ -5325,17 +5404,57 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                         </button>
                       ))}
                     </div>
+
+                    {/* Toggle Button Bộ Lọc Nâng Cao (Mặc định ẩn) */}
+                    <button
+                      type="button"
+                      onClick={() => setIsKcsFilterExpanded(!isKcsFilterExpanded)}
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer border ${
+                        isKcsFilterExpanded || activeKcsFilterCount > 0
+                          ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-2xs'
+                          : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200 shadow-2xs'
+                      }`}
+                      title="Ẩn / Hiện bộ lọc thời gian & chi tiết"
+                    >
+                      <Filter className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Bộ lọc</span>
+                      {activeKcsFilterCount > 0 && (
+                        <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+                          {activeKcsFilterCount}
+                        </span>
+                      )}
+                      {isKcsFilterExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+                    </button>
+
+                    {(kcsFilterDate !== 'All' || kcsFilterMonth !== 'All' || kcsFilterYear !== 'All' || kcsStatusFilter !== 'All' || kcsSearch !== '' || kcsSelectedLsx !== 'All') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setKcsFilterDate('All');
+                          setKcsFilterMonth('All');
+                          setKcsFilterYear('All');
+                          setKcsStatusFilter('All');
+                          setKcsSearch('');
+                          setKcsSelectedLsx('All');
+                          setKcsCurrentPage(1);
+                        }}
+                        className="text-[11px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                        title="Đặt lại toàn bộ bộ lọc về mặc định"
+                      >
+                        ✕ Đặt lại
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => {
-                        setLsxImportDefaultLsx(kcsSelectedLsx || '26-10');
+                        setLsxImportDefaultLsx(kcsSelectedLsx === 'All' ? (uniqueOqcLsxs[0] || '26-10') : kcsSelectedLsx);
                         setLsxImportError('');
                         setShowImportLsxModal(true);
                       }}
-                      className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                      className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-2xs"
                       title="Nạp danh sách xe từ file Lệnh Sản Xuất vào QMS để KCS kiểm tra"
                     >
                       <Upload className="w-3.5 h-3.5" /> Nạp từ LSX
@@ -5343,10 +5462,22 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                     <button
                       type="button"
                       onClick={() => {
+                        setNewCarLsx(kcsSelectedLsx === 'All' ? (uniqueOqcLsxs[0] || '26-10') : kcsSelectedLsx);
+                        setNewCarSerialNo('');
+                        setShowAddCarToLsxModal(true);
+                      }}
+                      className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                      title="Thêm 1 xe lẻ vào Lệnh Sản Xuất"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Thêm xe
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
                         setOqcImportError('');
                         setShowImportOqcModal(true);
                       }}
-                      className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer shadow-xs"
+                      className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer shadow-2xs"
                       title="Nhập dữ liệu KCS hàng loạt từ bảng tính Excel"
                     >
                       <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Nhập Excel
@@ -5361,6 +5492,87 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                     </button>
                   </div>
                 </div>
+
+                {/* Collapsible Filter Panel (Gọn gàng - Mặc định ẩn) */}
+                {isKcsFilterExpanded && (
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/90 shadow-2xs grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3 animate-in fade-in duration-150">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-blue-600" /> Ngày kiểm tra
+                      </label>
+                      <select
+                        value={kcsFilterDate}
+                        onChange={e => {
+                          setKcsFilterDate(e.target.value);
+                          setKcsCurrentPage(1);
+                        }}
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer"
+                      >
+                        <option value="All">Tất cả các ngày ({uniqueKcsDates.length})</option>
+                        {uniqueKcsDates.map(d => (
+                          <option key={d} value={d}>Ngày {d}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-blue-600" /> Tháng kiểm tra
+                      </label>
+                      <select
+                        value={kcsFilterMonth}
+                        onChange={e => {
+                          setKcsFilterMonth(e.target.value);
+                          setKcsCurrentPage(1);
+                        }}
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer"
+                      >
+                        <option value="All">Tất cả các tháng</option>
+                        {uniqueKcsMonths.map(m => (
+                          <option key={m} value={String(m)}>Tháng {m}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-blue-600" /> Năm kiểm tra
+                      </label>
+                      <select
+                        value={kcsFilterYear}
+                        onChange={e => {
+                          setKcsFilterYear(e.target.value);
+                          setKcsCurrentPage(1);
+                        }}
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer"
+                      >
+                        <option value="All">Tất cả các năm</option>
+                        {uniqueKcsYears.map(y => (
+                          <option key={y} value={String(y)}>Năm {y}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-amber-500" /> Lệnh Sản Xuất (LSX)
+                      </label>
+                      <select
+                        value={kcsSelectedLsx}
+                        onChange={e => {
+                          setKcsSelectedLsx(e.target.value);
+                          setKcsCurrentPage(1);
+                        }}
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer"
+                      >
+                        <option value="All">Tất cả Lệnh SX ({oqcRecords.length} xe)</option>
+                        {uniqueOqcLsxs.map(lsx => (
+                          <option key={lsx} value={lsx}>LSX {lsx}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 {/* Minimalist Summary Strip */}
                 <div className="bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -5421,7 +5633,14 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                                   </span>
                                 </td>
                                 <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{r.chassisNo || '--'}</td>
-                                <td className="px-3 py-2 font-bold text-slate-850">{r.model}</td>
+                                <td className="px-3 py-2 font-bold text-slate-850">
+                                  <span>{r.model}</span>
+                                  {isAllLsx && (
+                                    <span className="ml-1.5 text-[9.5px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono font-bold">
+                                      LSX {r.lsx || '--'}
+                                    </span>
+                                  )}
+                                </td>
                                 <td className="px-3 py-2 text-slate-600">{r.color}</td>
 
                                 {/* Pass input [1] */}
@@ -8848,15 +9067,15 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                   const firstCols = firstLine.includes('\t') ? firstLine.split('\t') : firstLine.split(',');
                   const isHeader = firstCols.some(col => {
                     const l = col.toLowerCase();
-                    return l.includes('mã') || l.includes('sêri') || l.includes('seri') || l.includes('khung') || l.includes('động cơ') || l.includes('model') || l.includes('mẫu') || l.includes('lsx') || l.includes('lệnh') || l.includes('tình trạng') || l.includes('đạt');
+                    return l.includes('mã') || l.includes('sêri') || l.includes('seri') || l.includes('khung') || l.includes('động cơ') || l.includes('máy') || l.includes('model') || l.includes('mẫu') || l.includes('lsx') || l.includes('lệnh') || l.includes('tình trạng') || l.includes('đạt') || l.includes('stt');
                   });
 
                   if (isHeader) {
                     firstCols.forEach((col, idx) => {
                       const clean = col.trim().toLowerCase();
-                      if (clean.includes('mã quy cách') || clean.includes('mã qc') || clean === 'mã' || clean.includes('part')) {
+                      if (clean.includes('mã quy cách') || clean.includes('mã qc') || clean.includes('mã tem') || clean === 'mã' || clean.includes('part')) {
                         partCodeIdx = idx;
-                      } else if (clean.includes('seri tem') || clean.includes('số sêri') || clean.includes('số seri') || clean === 'seri' || clean === 'serial') {
+                      } else if (clean.includes('seri tem') || clean.includes('số sêri') || clean.includes('số seri') || clean === 'seri' || clean === 'serial' || clean === 'sêri') {
                         serialNoIdx = idx;
                       } else if (clean.includes('số khung') || clean.includes('khung') || clean.includes('chassis') || clean.includes('vin')) {
                         chassisNoIdx = idx;
@@ -8891,25 +9110,52 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                       }
                     });
                   } else {
-                    // Fallback based on column count
-                    if (firstCols.length >= 7) {
-                      // LSX Master Format: STT, Mã quy cách, Seri tem ĐT, Số khung, Số động cơ, Màu sắc, LSX
-                      partCodeIdx = 1;
-                      serialNoIdx = 2;
-                      chassisNoIdx = 3;
-                      engineNoIdx = 4;
-                      colorIdx = 5;
-                      lsxIdx = 6;
-                    } else if (firstCols.length >= 5) {
-                      partCodeIdx = 0;
-                      serialNoIdx = 1;
-                      colorIdx = 2;
-                      modelIdx = 3;
-                      lsxIdx = 4;
+                    // Fallback based on column format when NO header is present (User copies columns without Model)
+                    // Check if first column is numeric (STT: 1, 2, 3...)
+                    const isCol0Number = /^\d+$/.test(firstCols[0]?.trim());
+                    const colOffset = isCol0Number ? 1 : 0;
+                    const effectiveLen = firstCols.length - colOffset;
+
+                    if (effectiveLen >= 6) {
+                      // Format: [STT], Mã quy cách, Số Sêri, Số khung, Số động cơ, Màu sắc, LSX
+                      partCodeIdx = 0 + colOffset;
+                      serialNoIdx = 1 + colOffset;
+                      chassisNoIdx = 2 + colOffset;
+                      engineNoIdx = 3 + colOffset;
+                      colorIdx = 4 + colOffset;
+                      lsxIdx = 5 + colOffset;
+                    } else if (effectiveLen === 5) {
+                      // Format: [STT], Mã quy cách, Số Sêri, Số khung, Số động cơ, Màu sắc (hoặc LSX)
+                      partCodeIdx = 0 + colOffset;
+                      serialNoIdx = 1 + colOffset;
+                      chassisNoIdx = 2 + colOffset;
+                      engineNoIdx = 3 + colOffset;
+                      const lastVal = firstCols[4 + colOffset]?.trim() || '';
+                      if (/^\d+[a-zA-Z0-9]*-\d+$/.test(lastVal)) {
+                        lsxIdx = 4 + colOffset;
+                      } else {
+                        colorIdx = 4 + colOffset;
+                      }
+                    } else if (effectiveLen === 4) {
+                      // Format: [STT], Mã quy cách, Số Sêri, Số khung, Số động cơ
+                      partCodeIdx = 0 + colOffset;
+                      serialNoIdx = 1 + colOffset;
+                      chassisNoIdx = 2 + colOffset;
+                      engineNoIdx = 3 + colOffset;
+                    } else if (effectiveLen === 3) {
+                      // Format: [STT], Mã quy cách, Số Sêri, Màu sắc (hoặc LSX)
+                      partCodeIdx = 0 + colOffset;
+                      serialNoIdx = 1 + colOffset;
+                      const lastVal = firstCols[2 + colOffset]?.trim() || '';
+                      if (/^\d+[a-zA-Z0-9]*-\d+$/.test(lastVal)) {
+                        lsxIdx = 2 + colOffset;
+                      } else {
+                        colorIdx = 2 + colOffset;
+                      }
                     } else {
-                      partCodeIdx = 0;
-                      serialNoIdx = 1;
-                      colorIdx = 2;
+                      // Format: [STT], Mã quy cách, Số Sêri
+                      partCodeIdx = 0 + colOffset;
+                      serialNoIdx = 1 + colOffset;
                     }
                   }
 
@@ -8923,12 +9169,11 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                     const cols = line.includes('\t') ? line.split('\t') : line.split(',');
                     if (cols.length < 2) continue;
 
-                    let serialNoVal = (serialNoIdx !== -1 && cols[serialNoIdx] ? cols[serialNoIdx] : (cols[1] || cols[0] || '')).trim();
+                    let partCodeVal = (partCodeIdx !== -1 && cols[partCodeIdx] ? cols[partCodeIdx] : cols[0] || '').trim();
+                    let serialNoVal = (serialNoIdx !== -1 && cols[serialNoIdx] ? cols[serialNoIdx] : (cols[1] || '')).trim();
                     let chassisNoVal = (chassisNoIdx !== -1 && cols[chassisNoIdx] ? cols[chassisNoIdx] : '').trim();
                     let engineNoVal = (engineNoIdx !== -1 && cols[engineNoIdx] ? cols[engineNoIdx] : '').trim();
-                    let partCodeVal = (partCodeIdx !== -1 && cols[partCodeIdx] ? cols[partCodeIdx] : (cols[0] || 'TEMDV11202')).trim();
-                    let colorVal = (colorIdx !== -1 && cols[colorIdx] ? cols[colorIdx] : (cols[2] || 'Đỏ')).trim();
-                    let modelVal = (modelIdx !== -1 && cols[modelIdx] ? cols[modelIdx] : '').trim();
+                    let colorVal = (colorIdx !== -1 && cols[colorIdx] ? cols[colorIdx] : '').trim();
                     let lsxVal = (lsxIdx !== -1 && cols[lsxIdx] ? cols[lsxIdx] : defaultLsx).trim();
 
                     if (!serialNoVal && chassisNoVal) {
@@ -8936,26 +9181,60 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                     }
                     if (!serialNoVal) continue;
 
-                    // Deduce model from color if color contains "Model - Color" (e.g. "DK D2 - Ghi đen", "DK ROMA SX v2_App - Cafe")
+                    // --- TỰ ĐỘNG TRA CỨU MODEL VÀ MÀU SẮC TỪ BẢNG MÃ XE (OQC PART CODES) ---
+                    let modelVal = '';
+                    const matchedPart = lookupPartCode(partCodeVal);
+                    if (matchedPart) {
+                      modelVal = matchedPart.model || '';
+                      // Nếu màu sắc chưa có từ dữ liệu dán, tự động điền Màu sắc từ Bảng mã xe
+                      if (!colorVal && matchedPart.color) {
+                        colorVal = matchedPart.color;
+                      }
+                    }
+
+                    // Nếu chưa tìm thấy chính xác, thử tìm partial match trong bảng mã xe
+                    if (!modelVal) {
+                      const cleanCode = partCodeVal.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                      const partialMatch = oqcPartCodes.find(p => {
+                        const pClean = p.partCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                        return pClean.includes(cleanCode) || cleanCode.includes(pClean);
+                      });
+                      if (partialMatch) {
+                        modelVal = partialMatch.model || '';
+                        if (!colorVal && partialMatch.color) {
+                          colorVal = partialMatch.color;
+                        }
+                      }
+                    }
+
+                    // Nếu màu sắc có dạng "Model - Màu" (Ví dụ: "DK D2 - Đỏ"), tách model và màu
                     if (!modelVal && colorVal.includes(' - ')) {
                       const colorParts = colorVal.split(' - ');
                       modelVal = colorParts[0].trim();
                       colorVal = colorParts.slice(1).join(' - ').trim();
                     }
 
-                    // Deduce model from PartCode
+                    // Fallback nhận diện Model theo tiền tố mã quy cách DKBike
                     if (!modelVal) {
                       const pUpper = partCodeVal.toUpperCase();
-                      if (pUpper.includes('ROM')) modelVal = 'DK Roma SX';
+                      if (pUpper.includes('ROM') || pUpper.includes('ROMA')) modelVal = 'DK Roma SX V2';
                       else if (pUpper.includes('TEMDD') || pUpper.includes('D2')) modelVal = 'DK D2';
                       else if (pUpper.includes('TEMDV') || pUpper.includes('V2')) modelVal = 'DK V2';
                       else if (pUpper.includes('GOGO') || pUpper.includes('GG')) modelVal = 'DK Gogo';
                       else if (pUpper.includes('SAM')) modelVal = 'DK Samurai';
-                      else if (pUpper.includes('XMEN') || pUpper.includes('XMAN')) modelVal = 'DK Xman';
-                      else if (pUpper.includes('CRETA')) modelVal = 'DK Creta';
-                      else if (pUpper.includes('POKE')) modelVal = 'DK Poke';
-                      else if (pUpper.includes('SPARK')) modelVal = 'DK Spark';
+                      else if (pUpper.includes('XMEN') || pUpper.includes('XMAN')) modelVal = 'DK Xmen';
+                      else if (pUpper.includes('CREA')) modelVal = 'DK Crea Mono';
+                      else if (pUpper.includes('EZ')) modelVal = 'DK EZ3';
+                      else if (pUpper.includes('S3')) modelVal = 'DK S3';
+                      else if (pUpper.includes('S2')) modelVal = 'DK S2';
+                      else if (pUpper.includes('S1')) modelVal = 'DK S1';
+                      else if (pUpper.includes('NOVA')) modelVal = 'DK Nova';
+                      else if (pUpper.includes('ZMTP') || pUpper.includes('ZMT')) modelVal = 'DK Z-MTP';
                       else modelVal = 'DK Gogo';
+                    }
+
+                    if (!colorVal) {
+                      colorVal = 'Đen';
                     }
 
                     // Status & defect details
@@ -9070,9 +9349,9 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                   />
                 </div>
                 <div className="flex flex-col justify-end">
-                  <span className="text-[10.5px] text-slate-400 font-medium leading-relaxed">
-                    💡 Dán danh sách xe từ file LSX (Copy cột từ Excel/Lark). Hệ thống tự nhận diện: Mã TEM, Số Khung/Sêri, Model, Màu sắc.
-                  </span>
+                  <div className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl font-medium leading-relaxed">
+                    ✨ <strong>Không cần cột Model</strong>: Bạn chỉ cần copy các cột từ file LSX (Mã quy cách, Sêri tem, Số khung, Số động cơ, Màu sắc, LSX). Hệ thống sẽ <strong>tự động tra cứu và điền chính xác Model xe và Màu sắc từ Bảng mã xe</strong>!
+                  </div>
                 </div>
               </div>
 
@@ -9084,7 +9363,7 @@ let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
                   value={lsxImportText}
                   onChange={e => setLsxImportText(e.target.value)}
                   rows={8}
-                  placeholder={`Mã TEM\tSố Sêri\tMàu sắc\tModel\tLSX\nTEMDV11202\t26DK00101\tĐỏ tươi\tDK Gogo\t26-10\nTEMDV11202\t26DK00102\tĐen bóng\tDK Gogo\t26-10...`}
+                  placeholder={`Mã quy cách\tSố Sêri\tSố khung\tSố động cơ\tMàu sắc\tLSX\nTEMDV11202\t26DK00101\tRLHDK0123\tDKM9921\tĐỏ tươi\t26-10\nTEMDV11202\t26DK00102\tRLHDK0124\tDKM9922\tĐen bóng\t26-10...`}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-xs focus:bg-white focus:ring-2 focus:ring-emerald-500 outline-hidden"
                 />
               </div>

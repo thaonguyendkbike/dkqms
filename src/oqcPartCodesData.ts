@@ -2412,7 +2412,7 @@ export const INITIAL_OQC_PART_CODES: OqcPartCodeItem[] = [
     "id": "PC-TEMZMT0101-301",
     "partCode": "TEMZMT0101",
     "nameWithColor": "DK Z-MTP - Đen pha lê",
-    "model": "Đen bóng",
+    "model": "DK Z-MTP",
     "color": "Đen pha lê",
     "updatedAt": "2026-08-14"
   },
@@ -2420,7 +2420,7 @@ export const INITIAL_OQC_PART_CODES: OqcPartCodeItem[] = [
     "id": "PC-TEMZMT0102-302",
     "partCode": "TEMZMT0102",
     "nameWithColor": "DK Z-MTP - Xám khói tuyết",
-    "model": "Xám ximang",
+    "model": "DK Z-MTP",
     "color": "Xám khói tuyết",
     "updatedAt": "2026-08-14"
   },
@@ -2428,7 +2428,7 @@ export const INITIAL_OQC_PART_CODES: OqcPartCodeItem[] = [
     "id": "PC-TEMZMT0103-303",
     "partCode": "TEMZMT0103",
     "nameWithColor": "DK Z-MTP - Be",
-    "model": "Be",
+    "model": "DK Z-MTP",
     "color": "Be",
     "updatedAt": "2026-08-14"
   },
@@ -2436,7 +2436,7 @@ export const INITIAL_OQC_PART_CODES: OqcPartCodeItem[] = [
     "id": "PC-TEMZMT0104-304",
     "partCode": "TEMZMT0104",
     "nameWithColor": "DK Z-MTP - Trắng ngọc trai",
-    "model": "Trắng ngọc trai",
+    "model": "DK Z-MTP",
     "color": "Trắng ngọc trai",
     "updatedAt": "2026-08-14"
   },
@@ -2444,7 +2444,7 @@ export const INITIAL_OQC_PART_CODES: OqcPartCodeItem[] = [
     "id": "PC-TEMZMT0105-305",
     "partCode": "TEMZMT0105",
     "nameWithColor": "DK Z-MTP - Xanh magic",
-    "model": "Xanh magic",
+    "model": "DK Z-MTP",
     "color": "Xanh magic",
     "updatedAt": "2026-08-14"
   },
@@ -2452,7 +2452,7 @@ export const INITIAL_OQC_PART_CODES: OqcPartCodeItem[] = [
     "id": "PC-TEMZMT0106-306",
     "partCode": "TEMZMT0106",
     "nameWithColor": "DK Z-MTP - Đen khói",
-    "model": "Đen mờ",
+    "model": "DK Z-MTP",
     "color": "Đen khói",
     "updatedAt": "2026-08-14"
   },
