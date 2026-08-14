@@ -4,7 +4,7 @@
  */
 
 import { useState, useMemo, FormEvent, useEffect, useRef, Fragment } from 'react';
-import { safeStorage as localStorage, sanitizeFirestorePayload } from './safeStorage';
+import { safeStorage, safeStorage as localStorage, sanitizeFirestorePayload } from './safeStorage';
 import { calculateAQLSample } from './utils/aqlUtils';
 import XLSXStyle from 'xlsx-js-style';
 import { 
@@ -5697,14 +5697,17 @@ export function App() {
   }, [equipmentIncidents]);
 
   useEffect(() => {
+    safeStorage.setItem('dk_iqc_records', JSON.stringify(iqcRecords));
     syncToServer('dk_iqc_records', iqcRecords);
   }, [iqcRecords]);
 
   useEffect(() => {
+    safeStorage.setItem('dk_pqc_records', JSON.stringify(pqcRecords));
     syncToServer('dk_pqc_records', pqcRecords);
   }, [pqcRecords]);
 
   useEffect(() => {
+    safeStorage.setItem('dk_oqc_records', JSON.stringify(oqcRecords));
     syncToServer('dk_oqc_records', oqcRecords);
   }, [oqcRecords]);
 
