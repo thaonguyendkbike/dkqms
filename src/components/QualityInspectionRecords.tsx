@@ -1981,6 +1981,10 @@ export default function QualityInspectionRecords({
       const matchesWeek = oqcFilterWeek === 'All' || recordWeek === oqcFilterWeek;
       
       return matchesSearch && matchesModel && matchesColor && matchesDate && matchesMonth && matchesYear && matchesWeek;
+    }).sort((a, b) => {
+      const sA = (a.serialNo || a.id || '').trim();
+      const sB = (b.serialNo || b.id || '').trim();
+      return sA.localeCompare(sB, undefined, { numeric: true, sensitivity: 'base' });
     });
   }, [oqcRecords, oqcSearch, oqcFilterModel, oqcFilterColor, oqcFilterDate, oqcFilterMonth, oqcFilterYear, oqcFilterWeek]);
 
@@ -5239,6 +5243,10 @@ export default function QualityInspectionRecords({
                 return matchSerial || matchChassis || matchEngine || matchModel || matchColor || matchDefect || matchLsx;
               }
               return true;
+            }).sort((a, b) => {
+              const sA = (a.serialNo || a.id || '').trim();
+              const sB = (b.serialNo || b.id || '').trim();
+              return sA.localeCompare(sB, undefined, { numeric: true, sensitivity: 'base' });
             });
 
             const totalLsxCars = displayLsxRecords.length;
