@@ -74,8 +74,11 @@ export interface OqcColorChangeRecord {
   note?: string;
 }
 
+export * from './oqcPartCodesData';
+
 export const INITIAL_IQC_DATA: IQCRecord[] = [];
 export const INITIAL_PQC_DATA: PQCRecord[] = [];
 export const INITIAL_OQC_DATA: OQCRecord[] = [];
 
 export const INITIAL_SUPPLIER_AUDITS: SupplierProductionAudit[] = [];
+

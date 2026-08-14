@@ -41,9 +41,10 @@ import {
   Copy,
   CheckCircle2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Tag
 } from 'lucide-react';
-import { IQCRecord, PQCRecord, OQCRecord, OqcColorChangeRecord } from '../qualityTestData';
+import { IQCRecord, PQCRecord, OQCRecord, OqcColorChangeRecord, OqcPartCodeItem, INITIAL_OQC_PART_CODES } from '../qualityTestData';
 import { safeStorage } from '../safeStorage';
 import { compressImageFile } from '../imageCompressor';
 import { Supplier, PTSPTask, MarketDefect, CAPA, SupplierProductionAudit, MonthlyPlan } from '../types';
@@ -1934,13 +1935,14 @@ export default function QualityInspectionRecords({
 
   const isOqcRecordPassed = useCallback((r: OQCRecord) => {
     if (r.status === 'Đạt') return true;
-    const text = ((r.defectDetail || '') + ' ' + (r.rootCause || '')).toLowerCase();
-    return (
-      text.includes('xước') ||
-      text.includes('xuoc') ||
-      text.includes('thiếu') ||
-      text.includes('thieu')
-    );
+    if (r.status === 'Lỗi') return false;
+    if (r.passFlag === 1) return true;
+    if (r.failedCount && r.failedCount > 0) return false;
+    const text = ((r.defectDetail || '') + ' ' + (r.rootCause || '')).trim().toLowerCase();
+    if (!text || text === 'không' || text === 'ok' || text === 'pass' || text === 'đạt' || text === 'sạch không lỗi') {
+      return true;
+    }
+    return false;
   }, []);
 
   const getRowCapaData = useCallback((defectDetail: string | undefined, evaluation: string | undefined, rootCause: string | undefined, treatment: string | undefined) => {
@@ -2340,8 +2342,49 @@ export default function QualityInspectionRecords({
   const [exportKcsYear, setExportKcsYear] = useState<number>(2026);
   const [exportKcsModel, setExportKcsModel] = useState<string>('All');
 
-  // OQC Sub-view state: 'station' (Trạm KCS) | 'handover' (Báo phẩm bàn giao) | 'dashboard' (Đồ thị báo cáo)
-  const [oqcSubView, setOqcSubView] = useState<'station' | 'handover' | 'dashboard'>('station');
+  // OQC Sub-view state: 'station' (Trạm KCS) | 'handover' (Báo phẩm bàn giao) | 'part_codes' (Bảng mã xe) | 'dashboard' (Đồ thị báo cáo)
+  const [oqcSubView, setOqcSubView] = useState<'station' | 'handover' | 'part_codes' | 'dashboard'>('station');
+
+  // Master Part Codes (Bảng mã xe / Mã quy cách) states
+  const [oqcPartCodes, setOqcPartCodes] = useState<OqcPartCodeItem[]>(() => {
+    try {
+      const saved = safeStorage.getItem('dk_oqc_part_codes');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_OQC_PART_CODES;
+  });
+
+  const saveOqcPartCodes = (list: OqcPartCodeItem[]) => {
+    setOqcPartCodes(list);
+    safeStorage.setItem('dk_oqc_part_codes', JSON.stringify(list));
+  };
+
+  const lookupPartCode = useCallback((code: string): OqcPartCodeItem | null => {
+    if (!code) return null;
+    const clean = code.trim().toUpperCase();
+    return oqcPartCodes.find(p => p.partCode.trim().toUpperCase() === clean) || null;
+  }, [oqcPartCodes]);
+
+  const [partCodeSearch, setPartCodeSearch] = useState('');
+  const [partCodeModelFilter, setPartCodeModelFilter] = useState('All');
+  const [partCodeCurrentPage, setPartCodeCurrentPage] = useState<number>(1);
+  const [partCodePageSize, setPartCodePageSize] = useState<number>(50);
+
+  const [showAddPartCodeModal, setShowAddPartCodeModal] = useState(false);
+  const [editingPartCode, setEditingPartCode] = useState<OqcPartCodeItem | null>(null);
+  const [partCodeFormCode, setPartCodeFormCode] = useState('');
+  const [partCodeFormNameWithColor, setPartCodeFormNameWithColor] = useState('');
+  const [partCodeFormModel, setPartCodeFormModel] = useState('');
+  const [partCodeFormColor, setPartCodeFormColor] = useState('');
+  const [partCodeFormError, setPartCodeFormError] = useState('');
+
+  const [showPastePartCodesModal, setShowPastePartCodesModal] = useState(false);
+  const [pastePartCodesText, setPastePartCodesText] = useState('');
+  const [pastePartCodesMode, setPastePartCodesMode] = useState<'merge' | 'replace'>('merge');
+  const [pastePartCodesError, setPastePartCodesError] = useState('');
 
   // KCS Realtime Line Station states
   const [kcsSelectedLsx, setKcsSelectedLsx] = useState<string>(() => uniqueOqcLsxs[0] || '26-10');
@@ -3443,22 +3486,7 @@ export default function QualityInspectionRecords({
       return;
     }
     
-    // Tự động chuyển lỗi xước, thiếu linh kiện thành Đạt
-    let finalStatus = newOqcStatus;
-    const combinedTexts = (newOqcDefectDetail + " " + newOqcRootCause).toLowerCase();
-    const isSpecialDat = 
-      combinedTexts.includes('xước') || 
-      combinedTexts.includes('xuoc') || 
-      combinedTexts.includes('thiếu linh kiện') || 
-      combinedTexts.includes('thieu linh kien') ||
-      combinedTexts.includes('thiếu lk') ||
-      combinedTexts.includes('thieu lk') ||
-      combinedTexts.includes('thiếu') ||
-      combinedTexts.includes('thieu');
-
-    if (isSpecialDat) {
-      finalStatus = 'Đạt';
-    }
+    const finalStatus = newOqcStatus;
 
     const newRecord: OQCRecord & { checkedBy?: string } = {
       id: `OQC-${newOqcSerialNo.trim().toUpperCase().replace(/[\/\s.#$\[\]]/g, '_')}`,
@@ -3744,22 +3772,8 @@ export default function QualityInspectionRecords({
         const causeVal1 = cols[causeColIdx1]?.trim() || '';
         const causeVal2 = cols[causeColIdx2]?.trim() || '';
 
-        // Check for special exception cases: "xước", "thiếu linh kiện" (and related phrases, ignoring case & accents)
-        const checkText = line.toLowerCase();
-        const isSpecialDat = 
-          checkText.includes('xước') || 
-          checkText.includes('xuoc') || 
-          checkText.includes('thiếu linh kiện') || 
-          checkText.includes('thieu linh kien') ||
-          checkText.includes('thiếu lk') ||
-          checkText.includes('thieu lk') ||
-          checkText.includes('thiếu') ||
-          checkText.includes('thieu');
-
-        let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
-        if (isSpecialDat) {
-          statusVal = 'Đạt';
-        } else if (
+let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
+        if (
           rawStatus.includes('lỗi') || 
           rawStatus.includes('ng') || 
           rawStatus.includes('hỏng') || 
@@ -3767,7 +3781,11 @@ export default function QualityInspectionRecords({
           rawDat === '0' || 
           rawDat === 'lỗi' || 
           rawDat === 'ng' ||
-          rawDat === 'không'
+          rawDat === 'không' ||
+          rawDat === 'false' ||
+          rawDat === 'k đạt' ||
+          rawDat === 'không đạt' ||
+          (defectDetailVal && defectDetailVal !== '0' && defectDetailVal !== '-' && defectDetailVal.toLowerCase() !== 'không' && defectDetailVal.toLowerCase() !== 'ok' && defectDetailVal.toLowerCase() !== 'pass')
         ) {
           statusVal = 'Lỗi';
         } else if (rawStatus.includes('chưa') || rawStatus.includes('pending')) {
@@ -5086,6 +5104,22 @@ export default function QualityInspectionRecords({
                 )}
               </button>
               <button
+                id="oqc-subview-partcodes"
+                type="button"
+                onClick={() => setOqcSubView('part_codes')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  oqcSubView === 'part_codes'
+                    ? 'bg-white text-slate-900 shadow-xs font-black'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Tag className="w-3.5 h-3.5 text-amber-600" />
+                Bảng mã xe
+                <span className="ml-1 bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded-full text-[10px] font-mono">
+                  {oqcPartCodes.length}
+                </span>
+              </button>
+              <button
                 id="oqc-subview-dashboard"
                 type="button"
                 onClick={() => setOqcSubView('dashboard')}
@@ -5875,14 +5909,18 @@ export default function QualityInspectionRecords({
                         (r.engineNo && r.engineNo.trim().toUpperCase() === serial)
                       );
 
+                      // Lookup in master part codes if found has partCode
+                      const pCode = found ? (found.partCode || 'TEM-GEN') : 'TEM-GEN';
+                      const matchedPart = lookupPartCode(pCode);
+
                       const newItem = {
                         id: `HO-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
                         serialNo: found ? found.serialNo : serial,
                         chassisNo: found ? (found.chassisNo || '--') : '--',
                         engineNo: found ? (found.engineNo || '--') : '--',
-                        partCode: found ? (found.partCode || 'TEM-GEN') : 'TEM-GEN',
-                        model: found ? (found.model || 'Chưa rõ') : 'Chưa có trong OQC',
-                        color: found ? (found.color || 'Chưa rõ') : 'Chưa rõ',
+                        partCode: pCode,
+                        model: found ? (found.model || (matchedPart ? matchedPart.model : 'Chưa rõ')) : (matchedPart ? matchedPart.model : 'Chưa có trong OQC'),
+                        color: found ? (found.color || (matchedPart ? matchedPart.color : 'Chưa rõ')) : (matchedPart ? matchedPart.color : 'Chưa rõ'),
                         lsx: found ? (found.lsx || 'Ngoại bảng') : 'Ngoại bảng',
                         status: found ? (found.status || 'Chưa kiểm tra') : 'Chưa có dữ liệu KCS',
                         checkTime: found ? (found.checkTime || '--:--') : '--:--',
@@ -5937,7 +5975,7 @@ export default function QualityInspectionRecords({
                     <button
                       type="button"
                       onClick={handleExportHandoverExcelLocal}
-                      className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-xs"
                     >
                       <Download className="w-3.5 h-3.5" /> Xuất Excel
                     </button>
@@ -5945,30 +5983,36 @@ export default function QualityInspectionRecords({
                       <button
                         type="button"
                         onClick={() => {
-                          if (window.confirm('Xóa sạch danh sách để bắt đầu đợt mới?')) {
+                          if (window.confirm('Xóa danh sách quét bàn giao hiện tại để bắt đầu phiên mới?')) {
                             saveHandoverList([]);
                           }
                         }}
-                        className="text-xs text-rose-600 hover:bg-rose-50 px-2 py-1.5 rounded-lg transition cursor-pointer"
-                        title="Làm mới đợt bàn giao"
+                        className="bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-500 font-bold text-xs px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+                        title="Làm mới danh sách quét"
                       >
-                        Làm mới
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
                 </div>
 
-                {/* Minimal Summary Strip */}
-                <div className="bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-4">
-                    <span className="text-slate-600">Đã quét: <strong className="text-slate-900 font-mono font-bold">{handoverScannedList.length}</strong> xe</span>
-                    <span className="text-slate-600">Dòng xe: <strong className="font-mono font-bold">{new Set(handoverScannedList.map(x => x.model)).size}</strong></span>
-                    <span className="text-slate-600">Lệnh SX: <strong className="font-mono font-bold">{new Set(handoverScannedList.map(x => x.lsx)).size}</strong></span>
+                {/* Minimalist Summary Strip */}
+                <div className="bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-xs space-y-2 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-4">
+                      <span className="text-slate-600">Đã quét: <strong className="text-slate-900 font-mono font-bold">{handoverScannedList.length}</strong> xe</span>
+                      <span className="text-slate-600">Dòng xe: <strong className="font-mono font-bold">{new Set(handoverScannedList.map(x => x.model)).size}</strong></span>
+                      <span className="text-slate-600">Lệnh SX: <strong className="font-mono font-bold">{new Set(handoverScannedList.map(x => x.lsx)).size}</strong></span>
+                    </div>
+                    <span className="text-[11px] text-slate-400">
+                      Súng quét Barcode / QR tự động nhận diện thông tin
+                    </span>
                   </div>
+
                   {handoverModelSummary.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {handoverModelSummary.slice(0, 4).map((item, i) => (
-                        <span key={i} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px]">
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100">
+                      {handoverModelSummary.map(item => (
+                        <span key={`${item.model}-${item.color}`} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md text-[11px] font-medium">
                           {item.model} ({item.color}): <strong>{item.count}</strong>
                         </span>
                       ))}
@@ -5994,8 +6038,7 @@ export default function QualityInspectionRecords({
                             <th scope="col" className="px-3 py-2.5 text-left">Model</th>
                             <th scope="col" className="px-3 py-2.5 text-left">Màu Sắc</th>
                             <th scope="col" className="px-3 py-2.5 text-left">LSX</th>
-                            <th scope="col" className="px-3 py-2.5 text-center">Tình Trạng</th>
-                            <th scope="col" className="px-3 py-2.5 text-center">Giờ Quét</th>
+                            <th scope="col" className="px-3 py-2.5 text-center">Giờ Bàn Giao</th>
                             <th scope="col" className="px-3 py-2.5 text-center w-12">Xóa</th>
                           </tr>
                         </thead>
@@ -6009,17 +6052,6 @@ export default function QualityInspectionRecords({
                               <td className="px-3 py-2 font-bold text-slate-850">{item.model}</td>
                               <td className="px-3 py-2 text-slate-600">{item.color}</td>
                               <td className="px-3 py-2 font-mono text-slate-600">{item.lsx}</td>
-                              <td className="px-3 py-2 text-center">
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                                  item.status === 'Đạt'
-                                    ? 'bg-emerald-50 text-emerald-700'
-                                    : item.status === 'Lỗi'
-                                    ? 'bg-rose-50 text-rose-700'
-                                    : 'bg-slate-100 text-slate-600'
-                                }`}>
-                                  {item.status}
-                                </span>
-                              </td>
                               <td className="px-3 py-2 text-center font-mono text-slate-500">{item.scannedAt}</td>
                               <td className="px-3 py-2 text-center">
                                 <button
@@ -6043,7 +6075,366 @@ export default function QualityInspectionRecords({
             );
           })()}
 
-          {/* ================================== 3. VISUAL KCS/OQC DASHBOARD ================================== */}
+          {/* ================================== 3. BẢNG MÃ QUY CÁCH XE (MASTER PART CODES) ================================== */}
+          {oqcSubView === 'part_codes' && (() => {
+            const filteredPartCodes = oqcPartCodes.filter(item => {
+              if (partCodeModelFilter !== 'All' && item.model !== partCodeModelFilter) {
+                return false;
+              }
+              if (partCodeSearch.trim()) {
+                const s = partCodeSearch.trim().toLowerCase();
+                const mCode = (item.partCode || '').toLowerCase().includes(s);
+                const mName = (item.nameWithColor || '').toLowerCase().includes(s);
+                const mModel = (item.model || '').toLowerCase().includes(s);
+                const mColor = (item.color || '').toLowerCase().includes(s);
+                return mCode || mName || mModel || mColor;
+              }
+              return true;
+            });
+
+            const uniquePartCodeModels = Array.from(new Set(oqcPartCodes.map(x => x.model).filter(Boolean))).sort();
+            const totalPages = Math.max(1, Math.ceil(filteredPartCodes.length / partCodePageSize));
+            const safeCurrentPage = Math.min(partCodeCurrentPage, totalPages);
+            const paginatedList = partCodePageSize === 0 
+              ? filteredPartCodes 
+              : filteredPartCodes.slice((safeCurrentPage - 1) * partCodePageSize, safeCurrentPage * partCodePageSize);
+
+            const handleExportPartCodesExcel = () => {
+              if (oqcPartCodes.length === 0) {
+                alert('Bảng mã quy cách hiện đang trống!');
+                return;
+              }
+              const today = new Date().toLocaleDateString('vi-VN');
+              const aoaData: any[][] = [];
+              const rowTracker: { type: string; isZebra?: boolean }[] = [];
+              const merges: any[] = [];
+
+              const addRow = (row: any[], type: string, isZebra: boolean = false) => {
+                const fullRow = [...row];
+                while (fullRow.length < 6) {
+                  fullRow.push("");
+                }
+                aoaData.push(fullRow);
+                rowTracker.push({ type, isZebra });
+                return aoaData.length - 1;
+              };
+
+              // Header
+              const r0 = addRow(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT - PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL)"], 'header-company');
+              merges.push({ s: { r: r0, c: 0 }, e: { r: r0, c: 5 } });
+
+              const r1 = addRow(["DKBike - Xe cho cả gia đình | Hệ thống Quản lý Chất lượng DK QMS"], 'header-department');
+              merges.push({ s: { r: r1, c: 0 }, e: { r: r1, c: 5 } });
+
+              const r2 = addRow(["DANH MỤC MÃ QUY CÁCH XE THÀNH PHẨM (MASTER CODES)"], 'header-title');
+              merges.push({ s: { r: r2, c: 0 }, e: { r: r2, c: 5 } });
+
+              const r3 = addRow([`Ngày xuất: ${today}   |   Tổng số mã quy cách: ${oqcPartCodes.length} mã   |   Số dòng xe (Model): ${uniquePartCodeModels.length}`], 'header-date');
+              merges.push({ s: { r: r3, c: 0 }, e: { r: r3, c: 5 } });
+
+              addRow([], 'empty');
+
+              addRow(["STT", "Mã Quy Cách", "Tên Model Kèm Màu", "Dòng Xe (Model)", "Màu Sắc", "Ngày Cập Nhật"], 'detail-header');
+
+              oqcPartCodes.forEach((item, idx) => {
+                addRow([
+                  idx + 1,
+                  item.partCode,
+                  item.nameWithColor,
+                  item.model,
+                  item.color,
+                  item.updatedAt || today
+                ], 'detail-row', idx % 2 === 1);
+              });
+
+              const wb = XLSXStyle.utils.book_new();
+              const ws = XLSXStyle.utils.aoa_to_sheet(aoaData);
+
+              // Styling
+              const decodedRange = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1:A1');
+              const totalRows = decodedRange.e.r + 1;
+              const totalCols = decodedRange.e.c + 1;
+
+              const borderThin = { style: "thin", color: { rgb: "CBD5E1" } };
+              const cellBordersNormal = {
+                top: borderThin, bottom: borderThin,
+                left: borderThin, right: borderThin
+              };
+
+              for (let r = 0; r < totalRows; r++) {
+                const tracker = rowTracker[r];
+                const rType = tracker?.type;
+                const isZebra = tracker?.isZebra;
+
+                for (let c = 0; c < totalCols; c++) {
+                  const cellRef = XLSXStyle.utils.encode_cell({ r, c });
+                  let cell = ws[cellRef];
+                  if (!cell) {
+                    cell = ws[cellRef] = { t: 's', v: '' };
+                  }
+
+                  if (rType === 'header-company') {
+                    cell.s = {
+                      font: { name: "Segoe UI", sz: 11, bold: true, color: { rgb: "1E3A8A" } },
+                      alignment: { horizontal: "left", vertical: "center" }
+                    };
+                  } else if (rType === 'header-department') {
+                    cell.s = {
+                      font: { name: "Segoe UI", sz: 9.5, italic: true, color: { rgb: "475569" } },
+                      alignment: { horizontal: "left", vertical: "center" }
+                    };
+                  } else if (rType === 'header-title') {
+                    cell.s = {
+                      font: { name: "Segoe UI", sz: 14, bold: true, color: { rgb: "1E3A8A" } },
+                      alignment: { horizontal: "center", vertical: "center" }
+                    };
+                  } else if (rType === 'header-date') {
+                    cell.s = {
+                      font: { name: "Segoe UI", sz: 10, bold: true, color: { rgb: "475569" } },
+                      alignment: { horizontal: "center", vertical: "center" }
+                    };
+                  } else if (rType === 'detail-header') {
+                    cell.s = {
+                      fill: { fgColor: { rgb: "1E3A8A" } },
+                      font: { name: "Segoe UI", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
+                      alignment: { horizontal: "center", vertical: "center" },
+                      border: cellBordersNormal
+                    };
+                  } else if (rType === 'detail-row') {
+                    cell.s = {
+                      fill: isZebra ? { fgColor: { rgb: "F8FAFC" } } : undefined,
+                      font: { 
+                        name: c === 1 ? "Consolas" : "Segoe UI", 
+                        sz: 10, 
+                        bold: c === 1,
+                        color: c === 1 ? { rgb: "1E3A8A" } : { rgb: "1E293B" } 
+                      },
+                      alignment: { 
+                        horizontal: (c === 2 || c === 3 || c === 4) ? "left" : "center", 
+                        vertical: "center" 
+                      },
+                      border: cellBordersNormal
+                    };
+                  }
+                }
+              }
+
+              ws['!merges'] = merges;
+              ws['!cols'] = [
+                { wch: 6 },   // STT
+                { wch: 18 },  // Mã Quy Cách
+                { wch: 38 },  // Tên Model Kèm Màu
+                { wch: 22 },  // Dòng Xe
+                { wch: 22 },  // Màu Sắc
+                { wch: 14 }   // Ngày Cập Nhật
+              ];
+
+              XLSXStyle.utils.book_append_sheet(wb, ws, "Bang_Ma_Xe");
+              XLSXStyle.writeFile(wb, `DKBike_Bang_Ma_Quy_Cach_Xe_${today.replace(/\//g, '_')}.xlsx`);
+            };
+
+            const handleStartEditPartCode = (item: OqcPartCodeItem) => {
+              setEditingPartCode(item);
+              setPartCodeFormCode(item.partCode);
+              setPartCodeFormNameWithColor(item.nameWithColor);
+              setPartCodeFormModel(item.model);
+              setPartCodeFormColor(item.color);
+              setPartCodeFormError('');
+              setShowAddPartCodeModal(true);
+            };
+
+            const handleDeletePartCode = (item: OqcPartCodeItem) => {
+              if (!window.confirm(`Xác nhận xóa mã quy cách "${item.partCode}" (${item.nameWithColor})?`)) return;
+              const updated = oqcPartCodes.filter(x => x.id !== item.id && x.partCode !== item.partCode);
+              saveOqcPartCodes(updated);
+            };
+
+            const handleResetDefaultPartCodes = () => {
+              if (!window.confirm(`Khôi phục lại toàn bộ ${INITIAL_OQC_PART_CODES.length} mã quy cách xe gốc từ nhà máy? Các thay đổi tùy biến trước đó sẽ được làm mới.`)) return;
+              saveOqcPartCodes(INITIAL_OQC_PART_CODES);
+              alert(`Đã khôi phục thành công ${INITIAL_OQC_PART_CODES.length} mã quy cách gốc!`);
+            };
+
+            return (
+              <div className="space-y-3 animate-in fade-in duration-150">
+                {/* Minimalist Toolbar */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative w-56 sm:w-72">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={partCodeSearch}
+                        onChange={e => {
+                          setPartCodeSearch(e.target.value);
+                          setPartCodeCurrentPage(1);
+                        }}
+                        placeholder="Tìm theo mã, tên model, màu xe..."
+                        className="w-full pl-8 pr-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-slate-400 outline-hidden"
+                      />
+                    </div>
+
+                    <select
+                      value={partCodeModelFilter}
+                      onChange={e => {
+                        setPartCodeModelFilter(e.target.value);
+                        setPartCodeCurrentPage(1);
+                      }}
+                      className="bg-slate-50 border border-slate-300 text-slate-900 font-bold text-xs rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-slate-400 outline-hidden cursor-pointer"
+                    >
+                      <option value="All">Tất cả model ({uniquePartCodeModels.length})</option>
+                      {uniquePartCodeModels.map(m => {
+                        const count = oqcPartCodes.filter(x => x.model === m).length;
+                        return (
+                          <option key={m} value={m}>
+                            {m} ({count} màu)
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingPartCode(null);
+                        setPartCodeFormCode('');
+                        setPartCodeFormNameWithColor('');
+                        setPartCodeFormModel('');
+                        setPartCodeFormColor('');
+                        setPartCodeFormError('');
+                        setShowAddPartCodeModal(true);
+                      }}
+                      className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Thêm mã xe
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPastePartCodesText('');
+                        setPastePartCodesError('');
+                        setShowPastePartCodesModal(true);
+                      }}
+                      className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer shadow-xs"
+                      title="Dán danh sách mã quy cách hàng loạt từ bảng tính Excel"
+                    >
+                      <Copy className="w-3.5 h-3.5 text-blue-600" /> Dán hàng loạt
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportPartCodesExcel}
+                      className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer shadow-xs"
+                      title="Tải bảng mã xe thành phẩm (Excel)"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Xuất Excel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetDefaultPartCodes}
+                      className="text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 px-2 py-1.5 rounded-lg transition cursor-pointer"
+                      title="Khôi phục danh mục mã xe gốc"
+                    >
+                      Khôi phục gốc
+                    </button>
+                  </div>
+                </div>
+
+                {/* Table */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                  {filteredPartCodes.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400 text-xs">
+                      Không tìm thấy mã quy cách phù hợp.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto max-h-[550px]">
+                      <table className="min-w-full divide-y divide-slate-200 text-xs">
+                        <thead className="bg-slate-800 text-white font-bold uppercase text-[10px] tracking-wider sticky top-0 z-10 select-none">
+                          <tr>
+                            <th scope="col" className="px-3 py-2.5 text-center w-10">STT</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Mã Quy Cách</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Tên Model Kèm Màu</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Dòng Xe (Model)</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Màu Sắc</th>
+                            <th scope="col" className="px-3 py-2.5 text-center">Cập Nhật</th>
+                            <th scope="col" className="px-3 py-2.5 text-center w-20">Thao Tác</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white font-medium text-slate-700">
+                          {paginatedList.map((item, idx) => {
+                            const globalIdx = partCodePageSize === 0 ? idx : (safeCurrentPage - 1) * partCodePageSize + idx;
+                            return (
+                              <tr key={item.id || item.partCode} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-3 py-2 text-center font-mono text-slate-400">{globalIdx + 1}</td>
+                                <td className="px-3 py-2 font-mono font-bold text-blue-700">{item.partCode}</td>
+                                <td className="px-3 py-2 font-bold text-slate-900">{item.nameWithColor}</td>
+                                <td className="px-3 py-2 text-slate-700">{item.model}</td>
+                                <td className="px-3 py-2 text-slate-600">{item.color}</td>
+                                <td className="px-3 py-2 text-center font-mono text-[11px] text-slate-400">{item.updatedAt || '--'}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEditPartCode(item)}
+                                      className="text-slate-400 hover:text-blue-600 p-1 rounded transition cursor-pointer"
+                                      title="Chỉnh sửa"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeletePartCode(item)}
+                                      className="text-slate-400 hover:text-rose-600 p-1 rounded transition cursor-pointer"
+                                      title="Xóa"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Pagination */}
+                {filteredPartCodes.length > partCodePageSize && partCodePageSize > 0 && (
+                  <div className="flex items-center justify-between text-xs text-slate-500 pt-2">
+                    <span>
+                      Hiển thị {(safeCurrentPage - 1) * partCodePageSize + 1} - {Math.min(safeCurrentPage * partCodePageSize, filteredPartCodes.length)} / {filteredPartCodes.length} mã
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={safeCurrentPage === 1}
+                        onClick={() => setPartCodeCurrentPage(p => Math.max(1, p - 1))}
+                        className="px-2.5 py-1 bg-white border border-slate-200 rounded text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 font-bold cursor-pointer"
+                      >
+                        Trước
+                      </button>
+                      <span className="px-2 font-mono font-bold text-slate-800">
+                        {safeCurrentPage} / {totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={safeCurrentPage === totalPages}
+                        onClick={() => setPartCodeCurrentPage(p => Math.min(totalPages, p + 1))}
+                        className="px-2.5 py-1 bg-white border border-slate-200 rounded text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 font-bold cursor-pointer"
+                      >
+                        Sau
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ================================== 4. VISUAL KCS/OQC DASHBOARD ================================== */}
           {oqcSubView === 'dashboard' && (() => {
               // Real-world dynamic live coordinates
               const liveLapRapTotal = filteredOqc.length;
@@ -8809,7 +9200,15 @@ export default function QualityInspectionRecords({
                   <input
                     type="text"
                     value={newCarPartCode}
-                    onChange={e => setNewCarPartCode(e.target.value)}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setNewCarPartCode(val);
+                      const matched = lookupPartCode(val);
+                      if (matched) {
+                        setNewCarModel(matched.model);
+                        if (matched.color) setNewCarColor(matched.color);
+                      }
+                    }}
                     placeholder="TEMDV11202"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold font-mono text-xs focus:bg-white focus:ring-2 focus:ring-blue-500 outline-hidden"
                   />
@@ -8972,6 +9371,325 @@ export default function QualityInspectionRecords({
                 >
                   Báo Phẩm Bàn Giao
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Thêm / Chỉnh sửa Mã Quy Cách Xe */}
+      {showAddPartCodeModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-extrabold text-slate-850 text-sm uppercase text-blue-700 flex items-center gap-2">
+                <Tag className="w-4 h-4" /> {editingPartCode ? 'Chỉnh Sửa Mã Quy Cách' : 'Thêm Mã Quy Cách Mới'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddPartCodeModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                setPartCodeFormError('');
+                const code = partCodeFormCode.trim().toUpperCase();
+                const name = partCodeFormNameWithColor.trim();
+                const model = partCodeFormModel.trim();
+                let color = partCodeFormColor.trim();
+
+                if (!code) {
+                  setPartCodeFormError('Vui lòng nhập Mã quy cách!');
+                  return;
+                }
+                if (!name) {
+                  setPartCodeFormError('Vui lòng nhập Tên model kèm màu!');
+                  return;
+                }
+                if (!model) {
+                  setPartCodeFormError('Vui lòng nhập hoặc chọn Dòng xe (Model)!');
+                  return;
+                }
+                if (!color && name.includes(' - ')) {
+                  color = name.split(' - ').slice(1).join(' - ').trim();
+                }
+
+                const today = new Date().toLocaleDateString('vi-VN');
+                const newItem: OqcPartCodeItem = {
+                  id: editingPartCode ? editingPartCode.id : `PC-${code}-${Date.now()}`,
+                  partCode: code,
+                  nameWithColor: name,
+                  model: model,
+                  color: color || 'Tiêu chuẩn',
+                  updatedAt: today
+                };
+
+                let updatedList: OqcPartCodeItem[];
+                if (editingPartCode) {
+                  updatedList = oqcPartCodes.map(x => x.id === editingPartCode.id || x.partCode === editingPartCode.partCode ? newItem : x);
+                } else {
+                  const existingIdx = oqcPartCodes.findIndex(x => x.partCode === code);
+                  if (existingIdx > -1) {
+                    if (!window.confirm(`Mã quy cách "${code}" đã tồn tại trong danh mục. Bạn có muốn ghi đè thông tin?`)) return;
+                    updatedList = [...oqcPartCodes];
+                    updatedList[existingIdx] = newItem;
+                  } else {
+                    updatedList = [newItem, ...oqcPartCodes];
+                  }
+                }
+
+                saveOqcPartCodes(updatedList);
+                setShowAddPartCodeModal(false);
+                setEditingPartCode(null);
+              }}
+              className="space-y-3.5 text-xs"
+            >
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                  Mã Quy Cách (Part Code):
+                </label>
+                <input
+                  type="text"
+                  value={partCodeFormCode}
+                  onChange={e => setPartCodeFormCode(e.target.value.toUpperCase())}
+                  placeholder="Ví dụ: TEBDS10101, TEMDV11202..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold font-mono text-xs focus:bg-white focus:ring-2 focus:ring-blue-500 outline-hidden uppercase"
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                  Tên Model Kèm Màu:
+                </label>
+                <input
+                  type="text"
+                  value={partCodeFormNameWithColor}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setPartCodeFormNameWithColor(val);
+                    if (val.includes(' - ')) {
+                      const parts = val.split(' - ');
+                      if (!partCodeFormModel) setPartCodeFormModel(parts[0].trim());
+                      setPartCodeFormColor(parts.slice(1).join(' - ').trim());
+                    }
+                  }}
+                  placeholder="Ví dụ: DK S1 - Đen khói, DK Gogo S - Đỏ đun..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-xs focus:bg-white focus:ring-2 focus:ring-blue-500 outline-hidden"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Dòng Xe (Model):
+                  </label>
+                  <input
+                    type="text"
+                    value={partCodeFormModel}
+                    onChange={e => setPartCodeFormModel(e.target.value)}
+                    placeholder="DK S1, DK Gogo..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-xs focus:bg-white focus:ring-2 focus:ring-blue-500 outline-hidden"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Màu Sắc:
+                  </label>
+                  <input
+                    type="text"
+                    value={partCodeFormColor}
+                    onChange={e => setPartCodeFormColor(e.target.value)}
+                    placeholder="Đen khói, Đỏ đun..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-xs focus:bg-white focus:ring-2 focus:ring-blue-500 outline-hidden"
+                  />
+                </div>
+              </div>
+
+              {partCodeFormError && (
+                <div className="p-2 bg-rose-50 text-rose-700 text-xs font-bold rounded-lg border border-rose-200">
+                  ⚠️ {partCodeFormError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 border-t pt-3 font-bold">
+                <button
+                  type="button"
+                  onClick={() => setShowAddPartCodeModal(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs transition cursor-pointer"
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2 rounded-xl text-xs transition cursor-pointer shadow-xs"
+                >
+                  {editingPartCode ? 'Lưu Thay Đổi' : 'Thêm Vào Danh Mục'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Dán danh sách mã quy cách hàng loạt */}
+      {showPastePartCodesModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full p-6 space-y-4 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-extrabold text-slate-850 text-sm uppercase text-blue-700 flex items-center gap-2">
+                <Copy className="w-4 h-4" /> DÁN DANH SÁCH MÃ QUY CÁCH HÀNG LOẠT (EXCEL / LARK)
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPastePartCodesModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
+              <p className="font-bold text-slate-700">Hướng dẫn định dạng 3 cột:</p>
+              <div className="bg-white p-1.5 px-2.5 rounded border border-slate-300 font-mono text-[11px] text-slate-800 font-bold overflow-x-auto whitespace-nowrap">
+                Mã Quy Cách [Tab] Tên model kèm màu [Tab] Model
+              </div>
+              <p className="text-[11px]">Ví dụ: <code className="bg-slate-200 px-1 py-0.5 rounded font-mono">TEBDS10101	DK S1 - Đen khói	DK S1</code></p>
+            </div>
+
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                setPastePartCodesError('');
+                const raw = pastePartCodesText.trim();
+                if (!raw) {
+                  setPastePartCodesError('Vui lòng dán nội dung danh sách mã quy cách!');
+                  return;
+                }
+
+                const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+                const parsedItems: OqcPartCodeItem[] = [];
+                const today = new Date().toLocaleDateString('vi-VN');
+
+                lines.forEach((line, idx) => {
+                  const parts = line.includes('\t') ? line.split('\t') : (line.includes(',') ? line.split(',') : line.split(/\s{2,}/));
+                  const p0 = (parts[0] || '').trim().toUpperCase();
+                  const p1 = (parts[1] || '').trim();
+                  const p2 = (parts[2] || '').trim();
+
+                  // Skip header line
+                  if (p0.includes('MÃ') || p0.includes('QUY CÁCH') || p0 === 'CODE' || p0 === 'PARTCODE') return;
+                  if (!p0) return;
+
+                  let color = '';
+                  if (p1.includes(' - ')) {
+                    color = p1.split(' - ').slice(1).join(' - ').trim();
+                  } else if (p2 && p1.startsWith(p2)) {
+                    color = p1.replace(p2, '').trim();
+                  } else {
+                    color = p1;
+                  }
+
+                  parsedItems.push({
+                    id: `PC-${p0}-${idx + 1}`,
+                    partCode: p0,
+                    nameWithColor: p1 || p0,
+                    model: p2 || (p1.includes(' - ') ? p1.split(' - ')[0].trim() : 'DKBike'),
+                    color: color || 'Tiêu chuẩn',
+                    updatedAt: today
+                  });
+                });
+
+                if (parsedItems.length === 0) {
+                  setPastePartCodesError('Không nhận diện được dòng dữ liệu hợp lệ nào. Vui lòng kiểm tra lại định dạng dán!');
+                  return;
+                }
+
+                let finalList: OqcPartCodeItem[];
+                if (pastePartCodesMode === 'replace') {
+                  if (!window.confirm(`Xác nhận GHI ĐÈ THAY THẾ TOÀN BỘ danh mục hiện tại bằng ${parsedItems.length} mã vừa dán?`)) return;
+                  finalList = parsedItems;
+                } else {
+                  const map = new Map<string, OqcPartCodeItem>();
+                  oqcPartCodes.forEach(x => map.set(x.partCode.toUpperCase(), x));
+                  parsedItems.forEach(x => map.set(x.partCode.toUpperCase(), x));
+                  finalList = Array.from(map.values());
+                }
+
+                saveOqcPartCodes(finalList);
+                setShowPastePartCodesModal(false);
+                setPastePartCodesText('');
+                alert(`Đã nạp thành công ${parsedItems.length} mã quy cách vào hệ thống!`);
+              }}
+              className="space-y-3 flex-1 flex flex-col min-h-0 text-xs"
+            >
+              <div className="flex items-center gap-4 py-1">
+                <span className="font-bold text-slate-700 text-xs">Chế độ nạp:</span>
+                <label className="flex items-center gap-1.5 cursor-pointer font-medium text-slate-700">
+                  <input
+                    type="radio"
+                    name="pasteMode"
+                    value="merge"
+                    checked={pastePartCodesMode === 'merge'}
+                    onChange={() => setPastePartCodesMode('merge')}
+                  />
+                  Thêm mới &amp; Cập nhật mã trùng (Khuyên dùng)
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer font-medium text-slate-700">
+                  <input
+                    type="radio"
+                    name="pasteMode"
+                    value="replace"
+                    checked={pastePartCodesMode === 'replace'}
+                    onChange={() => setPastePartCodesMode('replace')}
+                  />
+                  Ghi đè thay thế toàn bộ
+                </label>
+              </div>
+
+              <div className="flex-1 min-h-0 flex flex-col space-y-1">
+                <label className="font-bold text-slate-700 block">Dán danh sách tại đây (Ctrl + V):</label>
+                <textarea
+                  value={pastePartCodesText}
+                  onChange={e => setPastePartCodesText(e.target.value)}
+                  placeholder="TEBDS10101	DK S1 - Đen khói	DK S1&#10;TEBDS10102	DK S1 - Đỏ	DK S1&#10;TEBDS10103	DK S1 - Ghi pha lê	DK S1"
+                  className="w-full flex-1 bg-slate-50 border border-slate-300 p-2.5 font-mono text-[11px] focus:bg-white rounded-xl focus:ring-1 focus:ring-blue-500 focus:outline-none resize-none overflow-y-auto"
+                />
+              </div>
+
+              {pastePartCodesError && (
+                <div className="p-2 bg-rose-50 text-rose-700 font-bold rounded-lg border border-rose-200">
+                  ⚠️ {pastePartCodesError}
+                </div>
+              )}
+
+              <div className="flex justify-between items-center border-t pt-3 font-bold">
+                <span className="text-[11px] text-slate-500 font-mono">
+                  {pastePartCodesText.split('\n').filter(Boolean).length} dòng được dán
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowPastePartCodesModal(false)}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs transition cursor-pointer"
+                  >
+                    Hủy Bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-xl text-xs transition cursor-pointer shadow-xs"
+                  >
+                    Bắt Đầu Nạp Dữ Liệu
+                  </button>
+                </div>
               </div>
             </form>
           </div>
