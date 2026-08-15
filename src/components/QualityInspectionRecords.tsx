@@ -5319,39 +5319,37 @@ export default function QualityInspectionRecords({
             const paginatedRecords = displayLsxRecords.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
 
             const handleQuickPass = (record: OQCRecord, nextIndex?: number) => {
+              if (typeof nextIndex === 'number' && nextIndex < paginatedRecords.length) {
+                const nextInput = document.getElementById(`kcs-pass-input-${nextIndex}`);
+                if (nextInput) nextInput.focus();
+              }
+
               const nowTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
               const nowDate = new Date().toLocaleDateString('vi-VN');
               const nowMonth = new Date().getMonth() + 1;
               const nowYear = new Date().getFullYear();
 
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
-              const updated = oqcRecords.map(r => {
-                if (r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial)) {
-                  return {
-                    ...r,
-                    status: 'Đạt' as const,
-                    defectDetail: '',
-                    rootCause: '',
-                    failedCount: 0,
-                    checkTime: nowTime,
-                    date: nowDate,
-                    month: nowMonth,
-                    year: nowYear,
-                    checkedBy: 'Liễu Tùng Lâm'
-                  };
-                }
-                return r;
-              });
-
-              setOqcRecords(updated);
-              setTimeout(() => {
-                safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-              }, 0);
-
-              if (typeof nextIndex === 'number' && nextIndex < paginatedRecords.length) {
-                const nextInput = document.getElementById(`kcs-pass-input-${nextIndex}`);
-                if (nextInput) nextInput.focus();
+              const updated = [...oqcRecords];
+              const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
+              if (index !== -1) {
+                updated[index] = {
+                  ...updated[index],
+                  status: 'Đạt' as const,
+                  defectDetail: '',
+                  rootCause: '',
+                  failedCount: 0,
+                  checkTime: nowTime,
+                  date: nowDate,
+                  month: nowMonth,
+                  year: nowYear,
+                  checkedBy: 'Liễu Tùng Lâm'
+                };
               }
+
+              React.startTransition(() => {
+                setOqcRecords(updated);
+              });
             };
 
             const handleQuickFail = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
@@ -5361,38 +5359,35 @@ export default function QualityInspectionRecords({
               const nowYear = new Date().getFullYear();
 
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
-              const updated = oqcRecords.map(r => {
-                if (r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial)) {
-                  return {
-                    ...r,
-                    status: 'Lỗi' as const,
-                    defectDetail: defectDetail || 'Lỗi KCS',
-                    rootCause: rootCause || '',
-                    failedCount: 1,
-                    checkTime: nowTime,
-                    date: nowDate,
-                    month: nowMonth,
-                    year: nowYear,
-                    checkedBy: 'Liễu Tùng Lâm'
-                  };
-                }
-                return r;
-              });
+              const updated = [...oqcRecords];
+              const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
+              if (index !== -1) {
+                updated[index] = {
+                  ...updated[index],
+                  status: 'Lỗi' as const,
+                  defectDetail: defectDetail || 'Lỗi KCS',
+                  rootCause: rootCause || '',
+                  failedCount: 1,
+                  checkTime: nowTime,
+                  date: nowDate,
+                  month: nowMonth,
+                  year: nowYear,
+                  checkedBy: 'Liễu Tùng Lâm'
+                };
+              }
 
-              setOqcRecords(updated);
-              setTimeout(() => {
-                safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-              }, 0);
+              React.startTransition(() => {
+                setOqcRecords(updated);
+              });
             };
 
             const handleDeleteCar = (record: OQCRecord) => {
               if (!window.confirm(`Xóa xe Sêri ${record.serialNo} khỏi hệ thống?`)) return;
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = oqcRecords.filter(r => r.id !== record.id && (!targetSerial || !r.serialNo || r.serialNo.trim().toUpperCase() !== targetSerial));
-              setOqcRecords(updated);
-              setTimeout(() => {
-                safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-              }, 0);
+              React.startTransition(() => {
+                setOqcRecords(updated);
+              });
             };
 
             const handleBatchPassAllPending = () => {
@@ -5429,10 +5424,9 @@ export default function QualityInspectionRecords({
                 }
                 return r;
               });
-              setOqcRecords(updated);
-              setTimeout(() => {
-                safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-              }, 0);
+              React.startTransition(() => {
+                setOqcRecords(updated);
+              });
             };
 
             return (

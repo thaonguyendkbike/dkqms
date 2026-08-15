@@ -1024,11 +1024,15 @@ export function App() {
     localDirtyKeys.current = s;
   }
 
-  // 13 tables of large and relational transaction data to be stored as independent subcollections
+  // Massive datasets stored as high-efficiency document chunks to optimize Firestore reads (15 reads instead of 29,000 reads)
+  const CHUNKED_KEYS = [
+    'dk_oqc_records'
+  ];
+
+  // Large and relational transaction data to be stored as independent subcollections
   const SUBCOLLECTION_KEYS = [
     'dk_iqc_records',
     'dk_pqc_records',
-    'dk_oqc_records',
     'dk_daily_logs',
     'dk_tasks',
     'dk_weekly_plans',
@@ -1149,9 +1153,29 @@ export function App() {
       if (method === 'cloud') {
         console.log(`[Conflict Resolution]: Bỏ qua thay đổi cục bộ của '${key}' và tải mới hoàn toàn từ Cloud.`);
         const isSubcollection = SUBCOLLECTION_KEYS.includes(key);
+        const isChunked = CHUNKED_KEYS.includes(key);
         let serverRecords: any[] = [];
         
-        if (isSubcollection) {
+        if (isChunked) {
+          const docRef = doc(db, 'dk_db_sync', key);
+          const docSnap = await getDoc(docRef);
+          const docData = docSnap.data();
+          if (docData && docData.isChunked && docData.chunkCount) {
+            const chunkPromises = [];
+            for (let i = 0; i < docData.chunkCount; i++) {
+              chunkPromises.push(getDoc(doc(db, 'dk_db_sync', `${key}_chunk_${i}`)));
+            }
+            const chunkSnaps = await Promise.all(chunkPromises);
+            let assembled: any[] = [];
+            chunkSnaps.forEach(cs => {
+              const cd = cs.data();
+              if (cd && Array.isArray(cd.data)) assembled = assembled.concat(cd.data);
+            });
+            serverRecords = deduplicateOqcRecords(assembled);
+          } else if (docData && Array.isArray(docData.data)) {
+            serverRecords = docData.data;
+          }
+        } else if (isSubcollection) {
           const subCollectionRef = collection(db, 'dk_db_sync', key, 'records');
           const querySnap = await getDocs(subCollectionRef);
           querySnap.forEach((docSnap) => {
@@ -1162,9 +1186,7 @@ export function App() {
             }
           });
           
-          if (key === 'dk_oqc_records') {
-            serverRecords = deduplicateOqcRecords(serverRecords);
-          } else if (key === 'dk_daily_logs') {
+          if (key === 'dk_daily_logs') {
             serverRecords = sanitizeDailyLogs(serverRecords);
           } else if (key === 'dk_defects') {
             serverRecords = sanitizeDefects(serverRecords);
@@ -1227,8 +1249,28 @@ export function App() {
       } else if (method === 'merge') {
         console.log(`[Conflict Resolution]: Hợp nhất thông minh dữ liệu giữa local và Cloud cho '${key}'.`);
         const isSubcollection = SUBCOLLECTION_KEYS.includes(key);
+        const isChunked = CHUNKED_KEYS.includes(key);
         let serverRecords: any[] = [];
-        if (isSubcollection) {
+        if (isChunked) {
+          const docRef = doc(db, 'dk_db_sync', key);
+          const docSnap = await getDoc(docRef);
+          const docData = docSnap.data();
+          if (docData && docData.isChunked && docData.chunkCount) {
+            const chunkPromises = [];
+            for (let i = 0; i < docData.chunkCount; i++) {
+              chunkPromises.push(getDoc(doc(db, 'dk_db_sync', `${key}_chunk_${i}`)));
+            }
+            const chunkSnaps = await Promise.all(chunkPromises);
+            let assembled: any[] = [];
+            chunkSnaps.forEach(cs => {
+              const cd = cs.data();
+              if (cd && Array.isArray(cd.data)) assembled = assembled.concat(cd.data);
+            });
+            serverRecords = deduplicateOqcRecords(assembled);
+          } else if (docData && Array.isArray(docData.data)) {
+            serverRecords = docData.data;
+          }
+        } else if (isSubcollection) {
           const subCollectionRef = collection(db, 'dk_db_sync', key, 'records');
           const querySnap = await getDocs(subCollectionRef);
           querySnap.forEach((docSnap) => {
@@ -1320,7 +1362,7 @@ export function App() {
 
   const getCanonicalArray = (arr: any[], key: string): any[] => {
     if (!Array.isArray(arr)) return [];
-    const isSub = SUBCOLLECTION_KEYS.includes(key);
+    const isSub = SUBCOLLECTION_KEYS.includes(key) || CHUNKED_KEYS.includes(key);
     const itemsWithIds = arr.map((item, idx) => {
       const id = getItemId(item, key, idx);
       return { id, cleaned: cleanAndSortObjectSubcollection(item, isSub) };
@@ -1340,7 +1382,7 @@ export function App() {
       const parsed1 = JSON.parse(str1);
       const parsed2 = JSON.parse(str2);
 
-      const isSub = SUBCOLLECTION_KEYS.includes(key);
+      const isSub = SUBCOLLECTION_KEYS.includes(key) || CHUNKED_KEYS.includes(key);
       if (Array.isArray(parsed1) && Array.isArray(parsed2)) {
         const canon1 = getCanonicalArray(parsed1, key);
         const canon2 = getCanonicalArray(parsed2, key);
@@ -1442,7 +1484,42 @@ export function App() {
         const val = dirtyItems[key];
         const docRef = doc(db, 'dk_db_sync', key);
 
-        if (SUBCOLLECTION_KEYS.includes(key)) {
+        if (CHUNKED_KEYS.includes(key)) {
+          // Process massive dataset into high-efficiency chunked documents (2000 records/chunk)
+          const currentList = Array.isArray(val) ? val : [];
+          const CHUNK_SIZE = 2000;
+          const totalChunks = Math.ceil(currentList.length / CHUNK_SIZE) || 1;
+
+          for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
+            const chunkData = currentList.slice(cIdx * CHUNK_SIZE, (cIdx + 1) * CHUNK_SIZE);
+            const chunkRef = doc(db, 'dk_db_sync', `${key}_chunk_${cIdx}`);
+            ops.push({
+              type: 'set',
+              ref: chunkRef,
+              data: {
+                chunkIndex: cIdx,
+                parentKey: key,
+                data: chunkData,
+                updatedAt: timestamp
+              }
+            });
+          }
+
+          // Meta document tracking chunks
+          ops.push({
+            type: 'set',
+            ref: docRef,
+            data: {
+              isChunked: true,
+              chunkCount: totalChunks,
+              totalRecords: currentList.length,
+              updatedBy: email,
+              updatedAt: timestamp
+            }
+          });
+
+          console.log(`[Batch Sync Chunked] Key: ${key}. Split ${currentList.length} records into ${totalChunks} documents.`);
+        } else if (SUBCOLLECTION_KEYS.includes(key)) {
           // Process large array as independent documents in subcollections
           const currentList = Array.isArray(val) ? val : [];
           let prevList: any[] = [];
@@ -2020,7 +2097,39 @@ export function App() {
 
         const docRef = doc(db, 'dk_db_sync', key);
 
-        if (SUBCOLLECTION_KEYS.includes(key)) {
+        if (CHUNKED_KEYS.includes(key)) {
+          const currentList = Array.isArray(parsed) ? parsed : [];
+          const CHUNK_SIZE = 2000;
+          const totalChunks = Math.ceil(currentList.length / CHUNK_SIZE) || 1;
+
+          for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
+            const chunkData = currentList.slice(cIdx * CHUNK_SIZE, (cIdx + 1) * CHUNK_SIZE);
+            const chunkRef = doc(db, 'dk_db_sync', `${key}_chunk_${cIdx}`);
+            ops.push({
+              type: 'set',
+              ref: chunkRef,
+              data: {
+                chunkIndex: cIdx,
+                parentKey: key,
+                data: chunkData,
+                updatedAt: timestamp
+              }
+            });
+          }
+
+          ops.push({
+            type: 'set',
+            ref: docRef,
+            data: {
+              isChunked: true,
+              chunkCount: totalChunks,
+              totalRecords: currentList.length,
+              updatedBy: email,
+              updatedAt: timestamp,
+              forcedSync: true
+            }
+          });
+        } else if (SUBCOLLECTION_KEYS.includes(key)) {
           const currentList = Array.isArray(parsed) ? parsed : [];
           
           // Lấy dữ liệu nền tảng đã đồng bộ lần cuối từ máy chủ đám mây
@@ -2622,9 +2731,9 @@ export function App() {
         setConflictModalOpen(true);
       }
 
-      // Now set up real-time onSnapshot listeners for each SUBCOLLECTION_KEYS
+      // Now set up real-time onSnapshot listeners for each SUBCOLLECTION_KEYS and CHUNKED_KEYS
       let listenersInitialized = 0;
-      const totalListeners = SUBCOLLECTION_KEYS.length;
+      const totalListeners = SUBCOLLECTION_KEYS.length + CHUNKED_KEYS.length;
 
       SUBCOLLECTION_KEYS.forEach((key) => {
         const subCollectionRef = collection(db, 'dk_db_sync', key, 'records');
@@ -2639,9 +2748,6 @@ export function App() {
           });
 
           let finalDisplayData = list;
-          if (key === 'dk_oqc_records' && Array.isArray(list)) {
-            finalDisplayData = deduplicateOqcRecords(list);
-          }
           if (key === 'dk_daily_logs' && Array.isArray(list)) {
             finalDisplayData = sanitizeDailyLogs(list);
           }
@@ -2660,9 +2766,6 @@ export function App() {
             try {
               let parsedLocal = JSON.parse(localSaved);
               if (!Array.isArray(parsedLocal)) parsedLocal = [];
-              if (key === 'dk_oqc_records' && Array.isArray(parsedLocal)) {
-                parsedLocal = deduplicateOqcRecords(parsedLocal);
-              }
               if (key === 'dk_daily_logs' && Array.isArray(parsedLocal)) {
                 parsedLocal = sanitizeDailyLogs(parsedLocal);
               }
@@ -2686,8 +2789,6 @@ export function App() {
               // Clean up and prevent duplicates from building up during the merge by sanitizing the final merged list
               if (key === 'dk_daily_logs' && Array.isArray(finalDisplayData)) {
                 finalDisplayData = sanitizeDailyLogs(finalDisplayData);
-              } else if (key === 'dk_oqc_records' && Array.isArray(finalDisplayData)) {
-                finalDisplayData = deduplicateOqcRecords(finalDisplayData);
               } else if (key === 'dk_defects' && Array.isArray(finalDisplayData)) {
                 finalDisplayData = sanitizeDefects(finalDisplayData);
               }
@@ -2719,8 +2820,6 @@ export function App() {
                   // Ensure any merged data is properly sanitized and deduplicated to prevent list bloating
                   if (key === 'dk_daily_logs' && Array.isArray(finalDisplayData)) {
                     finalDisplayData = sanitizeDailyLogs(finalDisplayData);
-                  } else if (key === 'dk_oqc_records' && Array.isArray(finalDisplayData)) {
-                    finalDisplayData = deduplicateOqcRecords(finalDisplayData);
                   } else if (key === 'dk_defects' && Array.isArray(finalDisplayData)) {
                     finalDisplayData = sanitizeDefects(finalDisplayData);
                   }
@@ -2734,7 +2833,7 @@ export function App() {
           // Safe clearing of the dirty flag once the server has received all our local writes (completely caught up)
           const sanitizedServerList = key === 'dk_daily_logs' 
             ? sanitizeDailyLogs(list) 
-            : (key === 'dk_oqc_records' ? deduplicateOqcRecords(list) : (key === 'dk_defects' ? sanitizeDefects(list) : list));
+            : (key === 'dk_defects' ? sanitizeDefects(list) : list);
 
           if (isDirty) {
             const isServerIdenticalToLocal = isFunctionallyIdentical(JSON.stringify(finalDisplayData), JSON.stringify(sanitizedServerList), key);
@@ -2797,13 +2896,12 @@ export function App() {
           else if (key === 'dk_daily_logs') setDailyLogs(finalDisplayData);
           else if (key === 'dk_iqc_records') setIqcRecords(finalDisplayData);
           else if (key === 'dk_pqc_records') setPqcRecords(finalDisplayData);
-          else if (key === 'dk_oqc_records') setOqcRecords(finalDisplayData);
           else if (key === 'dk_defects') setDefects(finalDisplayData);
           else if (key === 'dk_fmea') setFmea(finalDisplayData);
           else if (key === 'dk_improvement_actions') setImprovementActions(finalDisplayData);
 
           // Check if legacy data exists and auto-migrate if subcollection is empty (and user hasn't explicitly deleted or modified items)
-          if (['dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records', 'dk_defects', 'dk_fmea', 'dk_ecos', 'dk_capas', 'dk_daily_logs', 'dk_tasks', 'dk_ptsp_tasks', 'dk_weekly_plans', 'dk_monthly_plans', 'dk_qms_quality_planning_tasks'].includes(key)) {
+          if (['dk_iqc_records', 'dk_pqc_records', 'dk_defects', 'dk_fmea', 'dk_ecos', 'dk_capas', 'dk_daily_logs', 'dk_tasks', 'dk_ptsp_tasks', 'dk_weekly_plans', 'dk_monthly_plans', 'dk_qms_quality_planning_tasks'].includes(key)) {
             const deletedStr = localStorage.getItem(`${key}_deleted_ids`);
             const deletedCount = deletedStr ? JSON.parse(deletedStr).length : 0;
             if (finalDisplayData.length === 0 && !isDirty && deletedCount === 0 && legacyRootData[key] && legacyRootData[key].length > 0) {
@@ -2832,10 +2930,8 @@ export function App() {
           if (localSaved) {
             try {
               const parsed = JSON.parse(localSaved);
-              const sanitizedParsed = key === 'dk_daily_logs' ? sanitizeDailyLogs(parsed) : (key === 'dk_oqc_records' ? deduplicateOqcRecords(parsed) : (key === 'dk_defects' ? sanitizeDefects(parsed) : parsed));
+              const sanitizedParsed = key === 'dk_daily_logs' ? sanitizeDailyLogs(parsed) : (key === 'dk_defects' ? sanitizeDefects(parsed) : parsed);
               
-              // PREVENT LOOP: Set the sync baselines immediately so that the resulting state updates 
-              // do not trigger unnecessary cloud writes in the React useEffect hooks!
               const serialized = JSON.stringify(sanitizedParsed);
               lastSyncedValues.current[key] = serialized;
               lastSeenValues.current[key] = serialized;
@@ -2849,12 +2945,130 @@ export function App() {
               else if (key === 'dk_daily_logs') setDailyLogs(sanitizedParsed);
               else if (key === 'dk_iqc_records') setIqcRecords(sanitizedParsed);
               else if (key === 'dk_pqc_records') setPqcRecords(sanitizedParsed);
-              else if (key === 'dk_oqc_records') setOqcRecords(sanitizedParsed);
               else if (key === 'dk_defects') setDefects(sanitizedParsed);
               else if (key === 'dk_fmea') setFmea(sanitizedParsed);
               else if (key === 'dk_improvement_actions') setImprovementActions(sanitizedParsed);
             } catch (e) {}
           }
+          listenersInitialized++;
+          if (listenersInitialized >= totalListeners) {
+            setSyncStatus('error');
+            setSyncLoaded(true);
+          }
+        });
+        unsubscribes.current.push(unsub);
+      });
+
+      // Set up real-time onSnapshot listeners for CHUNKED_KEYS (single meta document per key)
+      CHUNKED_KEYS.forEach((key) => {
+        const metaDocRef = doc(db, 'dk_db_sync', key);
+        const unsub = onSnapshot(metaDocRef, async (docSnap) => {
+          if (!docSnap.exists()) {
+            listenersInitialized++;
+            if (listenersInitialized >= totalListeners) {
+              setSyncSource('firestore');
+              setSyncStatus('synced');
+              setTimeout(() => setSyncStatus('idle'), 1500);
+              setSyncLoaded(true);
+            }
+            return;
+          }
+
+          const metaData = docSnap.data();
+          const serverTime = metaData?.updatedAt;
+          const localSaved = localStorage.getItem(key);
+          const isDirty = localDirtyKeys.current.has(key) || localStorage.getItem(`${key}_is_dirty`) === 'true';
+
+          if (conflictKeys.includes(key)) {
+            console.log(`[Chunked onSnapshot]: Phân hệ '${key}' đang có xung đột chưa giải quyết. Tạm dừng gộp.`);
+            return;
+          }
+
+          let assembledList: any[] = [];
+
+          if (metaData?.isChunked && metaData?.chunkCount) {
+            try {
+              const chunkPromises = [];
+              for (let i = 0; i < metaData.chunkCount; i++) {
+                chunkPromises.push(getDoc(doc(db, 'dk_db_sync', `${key}_chunk_${i}`)));
+              }
+              const chunkSnaps = await Promise.all(chunkPromises);
+              chunkSnaps.forEach(cs => {
+                const cd = cs.data();
+                if (cd && Array.isArray(cd.data)) {
+                  assembledList = assembledList.concat(cd.data);
+                }
+              });
+            } catch (err) {
+              console.error(`[Chunked Fetch Error] for ${key}:`, err);
+            }
+          } else if (Array.isArray(metaData?.data)) {
+            assembledList = metaData.data;
+          }
+
+          if (key === 'dk_oqc_records') {
+            assembledList = deduplicateOqcRecords(assembledList);
+          }
+
+          let finalDisplayData = assembledList;
+
+          if (isDirty && localSaved) {
+            try {
+              let parsedLocal = JSON.parse(localSaved);
+              if (Array.isArray(parsedLocal)) {
+                if (key === 'dk_oqc_records') {
+                  parsedLocal = deduplicateOqcRecords(parsedLocal);
+                }
+                const localIds = new Set(parsedLocal.map((item: any, idx: number) => getItemId(item, key, idx)));
+                const serverItemsToKeep = assembledList.filter((item: any, idx: number) => {
+                  const itemId = getItemId(item, key, idx);
+                  return !localIds.has(itemId);
+                });
+                finalDisplayData = deduplicateOqcRecords([...parsedLocal, ...serverItemsToKeep]);
+              }
+            } catch (e) {
+              console.error(`[Smart Merge Error] for ${key}:`, e);
+            }
+          } else if (!isDirty && localSaved && assembledList.length === 0) {
+            try {
+              const parsedLocal = JSON.parse(localSaved);
+              if (Array.isArray(parsedLocal) && parsedLocal.length > 0) {
+                finalDisplayData = deduplicateOqcRecords(parsedLocal);
+              }
+            } catch (e) {}
+          }
+
+          const serialized = JSON.stringify(finalDisplayData);
+          lastSyncedValues.current[key] = JSON.stringify(assembledList);
+          lastSeenValues.current[key] = serialized;
+          localStorage.setItem(key, serialized);
+          if (serverTime) {
+            localStorage.setItem(`${key}_last_synced_at`, serverTime);
+            serverTimestamps.current[key] = serverTime;
+          }
+
+          if (isDirty) {
+            const isIdentical = isFunctionallyIdentical(serialized, JSON.stringify(assembledList), key);
+            if (isIdentical) {
+              localStorage.setItem(`${key}_is_dirty`, 'false');
+              localDirtyKeys.current.delete(key);
+              console.log(`[Chunked onSnapshot Catch-up] Server caught up with local state for ${key}. Clearing dirty flags.`);
+            }
+          }
+
+          if (key === 'dk_oqc_records') {
+            setOqcRecords(finalDisplayData);
+          }
+
+          listenersInitialized++;
+          if (listenersInitialized >= totalListeners) {
+            setSyncSource('firestore');
+            setSyncStatus('synced');
+            setTimeout(() => setSyncStatus('idle'), 1500);
+            setSyncLoaded(true);
+          }
+        }, (err) => {
+          console.error(`[Chunked onSnapshot Error] for ${key}:`, err);
           listenersInitialized++;
           if (listenersInitialized >= totalListeners) {
             setSyncStatus('error');
@@ -5707,8 +5921,11 @@ export function App() {
   }, [pqcRecords]);
 
   useEffect(() => {
-    safeStorage.setItem('dk_oqc_records', JSON.stringify(oqcRecords));
-    syncToServer('dk_oqc_records', oqcRecords);
+    const timer = setTimeout(() => {
+      safeStorage.setItem('dk_oqc_records', JSON.stringify(oqcRecords));
+      syncToServer('dk_oqc_records', oqcRecords);
+    }, 300);
+    return () => clearTimeout(timer);
   }, [oqcRecords]);
 
   useEffect(() => {
