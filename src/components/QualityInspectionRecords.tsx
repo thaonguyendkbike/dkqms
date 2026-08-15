@@ -1736,12 +1736,12 @@ export default function QualityInspectionRecords({
     }
   };
 
-  // Compute unique dynamic values for selects
-  const uniqueIqcSuppliers = Array.from(new Set(iqcRecords.map(r => r.supplierName ? r.supplierName.trim() : ''))).filter(Boolean);
-  const uniquePqcModels = Array.from(new Set(pqcRecords.map(r => r.model ? r.model.trim() : ''))).filter(Boolean);
-  const uniqueOqcModels = Array.from(new Set(oqcRecords.map(r => r.model ? r.model.trim() : ''))).filter(Boolean);
-  const uniqueOqcColors = Array.from(new Set(oqcRecords.map(r => r.color ? r.color.trim() : ''))).filter(Boolean);
-  const uniqueOqcDates = Array.from(
+  // Compute unique dynamic values for selects with useMemo
+  const uniqueIqcSuppliers = useMemo(() => Array.from(new Set(iqcRecords.map(r => r.supplierName ? r.supplierName.trim() : ''))).filter(Boolean), [iqcRecords]);
+  const uniquePqcModels = useMemo(() => Array.from(new Set(pqcRecords.map(r => r.model ? r.model.trim() : ''))).filter(Boolean), [pqcRecords]);
+  const uniqueOqcModels = useMemo(() => Array.from(new Set(oqcRecords.map(r => r.model ? r.model.trim() : ''))).filter(Boolean), [oqcRecords]);
+  const uniqueOqcColors = useMemo(() => Array.from(new Set(oqcRecords.map(r => r.color ? r.color.trim() : ''))).filter(Boolean), [oqcRecords]);
+  const uniqueOqcDates = useMemo(() => Array.from(
     new Set(
       oqcRecords
         .filter(r => {
@@ -1765,9 +1765,9 @@ export default function QualityInspectionRecords({
     if (ya !== yb) return ya - yb;
     if (ma !== mb) return ma - mb;
     return da - db;
-  });
-  const uniqueOqcMonths = Array.from(new Set(oqcRecords.map(r => r.month))).filter(Boolean).sort((a, b) => Number(a) - Number(b));
-  const uniqueOqcYears = Array.from(new Set(oqcRecords.map(r => r.year))).filter(Boolean).sort((a, b) => Number(a) - Number(b));
+  }), [oqcRecords, oqcFilterMonth, oqcFilterYear]);
+  const uniqueOqcMonths = useMemo(() => Array.from(new Set(oqcRecords.map(r => r.month))).filter(Boolean).sort((a, b) => Number(a) - Number(b)), [oqcRecords]);
+  const uniqueOqcYears = useMemo(() => Array.from(new Set(oqcRecords.map(r => r.year))).filter(Boolean).sort((a, b) => Number(a) - Number(b)), [oqcRecords]);
   
   // Unique inspection dates for KCS Line Station (sorted newest to oldest)
   const uniqueKcsDates = useMemo(() => {
@@ -1820,14 +1820,18 @@ export default function QualityInspectionRecords({
     return arr.length > 0 ? arr : [2026];
   }, [oqcRecords]);
   
-  // Unique LSX list for OQC Line Station
-  const uniqueOqcLsxs = useMemo(() => {
-    const set = new Set<string>();
-    oqcRecords.forEach(r => {
-      if (r.lsx && r.lsx.trim()) set.add(r.lsx.trim());
-    });
-    const list = Array.from(set).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-    return list.length > 0 ? list : ['26-10', '26-15', '26-20'];
+  // Unique LSX list & fast O(1) count map for OQC Line Station
+  const { uniqueOqcLsxs, oqcLsxCountsMap } = useMemo(() => {
+    const countsMap = new Map<string, number>();
+    for (let i = 0; i < oqcRecords.length; i++) {
+      const lsx = (oqcRecords[i].lsx || '26-10').trim();
+      countsMap.set(lsx, (countsMap.get(lsx) || 0) + 1);
+    }
+    const list = Array.from(countsMap.keys()).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+    return {
+      uniqueOqcLsxs: list.length > 0 ? list : ['26-10', '26-15', '26-20'],
+      oqcLsxCountsMap: countsMap
+    };
   }, [oqcRecords]);
 
   // Defect autocomplete dictionary (aggregated from OQC, PQC, CAPA, and standard industry defects)
@@ -1984,7 +1988,8 @@ export default function QualityInspectionRecords({
     }).sort((a, b) => {
       const sA = (a.serialNo || a.id || '').trim();
       const sB = (b.serialNo || b.id || '').trim();
-      return sA.localeCompare(sB, undefined, { numeric: true, sensitivity: 'base' });
+      if (sA === sB) return 0;
+      return sA < sB ? -1 : 1;
     });
   }, [oqcRecords, oqcSearch, oqcFilterModel, oqcFilterColor, oqcFilterDate, oqcFilterMonth, oqcFilterYear, oqcFilterWeek]);
 
@@ -2460,6 +2465,88 @@ export default function QualityInspectionRecords({
   const [newCarPartCode, setNewCarPartCode] = useState('TEM-GEN');
   const [newCarModel, setNewCarModel] = useState('DK Gogo');
   const [newCarColor, setNewCarColor] = useState('Trắng');
+
+  // Fast & optimized KCS Station data pipeline (Single Pass O(N) calculation)
+  const kcsStationStats = useMemo(() => {
+    const isAllLsx = kcsSelectedLsx === 'All';
+    const cleanLsx = (kcsSelectedLsx || '26-10').trim();
+    const cleanSearch = kcsSearch.trim().toLowerCase();
+    const hasSearch = cleanSearch.length > 0;
+
+    let passedCount = 0;
+    let failedCount = 0;
+    let pendingCount = 0;
+
+    const filtered: OQCRecord[] = [];
+
+    for (let i = 0; i < oqcRecords.length; i++) {
+      const r = oqcRecords[i];
+      // 1. LSX filter
+      if (!isAllLsx && (r.lsx || '26-10').trim() !== cleanLsx) {
+        continue;
+      }
+      // 2. Date/Month/Year filters
+      if (kcsFilterDate !== 'All' && (r.date ? standardizeDate(r.date) : '') !== kcsFilterDate) {
+        continue;
+      }
+      if (kcsFilterMonth !== 'All' && String(r.month) !== kcsFilterMonth) {
+        continue;
+      }
+      if (kcsFilterYear !== 'All' && String(r.year) !== kcsFilterYear) {
+        continue;
+      }
+      // 3. Status filter
+      if (kcsStatusFilter !== 'All') {
+        if (kcsStatusFilter === 'Chưa kiểm tra' && (r.status === 'Đạt' || r.status === 'Lỗi')) continue;
+        if (kcsStatusFilter === 'Đạt' && r.status !== 'Đạt') continue;
+        if (kcsStatusFilter === 'Lỗi' && r.status !== 'Lỗi') continue;
+      }
+      // 4. Search text
+      if (hasSearch) {
+        const matchSerial = (r.serialNo || '').toLowerCase().includes(cleanSearch);
+        const matchChassis = (r.chassisNo || '').toLowerCase().includes(cleanSearch);
+        const matchEngine = (r.engineNo || '').toLowerCase().includes(cleanSearch);
+        const matchModel = (r.model || '').toLowerCase().includes(cleanSearch);
+        const matchColor = (r.color || '').toLowerCase().includes(cleanSearch);
+        const matchDefect = (r.defectDetail || '').toLowerCase().includes(cleanSearch);
+        const matchLsx = (r.lsx || '').toLowerCase().includes(cleanSearch);
+        if (!matchSerial && !matchChassis && !matchEngine && !matchModel && !matchColor && !matchDefect && !matchLsx) {
+          continue;
+        }
+      }
+
+      // Single-pass count
+      if (r.status === 'Đạt') {
+        passedCount++;
+      } else if (r.status === 'Lỗi') {
+        failedCount++;
+      } else {
+        pendingCount++;
+      }
+
+      filtered.push(r);
+    }
+
+    // Fast natural sort for serial numbers
+    filtered.sort((a, b) => {
+      const sA = (a.serialNo || a.id || '').trim();
+      const sB = (b.serialNo || b.id || '').trim();
+      if (sA === sB) return 0;
+      return sA < sB ? -1 : 1;
+    });
+
+    const totalCars = filtered.length;
+    const yieldRate = totalCars > 0 ? Math.round((passedCount / totalCars) * 100) : 100;
+
+    return {
+      displayRecords: filtered,
+      totalCars,
+      passedCars: passedCount,
+      failedCars: failedCount,
+      pendingCars: pendingCount,
+      yieldRate
+    };
+  }, [oqcRecords, kcsSelectedLsx, kcsFilterDate, kcsFilterMonth, kcsFilterYear, kcsStatusFilter, kcsSearch]);
 
   // Finished Goods Handover (Báo phẩm bàn giao kho) states
   const [handoverScanInput, setHandoverScanInput] = useState('');
@@ -5209,9 +5296,14 @@ export default function QualityInspectionRecords({
           {/* ================================== 1. TRẠM KIỂM ĐỊNH KCS REALTIME THEO LSX ================================== */}
           {oqcSubView === 'station' && (() => {
             const isAllLsx = kcsSelectedLsx === 'All';
-            const baseLsxRecords = isAllLsx 
-              ? oqcRecords 
-              : oqcRecords.filter(r => (r.lsx || '26-10').trim() === (kcsSelectedLsx || '26-10').trim());
+            const {
+              displayRecords: displayLsxRecords,
+              totalCars: totalLsxCars,
+              passedCars: passedLsxCars,
+              failedCars: failedLsxCars,
+              pendingCars: pendingLsxCars,
+              yieldRate: lsxYield
+            } = kcsStationStats;
 
             // Active filter count
             let activeKcsFilterCount = 0;
@@ -5220,40 +5312,6 @@ export default function QualityInspectionRecords({
             if (kcsFilterYear !== 'All') activeKcsFilterCount++;
             if (kcsStatusFilter !== 'All') activeKcsFilterCount++;
             if (kcsSelectedLsx !== 'All') activeKcsFilterCount++;
-
-            const displayLsxRecords = baseLsxRecords.filter(r => {
-              if (kcsFilterDate !== 'All' && (r.date ? standardizeDate(r.date) : '') !== kcsFilterDate) return false;
-              if (kcsFilterMonth !== 'All' && String(r.month) !== kcsFilterMonth) return false;
-              if (kcsFilterYear !== 'All' && String(r.year) !== kcsFilterYear) return false;
-
-              if (kcsStatusFilter !== 'All') {
-                if (kcsStatusFilter === 'Chưa kiểm tra' && (r.status === 'Đạt' || r.status === 'Lỗi')) return false;
-                if (kcsStatusFilter === 'Đạt' && r.status !== 'Đạt') return false;
-                if (kcsStatusFilter === 'Lỗi' && r.status !== 'Lỗi') return false;
-              }
-              if (kcsSearch.trim()) {
-                const s = kcsSearch.trim().toLowerCase();
-                const matchSerial = (r.serialNo || '').toLowerCase().includes(s);
-                const matchChassis = (r.chassisNo || '').toLowerCase().includes(s);
-                const matchEngine = (r.engineNo || '').toLowerCase().includes(s);
-                const matchModel = (r.model || '').toLowerCase().includes(s);
-                const matchColor = (r.color || '').toLowerCase().includes(s);
-                const matchDefect = (r.defectDetail || '').toLowerCase().includes(s);
-                const matchLsx = (r.lsx || '').toLowerCase().includes(s);
-                return matchSerial || matchChassis || matchEngine || matchModel || matchColor || matchDefect || matchLsx;
-              }
-              return true;
-            }).sort((a, b) => {
-              const sA = (a.serialNo || a.id || '').trim();
-              const sB = (b.serialNo || b.id || '').trim();
-              return sA.localeCompare(sB, undefined, { numeric: true, sensitivity: 'base' });
-            });
-
-            const totalLsxCars = displayLsxRecords.length;
-            const passedLsxCars = displayLsxRecords.filter(r => r.status === 'Đạt').length;
-            const failedLsxCars = displayLsxRecords.filter(r => r.status === 'Lỗi').length;
-            const pendingLsxCars = displayLsxRecords.filter(r => r.status !== 'Đạt' && r.status !== 'Lỗi').length;
-            const lsxYield = totalLsxCars > 0 ? Math.round((passedLsxCars / totalLsxCars) * 100) : 100;
 
             const pageSize = 50;
             const totalPages = Math.max(1, Math.ceil(displayLsxRecords.length / pageSize));
@@ -5266,8 +5324,9 @@ export default function QualityInspectionRecords({
               const nowMonth = new Date().getMonth() + 1;
               const nowYear = new Date().getFullYear();
 
+              const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = oqcRecords.map(r => {
-                if (r.id === record.id || r.serialNo.trim().toUpperCase() === record.serialNo.trim().toUpperCase()) {
+                if (r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial)) {
                   return {
                     ...r,
                     status: 'Đạt' as const,
@@ -5285,7 +5344,9 @@ export default function QualityInspectionRecords({
               });
 
               setOqcRecords(updated);
-              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+              setTimeout(() => {
+                safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+              }, 0);
 
               if (typeof nextIndex === 'number' && nextIndex < paginatedRecords.length) {
                 const nextInput = document.getElementById(`kcs-pass-input-${nextIndex}`);
@@ -5299,8 +5360,9 @@ export default function QualityInspectionRecords({
               const nowMonth = new Date().getMonth() + 1;
               const nowYear = new Date().getFullYear();
 
+              const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = oqcRecords.map(r => {
-                if (r.id === record.id || r.serialNo.trim().toUpperCase() === record.serialNo.trim().toUpperCase()) {
+                if (r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial)) {
                   return {
                     ...r,
                     status: 'Lỗi' as const,
@@ -5318,14 +5380,19 @@ export default function QualityInspectionRecords({
               });
 
               setOqcRecords(updated);
-              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+              setTimeout(() => {
+                safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+              }, 0);
             };
 
             const handleDeleteCar = (record: OQCRecord) => {
               if (!window.confirm(`Xóa xe Sêri ${record.serialNo} khỏi hệ thống?`)) return;
-              const updated = oqcRecords.filter(r => r.id !== record.id && r.serialNo.trim().toUpperCase() !== record.serialNo.trim().toUpperCase());
+              const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
+              const updated = oqcRecords.filter(r => r.id !== record.id && (!targetSerial || !r.serialNo || r.serialNo.trim().toUpperCase() !== targetSerial));
               setOqcRecords(updated);
-              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+              setTimeout(() => {
+                safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+              }, 0);
             };
 
             const handleBatchPassAllPending = () => {
@@ -5363,7 +5430,9 @@ export default function QualityInspectionRecords({
                 return r;
               });
               setOqcRecords(updated);
-              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+              setTimeout(() => {
+                safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+              }, 0);
             };
 
             return (
@@ -5382,7 +5451,7 @@ export default function QualityInspectionRecords({
                     >
                       <option value="All">Tất cả Lệnh SX ({oqcRecords.length} xe)</option>
                       {uniqueOqcLsxs.map(lsx => {
-                        const count = oqcRecords.filter(r => (r.lsx || '26-10').trim() === lsx.trim()).length;
+                        const count = oqcLsxCountsMap.get(lsx) || 0;
                         return (
                           <option key={lsx} value={lsx}>
                             LSX {lsx} ({count} xe)
@@ -5586,9 +5655,12 @@ export default function QualityInspectionRecords({
                         className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer"
                       >
                         <option value="All">Tất cả Lệnh SX ({oqcRecords.length} xe)</option>
-                        {uniqueOqcLsxs.map(lsx => (
-                          <option key={lsx} value={lsx}>LSX {lsx}</option>
-                        ))}
+                        {uniqueOqcLsxs.map(lsx => {
+                          const count = oqcLsxCountsMap.get(lsx) || 0;
+                          return (
+                            <option key={lsx} value={lsx}>LSX {lsx} ({count} xe)</option>
+                          );
+                        })}
                       </select>
                     </div>
                   </div>
