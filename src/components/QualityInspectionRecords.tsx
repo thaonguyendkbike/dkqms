@@ -3780,20 +3780,6 @@ export default function QualityInspectionRecords({
       let yColIdx = 15;
       let totalLlrColIdx = 16;
 
-      const isModelName = (v: string): boolean => {
-        const clean = v.trim().toLowerCase();
-        if (!clean) return false;
-        if (/^\d+-\d+$/.test(clean)) return false;
-        if (!isNaN(Number(clean))) return false;
-        if (clean.length < 2 || clean.length > 25) return false;
-        
-        const motorBrands = ['gogo', 'roma', 'volt', 'xman', 'wave', 'mona', 'ares', 'dk', 'lite', 'cross', 'crea', 'ebike', 'motor', 'xe', 'vespa', 'classic', 'samurai', 'sparta', 'tron', 'miku', 'cola', 'apollo', 'nova', 'z-buff', 'z-mtp'];
-        if (motorBrands.some(brand => clean.includes(brand))) return true;
-        
-        const textPattern = /^[a-zA-Z\s\dđđ]+$/i;
-        return textPattern.test(clean) && !/\d{4,}/.test(clean); 
-      };
-
       // Detect header row if present
       const firstLine = lines[0];
       let isHeader = false;
@@ -3801,48 +3787,68 @@ export default function QualityInspectionRecords({
         const firstCols = firstLine.includes('\t') ? firstLine.split('\t') : firstLine.split(',');
         isHeader = firstCols.some(col => {
           const l = col.toLowerCase();
-          return l.includes('mã') || l.includes('quy cách') || l.includes('sêri') || l.includes('serial') || l.includes('lệnh') || l.includes('model') || l.includes('mẫu') || l.includes('lsx') || l.includes('ngày') || l.includes('tháng') || l.includes('tình trạng') || l.includes('đạt');
+          return l.includes('mã') || l.includes('quy cách') || l.includes('sêri') || l.includes('serial') || l.includes('lệnh') || l.includes('model') || l.includes('mẫu') || l.includes('lsx') || l.includes('ngày') || l.includes('tháng') || l.includes('tình trạng') || l.includes('đạt') || l.includes('stt') || l.includes('số tt');
         });
 
         if (isHeader) {
           firstCols.forEach((col, idx) => {
             const cleanCol = col.trim().toLowerCase();
-            if (cleanCol.includes('mã quy') || cleanCol.includes('mã qc') || cleanCol === 'mã' || cleanCol.includes('part')) {
+            if (cleanCol.includes('mã quy') || cleanCol.includes('mã qc') || cleanCol.includes('mã tem') || cleanCol === 'mã' || cleanCol.includes('part')) {
               partCodeColIdx = idx;
-            } else if (cleanCol.includes('sêri') || cleanCol.includes('serial') || cleanCol.includes('số sê') || cleanCol.includes('số khung') || cleanCol.includes('khung')) {
+            } else if (cleanCol.includes('sêri') || cleanCol.includes('seri') || cleanCol.includes('serial') || cleanCol.includes('số sê') || cleanCol.includes('số khung') || cleanCol.includes('khung') || cleanCol.includes('chassis') || cleanCol.includes('vin')) {
               serialNoColIdx = idx;
             } else if (cleanCol.includes('màu') || cleanCol.includes('sơn') || cleanCol.includes('color')) {
               colorColIdx = idx;
-            } else if (cleanCol.includes('tình trạng') || cleanCol === 'trạng thái' || cleanCol === 'status') {
+            } else if (cleanCol.includes('tình trạng') || cleanCol === 'trạng thái' || cleanCol === 'status' || cleanCol.includes('kết quả')) {
               statusColIdx = idx;
             } else if (cleanCol === 'đạt' || cleanCol === 'có đạt' || cleanCol === 'pass') {
               passColIdx = idx;
-            } else if (cleanCol.includes('chi tiết lỗi') || cleanCol.includes('khuyết tật') || cleanCol === 'lỗi' || cleanCol.includes('defect')) {
+            } else if (cleanCol.includes('chi tiết lỗi') || cleanCol.includes('khuyết tật') || cleanCol.includes('nội dung lỗi') || cleanCol === 'lỗi' || cleanCol.includes('defect')) {
               defectColIdx = idx;
             } else if (cleanCol.includes('số lỗi') || cleanCol.includes('số lượng lỗi') || cleanCol.includes('vết lỗi')) {
               failedCountColIdx = idx;
-            } else if (cleanCol === 'nguyên nhân') {
+            } else if (cleanCol === 'nguyên nhân' || cleanCol.includes('nguyên nhân 1')) {
               causeColIdx1 = idx;
-            } else if (cleanCol.includes('chi tiết nguyên nhân')) {
+            } else if (cleanCol.includes('chi tiết nguyên nhân') || cleanCol.includes('nguyên nhân 2')) {
               causeColIdx2 = idx;
             } else if (cleanCol === 'lsx' || cleanCol.includes('lệnh sản') || cleanCol.includes('số lsx')) {
               lsxColIdx = idx;
-            } else if (cleanCol === 'model' || cleanCol.includes('dòng xe') || cleanCol.includes('mẫu xe')) {
+            } else if (cleanCol === 'model' || cleanCol.includes('dòng xe') || cleanCol.includes('mẫu xe') || cleanCol.includes('tên xe')) {
               modelColIdx = idx;
-            } else if (cleanCol.includes('giờ') || cleanCol.includes('thời gian')) {
+            } else if (cleanCol.includes('giờ') || cleanCol.includes('thời gian') || cleanCol.includes('time')) {
               checkTimeColIdx = idx;
-            } else if (cleanCol.includes('ngày kiểm') || cleanCol.includes('ngày kcs') || cleanCol === 'ngày/tháng/năm' || cleanCol === 'date') {
+            } else if (cleanCol.includes('ngày kiểm') || cleanCol.includes('ngày kcs') || cleanCol === 'ngày/tháng/năm' || cleanCol === 'date' || cleanCol.includes('ngày tháng')) {
               fullDateColIdx = idx;
-            } else if (cleanCol === 'ngày' && idx >= 3) {
+            } else if (cleanCol === 'ngày' && idx >= 2) {
               dColIdx = idx;
-            } else if (cleanCol === 'tháng' && idx >= 3) {
+            } else if (cleanCol === 'tháng' && idx >= 2) {
               mColIdx = idx;
-            } else if (cleanCol === 'năm' && idx >= 3) {
+            } else if (cleanCol === 'năm' && idx >= 2) {
               yColIdx = idx;
             } else if (cleanCol === 'sllr' || cleanCol.includes('lắp ráp')) {
               totalLlrColIdx = idx;
             }
           });
+        } else {
+          // Fallback when NO header is present: Check if column 0 is numeric index (STT: 1, 2, 3...)
+          const isCol0Number = /^\d+$/.test(firstCols[0]?.trim()) && Number(firstCols[0]?.trim()) < 100000;
+          const colOffset = isCol0Number ? 1 : 0;
+          partCodeColIdx = 0 + colOffset;
+          serialNoColIdx = 1 + colOffset;
+          colorColIdx = 2 + colOffset;
+          statusColIdx = 3 + colOffset;
+          passColIdx = 4 + colOffset;
+          defectColIdx = 5 + colOffset;
+          failedCountColIdx = 6 + colOffset;
+          causeColIdx1 = 7 + colOffset;
+          causeColIdx2 = 8 + colOffset;
+          lsxColIdx = 9 + colOffset;
+          modelColIdx = 10 + colOffset;
+          checkTimeColIdx = 12 + colOffset;
+          dColIdx = 13 + colOffset;
+          mColIdx = 14 + colOffset;
+          yColIdx = 15 + colOffset;
+          totalLlrColIdx = 16 + colOffset;
         }
       }
 
@@ -4065,16 +4071,21 @@ export default function QualityInspectionRecords({
 
       const finalUpdatedList = [...finalParsed, ...remainingOldRecords];
 
-      // --- CRITICAL: IMMEDIATE PERSISTENCE TO SAFE STORAGE & DIRTY FLAG ---
+      // --- CRITICAL: IMMEDIATE PERSISTENCE TO SAFE STORAGE, DIRTY FLAG & INSTANT CLOUD SYNC ---
       setOqcRecords(finalUpdatedList);
       safeStorage.setItem('dk_oqc_records', JSON.stringify(finalUpdatedList));
       try {
         localStorage.setItem('dk_oqc_records_is_dirty', 'true');
       } catch (e) {}
 
+      // Trigger immediate synchronization to Firebase
+      if (typeof (window as any).syncToServer === 'function') {
+        (window as any).syncToServer('dk_oqc_records', finalUpdatedList);
+      }
+
       setOqcImportText('');
       setShowImportOqcModal(false);
-      alert(`Nhập thành công ${finalParsed.length} chiếc xe KCS nghiệm thu! (Đã lưu an toàn vào bộ nhớ, Tháng: ${finalParsed[0]?.month || defaultMonth}/${finalParsed[0]?.year || defaultYear}, Bỏ qua: ${skippedCount} hàng trống/tiêu đề/chưa kiểm tra)`);
+      alert(`Nhập thành công ${finalParsed.length} chiếc xe KCS nghiệm thu! (Đã lưu an toàn vào bộ nhớ & đẩy ngay lên Cloud, Tháng: ${finalParsed[0]?.month || defaultMonth}/${finalParsed[0]?.year || defaultYear}, Bỏ qua: ${skippedCount} hàng trống/tiêu đề/chưa kiểm tra)`);
     } catch (err: any) {
       setOqcImportError(`Lỗi phân rã dữ liệu: ${err.message || err}`);
     }
@@ -9410,10 +9421,19 @@ export default function QualityInspectionRecords({
 
                   setOqcRecords(finalRecords);
                   safeStorage.setItem('dk_oqc_records', JSON.stringify(finalRecords));
+                  try {
+                    localStorage.setItem('dk_oqc_records_is_dirty', 'true');
+                  } catch (e) {}
+
+                  // Trigger immediate synchronization to Firebase
+                  if (typeof (window as any).syncToServer === 'function') {
+                    (window as any).syncToServer('dk_oqc_records', finalRecords);
+                  }
+
                   setKcsSelectedLsx(defaultLsx);
                   setLsxImportText('');
                   setShowImportLsxModal(false);
-                  alert(`Nạp thành công ${addedCount} xe mới vào Lệnh Sản Xuất ${defaultLsx}! Trạm KCS đã sẵn sàng kiểm định.`);
+                  alert(`Nạp thành công ${addedCount} xe mới vào Lệnh Sản Xuất ${defaultLsx}! Trạm KCS đã sẵn sàng kiểm định (Đã đồng bộ an toàn lên Cloud).`);
                 } catch (err: any) {
                   setLsxImportError(`Lỗi phân tách dữ liệu LSX: ${err.message || err}`);
                 }

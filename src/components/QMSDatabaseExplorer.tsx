@@ -167,7 +167,7 @@ export default function QMSDatabaseExplorer({
     let otherSize = 0;
     
     try {
-      const allKeys = localStorage.getAllKeys();
+      const allKeys = Object.keys(localStorage);
       allKeys.forEach(k => {
         if (k && k.startsWith('dk_')) {
           const val = localStorage.getItem(k) || '';
@@ -351,7 +351,7 @@ export default function QMSDatabaseExplorer({
   const handleExportJSONBackup = () => {
     try {
       const backup: Record<string, any> = {};
-      const allKeys = localStorage.getAllKeys();
+      const allKeys = Object.keys(localStorage);
       allKeys.forEach((key) => {
         if (key && key.startsWith('dk_')) {
           const val = localStorage.getItem(key);

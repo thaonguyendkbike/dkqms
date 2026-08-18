@@ -1015,7 +1015,7 @@ export function App() {
   if (!localDirtyKeys.current) {
     const s = new Set<string>();
     try {
-      localStorage.getAllKeys().forEach((key) => {
+      Object.keys(localStorage).forEach((key) => {
         if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
           s.add(key.replace('_is_dirty', ''));
         }
@@ -1485,9 +1485,9 @@ export function App() {
         const docRef = doc(db, 'dk_db_sync', key);
 
         if (CHUNKED_KEYS.includes(key)) {
-          // Process massive dataset into high-efficiency chunked documents (2000 records/chunk)
+          // Process massive dataset into high-efficiency chunked documents (400 records/chunk for absolute Firestore safety under 1MB)
           const currentList = Array.isArray(val) ? val : [];
-          const CHUNK_SIZE = 2000;
+          const CHUNK_SIZE = 400;
           const totalChunks = Math.ceil(currentList.length / CHUNK_SIZE) || 1;
 
           for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
@@ -1706,7 +1706,7 @@ export function App() {
     if (syncLoaded && auth.currentUser) {
       const dirtyKeysList: string[] = [];
       try {
-        localStorage.getAllKeys().forEach((key) => {
+        Object.keys(localStorage).forEach((key) => {
           if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
             const moduleKey = key.replace('_is_dirty', '');
             if (!conflictKeys.includes(moduleKey)) {
@@ -1854,7 +1854,7 @@ export function App() {
   const getUnsyncedChanges = () => {
     const dirtyKeysList: string[] = [];
     try {
-      localStorage.getAllKeys().forEach((key) => {
+      Object.keys(localStorage).forEach((key) => {
         if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
           dirtyKeysList.push(key.replace('_is_dirty', ''));
         }
@@ -1987,7 +1987,7 @@ export function App() {
     localStorage.setItem('dk_firebase_quota_exceeded', 'false');
     const localDirtyKeysList: string[] = [];
     try {
-      localStorage.getAllKeys().forEach((key) => {
+      Object.keys(localStorage).forEach((key) => {
         if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
           localDirtyKeysList.push(key.replace('_is_dirty', ''));
         }
@@ -2022,7 +2022,7 @@ export function App() {
     // Thu thập các khóa bẩn đang chờ đồng bộ
     const dirtyKeys: string[] = [];
     try {
-      localStorage.getAllKeys().forEach((key) => {
+      Object.keys(localStorage).forEach((key) => {
         if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
           dirtyKeys.push(key.replace('_is_dirty', ''));
         }
@@ -2099,7 +2099,7 @@ export function App() {
 
         if (CHUNKED_KEYS.includes(key)) {
           const currentList = Array.isArray(parsed) ? parsed : [];
-          const CHUNK_SIZE = 2000;
+          const CHUNK_SIZE = 400;
           const totalChunks = Math.ceil(currentList.length / CHUNK_SIZE) || 1;
 
           for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
@@ -2352,7 +2352,7 @@ export function App() {
   useEffect(() => {
     // Scan localStorage for any keys marked as dirty from a previous offline session
     try {
-      localStorage.getAllKeys().forEach((key) => {
+      Object.keys(localStorage).forEach((key) => {
         if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
           const baseKey = key.replace('_is_dirty', '');
           localDirtyKeys.current.add(baseKey);
@@ -3738,7 +3738,7 @@ export function App() {
       if (isAuth) {
         let hasDirty = false;
         try {
-          localStorage.getAllKeys().forEach((key) => {
+          Object.keys(localStorage).forEach((key) => {
             if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
               hasDirty = true;
             }
