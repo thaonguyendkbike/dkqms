@@ -3679,9 +3679,9 @@ export default function QualityInspectionRecords({
       model: newOqcModel,
       color: newOqcColor,
       status: finalStatus,
-      defectDetail: finalStatus === 'Đạt' ? '' : newOqcDefectDetail,
+      defectDetail: newOqcDefectDetail,
       failedCount: finalStatus === 'Đạt' ? 0 : Number(newOqcFailedCount),
-      rootCause: finalStatus === 'Đạt' ? '' : newOqcRootCause,
+      rootCause: newOqcRootCause,
       lsx: newOqcLsx,
       checkTime: newOqcCheckTime,
       date: newOqcDate,
@@ -3690,8 +3690,8 @@ export default function QualityInspectionRecords({
       totalLlr: 1,
       checkedBy: newOqcCheckedBy,
       imageUrl: newOqcImageUrl,
-      evaluation: finalStatus === 'Đạt' ? '' : newOqcEvaluation,
-      treatment: finalStatus === 'Đạt' ? '' : newOqcTreatment
+      evaluation: newOqcEvaluation,
+      treatment: newOqcTreatment
     };
 
     // Khi nhập tay dữ liệu mới: Tự động gộp các bản ghi trùng lặp
@@ -3762,10 +3762,10 @@ export default function QualityInspectionRecords({
         return {
           ...r,
           status: editOqcStatus,
-          defectDetail: editOqcStatus === 'Đạt' ? '' : editOqcDefectDetail,
-          rootCause: editOqcStatus === 'Đạt' ? '' : editOqcRootCause,
-          evaluation: editOqcStatus === 'Đạt' ? '' : editOqcEvaluation,
-          treatment: editOqcStatus === 'Đạt' ? '' : editOqcTreatment
+          defectDetail: editOqcDefectDetail,
+          rootCause: editOqcRootCause,
+          evaluation: editOqcEvaluation,
+          treatment: editOqcTreatment
         };
       }
       return r;
@@ -5796,11 +5796,13 @@ export default function QualityInspectionRecords({
               const updated = [...oqcRecords];
               const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
               if (index !== -1) {
+                const existingDefect = updated[index].defectDetail || record.defectDetail || '';
+                const existingRootCause = updated[index].rootCause || record.rootCause || '';
                 updated[index] = {
                   ...updated[index],
                   status: 'Đạt' as const,
-                  defectDetail: '',
-                  rootCause: '',
+                  defectDetail: existingDefect,
+                  rootCause: existingRootCause,
                   failedCount: 0,
                   checkTime: nowTime,
                   date: nowDate,
@@ -5810,6 +5812,22 @@ export default function QualityInspectionRecords({
                 };
               }
 
+              React.startTransition(() => {
+                setOqcRecords(updated);
+              });
+            };
+
+            const handleUpdateDefectNote = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
+              const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
+              const updated = [...oqcRecords];
+              const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
+              if (index !== -1) {
+                updated[index] = {
+                  ...updated[index],
+                  defectDetail: defectDetail,
+                  rootCause: typeof rootCause === 'string' ? rootCause : (updated[index].rootCause || '')
+                };
+              }
               React.startTransition(() => {
                 setOqcRecords(updated);
               });
@@ -6245,14 +6263,20 @@ export default function QualityInspectionRecords({
                                 <td className="px-3 py-2">
                                   <AutocompleteInput
                                     value={r.defectDetail || ''}
-                                    placeholder={isPassed ? '-- Không lỗi --' : 'Gõ từ khóa lỗi...'}
-                                    disabled={isPassed}
+                                    placeholder={isPassed ? (r.defectDetail ? r.defectDetail : '-- Không lỗi --') : 'Gõ từ khóa lỗi...'}
+                                    disabled={false}
                                     options={defectDictionary}
-                                    onCommit={val => handleQuickFail(r, val, r.rootCause || '')}
+                                    onCommit={val => {
+                                      if (r.status === 'Đạt') {
+                                        handleUpdateDefectNote(r, val);
+                                      } else {
+                                        handleQuickFail(r, val, r.rootCause || '');
+                                      }
+                                    }}
                                     onChange={() => {}}
                                     className={`w-full text-xs px-2 py-1 rounded border outline-hidden transition ${
                                       isPassed
-                                        ? 'bg-slate-50 text-slate-300 border-transparent cursor-not-allowed text-center'
+                                        ? (r.defectDetail ? 'bg-amber-50/70 text-amber-900 border-amber-300 font-semibold' : 'bg-slate-50 text-slate-400 border-slate-200 focus:bg-white text-center')
                                         : isFailed
                                         ? 'bg-rose-50 text-rose-900 border-rose-300 focus:bg-white font-semibold'
                                         : 'bg-slate-50 text-slate-700 border-slate-200 focus:bg-white'
@@ -6264,14 +6288,20 @@ export default function QualityInspectionRecords({
                                 <td className="px-3 py-2">
                                   <AutocompleteInput
                                     value={r.rootCause || ''}
-                                    placeholder={isPassed ? '--' : 'Nguyên nhân...'}
-                                    disabled={isPassed}
+                                    placeholder={isPassed ? (r.rootCause ? r.rootCause : '--') : 'Nguyên nhân...'}
+                                    disabled={false}
                                     options={causeDictionary}
-                                    onCommit={val => handleQuickFail(r, r.defectDetail || 'Lỗi KCS', val)}
+                                    onCommit={val => {
+                                      if (r.status === 'Đạt') {
+                                        handleUpdateDefectNote(r, r.defectDetail || '', val);
+                                      } else {
+                                        handleQuickFail(r, r.defectDetail || 'Lỗi KCS', val);
+                                      }
+                                    }}
                                     onChange={() => {}}
                                     className={`w-full text-xs px-2 py-1 rounded border outline-hidden transition ${
                                       isPassed
-                                        ? 'bg-slate-50 text-slate-300 border-transparent cursor-not-allowed text-center'
+                                        ? (r.rootCause ? 'bg-amber-50/70 text-amber-900 border-amber-300 font-semibold' : 'bg-slate-50 text-slate-400 border-slate-200 focus:bg-white text-center')
                                         : 'bg-slate-50 text-slate-700 border-slate-200 focus:bg-white'
                                     }`}
                                   />
