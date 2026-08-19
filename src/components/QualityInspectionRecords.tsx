@@ -4784,7 +4784,7 @@ export default function QualityInspectionRecords({
 
     const validItems = liveParsedColorChanges.filter(p => p.isValid);
     if (validItems.length === 0) {
-      setColorChangeError('Không tìm thấy dòng dữ liệu đổi màu hợp lệ nào. Vui lòng kiểm tra lại định dạng: Số seri | Model | Màu cũ | Màu mới | Ngày đổi màu');
+      setColorChangeError('Không tìm thấy dòng dữ liệu hợp lệ nào. Vui lòng kiểm tra lại định dạng: Số Sêri | Model & Màu Cũ | Model & Màu Mới | Ngày đổi');
       return;
     }
 
@@ -4797,17 +4797,21 @@ export default function QualityInspectionRecords({
       // 1. Update OQC records
       const existingSerials = new Set<string>();
       const updatedOqc = oqcRecords.map(r => {
-        const sUpper = r.serialNo.trim().toUpperCase();
+        const sUpper = (r.serialNo || '').trim().toUpperCase();
         existingSerials.add(sUpper);
         const change = serialChangeMap.get(sUpper);
         if (change) {
+          const isStatusChanged = Boolean(change.oldModel && change.newModel && change.oldModel.toLowerCase().trim() !== change.newModel.toLowerCase().trim());
+          const isColorChanged = Boolean(change.oldColor && change.newColor && change.oldColor.toLowerCase().trim() !== change.newColor.toLowerCase().trim());
           return {
             ...r,
-            color: change.newColor,
-            oldColor: change.oldColor || r.color,
-            isColorChanged: true,
-            colorChangeDate: change.date,
-            model: change.model || r.model
+            model: change.newModel || change.model || r.model,
+            color: change.newColor || r.color,
+            oldModel: change.oldModel || r.oldModel || r.model,
+            oldColor: change.oldColor || r.oldColor || r.color,
+            isColorChanged: isColorChanged || r.isColorChanged,
+            isStatusChanged: isStatusChanged || r.isStatusChanged,
+            colorChangeDate: change.date
           };
         }
         return r;
@@ -4818,14 +4822,18 @@ export default function QualityInspectionRecords({
       validItems.forEach(item => {
         const sUpper = item.serialNo.trim().toUpperCase();
         if (!existingSerials.has(sUpper)) {
+          const isStatusChanged = Boolean(item.oldModel && item.newModel && item.oldModel.toLowerCase().trim() !== item.newModel.toLowerCase().trim());
+          const isColorChanged = Boolean(item.oldColor && item.newColor && item.oldColor.toLowerCase().trim() !== item.newColor.toLowerCase().trim());
           newOqcFromChanges.push({
             id: `OQC-${sUpper.replace(/[\/\s.#$\[\]]/g, '_')}`,
-            partCode: 'TEMDV11202',
+            partCode: 'TEM-GEN',
             serialNo: item.serialNo.trim(),
-            model: item.model,
+            model: item.newModel || item.model,
             color: item.newColor,
+            oldModel: item.oldModel || item.model,
             oldColor: item.oldColor,
-            isColorChanged: true,
+            isColorChanged: isColorChanged,
+            isStatusChanged: isStatusChanged,
             colorChangeDate: item.date,
             status: 'Đạt',
             defectDetail: '',
@@ -4847,9 +4855,12 @@ export default function QualityInspectionRecords({
       const newColorChangeRecords: OqcColorChangeRecord[] = validItems.map(item => ({
         id: `CC-${item.serialNo.trim().toUpperCase()}-${item.date.replace(/\//g, '')}-${Date.now()}`,
         serialNo: item.serialNo.trim(),
-        model: item.model,
+        model: item.newModel || item.model,
+        oldModel: item.oldModel || item.model,
+        newModel: item.newModel || item.model,
         oldColor: item.oldColor,
         newColor: item.newColor,
+        changeType: item.changeType,
         date: item.date,
         flag: item.flag,
         createdAt: new Date().toISOString()
@@ -4874,24 +4885,65 @@ export default function QualityInspectionRecords({
         (window as any).syncToServer('dk_oqc_records', finalOqc);
       }
 
-      // 4. Summaries for alert
-      const groups: Record<string, { model: string; oldColor: string; newColor: string; count: number }> = {};
-      validItems.forEach(item => {
-        const k = `${item.model}___${item.oldColor}___${item.newColor}`;
-        if (!groups[k]) {
-          groups[k] = { model: item.model, oldColor: item.oldColor, newColor: item.newColor, count: 0 };
-        }
-        groups[k].count++;
-      });
-      const summaryParts = Object.values(groups).map(g => `${g.count} xe ${g.model} ${g.oldColor} đổi màu thành ${g.count} xe ${g.model} ${g.newColor}`);
+      const statusChangesCount = validItems.filter(v => v.changeType === 'status' || v.changeType === 'both').length;
+      const colorChangesCount = validItems.filter(v => v.changeType === 'color' || v.changeType === 'both').length;
 
       setShowColorChangeModal(false);
       setColorChangeText('');
-      alert(`✓ Đã nhập đổi màu thành công cho ${validItems.length} xe!\n\nChi tiết:\n• ${summaryParts.join('\n• ')}\n\n(Dữ liệu đã tự động cập nhật vào OQC và Báo cáo ngày email)`);
+      alert(`✓ Đã nạp & lưu thành công ${validItems.length} xe chuyển đổi!\n\n• Đổi trạng thái / Model: ${statusChangesCount} xe\n• Đổi màu sơn: ${colorChangesCount} xe\n\n(Dữ liệu đã tự động cập nhật vào OQC và đẩy lên Cloud an toàn)`);
     } catch (err: any) {
-      setColorChangeError(`Lỗi khi xử lý dữ liệu đổi màu: ${err.message || err}`);
+      setColorChangeError(`Lỗi khi lưu dữ liệu: ${err.message || err}`);
     }
   };
+
+  // Robust classification helper for color vs status shifts (with fallbacks for legacy records)
+  const getChangeClassification = useCallback((item: OqcColorChangeRecord) => {
+    const oldModel = (item.oldModel || '').trim();
+    const newModel = (item.newModel || item.model || '').trim();
+    const oldColor = (item.oldColor || '').trim();
+    const newColor = (item.newColor || '').trim();
+
+    const isModelDiff = Boolean(oldModel && newModel && oldModel.toLowerCase() !== newModel.toLowerCase());
+    const isColorDiff = Boolean(oldColor && newColor && oldColor.toLowerCase() !== newColor.toLowerCase());
+
+    let isStatusShift = false;
+    let isColorShift = false;
+
+    if (item.changeType === 'both') {
+      isStatusShift = true;
+      isColorShift = true;
+    } else if (item.changeType === 'status') {
+      isStatusShift = true;
+      isColorShift = isColorDiff;
+    } else if (item.changeType === 'color') {
+      isColorShift = true;
+      isStatusShift = isModelDiff;
+    } else if (isModelDiff && isColorDiff) {
+      isStatusShift = true;
+      isColorShift = true;
+    } else if (isModelDiff) {
+      isStatusShift = true;
+      isColorShift = false;
+    } else if (isColorDiff) {
+      isColorShift = true;
+      isStatusShift = false;
+    } else if (oldColor && newColor && oldColor.toLowerCase() === newColor.toLowerCase()) {
+      // Same color but has record -> it was a status/model change!
+      isStatusShift = true;
+      isColorShift = false;
+    } else {
+      isColorShift = true;
+    }
+
+    return {
+      isStatusShift,
+      isColorShift,
+      displayOldModel: oldModel || item.model,
+      displayNewModel: newModel || item.model,
+      displayOldColor: oldColor || 'Tiêu chuẩn',
+      displayNewColor: newColor || oldColor || 'Tiêu chuẩn'
+    };
+  }, []);
 
   // Filtered color & status changes for the Subtab
   const filteredColorChanges = useMemo(() => {
@@ -4969,20 +5021,19 @@ export default function QualityInspectionRecords({
     const modelsSet = new Set<string>();
 
     filteredColorChanges.forEach(item => {
-      const isStatusShift = Boolean(item.oldModel && item.newModel && item.oldModel.toLowerCase().trim() !== item.newModel.toLowerCase().trim());
-      const isColorShift = Boolean(item.oldColor && item.newColor && item.oldColor.toLowerCase().trim() !== item.newColor.toLowerCase().trim());
+      const cls = getChangeClassification(item);
 
-      if (isStatusShift && isColorShift) {
+      if (cls.isStatusShift && cls.isColorShift) {
         bothShiftCount++;
         colorShiftCount++;
         statusShiftCount++;
-      } else if (isStatusShift) {
+      } else if (cls.isStatusShift) {
         statusShiftCount++;
       } else {
         colorShiftCount++;
       }
 
-      const m = item.newModel || item.model || item.oldModel;
+      const m = cls.displayNewModel || cls.displayOldModel;
       if (m) modelsSet.add(m);
 
       if (item.date) {
@@ -5005,7 +5056,7 @@ export default function QualityInspectionRecords({
       uniqueModels: modelsSet.size,
       thisMonthCount
     };
-  }, [filteredColorChanges]);
+  }, [filteredColorChanges, getChangeClassification]);
 
   return (
     <div className="space-y-6 overflow-y-auto max-h-[calc(100vh-10rem)] pr-2 animate-in fade-in duration-300" id="view_quality_inspection_content">
@@ -8387,23 +8438,23 @@ export default function QualityInspectionRecords({
               </div>
             </div>
 
-            {/* Card 4: Month & Model count */}
+            {/* Card 4: Model & Month Stats */}
             <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
               <div className="flex justify-between items-start">
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">
-                    Đổi trong tháng này
+                    Số Model xe liên quan
                   </span>
                   <span className="text-xl sm:text-2xl font-black text-emerald-700 font-mono mt-1 block">
-                    {colorChangeDashboardStats.thisMonthCount} <span className="text-xs font-bold text-slate-500">xe</span>
+                    {colorChangeDashboardStats.uniqueModels} <span className="text-xs font-bold text-slate-500">model</span>
                   </span>
                 </div>
                 <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
                   <Calendar className="w-4 h-4" />
                 </div>
               </div>
-              <div className="mt-2 text-[10.5px] text-emerald-600 font-bold">
-                Tháng {new Date().getMonth() + 1}/{new Date().getFullYear()} ({colorChangeDashboardStats.uniqueModels} model)
+              <div className="mt-2 text-[10.5px] text-emerald-700 font-bold">
+                Tháng này: {colorChangeDashboardStats.thisMonthCount} xe ({colorChangeDashboardStats.bothShiftCount > 0 ? `${colorChangeDashboardStats.bothShiftCount} xe đổi cả 2` : 'Đã đồng bộ CSDL'})
               </div>
             </div>
           </div>
@@ -8670,8 +8721,7 @@ export default function QualityInspectionRecords({
                           {paginatedColorChanges.map((item, idx) => {
                             const matchedOqc = oqcRecords.find(r => r.serialNo && r.serialNo.trim().toUpperCase() === item.serialNo.trim().toUpperCase());
                             const rowStt = (safeColorChangePage - 1) * colorChangePageSize + idx + 1;
-                            const isStatusShift = Boolean(item.oldModel && item.newModel && item.oldModel.toLowerCase().trim() !== item.newModel.toLowerCase().trim());
-                            const isColorShift = Boolean(item.oldColor && item.newColor && item.oldColor.toLowerCase().trim() !== item.newColor.toLowerCase().trim());
+                            const cls = getChangeClassification(item);
                             
                             return (
                               <tr key={item.id || idx} className="hover:bg-purple-50/40 transition">
@@ -8682,11 +8732,11 @@ export default function QualityInspectionRecords({
                                   </span>
                                 </td>
                                 <td className="p-2.5 text-center">
-                                  {isStatusShift && isColorShift ? (
+                                  {cls.isStatusShift && cls.isColorShift ? (
                                     <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-300 shadow-2xs">
                                       ✨ Đổi cả 2
                                     </span>
-                                  ) : isStatusShift ? (
+                                  ) : cls.isStatusShift ? (
                                     <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-300 shadow-2xs">
                                       🔄 Đổi trạng thái
                                     </span>
@@ -8697,34 +8747,34 @@ export default function QualityInspectionRecords({
                                   )}
                                 </td>
                                 <td className="p-2.5">
-                                  {isStatusShift ? (
+                                  {cls.isStatusShift ? (
                                     <div className="flex items-center gap-1 text-xs">
-                                      <span className="line-through text-slate-400 font-medium">{item.oldModel}</span>
+                                      <span className="line-through text-slate-400 font-medium">{cls.displayOldModel}</span>
                                       <ArrowRight className="w-3 h-3 text-indigo-600 shrink-0" />
                                       <span className="font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
-                                        {item.newModel}
+                                        {cls.displayNewModel}
                                       </span>
                                     </div>
                                   ) : (
                                     <span className="font-extrabold text-slate-800">
-                                      {item.model || item.newModel || item.oldModel}
+                                      {cls.displayNewModel || cls.displayOldModel}
                                     </span>
                                   )}
                                 </td>
                                 <td className="p-2.5 text-center">
-                                  {isColorShift ? (
+                                  {cls.isColorShift ? (
                                     <div className="flex items-center justify-center gap-1 text-xs">
                                       <span className="px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 font-bold border border-rose-200">
-                                        {item.oldColor}
+                                        {cls.displayOldColor}
                                       </span>
                                       <ArrowRight className="w-3 h-3 text-purple-600 shrink-0" />
                                       <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-100 text-purple-800 font-black border border-purple-300">
-                                        {item.newColor}
+                                        {cls.displayNewColor}
                                       </span>
                                     </div>
                                   ) : (
                                     <span className="px-2 py-0.5 rounded text-[10px] bg-slate-100 text-slate-700 font-bold border border-slate-200">
-                                      {item.newColor || item.oldColor}
+                                      {cls.displayNewColor || cls.displayOldColor}
                                     </span>
                                   )}
                                 </td>
