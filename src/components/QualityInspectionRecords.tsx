@@ -2677,6 +2677,7 @@ export default function QualityInspectionRecords({
   // Finished Goods Handover (Báo phẩm bàn giao kho) states
   const [handoverScanInput, setHandoverScanInput] = useState('');
   const [showPasteHandoverModal, setShowPasteHandoverModal] = useState(false);
+  const [editingHandoverItem, setEditingHandoverItem] = useState<any | null>(null);
   const [handoverPasteText, setHandoverPasteText] = useState('');
   const [handoverFilterDate, setHandoverFilterDate] = useState('All');
   const [handoverFilterModel, setHandoverFilterModel] = useState('All');
@@ -7335,7 +7336,9 @@ export default function QualityInspectionRecords({
                       // Lookup in master part codes if found has partCode
                       const pCode = found ? (found.partCode || 'TEM-GEN') : 'TEM-GEN';
                       const matchedPart = lookupPartCode(pCode);
-                      const currentDateStr = new Date().toLocaleDateString('vi-VN');
+                      const now = new Date();
+                      const currentDateStr = standardizeDate(now.toLocaleDateString('vi-VN'));
+                      const currentTimeStr = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 
                       const newItem = {
                         id: `HO-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -7348,8 +7351,8 @@ export default function QualityInspectionRecords({
                         lsx: found ? (found.lsx || 'Ngoại bảng') : 'Ngoại bảng',
                         status: found ? (found.status || 'Chưa kiểm tra') : 'Chưa có dữ liệu KCS',
                         checkTime: found ? (found.checkTime || '--:--') : '--:--',
-                        date: found ? (found.date || currentDateStr) : currentDateStr,
-                        scannedAt: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+                        date: currentDateStr,
+                        scannedAt: currentTimeStr
                       };
 
                       const filtered = handoverScannedList.filter(x => x.serialNo.toUpperCase() !== (found ? found.serialNo.toUpperCase() : serial));
@@ -7592,7 +7595,7 @@ export default function QualityInspectionRecords({
                             <th scope="col" className="px-3 py-2.5 text-left">LSX</th>
                             <th scope="col" className="px-3 py-2.5 text-center">Ngày Quét</th>
                             <th scope="col" className="px-3 py-2.5 text-center">Giờ Bàn Giao</th>
-                            <th scope="col" className="px-3 py-2.5 text-center w-12">Xóa</th>
+                            <th scope="col" className="px-3 py-2.5 text-center w-20">Thao tác</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 bg-white font-medium text-slate-700">
@@ -7609,16 +7612,28 @@ export default function QualityInspectionRecords({
                               <td className="px-3 py-2 text-center font-mono text-slate-500">{item.date || '--'}</td>
                               <td className="px-3 py-2 text-center font-mono text-slate-500">{item.scannedAt}</td>
                               <td className="px-3 py-2 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    saveHandoverList(handoverScannedList.filter(x => x.id !== item.id));
-                                  }}
-                                  className="text-slate-300 hover:text-rose-600 transition p-1 rounded cursor-pointer"
-                                  title="Xóa xe này khỏi danh sách bàn giao"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingHandoverItem({ ...item })}
+                                    className="p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
+                                    title="Chỉnh sửa thông tin xe này"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (window.confirm(`Xóa xe Sêri "${item.serialNo}" khỏi danh sách bàn giao?`)) {
+                                        saveHandoverList(handoverScannedList.filter(x => x.id !== item.id));
+                                      }
+                                    }}
+                                    className="p-1 rounded-md text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                    title="Xóa xe này khỏi danh sách bàn giao"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -11517,6 +11532,10 @@ export default function QualityInspectionRecords({
                 const newItems: any[] = [];
                 const existingSerials = new Set(handoverScannedList.map(x => x.serialNo.toUpperCase()));
 
+                const now = new Date();
+                const scanDateStr = standardizeDate(now.toLocaleDateString('vi-VN'));
+                const scanTimeStr = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
                 lines.forEach(line => {
                   const parts = line.includes('\t') ? line.split('\t') : (line.includes(',') ? line.split(',') : [line]);
                   const serial = parts[0].trim().toUpperCase();
@@ -11540,8 +11559,8 @@ export default function QualityInspectionRecords({
                     lsx: found ? (found.lsx || 'Ngoại bảng') : 'Ngoại bảng',
                     status: found ? (found.status || 'Chưa kiểm tra') : 'Chưa có dữ liệu KCS',
                     checkTime: found ? (found.checkTime || '--:--') : '--:--',
-                    date: found ? (found.date || new Date().toLocaleDateString('vi-VN')) : new Date().toLocaleDateString('vi-VN'),
-                    scannedAt: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+                    date: scanDateStr,
+                    scannedAt: scanTimeStr
                   });
                 });
 
@@ -11583,6 +11602,188 @@ export default function QualityInspectionRecords({
                   className="bg-amber-600 hover:bg-amber-500 text-white px-5 py-2 rounded-xl text-xs transition shadow-md shadow-amber-200 cursor-pointer font-black"
                 >
                   Báo Phẩm Bàn Giao
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Chỉnh sửa Bản Ghi Quét Báo Phẩm Bàn Giao */}
+      {editingHandoverItem && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="font-extrabold text-slate-850 text-sm uppercase text-indigo-700 flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-indigo-600" /> Chỉnh Sửa Bản Ghi Bàn Giao Xe
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingHandoverItem(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg text-lg font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!editingHandoverItem.serialNo || !editingHandoverItem.serialNo.trim()) {
+                  alert('Vui lòng nhập Số Sêri xe!');
+                  return;
+                }
+
+                const updated = handoverScannedList.map(item => 
+                  item.id === editingHandoverItem.id ? editingHandoverItem : item
+                );
+                saveHandoverList(updated);
+                setEditingHandoverItem(null);
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Số Sêri (Tem ĐT) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editingHandoverItem.serialNo}
+                    onChange={e => setEditingHandoverItem({ ...editingHandoverItem, serialNo: e.target.value.toUpperCase() })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-xs font-bold text-slate-900 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Số Khung
+                  </label>
+                  <input
+                    type="text"
+                    value={editingHandoverItem.chassisNo || ''}
+                    onChange={e => setEditingHandoverItem({ ...editingHandoverItem, chassisNo: e.target.value.toUpperCase() })}
+                    placeholder="VD: RLKDK..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-xs text-slate-800 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Số Động Cơ
+                  </label>
+                  <input
+                    type="text"
+                    value={editingHandoverItem.engineNo || ''}
+                    onChange={e => setEditingHandoverItem({ ...editingHandoverItem, engineNo: e.target.value.toUpperCase() })}
+                    placeholder="VD: 10DK..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-xs text-slate-800 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Mã Quy Cách (Part Code)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingHandoverItem.partCode || ''}
+                    onChange={e => {
+                      const pCode = e.target.value.toUpperCase();
+                      const matched = lookupPartCode(pCode);
+                      setEditingHandoverItem({
+                        ...editingHandoverItem,
+                        partCode: pCode,
+                        model: matched ? matched.model : editingHandoverItem.model,
+                        color: matched ? matched.color : editingHandoverItem.color
+                      });
+                    }}
+                    placeholder="VD: SP-01..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-xs text-slate-800 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Dòng Xe (Model)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingHandoverItem.model || ''}
+                    onChange={e => setEditingHandoverItem({ ...editingHandoverItem, model: e.target.value })}
+                    placeholder="VD: DK Roma SX"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-850 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Màu Sắc
+                  </label>
+                  <input
+                    type="text"
+                    value={editingHandoverItem.color || ''}
+                    onChange={e => setEditingHandoverItem({ ...editingHandoverItem, color: e.target.value })}
+                    placeholder="VD: Đỏ bóng / Đen mờ"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-750 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Lệnh Sản Xuất (LSX)
+                  </label>
+                  <input
+                    type="text"
+                    value={editingHandoverItem.lsx || ''}
+                    onChange={e => setEditingHandoverItem({ ...editingHandoverItem, lsx: e.target.value.toUpperCase() })}
+                    placeholder="VD: LSX-0826"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-xs text-slate-800 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Ngày Quét Bàn Giao
+                  </label>
+                  <input
+                    type="text"
+                    value={editingHandoverItem.date || ''}
+                    onChange={e => setEditingHandoverItem({ ...editingHandoverItem, date: e.target.value })}
+                    placeholder="DD/MM/YYYY"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-xs text-slate-800 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+                    Giờ Bàn Giao
+                  </label>
+                  <input
+                    type="text"
+                    value={editingHandoverItem.scannedAt || ''}
+                    onChange={e => setEditingHandoverItem({ ...editingHandoverItem, scannedAt: e.target.value })}
+                    placeholder="HH:mm:ss"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-xs text-slate-800 focus:bg-white focus:ring-1 focus:ring-indigo-500 outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t pt-3 font-bold">
+                <button
+                  type="button"
+                  onClick={() => setEditingHandoverItem(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs transition cursor-pointer"
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="bg-indigo-600 hover:bg-indigo-550 text-white px-5 py-2 rounded-xl text-xs transition shadow-md shadow-indigo-200 cursor-pointer font-black flex items-center gap-1.5"
+                >
+                  <Save className="w-3.5 h-3.5" /> Lưu Thay Đổi
                 </button>
               </div>
             </form>
