@@ -1410,7 +1410,7 @@ export function App() {
       console.warn("[Local Quota Exceeded Sync]: Firebase write quota is currently exceeded. Writing silently to localStorage.");
       dirtyKeys.forEach((key) => {
         const val = dirtyItems[key];
-        const isMetadataKey = key === 'dk_staff' || key === 'dk_models' || key === 'dk_current_user' || key === 'dk_ecount_config';
+        const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
         if (!isMetadataKey) {
           localStorage.setItem(key, JSON.stringify(val));
           localStorage.setItem(`${key}_is_dirty`, 'true'); 
@@ -1444,7 +1444,7 @@ export function App() {
       console.log("[Local Storage Sync]: Phiên làm việc offline/chuyển quyền hoạt động. Đang cập nhật localStorage cục bộ (giữ cờ_is_dirty = true để đồng bộ khi online).");
       dirtyKeys.forEach((key) => {
         const val = dirtyItems[key];
-        const isMetadataKey = key === 'dk_staff' || key === 'dk_models' || key === 'dk_current_user' || key === 'dk_ecount_config';
+        const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
         if (!isMetadataKey) {
           localStorage.setItem(key, JSON.stringify(val));
           localStorage.setItem(`${key}_is_dirty`, 'true'); // Giữ dirty=true để khi auth đăng nhập thật sẽ đồng bộ lên đám mây
@@ -1669,7 +1669,7 @@ export function App() {
           // Cờ bẩn sẽ được hủy một cách an toàn bên trong listener onSnapshot khi snapshot thực tế từ server gửi về trùng khớp hoàn toàn với dữ liệu cục bộ.
           console.log(`[Batch Cloud Sync]: Trì hoãn việc hủy cờ dirty cho subcollection '${key}'. Sẽ được xử lý bởi listener onSnapshot.`);
         }
-        const isMetadataKey = key === 'dk_staff' || key === 'dk_models' || key === 'dk_current_user' || key === 'dk_ecount_config';
+        const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
         if (!isMetadataKey) {
           localStorage.setItem(key, JSON.stringify(val));
           const syncTime = new Date().toISOString();
@@ -1767,7 +1767,7 @@ export function App() {
   }, [syncLoaded, firebaseUser, conflictKeys]);
 
   const syncToServer = (key: string, data: any) => {
-    const isMetadataKey = key === 'dk_staff' || key === 'dk_models' || key === 'dk_current_user' || key === 'dk_ecount_config';
+    const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
     const serialized = JSON.stringify(data);
 
     // If the data is exactly identical to the last seen/saved data, skip completely!
@@ -2558,6 +2558,7 @@ export function App() {
 
       // Reconcile local storage with Firestore server data on startup
       const nonSubcollectionKeys = [
+        'dk_staff',
         'dk_kpis',
         'dk_suppliers',
         'dk_projects',
@@ -2642,6 +2643,16 @@ export function App() {
       });
 
       // Dispatch non-subcollection states to React
+      if (serverData.dk_staff !== undefined && Array.isArray(serverData.dk_staff)) {
+        const cleanedStaff = serverData.dk_staff.map((s: any) => {
+          if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
+            return { ...s, permission: 'edit' as const };
+          }
+          return s;
+        });
+        setStaff(cleanedStaff);
+        safeStorage.setItem('dk_staff', JSON.stringify(cleanedStaff));
+      }
       if (serverData.dk_kpis !== undefined) setKpis(serverData.dk_kpis);
       if (serverData.dk_suppliers !== undefined) {
         const addressKeywords = [
@@ -3151,8 +3162,9 @@ export function App() {
         unsubscribes.current.push(unsub);
       });
 
-      // Set up real-time onSnapshot listeners for standalone documents (Color Changes, Part codes, Audits, etc.)
+      // Set up real-time onSnapshot listeners for standalone documents (Staff, Color Changes, Part codes, Audits, etc.)
       const STANDARD_DOC_SYNC_KEYS = [
+        'dk_staff',
         'dk_oqc_color_changes',
         'dk_oqc_part_codes',
         'dk_oqc_handover_list',
@@ -3167,7 +3179,15 @@ export function App() {
           const list = Array.isArray(metaData?.data) ? metaData.data : [];
           safeStorage.setItem(key, JSON.stringify(list));
           try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) {}
-          if (key === 'dk_oqc_color_changes') {
+          if (key === 'dk_staff') {
+            const cleaned = list.map((s: any) => {
+              if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
+                return { ...s, permission: 'edit' as const };
+              }
+              return s;
+            });
+            setStaff(cleaned);
+          } else if (key === 'dk_oqc_color_changes') {
             setOqcColorChanges(list);
           } else if (key === 'dk_supplier_production_audits') {
             setSupplierProductionAudits(list);
@@ -3798,6 +3818,55 @@ export function App() {
     });
   });
 
+  // Tải tức thời và lắng nghe thời gian thực Master Staff từ Firestore (hoạt động liên tục cả trước và sau đăng nhập)
+  useEffect(() => {
+    let isMounted = true;
+    const docRef = doc(db, 'dk_db_sync', 'dk_staff');
+
+    // 1. Tải tức thời ngay khi khởi động
+    getDoc(docRef).then((snap) => {
+      if (!isMounted || !snap.exists()) return;
+      const docData = snap.data();
+      if (docData && Array.isArray(docData.data) && docData.data.length > 0) {
+        const cleaned = docData.data.map((s: any) => {
+          if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
+            return { ...s, permission: 'edit' as const };
+          }
+          return s;
+        });
+        setStaff(cleaned);
+        safeStorage.setItem('dk_staff', JSON.stringify(cleaned));
+        try { localStorage.setItem('dk_staff', JSON.stringify(cleaned)); } catch (e) {}
+      }
+    }).catch(err => {
+      console.warn("[Global Staff Initial Fetch Notice]:", err?.message || err);
+    });
+
+    // 2. Lắng nghe real-time liên tục
+    const unsub = onSnapshot(docRef, (snap) => {
+      if (!isMounted || !snap.exists()) return;
+      const docData = snap.data();
+      if (docData && Array.isArray(docData.data) && docData.data.length > 0) {
+        const cleaned = docData.data.map((s: any) => {
+          if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
+            return { ...s, permission: 'edit' as const };
+          }
+          return s;
+        });
+        setStaff(cleaned);
+        safeStorage.setItem('dk_staff', JSON.stringify(cleaned));
+        try { localStorage.setItem('dk_staff', JSON.stringify(cleaned)); } catch (e) {}
+      }
+    }, (err) => {
+      console.warn("[Global Staff Snapshot Notice]:", err?.message || err);
+    });
+
+    return () => {
+      isMounted = false;
+      unsub();
+    };
+  }, []);
+
   // Sync currentUser with corresponding firebaseUser metadata and authorized staff lists
   useEffect(() => {
     if (firebaseUser) {
@@ -3913,25 +3982,21 @@ export function App() {
   });
 
   const getLoggedInMember = () => {
-    let rawMember = null;
-    if (firebaseUser && firebaseUser.email) {
-      const emailLower = firebaseUser.email.toLowerCase().trim();
-      rawMember = staff.find(s => s.email.toLowerCase().trim() === emailLower) ||
-                  INITIAL_STAFF.find(s => s.email.toLowerCase().trim() === emailLower) || null;
+    if (!firebaseUser || !firebaseUser.email) return null;
+    const emailLower = firebaseUser.email.toLowerCase().trim();
+    if (emailLower === 'thaonguyendkbike@gmail.com') {
+      const found = staff.find(s => s && s.email && s.email.toLowerCase().trim() === emailLower);
+      return {
+        id: found?.id || 'STF-01',
+        name: found?.name || 'Nguyễn Xuân Thao',
+        role: found?.role || 'Trưởng phòng QLCL (QA/QC Head)',
+        email: 'thaonguyendkbike@gmail.com',
+        permission: 'edit' as const
+      };
     }
-
-    if (rawMember) {
-      const emailLower = rawMember.email.toLowerCase().trim();
-      // ĐẢM BẢO TUYỆT ĐỐI: thaonguyendkbike@gmail.com luôn có quyền Biên Tập (edit)
-      if (emailLower === 'thaonguyendkbike@gmail.com') {
-        return {
-          ...rawMember,
-          permission: 'edit' as const
-        };
-      }
-      return rawMember;
-    }
-    return null;
+    const member = staff.find(s => s && s.email && s.email.toLowerCase().trim() === emailLower) ||
+                   INITIAL_STAFF.find(s => s && s.email && s.email.toLowerCase().trim() === emailLower) || null;
+    return member;
   };
 
   // Check if current user is authorized to edit (they have 'edit' permission)
@@ -3944,7 +4009,7 @@ export function App() {
       return true;
     }
     const member = getLoggedInMember();
-    return member ? member.permission === 'edit' : false;
+    return member ? (member.permission === 'edit' || (member as any).permission === 'admin') : false;
   };
 
   const isStaffAdmin = () => {
@@ -3956,8 +4021,9 @@ export function App() {
   const isEmailAuthorized = (email?: string | null) => {
     if (!email) return false;
     const emailLower = email.toLowerCase().trim();
-    return staff.some(s => s.email.toLowerCase().trim() === emailLower) ||
-           INITIAL_STAFF.some(s => s.email.toLowerCase().trim() === emailLower);
+    if (emailLower === 'thaonguyendkbike@gmail.com') return true;
+    return staff.some(s => s && s.email && s.email.toLowerCase().trim() === emailLower) ||
+           INITIAL_STAFF.some(s => s && s.email && s.email.toLowerCase().trim() === emailLower);
   };
 
   const guardAction = (callback: () => void) => {
@@ -11777,11 +11843,31 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   try {
                     const user = await loginWithGoogle();
                     if (user) {
-                      const isAuth = isEmailAuthorized(user.email);
+                      const userEmailLower = user.email?.toLowerCase().trim() || '';
+                      // Tự động kiểm tra trực tiếp từ Firestore nếu dữ liệu RAM chưa kịp cập nhật
+                      let currentStaffList = staff;
+                      if (userEmailLower !== 'thaonguyendkbike@gmail.com' && !currentStaffList.some(s => s && s.email && s.email.toLowerCase().trim() === userEmailLower)) {
+                        try {
+                          const staffSnap = await getDoc(doc(db, 'dk_db_sync', 'dk_staff'));
+                          if (staffSnap.exists()) {
+                            const d = staffSnap.data();
+                            if (Array.isArray(d?.data)) {
+                              currentStaffList = d.data;
+                              setStaff(currentStaffList);
+                              safeStorage.setItem('dk_staff', JSON.stringify(currentStaffList));
+                            }
+                          }
+                        } catch (e) {}
+                      }
+
+                      const isAuth = userEmailLower === 'thaonguyendkbike@gmail.com' ||
+                                     currentStaffList.some(s => s && s.email && s.email.toLowerCase().trim() === userEmailLower) ||
+                                     INITIAL_STAFF.some(s => s && s.email && s.email.toLowerCase().trim() === userEmailLower);
+
                       if (isAuth) {
                         alert(`Đăng nhập Google thành công!\nXin chào anh: ${user.displayName || user.email}.\nPhiên kết nối dữ liệu của anh đã được thiết lập bảo mật.`);
                       } else {
-                        alert(`Đăng nhập thành công!\nTài khoản Google (${user.email}) chưa được phân quyền truy cập hệ thống nội bộ phòng QLCL.`);
+                        alert(`Đăng nhập thành công!\nTài khoản Google (${user.email}) chưa được phân quyền truy cập hệ thống nội bộ phòng QLCL.\n\nVui lòng liên hệ anh Thao (Trưởng phòng QLCL) để được cấp quyền.`);
                       }
                     }
                   } catch (error: any) {
@@ -11854,7 +11940,22 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
   }
 
   // Blocking view for signed-in emails not in the authorized directory
-  if (!isEmailAuthorized(firebaseUser.email)) {
+  const isEmailAuth = isEmailAuthorized(firebaseUser.email);
+  let isLocallyAuth = false;
+  if (!isEmailAuth && firebaseUser.email) {
+    try {
+      const savedStaff = localStorage.getItem('dk_staff');
+      if (savedStaff) {
+        const parsed = JSON.parse(savedStaff);
+        const userEmailLower = firebaseUser.email.toLowerCase().trim();
+        if (Array.isArray(parsed) && parsed.some((s: any) => s && s.email && s.email.toLowerCase().trim() === userEmailLower)) {
+          isLocallyAuth = true;
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (!isEmailAuth && !isLocallyAuth) {
     return (
       <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 min-h-screen w-full flex items-center justify-center p-4 font-sans text-slate-100" id="sec_denied">
         <div className="w-full max-w-lg bg-slate-900/95 border border-red-950 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 md:space-y-8 backdrop-blur-md relative overflow-hidden" id="sec_denied_container">
