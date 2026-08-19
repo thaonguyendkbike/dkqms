@@ -3113,7 +3113,6 @@ export function App() {
           lastSyncedValues.current[key] = JSON.stringify(assembledList);
           lastSeenValues.current[key] = serialized;
           safeStorage.setItem(key, serialized);
-          try { localStorage.setItem(key, serialized); } catch (e) {}
           if (serverTime) {
             try { localStorage.setItem(`${key}_last_synced_at`, serverTime); } catch (e) {}
             serverTimestamps.current[key] = serverTime;

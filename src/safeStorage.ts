@@ -299,39 +299,30 @@ try {
 if (typeof window !== 'undefined' && window.localStorage && rawSetItem) {
   try {
     window.localStorage.setItem = function (key: string, value: string) {
+      const strVal = String(value);
+      // For large datasets, keep purely in memoryStore & IndexedDB to avoid freezing the browser
+      if (strVal.length > 1000000 || key === 'dk_oqc_records') {
+        memoryStore[key] = strVal;
+        writeIDB(key, strVal);
+        return;
+      }
+
       try {
         rawSetItem.call(window.localStorage, key, value);
       } catch (err: any) {
-        if (
-          err &&
-          (err.name === 'QuotaExceededError' ||
-           err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
-           err.code === 22 ||
-           err.code === 1014 ||
-           String(err).includes('quota') ||
-           String(err).includes('setItem'))
-        ) {
-          if (!isCleaningInProgress) {
+        memoryStore[key] = strVal;
+        if (!isCleaningInProgress) {
+          isCleaningInProgress = true;
+          try {
             freeUpLocalStorageSpace(key);
             try {
               rawSetItem.call(window.localStorage, key, value);
-              return;
             } catch (retryErr) {
-              if (key.startsWith('firestore_')) return;
-              purgeNonEssentialLocalStorage(key);
-              try {
-                rawSetItem.call(window.localStorage, key, value);
-                return;
-              } catch (finalErr) {
-                // Fallback to memoryStore
-                memoryStore[key] = String(value);
-              }
+              // Silently stored in memoryStore & IndexedDB
             }
-          } else {
-            memoryStore[key] = String(value);
+          } finally {
+            isCleaningInProgress = false;
           }
-        } else {
-          memoryStore[key] = String(value);
         }
       }
     };
@@ -396,6 +387,18 @@ export const safeStorage = {
 
     if (isInMemory) return;
 
+    // For massive datasets (e.g. dk_oqc_records > 1MB), do NOT write to 5MB localStorage
+    // This completely eliminates QuotaExceededError and prevents main-thread freezing!
+    if (strVal.length > 1000000 || key === 'dk_oqc_records') {
+      try {
+        // Clean out any old truncated copies from localStorage
+        if (rawSetItem) {
+          window.localStorage.removeItem(key);
+        }
+      } catch (e) {}
+      return;
+    }
+
     try {
       if (rawSetItem) {
         rawSetItem.call(window.localStorage, key, strVal);
@@ -403,46 +406,18 @@ export const safeStorage = {
         window.localStorage.setItem(key, strVal);
       }
     } catch (e) {
-      // Step 1: Clean other keys
-      const spaceFreed = freeUpLocalStorageSpace(key);
-      if (spaceFreed) {
+      if (!isCleaningInProgress) {
+        isCleaningInProgress = true;
         try {
-          if (rawSetItem) {
-            rawSetItem.call(window.localStorage, key, strVal);
-          } else {
-            window.localStorage.setItem(key, strVal);
+          const spaceFreed = freeUpLocalStorageSpace(key);
+          if (spaceFreed && rawSetItem) {
+            try {
+              rawSetItem.call(window.localStorage, key, strVal);
+            } catch (retryErr) {}
           }
-          return;
-        } catch (retryErr) {}
-      }
-
-      // Step 2: Strip images from current key
-      let cleanedValue = strVal;
-      try {
-        const parsed = JSON.parse(strVal);
-        const cleaned = stripBase64Images(parsed);
-        cleanedValue = JSON.stringify(cleaned);
-      } catch (parseErr) {}
-
-      try {
-        if (rawSetItem) {
-          rawSetItem.call(window.localStorage, key, cleanedValue);
-        } else {
-          window.localStorage.setItem(key, cleanedValue);
+        } finally {
+          isCleaningInProgress = false;
         }
-        return;
-      } catch (cleanErr) {}
-
-      // Step 3: Purge other non-essentials
-      try {
-        purgeNonEssentialLocalStorage(key);
-        if (rawSetItem) {
-          rawSetItem.call(window.localStorage, key, cleanedValue);
-        } else {
-          window.localStorage.setItem(key, cleanedValue);
-        }
-      } catch (purgeErr) {
-        // Data is safely persisted in IndexedDB and memoryStore, so no loss occurs!
       }
     }
   },

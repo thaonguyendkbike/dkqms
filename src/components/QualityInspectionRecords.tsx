@@ -1,4 +1,4 @@
-import React, { useState, FormEvent, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, FormEvent, useMemo, useCallback } from 'react';
 import XLSXStyle from 'xlsx-js-style';
 import { 
   Wrench, 
@@ -46,7 +46,8 @@ import {
   QrCode,
   ArrowRight,
   Palette,
-  Layers
+  Layers,
+  Save
 } from 'lucide-react';
 import { IQCRecord, PQCRecord, OQCRecord, OqcColorChangeRecord, OqcPartCodeItem, INITIAL_OQC_PART_CODES } from '../qualityTestData';
 import { safeStorage } from '../safeStorage';
@@ -7967,8 +7968,8 @@ export default function QualityInspectionRecords({
               });
 
               // Get unique models dynamically from filtered OQC records (case-insensitive filter)
-              const assembledModels: string[] = Array.from(new Set(filteredOqc.map(getCleanModelName)))
-                .filter((m): m is string => Boolean(m) && m.toLowerCase() !== 'đạt' && m.toLowerCase() !== 'lỗi' && m.toLowerCase() !== 'chưa kiểm tra' && m.toLowerCase() !== 'pass' && m.toLowerCase() !== 'fail')
+              const assembledModels: string[] = Array.from(new Set<string>(filteredOqc.map(r => getCleanModelName(r))))
+                .filter((m: string) => Boolean(m) && m.toLowerCase() !== 'đạt' && m.toLowerCase() !== 'lỗi' && m.toLowerCase() !== 'chưa kiểm tra' && m.toLowerCase() !== 'pass' && m.toLowerCase() !== 'fail')
                 .sort();
 
               const currentAssembled = liveLapRapTotal;
