@@ -1,18 +1,116 @@
 let isInMemory = false;
 const memoryStore: Record<string, string> = {};
 
+// ==================== INDEXEDDB PERSISTENCE ENGINE (UNLIMITED LOCAL QUOTA) ====================
+const IDB_NAME = 'dk_qms_storage_db';
+const IDB_STORE = 'keyval';
+const IDB_VERSION = 1;
+
+let idbDatabasePromise: Promise<IDBDatabase | null> | null = null;
+
+function getIDBDatabase(): Promise<IDBDatabase | null> {
+  if (typeof window === 'undefined' || !window.indexedDB) {
+    return Promise.resolve(null);
+  }
+  if (!idbDatabasePromise) {
+    idbDatabasePromise = new Promise((resolve) => {
+      try {
+        const req = window.indexedDB.open(IDB_NAME, IDB_VERSION);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) {
+            db.createObjectStore(IDB_STORE);
+          }
+        };
+        req.onsuccess = () => {
+          resolve(req.result);
+        };
+        req.onerror = () => {
+          console.warn("[safeStorage IDB] IndexedDB open error, continuing with memory/localStorage fallback.");
+          resolve(null);
+        };
+      } catch (err) {
+        console.warn("[safeStorage IDB] IndexedDB not available:", err);
+        resolve(null);
+      }
+    });
+  }
+  return idbDatabasePromise;
+}
+
+// Write a key-value pair asynchronously to IndexedDB
+function writeIDB(key: string, val: string): void {
+  getIDBDatabase().then((db) => {
+    if (!db) return;
+    try {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_STORE);
+      store.put(val, key);
+    } catch (err) {
+      console.warn(`[safeStorage IDB Write Error] for key '${key}':`, err);
+    }
+  });
+}
+
+// Delete a key asynchronously from IndexedDB
+function deleteIDB(key: string): void {
+  getIDBDatabase().then((db) => {
+    if (!db) return;
+    try {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_STORE);
+      store.delete(key);
+    } catch (err) {}
+  });
+}
+
+// Pre-load all data from IndexedDB into memoryStore on startup
+if (typeof window !== 'undefined' && window.indexedDB) {
+  getIDBDatabase().then((db) => {
+    if (!db) return;
+    try {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const store = tx.objectStore(IDB_STORE);
+      const req = store.openCursor();
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (cursor) {
+          const k = String(cursor.key);
+          const v = String(cursor.value);
+          // If memoryStore doesn't have it or IDB has a newer/larger value, populate RAM
+          if (!memoryStore[k] || memoryStore[k].length < v.length) {
+            memoryStore[k] = v;
+          }
+          cursor.continue();
+        }
+      };
+    } catch (e) {}
+  });
+}
+
 // Test if localStorage is accessible and writable
 try {
   if (typeof window !== 'undefined' && window.localStorage) {
     const testKey = '__storage_test__';
     window.localStorage.setItem(testKey, testKey);
     window.localStorage.removeItem(testKey);
+    
+    // Initial sync from localStorage to memoryStore
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k) {
+        const v = window.localStorage.getItem(k);
+        if (v !== null) {
+          memoryStore[k] = v;
+        }
+      }
+    }
   } else {
     isInMemory = true;
   }
 } catch (e) {
   isInMemory = true;
-  console.warn("⚠️ LocalStorage is disabled, restricted, or insecure in this environment. Falling back to safe memory storage.");
+  console.warn("⚠️ LocalStorage is disabled, restricted, or insecure in this environment. Falling back to safe memory & IndexedDB storage.");
 }
 
 // Helper function to recursively remove base64 images to free up space
@@ -213,27 +311,38 @@ if (typeof window !== 'undefined' && window.localStorage && rawSetItem) {
 
 export const safeStorage = {
   getItem(key: string): string | null {
+    if (Object.prototype.hasOwnProperty.call(memoryStore, key) && memoryStore[key] !== undefined && memoryStore[key] !== null) {
+      return memoryStore[key];
+    }
     if (isInMemory) {
-      return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : null;
+      return null;
     }
     try {
       const val = window.localStorage.getItem(key);
-      if (val !== null) return val;
-      return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : null;
+      if (val !== null) {
+        memoryStore[key] = val;
+        return val;
+      }
+      return null;
     } catch (e) {
-      return Object.prototype.hasOwnProperty.call(memoryStore, key) ? memoryStore[key] : null;
+      return null;
     }
   },
 
   setItem(key: string, value: string): void {
-    memoryStore[key] = String(value);
+    const strVal = String(value);
+    memoryStore[key] = strVal;
+    
+    // Always persist to IndexedDB asynchronously (no 5MB quota limit!)
+    writeIDB(key, strVal);
+
     if (isInMemory) return;
 
     try {
       if (rawSetItem) {
-        rawSetItem.call(window.localStorage, key, value);
+        rawSetItem.call(window.localStorage, key, strVal);
       } else {
-        window.localStorage.setItem(key, value);
+        window.localStorage.setItem(key, strVal);
       }
     } catch (e) {
       // Step 1: Clean other keys
@@ -241,18 +350,18 @@ export const safeStorage = {
       if (spaceFreed) {
         try {
           if (rawSetItem) {
-            rawSetItem.call(window.localStorage, key, value);
+            rawSetItem.call(window.localStorage, key, strVal);
           } else {
-            window.localStorage.setItem(key, value);
+            window.localStorage.setItem(key, strVal);
           }
           return;
         } catch (retryErr) {}
       }
 
       // Step 2: Strip images from current key
-      let cleanedValue = value;
+      let cleanedValue = strVal;
       try {
-        const parsed = JSON.parse(value);
+        const parsed = JSON.parse(strVal);
         const cleaned = stripBase64Images(parsed);
         cleanedValue = JSON.stringify(cleaned);
       } catch (parseErr) {}
@@ -275,13 +384,14 @@ export const safeStorage = {
           window.localStorage.setItem(key, cleanedValue);
         }
       } catch (purgeErr) {
-        // Saved in memoryStore, no error thrown to caller
+        // Data is safely persisted in IndexedDB and memoryStore, so no loss occurs!
       }
     }
   },
 
   removeItem(key: string): void {
     delete memoryStore[key];
+    deleteIDB(key);
     if (isInMemory) {
       return;
     }

@@ -1485,9 +1485,40 @@ export function App() {
         const docRef = doc(db, 'dk_db_sync', key);
 
         if (CHUNKED_KEYS.includes(key)) {
-          // Process massive dataset into high-efficiency chunked documents (400 records/chunk for absolute Firestore safety under 1MB)
-          const currentList = Array.isArray(val) ? val : [];
-          const CHUNK_SIZE = 400;
+          // Process massive dataset into high-efficiency minified chunked documents (500 records/chunk)
+          const rawList = Array.isArray(val) ? val : [];
+          const currentList = rawList.map((r: any) => {
+            if (!r || typeof r !== 'object') return r;
+            const clean: any = {
+              id: r.id || `OQC-${(r.serialNo || '').trim().toUpperCase()}`,
+              serialNo: r.serialNo,
+              model: r.model,
+              color: r.color,
+              status: r.status || 'Đạt',
+              date: r.date,
+              month: r.month,
+              year: r.year,
+              lsx: r.lsx,
+              partCode: r.partCode
+            };
+            if (r.chassisNo) clean.chassisNo = r.chassisNo;
+            if (r.engineNo) clean.engineNo = r.engineNo;
+            if (r.oldColor) clean.oldColor = r.oldColor;
+            if (r.oldModel) clean.oldModel = r.oldModel;
+            if (r.isColorChanged) clean.isColorChanged = true;
+            if (r.isStatusChanged) clean.isStatusChanged = true;
+            if (r.colorChangeDate) clean.colorChangeDate = r.colorChangeDate;
+            if (r.failedCount && r.failedCount > 0) clean.failedCount = r.failedCount;
+            if (r.defectDetail && String(r.defectDetail).trim()) clean.defectDetail = String(r.defectDetail).trim();
+            if (r.rootCause && String(r.rootCause).trim()) clean.rootCause = String(r.rootCause).trim();
+            if (r.evaluation && String(r.evaluation).trim()) clean.evaluation = String(r.evaluation).trim();
+            if (r.treatment && String(r.treatment).trim()) clean.treatment = String(r.treatment).trim();
+            if (r.checkTime && r.checkTime !== '08:30') clean.checkTime = r.checkTime;
+            if (r.totalLlr && r.totalLlr !== 1) clean.totalLlr = r.totalLlr;
+            return clean;
+          });
+
+          const CHUNK_SIZE = 500;
           const totalChunks = Math.ceil(currentList.length / CHUNK_SIZE) || 1;
 
           for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
@@ -3010,32 +3041,44 @@ export function App() {
             assembledList = deduplicateOqcRecords(assembledList);
           }
 
+          let localParsedCount = 0;
+          let parsedLocalData: any[] = [];
+          if (localSaved) {
+            try {
+              const p = JSON.parse(localSaved);
+              if (Array.isArray(p)) {
+                parsedLocalData = key === 'dk_oqc_records' ? deduplicateOqcRecords(p) : p;
+                localParsedCount = parsedLocalData.length;
+              }
+            } catch (e) {}
+          }
+
           let finalDisplayData = assembledList;
 
           if (isDirty && localSaved) {
             try {
-              let parsedLocal = JSON.parse(localSaved);
-              if (Array.isArray(parsedLocal)) {
-                if (key === 'dk_oqc_records') {
-                  parsedLocal = deduplicateOqcRecords(parsedLocal);
-                }
-                const localIds = new Set(parsedLocal.map((item: any, idx: number) => getItemId(item, key, idx)));
-                const serverItemsToKeep = assembledList.filter((item: any, idx: number) => {
-                  const itemId = getItemId(item, key, idx);
-                  return !localIds.has(itemId);
-                });
-                finalDisplayData = deduplicateOqcRecords([...parsedLocal, ...serverItemsToKeep]);
-              }
+              const localIds = new Set(parsedLocalData.map((item: any, idx: number) => getItemId(item, key, idx)));
+              const serverItemsToKeep = assembledList.filter((item: any, idx: number) => {
+                const itemId = getItemId(item, key, idx);
+                return !localIds.has(itemId);
+              });
+              finalDisplayData = deduplicateOqcRecords([...parsedLocalData, ...serverItemsToKeep]);
             } catch (e) {
               console.error(`[Smart Merge Error] for ${key}:`, e);
             }
-          } else if (!isDirty && localSaved && assembledList.length === 0) {
-            try {
-              const parsedLocal = JSON.parse(localSaved);
-              if (Array.isArray(parsedLocal) && parsedLocal.length > 0) {
-                finalDisplayData = deduplicateOqcRecords(parsedLocal);
-              }
-            } catch (e) {}
+          } else if (localParsedCount > 0 && assembledList.length < localParsedCount) {
+            // DATASET LOSS-PREVENTION GUARD:
+            // If local storage has more records (e.g. 16,999 records) than what the server snapshot returned,
+            // DO NOT wipe out the local data! Preserve local data and re-sync to Cloud!
+            console.warn(`[${key} Chunk Protection]: Local data has ${localParsedCount} records, while server returned only ${assembledList.length}. Preserving local records.`);
+            finalDisplayData = parsedLocalData;
+            localStorage.setItem(`${key}_is_dirty`, 'true');
+            localDirtyKeys.current.add(key);
+            pendingSyncBuffer.current[key] = finalDisplayData;
+          } else if (assembledList.length > 0) {
+            finalDisplayData = assembledList;
+          } else if (localParsedCount > 0) {
+            finalDisplayData = parsedLocalData;
           }
 
           const serialized = JSON.stringify(finalDisplayData);
