@@ -2497,6 +2497,7 @@ export default function QualityInspectionRecords({
   const [newCarPartCode, setNewCarPartCode] = useState('TEM-GEN');
   const [newCarModel, setNewCarModel] = useState('DK Gogo');
   const [newCarColor, setNewCarColor] = useState('Trắng');
+  const [oqcImportReplaceAll, setOqcImportReplaceAll] = useState(false);
 
   // Fast & optimized KCS Station data pipeline (Single Pass O(N) calculation)
   const kcsStationStats = useMemo(() => {
@@ -3793,6 +3794,35 @@ export default function QualityInspectionRecords({
     alert('Cập nhật thông tin & thời gian chỉnh sửa KCS thành công!');
   };
 
+  const handleClearAllOqcData = () => {
+    const totalCount = oqcRecords.length;
+    if (totalCount === 0) {
+      alert('ℹ️ Cơ sở dữ liệu KCS hiện đang trống, không có bản ghi nào để xóa.');
+      setShowImportOqcModal(true);
+      return;
+    }
+
+    const confirmMsg = `⚠️ CẢNH BÁO XÓA TOÀN BỘ DỮ LIỆU KCS:\n\nAnh Thao có chắc chắn muốn XÓA SẠCH TOÀN BỘ ${totalCount.toLocaleString('vi-VN')} xe trong cơ sở dữ liệu KCS không?\n\n• Thao tác này sẽ làm sạch toàn bộ dữ liệu trên thiết bị và đồng bộ làm sạch lên Cloud Firebase.\n• Sau khi xóa, anh Thao có thể nạp ngay bộ dữ liệu Excel mới tinh.`;
+    
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+
+    setOqcRecords([]);
+    safeStorage.setItem('dk_oqc_records', JSON.stringify([]));
+    try {
+      localStorage.setItem('dk_oqc_records_is_dirty', 'true');
+    } catch (e) {}
+
+    if (typeof (window as any).syncToServer === 'function') {
+      (window as any).syncToServer('dk_oqc_records', []);
+    }
+
+    alert(`✓ Đã xóa sạch toàn bộ ${totalCount.toLocaleString('vi-VN')} xe KCS cũ thành công!\n\nHệ thống sẽ tự động mở cửa sổ 'Dán Excel KCS' để anh Thao nạp bộ dữ liệu mới.`);
+    setOqcImportReplaceAll(false);
+    setShowImportOqcModal(true);
+  };
+
   const handleImportOqcSubmit = (e: FormEvent) => {
     e.preventDefault();
     setOqcImportError('');
@@ -4186,65 +4216,73 @@ export default function QualityInspectionRecords({
       }
       const finalParsed = Object.values(mergedParsed);
 
-      // Multi-key lookup map for existing records
-      const finalParsedLookupMap = new Map<string, OQCRecord>();
-      finalParsed.forEach(r => {
-        if (r.serialNo) finalParsedLookupMap.set(r.serialNo.trim().toUpperCase(), r);
-        if (r.chassisNo) finalParsedLookupMap.set(r.chassisNo.trim().toUpperCase(), r);
-        if (r.id) finalParsedLookupMap.set(r.id.trim().toUpperCase().replace(/^OQC-/, ''), r);
-      });
-
-      const updatedExistingRecords: OQCRecord[] = [];
-      const matchedImportedSerials = new Set<string>();
+      let finalUpdatedList: OQCRecord[] = [];
       let updatedCount = 0;
       let addedCount = 0;
 
-      oqcRecords.forEach(oldRec => {
-        const sKey = (oldRec.serialNo || '').trim().toUpperCase();
-        const cKey = (oldRec.chassisNo || '').trim().toUpperCase();
-        const idKey = (oldRec.id || '').trim().toUpperCase().replace(/^OQC-/, '');
+      if (oqcImportReplaceAll) {
+        // GHI ĐÈ THAY THẾ TOÀN BỘ (REPLACE ALL): Xóa sạch dữ liệu cũ, chỉ lấy dữ liệu mới vừa dán
+        finalUpdatedList = finalParsed;
+        addedCount = finalParsed.length;
+      } else {
+        // Multi-key lookup map for existing records
+        const finalParsedLookupMap = new Map<string, OQCRecord>();
+        finalParsed.forEach(r => {
+          if (r.serialNo) finalParsedLookupMap.set(r.serialNo.trim().toUpperCase(), r);
+          if (r.chassisNo) finalParsedLookupMap.set(r.chassisNo.trim().toUpperCase(), r);
+          if (r.id) finalParsedLookupMap.set(r.id.trim().toUpperCase().replace(/^OQC-/, ''), r);
+        });
 
-        const newRec = (sKey && finalParsedLookupMap.get(sKey)) || 
-                       (cKey && finalParsedLookupMap.get(cKey)) || 
-                       (idKey && finalParsedLookupMap.get(idKey));
+        const updatedExistingRecords: OQCRecord[] = [];
+        const matchedImportedSerials = new Set<string>();
 
-        if (newRec) {
-          updatedCount++;
-          // GHI ĐÈ ƯU TIÊN 100% CÁC TRƯỜNG DỮ LIỆU TỪ FILE EXCEL
-          updatedExistingRecords.push({
-            ...oldRec,
-            status: newRec.status,
-            defectDetail: newRec.defectDetail,
-            failedCount: newRec.failedCount,
-            rootCause: newRec.rootCause,
-            model: newRec.model || oldRec.model,
-            color: newRec.color || oldRec.color,
-            lsx: newRec.lsx || oldRec.lsx,
-            partCode: (newRec.partCode && newRec.partCode !== 'TEM-GEN') ? newRec.partCode : (oldRec.partCode || newRec.partCode),
-            chassisNo: newRec.chassisNo || oldRec.chassisNo,
-            engineNo: newRec.engineNo || oldRec.engineNo,
-            date: newRec.date || oldRec.date,
-            month: newRec.month || oldRec.month,
-            year: newRec.year || oldRec.year,
-            checkTime: newRec.checkTime || oldRec.checkTime || '08:30'
-          });
-          if (newRec.serialNo) matchedImportedSerials.add(newRec.serialNo.trim().toUpperCase());
-        } else {
-          updatedExistingRecords.push(oldRec);
-        }
-      });
+        oqcRecords.forEach(oldRec => {
+          const sKey = (oldRec.serialNo || '').trim().toUpperCase();
+          const cKey = (oldRec.chassisNo || '').trim().toUpperCase();
+          const idKey = (oldRec.id || '').trim().toUpperCase().replace(/^OQC-/, '');
 
-      // Add any brand new serials that were not in oqcRecords before
-      const brandNewRecords: OQCRecord[] = [];
-      finalParsed.forEach(newRec => {
-        const sUpper = (newRec.serialNo || '').trim().toUpperCase();
-        if (!matchedImportedSerials.has(sUpper)) {
-          brandNewRecords.push(newRec);
-          addedCount++;
-        }
-      });
+          const newRec = (sKey && finalParsedLookupMap.get(sKey)) || 
+                         (cKey && finalParsedLookupMap.get(cKey)) || 
+                         (idKey && finalParsedLookupMap.get(idKey));
 
-      const finalUpdatedList = [...brandNewRecords, ...updatedExistingRecords];
+          if (newRec) {
+            updatedCount++;
+            // GHI ĐÈ ƯU TIÊN 100% CÁC TRƯỜNG DỮ LIỆU TỪ FILE EXCEL
+            updatedExistingRecords.push({
+              ...oldRec,
+              status: newRec.status,
+              defectDetail: newRec.defectDetail,
+              failedCount: newRec.failedCount,
+              rootCause: newRec.rootCause,
+              model: newRec.model || oldRec.model,
+              color: newRec.color || oldRec.color,
+              lsx: newRec.lsx || oldRec.lsx,
+              partCode: (newRec.partCode && newRec.partCode !== 'TEM-GEN') ? newRec.partCode : (oldRec.partCode || newRec.partCode),
+              chassisNo: newRec.chassisNo || oldRec.chassisNo,
+              engineNo: newRec.engineNo || oldRec.engineNo,
+              date: newRec.date || oldRec.date,
+              month: newRec.month || oldRec.month,
+              year: newRec.year || oldRec.year,
+              checkTime: newRec.checkTime || oldRec.checkTime || '08:30'
+            });
+            if (newRec.serialNo) matchedImportedSerials.add(newRec.serialNo.trim().toUpperCase());
+          } else {
+            updatedExistingRecords.push(oldRec);
+          }
+        });
+
+        // Add any brand new serials that were not in oqcRecords before
+        const brandNewRecords: OQCRecord[] = [];
+        finalParsed.forEach(newRec => {
+          const sUpper = (newRec.serialNo || '').trim().toUpperCase();
+          if (!matchedImportedSerials.has(sUpper)) {
+            brandNewRecords.push(newRec);
+            addedCount++;
+          }
+        });
+
+        finalUpdatedList = [...brandNewRecords, ...updatedExistingRecords];
+      }
 
       // GHI ĐÈ AN TOÀN VÀO SAFE STORAGE & ĐẨY LÊN CLOUD FIREBASE
       setOqcRecords(finalUpdatedList);
@@ -4269,7 +4307,13 @@ export default function QualityInspectionRecords({
 
       setOqcImportText('');
       setShowImportOqcModal(false);
-      alert(`🎉 Nhập KCS & Ghi đè thành công!\n\nChi tiết file Excel vừa nạp (${finalParsed.length} xe):\n• Số xe ĐẠT: ${finalPassedCount} xe\n• Số xe LỖI: ${finalFailedCount} xe\n\nĐối chiếu theo Số Sêri:\n• Đã ghi đè cập nhật: ${updatedCount} xe\n• Thêm mới: ${addedCount} xe\n\n(Dữ liệu đã tự động lưu an toàn và đồng bộ lên Cloud Firebase)`);
+      setOqcImportReplaceAll(false);
+
+      if (oqcImportReplaceAll) {
+        alert(`🎉 NẠP MỚI TOÀN BỘ KCS THÀNH CÔNG!\n\nĐã thay thế toàn bộ CSDL bằng ${finalParsed.length} xe vừa nạp:\n• Số xe ĐẠT: ${finalPassedCount} xe\n• Số xe LỖI: ${finalFailedCount} xe\n\n(Dữ liệu đã tự động lưu an toàn và đồng bộ lên Cloud Firebase)`);
+      } else {
+        alert(`🎉 Nhập KCS & Ghi đè thành công!\n\nChi tiết file Excel vừa nạp (${finalParsed.length} xe):\n• Số xe ĐẠT: ${finalPassedCount} xe\n• Số xe LỖI: ${finalFailedCount} xe\n\nĐối chiếu theo Số Sêri:\n• Đã ghi đè cập nhật: ${updatedCount} xe\n• Thêm mới: ${addedCount} xe\n\n(Dữ liệu đã tự động lưu an toàn và đồng bộ lên Cloud Firebase)`);
+      }
     } catch (err: any) {
       setOqcImportError(`Lỗi phân rã dữ liệu: ${err.message || err}`);
     }
@@ -6495,6 +6539,42 @@ export default function QualityInspectionRecords({
                       </div>
                     </div>
                   )}
+
+                  {/* BOTTOM ACTION BAR: Xóa sạch dữ liệu cũ & Nhập dữ liệu mới */}
+                  <div className="p-3 bg-slate-900 text-white rounded-xl flex flex-wrap items-center justify-between gap-3 shadow-lg border border-slate-800 mt-2">
+                    <div className="flex items-center gap-3">
+                      <span className="p-1.5 px-2.5 bg-slate-800 text-slate-300 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 border border-slate-700">
+                        📊 Tổng cơ sở dữ liệu KCS: <strong className="text-white text-sm">{oqcRecords.length.toLocaleString('vi-VN')}</strong> xe
+                      </span>
+                      <span className="text-[11px] text-slate-400 hidden md:inline">
+                        (Đạt: <strong className="text-emerald-400 font-mono">{oqcRecords.filter(r => r.status === 'Đạt').length}</strong> | Lỗi: <strong className="text-rose-400 font-mono">{oqcRecords.filter(r => r.status === 'Lỗi').length}</strong>)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleClearAllOqcData}
+                        className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-lg text-xs transition flex items-center gap-1.5 shadow-md shadow-rose-950/50 cursor-pointer active:scale-95 border border-rose-400/40"
+                        title="Xóa sạch toàn bộ dữ liệu KCS cũ trên máy và Cloud để nạp dữ liệu mới tinh"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Xóa Hết Dữ Liệu KCS Cũ
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOqcImportReplaceAll(false);
+                          setShowImportOqcModal(true);
+                        }}
+                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-lg text-xs transition flex items-center gap-1.5 shadow-md shadow-blue-950/50 cursor-pointer active:scale-95 border border-blue-400/40"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Dán Excel KCS Mới
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             );
@@ -11445,13 +11525,47 @@ export default function QualityInspectionRecords({
               </div>
             </div>
 
-            <form onSubmit={handleImportOqcSubmit} className="space-y-4 flex-1 flex flex-col min-h-0 text-xs text-slate-800">
+            <form onSubmit={handleImportOqcSubmit} className="space-y-3.5 flex-1 flex flex-col min-h-0 text-xs text-slate-800">
+              <div className="flex flex-wrap items-center justify-between bg-slate-100 p-2.5 rounded-xl border border-slate-200 gap-2">
+                <div className="flex items-center gap-3">
+                  <span className="font-bold text-slate-700 text-xs">Chế độ nạp:</span>
+                  <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700">
+                    <input
+                      type="radio"
+                      name="oqcPasteMode"
+                      checked={!oqcImportReplaceAll}
+                      onChange={() => setOqcImportReplaceAll(false)}
+                    />
+                    Thêm &amp; Ghi đè theo Sêri
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer font-black text-rose-700">
+                    <input
+                      type="radio"
+                      name="oqcPasteMode"
+                      checked={oqcImportReplaceAll}
+                      onChange={() => setOqcImportReplaceAll(true)}
+                    />
+                    🔥 Xóa sạch dữ liệu cũ &amp; Nạp mới 100%
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleClearAllOqcData}
+                  className="text-[11px] text-rose-600 hover:text-rose-800 font-extrabold hover:underline cursor-pointer flex items-center gap-1"
+                  title="Xóa sạch toàn bộ dữ liệu KCS hiện có"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Xóa sạch dữ liệu cũ ngay
+                </button>
+              </div>
+
               <div className="flex-1 min-h-0 flex flex-col space-y-1">
                 <label className="font-extrabold text-slate-700 block">Dán nội dung bảng tính Excel tại đây:</label>
                 <textarea
                   value={oqcImportText}
                   onChange={(e) => setOqcImportText(e.target.value)}
-                  placeholder="TEMDV11202&#9;26DK100234&#9;Xanh Cửu Long&#9;Đạt&#9;1&#9;&#9;0&#9;&#9;&#9;26-10&#9;DK Gogo&#9;&#9;08:30&#9;25&#9;05&#9;2026&#9;1&#10;TEMDV11202&#9;26DK100235&#9;Xám xi măng&#9;Lỗi&#9;0&#9;Xước rè trước&#9;1&#9;Va chạm khâu bốc dỡ&#9;Khu vực đóng gói&#9;26-10&#9;DK Volt v2&#9;&#9;14:15&#9;25&#9;05&#9;2026&#9;1"
+                  placeholder="TEMDD20102&#9;26DK18532&#9;DK D2 - Ghi đen&#9;Lỗi&#9;&#9;Không vào điện&#9;1&#9;&#9;&#9;26-178&#9;DK D2&#9;2026-06-08 19:37&#9;19:37:45&#9;8&#9;6&#9;2026&#9;1"
                   className="w-full flex-1 bg-slate-50 border p-2.5 font-mono text-[11px] focus:bg-white rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none overflow-y-auto border-slate-300"
                 />
               </div>
