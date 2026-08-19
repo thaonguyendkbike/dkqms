@@ -4,7 +4,7 @@
  */
 
 import { useState, useMemo, FormEvent, useEffect, useRef, Fragment } from 'react';
-import { safeStorage, safeStorage as localStorage, sanitizeFirestorePayload } from './safeStorage';
+import { safeStorage, safeStorage as localStorage, sanitizeFirestorePayload, onSafeStorageReady } from './safeStorage';
 import { calculateAQLSample } from './utils/aqlUtils';
 import XLSXStyle from 'xlsx-js-style';
 import { 
@@ -1638,8 +1638,8 @@ export function App() {
         }
       });
 
-      // Commit operations in batches of 400 (well within Firebase 500 limit)
-      const CHUNK_LIMIT = 400;
+      // Commit operations in batches of 50 (prevents network timeouts on massive document payloads)
+      const CHUNK_LIMIT = 50;
       for (let i = 0; i < ops.length; i += CHUNK_LIMIT) {
         const chunk = ops.slice(i, i + CHUNK_LIMIT);
         const chunkBatch = writeBatch(db);
@@ -3023,11 +3023,15 @@ export function App() {
               for (let i = 0; i < metaData.chunkCount; i++) {
                 chunkPromises.push(getDoc(doc(db, 'dk_db_sync', `${key}_chunk_${i}`)));
               }
-              const chunkSnaps = await Promise.all(chunkPromises);
-              chunkSnaps.forEach(cs => {
-                const cd = cs.data();
-                if (cd && Array.isArray(cd.data)) {
-                  assembledList = assembledList.concat(cd.data);
+              const chunkResults = await Promise.allSettled(chunkPromises);
+              chunkResults.forEach((res, cIdx) => {
+                if (res.status === 'fulfilled') {
+                  const cd = res.value.data();
+                  if (cd && Array.isArray(cd.data)) {
+                    assembledList = assembledList.concat(cd.data);
+                  }
+                } else {
+                  console.error(`[Chunk Fetch Error] Failed to load chunk ${cIdx}:`, res.reason);
                 }
               });
             } catch (err) {
@@ -3043,9 +3047,10 @@ export function App() {
 
           let localParsedCount = 0;
           let parsedLocalData: any[] = [];
-          if (localSaved) {
+          const currentMemoryVal = safeStorage.getItem(key) || localSaved;
+          if (currentMemoryVal) {
             try {
-              const p = JSON.parse(localSaved);
+              const p = JSON.parse(currentMemoryVal);
               if (Array.isArray(p)) {
                 parsedLocalData = key === 'dk_oqc_records' ? deduplicateOqcRecords(p) : p;
                 localParsedCount = parsedLocalData.length;
@@ -5826,6 +5831,36 @@ export function App() {
   const [oqcColorChanges, setOqcColorChanges] = useState<OqcColorChangeRecord[]>(() => getSavedState('dk_oqc_color_changes', []));
   const [supplierProductionAudits, setSupplierProductionAudits] = useState<SupplierProductionAudit[]>(() => getSavedState('dk_supplier_production_audits', INITIAL_SUPPLIER_AUDITS));
 
+  // Auto-restore full massive datasets from IndexedDB as soon as IndexedDB completes async startup load
+  useEffect(() => {
+    let isMounted = true;
+    const handleIdbReady = async () => {
+      const oqcSaved = await safeStorage.getItemAsync('dk_oqc_records');
+      if (oqcSaved && isMounted) {
+        try {
+          const parsed = JSON.parse(oqcSaved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const deduplicated = deduplicateOqcRecords(parsed);
+            setOqcRecords(prev => {
+              if (deduplicated.length >= prev.length) {
+                console.log(`[IndexedDB Ready Sync] Restored ${deduplicated.length} OQC records from IndexedDB.`);
+                return deduplicated;
+              }
+              return prev;
+            });
+          }
+        } catch (e) {}
+      }
+    };
+
+    onSafeStorageReady(handleIdbReady);
+    window.addEventListener('dk_safe_storage_ready', handleIdbReady);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('dk_safe_storage_ready', handleIdbReady);
+    };
+  }, []);
+
   useEffect(() => {
     if (syncLoaded) {
       const pendingKeys = Object.keys(pendingSyncBuffer.current);
@@ -5964,6 +5999,19 @@ export function App() {
   }, [pqcRecords]);
 
   useEffect(() => {
+    // Overwrite protection: If local state has few records (< 500) but IndexedDB/safeStorage already has more records, restore them instead of wiping them out!
+    const currentSavedStr = safeStorage.getItem('dk_oqc_records');
+    if (currentSavedStr && oqcRecords.length < 500) {
+      try {
+        const parsed = JSON.parse(currentSavedStr);
+        if (Array.isArray(parsed) && parsed.length > oqcRecords.length) {
+          console.warn(`[OQC Overwrite Protection] Blocked small state (${oqcRecords.length}) from overwriting large saved dataset (${parsed.length}). Restoring saved records.`);
+          setOqcRecords(deduplicateOqcRecords(parsed));
+          return;
+        }
+      } catch (e) {}
+    }
+
     const timer = setTimeout(() => {
       safeStorage.setItem('dk_oqc_records', JSON.stringify(oqcRecords));
       syncToServer('dk_oqc_records', oqcRecords);

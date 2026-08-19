@@ -64,10 +64,25 @@ function deleteIDB(key: string): void {
   });
 }
 
+let isSafeStorageReady = false;
+const readyCallbacks: (() => void)[] = [];
+
+export function onSafeStorageReady(callback: () => void): void {
+  if (isSafeStorageReady) {
+    try { callback(); } catch (e) {}
+  } else {
+    readyCallbacks.push(callback);
+  }
+}
+
 // Pre-load all data from IndexedDB into memoryStore on startup
 if (typeof window !== 'undefined' && window.indexedDB) {
   getIDBDatabase().then((db) => {
-    if (!db) return;
+    if (!db) {
+      isSafeStorageReady = true;
+      readyCallbacks.forEach(cb => { try { cb(); } catch (e) {} });
+      return;
+    }
     try {
       const tx = db.transaction(IDB_STORE, 'readonly');
       const store = tx.objectStore(IDB_STORE);
@@ -77,15 +92,31 @@ if (typeof window !== 'undefined' && window.indexedDB) {
         if (cursor) {
           const k = String(cursor.key);
           const v = String(cursor.value);
-          // If memoryStore doesn't have it or IDB has a newer/larger value, populate RAM
+          // Populate RAM from IndexedDB
           if (!memoryStore[k] || memoryStore[k].length < v.length) {
             memoryStore[k] = v;
           }
           cursor.continue();
+        } else {
+          // Finished reading all keys from IndexedDB
+          isSafeStorageReady = true;
+          readyCallbacks.forEach(cb => { try { cb(); } catch (e) {} });
+          try {
+            window.dispatchEvent(new CustomEvent('dk_safe_storage_ready'));
+          } catch (e) {}
         }
       };
-    } catch (e) {}
+      req.onerror = () => {
+        isSafeStorageReady = true;
+        readyCallbacks.forEach(cb => { try { cb(); } catch (e) {} });
+      };
+    } catch (e) {
+      isSafeStorageReady = true;
+      readyCallbacks.forEach(cb => { try { cb(); } catch (e) {} });
+    }
   });
+} else {
+  isSafeStorageReady = true;
 }
 
 // Test if localStorage is accessible and writable
@@ -310,6 +341,33 @@ if (typeof window !== 'undefined' && window.localStorage && rawSetItem) {
 }
 
 export const safeStorage = {
+  isReady(): boolean {
+    return isSafeStorageReady;
+  },
+
+  async getItemAsync(key: string): Promise<string | null> {
+    if (Object.prototype.hasOwnProperty.call(memoryStore, key) && memoryStore[key] !== undefined && memoryStore[key] !== null) {
+      return memoryStore[key];
+    }
+    const db = await getIDBDatabase();
+    if (!db) return this.getItem(key);
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const store = tx.objectStore(IDB_STORE);
+        const req = store.get(key);
+        req.onsuccess = () => {
+          const val = req.result !== undefined && req.result !== null ? String(req.result) : null;
+          if (val) memoryStore[key] = val;
+          resolve(val || this.getItem(key));
+        };
+        req.onerror = () => resolve(this.getItem(key));
+      } catch (err) {
+        resolve(this.getItem(key));
+      }
+    });
+  },
+
   getItem(key: string): string | null {
     if (Object.prototype.hasOwnProperty.call(memoryStore, key) && memoryStore[key] !== undefined && memoryStore[key] !== null) {
       return memoryStore[key];
