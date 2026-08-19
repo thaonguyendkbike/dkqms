@@ -3757,6 +3757,12 @@ export default function QualityInspectionRecords({
     e.preventDefault();
     if (!editingOqcRecord) return;
 
+    const now = new Date();
+    const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const nowDate = now.toLocaleDateString('vi-VN');
+    const nowMonth = now.getMonth() + 1;
+    const nowYear = now.getFullYear();
+
     const updated = oqcRecords.map(r => {
       if (r.id === editingOqcRecord.id || editingOqcGroupIds.includes(r.id)) {
         return {
@@ -3765,7 +3771,11 @@ export default function QualityInspectionRecords({
           defectDetail: editOqcDefectDetail,
           rootCause: editOqcRootCause,
           evaluation: editOqcEvaluation,
-          treatment: editOqcTreatment
+          treatment: editOqcTreatment,
+          checkTime: nowTime,
+          date: nowDate,
+          month: nowMonth,
+          year: nowYear
         };
       }
       return r;
@@ -3774,10 +3784,13 @@ export default function QualityInspectionRecords({
     setOqcRecords(updated);
     safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
     try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+    if (typeof (window as any).syncToServer === 'function') {
+      (window as any).syncToServer('dk_oqc_records', updated);
+    }
     setShowEditOqcModal(false);
     setEditingOqcRecord(null);
     setEditingOqcGroupIds([]);
-    alert('Cập nhật thông tin đánh giá & phương án xử lý lỗi KCS thành công!');
+    alert('Cập nhật thông tin & thời gian chỉnh sửa KCS thành công!');
   };
 
   const handleImportOqcSubmit = (e: FormEvent) => {
@@ -5787,10 +5800,11 @@ export default function QualityInspectionRecords({
                 if (nextInput) nextInput.focus();
               }
 
-              const nowTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-              const nowDate = new Date().toLocaleDateString('vi-VN');
-              const nowMonth = new Date().getMonth() + 1;
-              const nowYear = new Date().getFullYear();
+              const now = new Date();
+              const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+              const nowDate = now.toLocaleDateString('vi-VN');
+              const nowMonth = now.getMonth() + 1;
+              const nowYear = now.getFullYear();
 
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = [...oqcRecords];
@@ -5812,12 +5826,21 @@ export default function QualityInspectionRecords({
                 };
               }
 
-              React.startTransition(() => {
-                setOqcRecords(updated);
-              });
+              setOqcRecords(updated);
+              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+              try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+              if (typeof (window as any).syncToServer === 'function') {
+                (window as any).syncToServer('dk_oqc_records', updated);
+              }
             };
 
             const handleUpdateDefectNote = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
+              const now = new Date();
+              const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+              const nowDate = now.toLocaleDateString('vi-VN');
+              const nowMonth = now.getMonth() + 1;
+              const nowYear = now.getFullYear();
+
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = [...oqcRecords];
               const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
@@ -5825,19 +5848,27 @@ export default function QualityInspectionRecords({
                 updated[index] = {
                   ...updated[index],
                   defectDetail: defectDetail,
-                  rootCause: typeof rootCause === 'string' ? rootCause : (updated[index].rootCause || '')
+                  rootCause: typeof rootCause === 'string' ? rootCause : (updated[index].rootCause || ''),
+                  checkTime: nowTime,
+                  date: nowDate,
+                  month: nowMonth,
+                  year: nowYear
                 };
               }
-              React.startTransition(() => {
-                setOqcRecords(updated);
-              });
+              setOqcRecords(updated);
+              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+              try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+              if (typeof (window as any).syncToServer === 'function') {
+                (window as any).syncToServer('dk_oqc_records', updated);
+              }
             };
 
             const handleQuickFail = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
-              const nowTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-              const nowDate = new Date().toLocaleDateString('vi-VN');
-              const nowMonth = new Date().getMonth() + 1;
-              const nowYear = new Date().getFullYear();
+              const now = new Date();
+              const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+              const nowDate = now.toLocaleDateString('vi-VN');
+              const nowMonth = now.getMonth() + 1;
+              const nowYear = now.getFullYear();
 
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = [...oqcRecords];
@@ -5857,18 +5888,24 @@ export default function QualityInspectionRecords({
                 };
               }
 
-              React.startTransition(() => {
-                setOqcRecords(updated);
-              });
+              setOqcRecords(updated);
+              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+              try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+              if (typeof (window as any).syncToServer === 'function') {
+                (window as any).syncToServer('dk_oqc_records', updated);
+              }
             };
 
             const handleDeleteCar = (record: OQCRecord) => {
               if (!window.confirm(`Xóa xe Sêri ${record.serialNo} khỏi hệ thống?`)) return;
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = oqcRecords.filter(r => r.id !== record.id && (!targetSerial || !r.serialNo || r.serialNo.trim().toUpperCase() !== targetSerial));
-              React.startTransition(() => {
-                setOqcRecords(updated);
-              });
+              setOqcRecords(updated);
+              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+              try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+              if (typeof (window as any).syncToServer === 'function') {
+                (window as any).syncToServer('dk_oqc_records', updated);
+              }
             };
 
             const handleBatchPassAllPending = () => {
