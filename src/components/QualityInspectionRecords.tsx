@@ -4066,42 +4066,49 @@ export default function QualityInspectionRecords({
         return;
       }
 
-      // Merge and deduplicate
+      // Deduplicate parsed records (last row in import text takes precedence)
       const mergedParsed: { [serial: string]: OQCRecord } = {};
       for (const r of parsedRecords) {
         const serial = r.serialNo.trim().toUpperCase();
-        if (!mergedParsed[serial]) {
-          mergedParsed[serial] = { ...r };
-        } else {
-          const existing = mergedParsed[serial];
-          if (r.status === 'Lỗi' || existing.status === 'Lỗi') {
-            existing.status = 'Lỗi';
-          }
-          if (r.defectDetail && r.defectDetail !== existing.defectDetail) {
-            existing.defectDetail = existing.defectDetail 
-              ? `${existing.defectDetail}, ${r.defectDetail}`
-              : r.defectDetail;
-          }
-          if (r.rootCause && r.rootCause !== existing.rootCause) {
-            existing.rootCause = existing.rootCause 
-              ? `${existing.rootCause}, ${r.rootCause}`
-              : r.rootCause;
-          }
-          existing.failedCount = (existing.failedCount || 0) + (r.failedCount || 0);
-          if (r.model) existing.model = r.model;
-          if (r.color) existing.color = r.color;
-          if (r.lsx) existing.lsx = r.lsx;
-          if (r.date) existing.date = r.date;
-          if (r.month) existing.month = r.month;
-          if (r.year) existing.year = r.year;
-        }
+        mergedParsed[serial] = { ...r };
       }
       const finalParsed = Object.values(mergedParsed);
 
-      const finalParsedSerials = new Set(finalParsed.map(r => r.serialNo.trim().toUpperCase()));
-      const remainingOldRecords = oqcRecords.filter(r => !finalParsedSerials.has(r.serialNo.trim().toUpperCase()));
+      // Build updated list: OVERWRITE existing record in oqcRecords if serialNo matches!
+      const finalParsedMap = new Map<string, OQCRecord>();
+      finalParsed.forEach(r => finalParsedMap.set(r.serialNo.trim().toUpperCase(), r));
 
-      const finalUpdatedList = [...finalParsed, ...remainingOldRecords];
+      const updatedExistingRecords: OQCRecord[] = [];
+      const matchedSerials = new Set<string>();
+
+      oqcRecords.forEach(oldRec => {
+        const sUpper = (oldRec.serialNo || oldRec.id || '').trim().toUpperCase();
+        if (finalParsedMap.has(sUpper)) {
+          const newRec = finalParsedMap.get(sUpper)!;
+          // Ghi đè ưu tiên toàn bộ dữ liệu mới (status, defectDetail, failedCount, rootCause, color, model, date, lsx, etc.)
+          updatedExistingRecords.push({
+            ...oldRec,
+            ...newRec,
+            id: oldRec.id || newRec.id,
+            chassisNo: newRec.chassisNo || oldRec.chassisNo,
+            engineNo: newRec.engineNo || oldRec.engineNo
+          });
+          matchedSerials.add(sUpper);
+        } else {
+          updatedExistingRecords.push(oldRec);
+        }
+      });
+
+      // Add any brand new serials that were not in oqcRecords before
+      const brandNewRecords: OQCRecord[] = [];
+      finalParsed.forEach(newRec => {
+        const sUpper = (newRec.serialNo || newRec.id || '').trim().toUpperCase();
+        if (!matchedSerials.has(sUpper)) {
+          brandNewRecords.push(newRec);
+        }
+      });
+
+      const finalUpdatedList = [...brandNewRecords, ...updatedExistingRecords];
 
       // --- CRITICAL: IMMEDIATE PERSISTENCE TO SAFE STORAGE, DIRTY FLAG & INSTANT CLOUD SYNC ---
       setOqcRecords(finalUpdatedList);
@@ -4742,43 +4749,6 @@ export default function QualityInspectionRecords({
               <Plus className="w-3.5 h-3.5" /> Ghi Nhận Sự Cố PQC
             </button>
           )}
-          {qcMainSubTab === 'oqc' && (
-            <div className="flex items-center gap-2">
-              <button 
-                id="btn-import-lsx"
-                onClick={() => {
-                  setLsxImportDefaultLsx(kcsSelectedLsx || '26-10');
-                  setLsxImportError('');
-                  setShowImportLsxModal(true);
-                }}
-                className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-                title="Nạp danh sách xe từ file Lệnh Sản Xuất vào QMS để KCS kiểm tra"
-              >
-                <Upload className="w-3.5 h-3.5" /> Nạp từ LSX
-              </button>
-              <button 
-                id="btn-import-oqc-excel"
-                onClick={() => {
-                  setOqcImportError('');
-                  setShowImportOqcModal(true);
-                }}
-                className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-                title="Nhập dữ liệu KCS hàng loạt từ bảng tính Excel"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Nhập KCS từ Excel
-              </button>
-              <button 
-                id="btn-color-change"
-                onClick={() => {
-                  setQcMainSubTab('color_change');
-                }}
-                className="bg-white hover:bg-purple-50 text-purple-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-purple-200 transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-                title="Mở phân hệ đổi màu xe KCS"
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-purple-600" /> Đổi màu xe
-              </button>
-            </div>
-          )}
           {qcMainSubTab === 'color_change' && (
             <div className="flex items-center gap-2">
               <button 
@@ -4838,54 +4808,78 @@ export default function QualityInspectionRecords({
       </div>
 
       {/* Navigation Sub-Tabs Switch */}
-      <div className="flex border-b border-slate-200 gap-0.5 sm:gap-1 bg-slate-100 p-0.5 sm:p-1 rounded-md sm:rounded-lg">
+      <div className="flex border-b border-slate-200 gap-1 sm:gap-1.5 bg-slate-100/90 p-1 sm:p-1.5 rounded-xl shadow-xs">
         <button
           id="subtab-btn-iqc"
           onClick={() => setQcMainSubTab('iqc')}
-          className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'iqc' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-emerald-955 hover:bg-white/30'}`}
+          className={`flex-1 py-2 sm:py-2.5 px-2.5 sm:px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            qcMainSubTab === 'iqc'
+              ? 'bg-white text-emerald-700 shadow-sm border border-emerald-100'
+              : 'text-slate-600 hover:text-emerald-900 hover:bg-white/50'
+          }`}
         >
-          <Building2 className="w-3.5 h-3.5 text-emerald-655" />
-          IQC ({iqcRecords.length})
+          <Building2 className="w-4 h-4 text-emerald-600" />
+          <span>IQC ({iqcRecords.length})</span>
         </button>
         <button
           id="subtab-btn-pqc"
           onClick={() => setQcMainSubTab('pqc')}
-          className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'pqc' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-indigo-950 hover:bg-white/30'}`}
+          className={`flex-1 py-2 sm:py-2.5 px-2.5 sm:px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            qcMainSubTab === 'pqc'
+              ? 'bg-white text-indigo-700 shadow-sm border border-indigo-100'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-white/50'
+          }`}
         >
-          <Clock className="w-3.5 h-3.5 text-indigo-500" />
-          PQC ({pqcRecords.length})
+          <Clock className="w-4 h-4 text-indigo-600" />
+          <span>PQC ({pqcRecords.length})</span>
         </button>
         <button
           id="subtab-btn-oqc"
           onClick={() => setQcMainSubTab('oqc')}
-          className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'oqc' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-blue-955 hover:bg-white/30'}`}
+          className={`flex-1 py-2 sm:py-2.5 px-2.5 sm:px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            qcMainSubTab === 'oqc'
+              ? 'bg-white text-blue-700 shadow-sm border border-blue-100'
+              : 'text-slate-600 hover:text-blue-900 hover:bg-white/50'
+          }`}
         >
-          <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-          OQC ({oqcRecords.length})
+          <ShieldCheck className="w-4 h-4 text-blue-600" />
+          <span>OQC ({oqcRecords.length})</span>
         </button>
         <button
           id="subtab-btn-color-change"
           onClick={() => setQcMainSubTab('color_change')}
-          className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'color_change' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-600 hover:text-purple-950 hover:bg-white/30'}`}
+          className={`flex-1 py-2 sm:py-2.5 px-2.5 sm:px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            qcMainSubTab === 'color_change'
+              ? 'bg-white text-purple-700 shadow-sm border border-purple-100'
+              : 'text-slate-600 hover:text-purple-900 hover:bg-white/50'
+          }`}
         >
-          <RefreshCw className="w-3.5 h-3.5 text-purple-600" />
-          Đổi màu xe ({activeColorChanges.length})
+          <RefreshCw className="w-4 h-4 text-purple-600" />
+          <span>Đổi màu xe ({activeColorChanges.length})</span>
         </button>
         <button
           id="subtab-btn-sqc"
           onClick={() => setQcMainSubTab('supplier_monitoring')}
-          className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'supplier_monitoring' ? 'bg-white text-orange-750 shadow-sm' : 'text-slate-600 hover:text-orange-955 hover:bg-white/30'}`}
+          className={`flex-1 py-2 sm:py-2.5 px-2.5 sm:px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            qcMainSubTab === 'supplier_monitoring'
+              ? 'bg-white text-orange-700 shadow-sm border border-orange-100'
+              : 'text-slate-600 hover:text-orange-900 hover:bg-white/50'
+          }`}
         >
-          <Users className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
-          SQC ({supplierProductionAudits.length})
+          <Users className="w-4 h-4 text-orange-600 animate-pulse" />
+          <span>SQC ({supplierProductionAudits.length})</span>
         </button>
         <button
           id="subtab-btn-reports"
           onClick={() => setQcMainSubTab('reports')}
-          className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'reports' ? 'bg-indigo-650 text-white shadow-sm' : 'text-slate-600 hover:text-indigo-950 hover:bg-white/30'}`}
+          className={`flex-1 py-2 sm:py-2.5 px-2.5 sm:px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            qcMainSubTab === 'reports'
+              ? 'bg-indigo-650 text-white shadow-sm border border-indigo-500'
+              : 'text-slate-600 hover:text-indigo-900 hover:bg-white/50'
+          }`}
         >
-          <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" />
-          BC
+          <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
+          <span>Báo cáo chu kỳ</span>
         </button>
       </div>
 
@@ -5636,31 +5630,31 @@ export default function QualityInspectionRecords({
           
           {/* Sub-view switcher bar inside OQC */}
           <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+            <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-100 p-1 sm:p-1.5 rounded-xl shadow-xs">
               <button
                 id="oqc-subview-station"
                 type="button"
                 onClick={() => setOqcSubView('station')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3.5 py-2 rounded-lg text-xs sm:text-[13px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
                   oqcSubView === 'station'
-                    ? 'bg-white text-slate-900 shadow-xs font-black'
+                    ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <Zap className="w-3.5 h-3.5 text-blue-600" />
+                <Zap className="w-4 h-4 text-blue-600" />
                 Trạm KCS (LSX)
               </button>
               <button
                 id="oqc-subview-handover"
                 type="button"
                 onClick={() => setOqcSubView('handover')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3.5 py-2 rounded-lg text-xs sm:text-[13px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
                   oqcSubView === 'handover'
-                    ? 'bg-white text-slate-900 shadow-xs font-black'
+                    ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 Báo phẩm bàn giao
                 {handoverScannedList.length > 0 && (
                   <span className="ml-1 bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded-full text-[10px] font-mono">
@@ -5672,13 +5666,13 @@ export default function QualityInspectionRecords({
                 id="oqc-subview-partcodes"
                 type="button"
                 onClick={() => setOqcSubView('part_codes')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3.5 py-2 rounded-lg text-xs sm:text-[13px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
                   oqcSubView === 'part_codes'
-                    ? 'bg-white text-slate-900 shadow-xs font-black'
+                    ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <Tag className="w-3.5 h-3.5 text-amber-600" />
+                <Tag className="w-4 h-4 text-amber-600" />
                 Bảng mã xe
                 <span className="ml-1 bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded-full text-[10px] font-mono">
                   {oqcPartCodes.length}
@@ -5688,13 +5682,13 @@ export default function QualityInspectionRecords({
                 id="oqc-subview-dashboard"
                 type="button"
                 onClick={() => setOqcSubView('dashboard')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3.5 py-2 rounded-lg text-xs sm:text-[13px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
                   oqcSubView === 'dashboard'
-                    ? 'bg-white text-slate-900 shadow-xs font-black'
+                    ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" />
+                <FileSpreadsheet className="w-4 h-4 text-slate-500" />
                 Báo cáo &amp; Đồ thị
               </button>
             </div>
@@ -5970,7 +5964,7 @@ export default function QualityInspectionRecords({
                       className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer shadow-2xs"
                       title="Nhập dữ liệu KCS hàng loạt từ bảng tính Excel"
                     >
-                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Nhập Excel
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Nhập KCS từ Excel
                     </button>
                     <button
                       type="button"
