@@ -45,7 +45,8 @@ import {
   Tag,
   QrCode,
   ArrowRight,
-  Palette
+  Palette,
+  Layers
 } from 'lucide-react';
 import { IQCRecord, PQCRecord, OQCRecord, OqcColorChangeRecord, OqcPartCodeItem, INITIAL_OQC_PART_CODES } from '../qualityTestData';
 import { safeStorage } from '../safeStorage';
@@ -4891,18 +4892,25 @@ export default function QualityInspectionRecords({
     }
   };
 
-  // Filtered color changes for the Subtab
+  // Filtered color & status changes for the Subtab
   const filteredColorChanges = useMemo(() => {
     return activeColorChanges.filter(c => {
       if (colorChangeSearchText.trim()) {
         const q = colorChangeSearchText.trim().toLowerCase();
         const match = (c.serialNo || '').toLowerCase().includes(q) ||
                       (c.model || '').toLowerCase().includes(q) ||
+                      (c.oldModel || '').toLowerCase().includes(q) ||
+                      (c.newModel || '').toLowerCase().includes(q) ||
                       (c.oldColor || '').toLowerCase().includes(q) ||
                       (c.newColor || '').toLowerCase().includes(q);
         if (!match) return false;
       }
-      if (colorChangeFilterModel !== 'Tất cả' && c.model !== colorChangeFilterModel) return false;
+      if (colorChangeFilterModel !== 'Tất cả') {
+        const itemModel = c.newModel || c.model || c.oldModel;
+        if (itemModel !== colorChangeFilterModel && c.oldModel !== colorChangeFilterModel && c.model !== colorChangeFilterModel) {
+          return false;
+        }
+      }
       if (colorChangeFilterOldColor !== 'Tất cả' && c.oldColor !== colorChangeFilterOldColor) return false;
       if (colorChangeFilterNewColor !== 'Tất cả' && c.newColor !== colorChangeFilterNewColor) return false;
       if (colorChangeFilterMonth !== 'Tất cả') {
@@ -4918,43 +4926,71 @@ export default function QualityInspectionRecords({
   }, [activeColorChanges, colorChangeSearchText, colorChangeFilterModel, colorChangeFilterOldColor, colorChangeFilterNewColor, colorChangeFilterMonth, colorChangeFilterYear]);
 
   // Unique filter options for Color Change subtab
-  const uniqueColorChangeModels = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.model).filter(Boolean))), [activeColorChanges]);
-  const uniqueColorChangeOldColors = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.oldColor).filter(Boolean))), [activeColorChanges]);
-  const uniqueColorChangeNewColors = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.newColor).filter(Boolean))), [activeColorChanges]);
+  const uniqueColorChangeModels = useMemo(() => {
+    const set = new Set<string>();
+    activeColorChanges.forEach(c => {
+      if (c.newModel) set.add(c.newModel);
+      if (c.oldModel) set.add(c.oldModel);
+      if (c.model) set.add(c.model);
+    });
+    return Array.from(set).filter(Boolean).sort();
+  }, [activeColorChanges]);
+
+  const uniqueColorChangeOldColors = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.oldColor).filter(Boolean))).sort(), [activeColorChanges]);
+  const uniqueColorChangeNewColors = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.newColor).filter(Boolean))).sort(), [activeColorChanges]);
   const uniqueColorChangeMonths = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.date ? parseInt(c.date.split('/')[1] || '0', 10) : null).filter(Boolean))).sort((a, b) => Number(a) - Number(b)), [activeColorChanges]);
   const uniqueColorChangeYears = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.date ? c.date.split('/')[2] : null).filter(Boolean))).sort(), [activeColorChanges]);
 
-  // Color Change Dashboard KPI Stats
+  // Color & Status Shift Dashboard KPI Stats (Dynamically re-calculated based on filteredColorChanges)
   const colorChangeDashboardStats = useMemo(() => {
-    const total = activeColorChanges.length;
-    const uniqueModels = new Set(activeColorChanges.map(c => c.model).filter(Boolean)).size;
+    const total = filteredColorChanges.length;
+    let colorShiftCount = 0;
+    let statusShiftCount = 0;
+    let bothShiftCount = 0;
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
-    const thisMonthCount = activeColorChanges.filter(c => {
-      if (!c.date) return false;
-      const parts = c.date.split('/');
-      return parseInt(parts[1], 10) === currentMonth && parseInt(parts[2], 10) === currentYear;
-    }).length;
+    let thisMonthCount = 0;
+    const modelsSet = new Set<string>();
 
-    // Grouping top color shift pairs
-    const pairMap: Record<string, { model: string; oldColor: string; newColor: string; count: number }> = {};
-    activeColorChanges.forEach(c => {
-      const key = `${c.model || 'Chưa rõ'}___${c.oldColor || 'Gốc'}___${c.newColor || 'Mới'}`;
-      if (!pairMap[key]) {
-        pairMap[key] = { model: c.model || 'Chưa rõ', oldColor: c.oldColor || 'Gốc', newColor: c.newColor || 'Mới', count: 0 };
+    filteredColorChanges.forEach(item => {
+      const isStatusShift = Boolean(item.oldModel && item.newModel && item.oldModel.toLowerCase().trim() !== item.newModel.toLowerCase().trim());
+      const isColorShift = Boolean(item.oldColor && item.newColor && item.oldColor.toLowerCase().trim() !== item.newColor.toLowerCase().trim());
+
+      if (isStatusShift && isColorShift) {
+        bothShiftCount++;
+        colorShiftCount++;
+        statusShiftCount++;
+      } else if (isStatusShift) {
+        statusShiftCount++;
+      } else {
+        colorShiftCount++;
       }
-      pairMap[key].count++;
+
+      const m = item.newModel || item.model || item.oldModel;
+      if (m) modelsSet.add(m);
+
+      if (item.date) {
+        const parts = item.date.split('/');
+        if (parts.length >= 3) {
+          const mPart = parseInt(parts[1], 10);
+          const yPart = parseInt(parts[2], 10);
+          if (mPart === currentMonth && yPart === currentYear) {
+            thisMonthCount++;
+          }
+        }
+      }
     });
-    const topPairs = Object.values(pairMap).sort((a, b) => b.count - a.count);
 
     return {
       total,
-      uniqueModels,
-      thisMonthCount,
-      topPairs
+      colorShiftCount,
+      statusShiftCount,
+      bothShiftCount,
+      uniqueModels: modelsSet.size,
+      thisMonthCount
     };
-  }, [activeColorChanges]);
+  }, [filteredColorChanges]);
 
   return (
     <div className="space-y-6 overflow-y-auto max-h-[calc(100vh-10rem)] pr-2 animate-in fade-in duration-300" id="view_quality_inspection_content">
@@ -8274,14 +8310,17 @@ export default function QualityInspectionRecords({
             </div>
           </div>
 
-          {/* Dashboard Summary Cards */}
+          {/* Dashboard Summary Cards - Realtime Dynamic Sync with Filters */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {/* Card 1: Total */}
             <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
               <div className="flex justify-between items-start">
                 <div>
-                  <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">Tổng xe đã đổi màu</span>
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">
+                    Tổng xe chuyển đổi
+                  </span>
                   <span className="text-xl sm:text-2xl font-black text-purple-700 font-mono mt-1 block">
-                    {colorChangeDashboardStats.total}
+                    {colorChangeDashboardStats.total} <span className="text-xs font-bold text-slate-500">xe</span>
                   </span>
                 </div>
                 <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
@@ -8293,29 +8332,55 @@ export default function QualityInspectionRecords({
               </div>
             </div>
 
+            {/* Card 2: Color Shift */}
             <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
               <div className="flex justify-between items-start">
                 <div>
-                  <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">Số Model xe đổi màu</span>
-                  <span className="text-xl sm:text-2xl font-black text-indigo-700 font-mono mt-1 block">
-                    {colorChangeDashboardStats.uniqueModels}
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">
+                    Số xe đổi màu sơn
+                  </span>
+                  <span className="text-xl sm:text-2xl font-black text-pink-600 font-mono mt-1 block">
+                    {colorChangeDashboardStats.colorShiftCount} <span className="text-xs font-bold text-slate-500">xe</span>
                   </span>
                 </div>
-                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-                  <Tag className="w-4 h-4" />
+                <div className="p-2 bg-pink-50 text-pink-600 rounded-lg">
+                  <Palette className="w-4 h-4" />
                 </div>
               </div>
-              <div className="mt-2 text-[10.5px] text-slate-500 truncate">
-                {uniqueColorChangeModels.slice(0, 3).join(', ')}{uniqueColorChangeModels.length > 3 ? '...' : ''}
+              <div className="mt-2 text-[10.5px] text-slate-500 font-medium">
+                Chiếm: <strong className="text-pink-700 font-mono">{colorChangeDashboardStats.total > 0 ? Math.round((colorChangeDashboardStats.colorShiftCount / colorChangeDashboardStats.total) * 100) : 0}%</strong> xe theo bộ lọc
               </div>
             </div>
 
+            {/* Card 3: Status / Model Shift */}
             <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
               <div className="flex justify-between items-start">
                 <div>
-                  <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">Đổi trong tháng này</span>
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">
+                    Số xe đổi trạng thái / Model
+                  </span>
+                  <span className="text-xl sm:text-2xl font-black text-indigo-700 font-mono mt-1 block">
+                    {colorChangeDashboardStats.statusShiftCount} <span className="text-xs font-bold text-slate-500">xe</span>
+                  </span>
+                </div>
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                  <Layers className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-2 text-[10.5px] text-slate-500 font-medium">
+                Chiếm: <strong className="text-indigo-700 font-mono">{colorChangeDashboardStats.total > 0 ? Math.round((colorChangeDashboardStats.statusShiftCount / colorChangeDashboardStats.total) * 100) : 0}%</strong> xe theo bộ lọc
+              </div>
+            </div>
+
+            {/* Card 4: Month & Model count */}
+            <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">
+                    Đổi trong tháng này
+                  </span>
                   <span className="text-xl sm:text-2xl font-black text-emerald-700 font-mono mt-1 block">
-                    {colorChangeDashboardStats.thisMonthCount}
+                    {colorChangeDashboardStats.thisMonthCount} <span className="text-xs font-bold text-slate-500">xe</span>
                   </span>
                 </div>
                 <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
@@ -8323,68 +8388,10 @@ export default function QualityInspectionRecords({
                 </div>
               </div>
               <div className="mt-2 text-[10.5px] text-emerald-600 font-bold">
-                Tháng {new Date().getMonth() + 1}/{new Date().getFullYear()}
-              </div>
-            </div>
-
-            <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
-              <div className="flex justify-between items-start">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">Cặp màu đổi nhiều nhất</span>
-                  <span className="text-xs sm:text-sm font-black text-rose-700 mt-1 block truncate max-w-[160px]">
-                    {colorChangeDashboardStats.topPairs[0] 
-                      ? `${colorChangeDashboardStats.topPairs[0].oldColor} ➔ ${colorChangeDashboardStats.topPairs[0].newColor}`
-                      : 'Chưa có dữ liệu'}
-                  </span>
-                </div>
-                <div className="p-2 bg-rose-50 text-rose-600 rounded-lg">
-                  <Palette className="w-4 h-4" />
-                </div>
-              </div>
-              <div className="mt-2 text-[10.5px] text-slate-500 font-medium">
-                {colorChangeDashboardStats.topPairs[0] 
-                  ? `${colorChangeDashboardStats.topPairs[0].model} (${colorChangeDashboardStats.topPairs[0].count} xe)`
-                  : 'Sẵn sàng ghi nhận'}
+                Tháng {new Date().getMonth() + 1}/{new Date().getFullYear()} ({colorChangeDashboardStats.uniqueModels} model)
               </div>
             </div>
           </div>
-
-          {/* Grouping Breakdown Pills */}
-          {colorChangeDashboardStats.topPairs.length > 0 && (
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
-                  <Palette className="w-3.5 h-3.5 text-purple-600" />
-                  Phân bố các luồng đổi màu theo dòng xe & màu sắc:
-                </span>
-                <span className="text-[10px] text-slate-400">
-                  {colorChangeDashboardStats.topPairs.length} nhóm chuyển đổi
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {colorChangeDashboardStats.topPairs.map((pair, idx) => (
-                  <div 
-                    key={idx}
-                    className="flex items-center gap-2 bg-purple-50/60 hover:bg-purple-100/80 border border-purple-200 rounded-lg px-2.5 py-1 text-xs transition"
-                  >
-                    <span className="font-extrabold text-slate-800 text-[11px]">{pair.model}</span>
-                    <div className="flex items-center gap-1 text-[10px]">
-                      <span className="px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 font-bold border border-rose-200">
-                        {pair.oldColor}
-                      </span>
-                      <ArrowRight className="w-3 h-3 text-purple-600" />
-                      <span className="px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 font-bold border border-purple-300">
-                        {pair.newColor}
-                      </span>
-                    </div>
-                    <span className="font-mono font-black text-purple-900 bg-white px-1.5 py-0.2 rounded border border-purple-200 text-[10px]">
-                      {pair.count} xe
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Filter Toolbar */}
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-3">
