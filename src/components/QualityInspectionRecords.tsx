@@ -2446,6 +2446,7 @@ export default function QualityInspectionRecords({
   const [colorChangeFilterModel, setColorChangeFilterModel] = useState('Tất cả');
   const [colorChangeFilterOldColor, setColorChangeFilterOldColor] = useState('Tất cả');
   const [colorChangeFilterNewColor, setColorChangeFilterNewColor] = useState('Tất cả');
+  const [colorChangeFilterDate, setColorChangeFilterDate] = useState('Tất cả');
   const [colorChangeFilterMonth, setColorChangeFilterMonth] = useState('Tất cả');
   const [colorChangeFilterYear, setColorChangeFilterYear] = useState('Tất cả');
   const [isColorChangeFilterExpanded, setIsColorChangeFilterExpanded] = useState(false);
@@ -4913,6 +4914,7 @@ export default function QualityInspectionRecords({
       }
       if (colorChangeFilterOldColor !== 'Tất cả' && c.oldColor !== colorChangeFilterOldColor) return false;
       if (colorChangeFilterNewColor !== 'Tất cả' && c.newColor !== colorChangeFilterNewColor) return false;
+      if (colorChangeFilterDate !== 'Tất cả' && c.date !== colorChangeFilterDate) return false;
       if (colorChangeFilterMonth !== 'Tất cả') {
         const m = c.date ? c.date.split('/')[1] : '';
         if (parseInt(m, 10) !== parseInt(colorChangeFilterMonth, 10)) return false;
@@ -4923,7 +4925,7 @@ export default function QualityInspectionRecords({
       }
       return true;
     });
-  }, [activeColorChanges, colorChangeSearchText, colorChangeFilterModel, colorChangeFilterOldColor, colorChangeFilterNewColor, colorChangeFilterMonth, colorChangeFilterYear]);
+  }, [activeColorChanges, colorChangeSearchText, colorChangeFilterModel, colorChangeFilterOldColor, colorChangeFilterNewColor, colorChangeFilterDate, colorChangeFilterMonth, colorChangeFilterYear]);
 
   // Unique filter options for Color Change subtab
   const uniqueColorChangeModels = useMemo(() => {
@@ -4938,6 +4940,19 @@ export default function QualityInspectionRecords({
 
   const uniqueColorChangeOldColors = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.oldColor).filter(Boolean))).sort(), [activeColorChanges]);
   const uniqueColorChangeNewColors = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.newColor).filter(Boolean))).sort(), [activeColorChanges]);
+  const uniqueColorChangeDates = useMemo(() => {
+    const dates = Array.from(new Set(activeColorChanges.map(c => c.date).filter(Boolean))) as string[];
+    return dates.sort((a, b) => {
+      const pA = a.split('/');
+      const pB = b.split('/');
+      if (pA.length === 3 && pB.length === 3) {
+        const tA = new Date(parseInt(pA[2], 10), parseInt(pA[1], 10) - 1, parseInt(pA[0], 10)).getTime();
+        const tB = new Date(parseInt(pB[2], 10), parseInt(pB[1], 10) - 1, parseInt(pB[0], 10)).getTime();
+        return tB - tA; // Newest first
+      }
+      return b.localeCompare(a);
+    });
+  }, [activeColorChanges]);
   const uniqueColorChangeMonths = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.date ? parseInt(c.date.split('/')[1] || '0', 10) : null).filter(Boolean))).sort((a, b) => Number(a) - Number(b)), [activeColorChanges]);
   const uniqueColorChangeYears = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.date ? c.date.split('/')[2] : null).filter(Boolean))).sort(), [activeColorChanges]);
 
@@ -8428,19 +8443,19 @@ export default function QualityInspectionRecords({
                   type="button"
                   onClick={() => setIsColorChangeFilterExpanded(!isColorChangeFilterExpanded)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border ${
-                    isColorChangeFilterExpanded || colorChangeFilterModel !== 'Tất cả' || colorChangeFilterOldColor !== 'Tất cả' || colorChangeFilterNewColor !== 'Tất cả' || colorChangeFilterMonth !== 'Tất cả' || colorChangeFilterYear !== 'Tất cả'
+                    isColorChangeFilterExpanded || colorChangeFilterModel !== 'Tất cả' || colorChangeFilterOldColor !== 'Tất cả' || colorChangeFilterNewColor !== 'Tất cả' || colorChangeFilterDate !== 'Tất cả' || colorChangeFilterMonth !== 'Tất cả' || colorChangeFilterYear !== 'Tất cả'
                       ? 'bg-purple-50 text-purple-700 border-purple-300'
                       : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
                   }`}
                 >
                   <Filter className="w-3.5 h-3.5 text-purple-600" />
                   Bộ lọc nâng cao
-                  {(colorChangeFilterModel !== 'Tất cả' || colorChangeFilterOldColor !== 'Tất cả' || colorChangeFilterNewColor !== 'Tất cả' || colorChangeFilterMonth !== 'Tất cả' || colorChangeFilterYear !== 'Tất cả') && (
+                  {(colorChangeFilterModel !== 'Tất cả' || colorChangeFilterOldColor !== 'Tất cả' || colorChangeFilterNewColor !== 'Tất cả' || colorChangeFilterDate !== 'Tất cả' || colorChangeFilterMonth !== 'Tất cả' || colorChangeFilterYear !== 'Tất cả') && (
                     <span className="w-2 h-2 rounded-full bg-purple-600"></span>
                   )}
                 </button>
 
-                {(colorChangeSearchText || colorChangeFilterModel !== 'Tất cả' || colorChangeFilterOldColor !== 'Tất cả' || colorChangeFilterNewColor !== 'Tất cả' || colorChangeFilterMonth !== 'Tất cả' || colorChangeFilterYear !== 'Tất cả') && (
+                {(colorChangeSearchText || colorChangeFilterModel !== 'Tất cả' || colorChangeFilterOldColor !== 'Tất cả' || colorChangeFilterNewColor !== 'Tất cả' || colorChangeFilterDate !== 'Tất cả' || colorChangeFilterMonth !== 'Tất cả' || colorChangeFilterYear !== 'Tất cả') && (
                   <button
                     type="button"
                     onClick={() => {
@@ -8448,6 +8463,7 @@ export default function QualityInspectionRecords({
                       setColorChangeFilterModel('Tất cả');
                       setColorChangeFilterOldColor('Tất cả');
                       setColorChangeFilterNewColor('Tất cả');
+                      setColorChangeFilterDate('Tất cả');
                       setColorChangeFilterMonth('Tất cả');
                       setColorChangeFilterYear('Tất cả');
                       setColorChangeCurrentPage(1);
@@ -8462,7 +8478,7 @@ export default function QualityInspectionRecords({
 
             {/* Expanded Filters */}
             {isColorChangeFilterExpanded && (
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2 border-t border-slate-100 text-xs animate-in fade-in duration-200">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-2 border-t border-slate-100 text-xs animate-in fade-in duration-200">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Model xe:</label>
                   <select
@@ -8510,6 +8526,23 @@ export default function QualityInspectionRecords({
                     <option value="Tất cả">Tất cả màu mới</option>
                     {uniqueColorChangeNewColors.map(c => (
                       <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Ngày đổi:</label>
+                  <select
+                    value={colorChangeFilterDate}
+                    onChange={(e) => {
+                      setColorChangeFilterDate(e.target.value);
+                      setColorChangeCurrentPage(1);
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-600 font-mono"
+                  >
+                    <option value="Tất cả">Tất cả các ngày</option>
+                    {uniqueColorChangeDates.map(d => (
+                      <option key={d} value={d}>{d}</option>
                     ))}
                   </select>
                 </div>
