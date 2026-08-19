@@ -2360,6 +2360,7 @@ export default function QualityInspectionRecords({
   const [colorChangeFilterMonth, setColorChangeFilterMonth] = useState('Tất cả');
   const [colorChangeFilterYear, setColorChangeFilterYear] = useState('Tất cả');
   const [isColorChangeFilterExpanded, setIsColorChangeFilterExpanded] = useState(false);
+  const [colorChangeCurrentPage, setColorChangeCurrentPage] = useState<number>(1);
 
   const [localColorChanges, setLocalColorChanges] = useState<OqcColorChangeRecord[]>(() => {
     if (oqcColorChanges && oqcColorChanges.length > 0) return oqcColorChanges;
@@ -8024,13 +8025,19 @@ export default function QualityInspectionRecords({
                 <input
                   type="text"
                   value={colorChangeSearchText}
-                  onChange={(e) => setColorChangeSearchText(e.target.value)}
+                  onChange={(e) => {
+                    setColorChangeSearchText(e.target.value);
+                    setColorChangeCurrentPage(1);
+                  }}
                   placeholder="Tìm theo Số Sêri / Số khung / Model / Màu sắc..."
                   className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-500"
                 />
                 {colorChangeSearchText && (
                   <button 
-                    onClick={() => setColorChangeSearchText('')}
+                    onClick={() => {
+                      setColorChangeSearchText('');
+                      setColorChangeCurrentPage(1);
+                    }}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
                   >
                     ✕
@@ -8066,6 +8073,7 @@ export default function QualityInspectionRecords({
                       setColorChangeFilterNewColor('Tất cả');
                       setColorChangeFilterMonth('Tất cả');
                       setColorChangeFilterYear('Tất cả');
+                      setColorChangeCurrentPage(1);
                     }}
                     className="text-xs text-rose-600 hover:text-rose-800 font-bold px-2 py-1 hover:bg-rose-50 rounded-lg transition"
                   >
@@ -8082,7 +8090,10 @@ export default function QualityInspectionRecords({
                   <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Model xe:</label>
                   <select
                     value={colorChangeFilterModel}
-                    onChange={(e) => setColorChangeFilterModel(e.target.value)}
+                    onChange={(e) => {
+                      setColorChangeFilterModel(e.target.value);
+                      setColorChangeCurrentPage(1);
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-600"
                   >
                     <option value="Tất cả">Tất cả ({uniqueColorChangeModels.length} model)</option>
@@ -8096,7 +8107,10 @@ export default function QualityInspectionRecords({
                   <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Màu gốc (Cũ):</label>
                   <select
                     value={colorChangeFilterOldColor}
-                    onChange={(e) => setColorChangeFilterOldColor(e.target.value)}
+                    onChange={(e) => {
+                      setColorChangeFilterOldColor(e.target.value);
+                      setColorChangeCurrentPage(1);
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-600"
                   >
                     <option value="Tất cả">Tất cả màu gốc</option>
@@ -8110,7 +8124,10 @@ export default function QualityInspectionRecords({
                   <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Màu mới (Sau đổi):</label>
                   <select
                     value={colorChangeFilterNewColor}
-                    onChange={(e) => setColorChangeFilterNewColor(e.target.value)}
+                    onChange={(e) => {
+                      setColorChangeFilterNewColor(e.target.value);
+                      setColorChangeCurrentPage(1);
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-600"
                   >
                     <option value="Tất cả">Tất cả màu mới</option>
@@ -8124,7 +8141,10 @@ export default function QualityInspectionRecords({
                   <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Tháng đổi:</label>
                   <select
                     value={colorChangeFilterMonth}
-                    onChange={(e) => setColorChangeFilterMonth(e.target.value)}
+                    onChange={(e) => {
+                      setColorChangeFilterMonth(e.target.value);
+                      setColorChangeCurrentPage(1);
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-600"
                   >
                     <option value="Tất cả">Tất cả các tháng</option>
@@ -8138,7 +8158,10 @@ export default function QualityInspectionRecords({
                   <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Năm:</label>
                   <select
                     value={colorChangeFilterYear}
-                    onChange={(e) => setColorChangeFilterYear(e.target.value)}
+                    onChange={(e) => {
+                      setColorChangeFilterYear(e.target.value);
+                      setColorChangeCurrentPage(1);
+                    }}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-600"
                   >
                     <option value="Tất cả">Tất cả các năm</option>
@@ -8152,133 +8175,181 @@ export default function QualityInspectionRecords({
           </div>
 
           {/* Main Table: Color Changes List */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-slate-700 uppercase tracking-wide">
-                  Danh Sách Xe Đổi Màu Chi Tiết ({filteredColorChanges.length} xe)
-                </span>
-              </div>
-              <span className="text-[11px] text-slate-500">
-                Hiển thị {filteredColorChanges.length} / {activeColorChanges.length} bản ghi
-              </span>
-            </div>
+          {(() => {
+            const colorChangePageSize = 30;
+            const colorChangeTotalPages = Math.max(1, Math.ceil(filteredColorChanges.length / colorChangePageSize));
+            const safeColorChangePage = Math.min(colorChangeCurrentPage, colorChangeTotalPages);
+            const paginatedColorChanges = filteredColorChanges.slice(
+              (safeColorChangePage - 1) * colorChangePageSize,
+              safeColorChangePage * colorChangePageSize
+            );
 
-            {filteredColorChanges.length === 0 ? (
-              <div className="text-center py-12 px-4 space-y-3">
-                <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center mx-auto border border-purple-200">
-                  <RefreshCw className="w-6 h-6" />
-                </div>
-                <h4 className="font-black text-slate-700 text-sm">
-                  {activeColorChanges.length === 0 ? 'Chưa có bản ghi đổi màu xe nào!' : 'Không tìm thấy xe nào khớp với bộ lọc!'}
-                </h4>
-                <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  {activeColorChanges.length === 0 
-                    ? 'Anh Thao có thể sử dụng tính năng Quét mã Sêri hoặc Dán từ Excel để ghi nhận các xe đổi màu.'
-                    : 'Thử điều chỉnh lại từ khóa tìm kiếm hoặc bấm nút "Xóa lọc" phía trên.'}
-                </p>
-                {activeColorChanges.length === 0 && (
-                  <div className="flex justify-center gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setScanError('');
-                        setScanLastSuccess(null);
-                        setShowScanColorChangeModal(true);
-                        setTimeout(() => scannerInputRef.current?.focus(), 150);
-                      }}
-                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow shadow-purple-200"
-                    >
-                      <QrCode className="w-3.5 h-3.5" /> 🔫 Bắt đầu Quét mã Sêri
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setColorChangeError('');
-                        setShowColorChangeModal(true);
-                      }}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> 📋 Dán từ Excel
-                    </button>
+            return (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-slate-700 uppercase tracking-wide">
+                      Danh Sách Xe Đổi Màu Chi Tiết ({filteredColorChanges.length} xe)
+                    </span>
+                    <span className="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded-full font-bold font-mono">
+                      30 xe/trang
+                    </span>
                   </div>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    Trang <strong>{safeColorChangePage}</strong> / <strong>{colorChangeTotalPages}</strong> (Tổng <strong>{filteredColorChanges.length}</strong> bản ghi)
+                  </span>
+                </div>
+
+                {filteredColorChanges.length === 0 ? (
+                  <div className="text-center py-12 px-4 space-y-3">
+                    <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center mx-auto border border-purple-200">
+                      <RefreshCw className="w-6 h-6" />
+                    </div>
+                    <h4 className="font-black text-slate-700 text-sm">
+                      {activeColorChanges.length === 0 ? 'Chưa có bản ghi đổi màu xe nào!' : 'Không tìm thấy xe nào khớp với bộ lọc!'}
+                    </h4>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      {activeColorChanges.length === 0 
+                        ? 'Anh Thao có thể sử dụng tính năng Quét mã Sêri hoặc Dán từ Excel để ghi nhận các xe đổi màu.'
+                        : 'Thử điều chỉnh lại từ khóa tìm kiếm hoặc bấm nút "Xóa lọc" phía trên.'}
+                    </p>
+                    {activeColorChanges.length === 0 && (
+                      <div className="flex justify-center gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setScanError('');
+                            setScanLastSuccess(null);
+                            setShowScanColorChangeModal(true);
+                            setTimeout(() => scannerInputRef.current?.focus(), 150);
+                          }}
+                          className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow shadow-purple-200"
+                        >
+                          <QrCode className="w-3.5 h-3.5" /> 🔫 Bắt đầu Quét mã Sêri
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setColorChangeError('');
+                            setShowColorChangeModal(true);
+                          }}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> 📋 Dán từ Excel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto max-h-[560px] overflow-y-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-slate-100/80 text-slate-700 sticky top-0 font-extrabold text-[11px] uppercase tracking-wide border-b border-slate-200 z-10">
+                          <tr>
+                            <th className="p-2.5 w-10 text-center">STT</th>
+                            <th className="p-2.5">Số Sêri / Khung</th>
+                            <th className="p-2.5">Dòng xe (Model)</th>
+                            <th className="p-2.5 text-center">Màu gốc (Cũ)</th>
+                            <th className="p-2.5 text-center w-8">➔</th>
+                            <th className="p-2.5 text-center">Màu mới (Sau đổi)</th>
+                            <th className="p-2.5 text-center">Ngày đổi màu</th>
+                            <th className="p-2.5 text-center">Trạng thái OQC</th>
+                            <th className="p-2.5 text-center w-16">Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 font-medium text-slate-800">
+                          {paginatedColorChanges.map((item, idx) => {
+                            const matchedOqc = oqcRecords.find(r => r.serialNo && r.serialNo.trim().toUpperCase() === item.serialNo.trim().toUpperCase());
+                            const rowStt = (safeColorChangePage - 1) * colorChangePageSize + idx + 1;
+                            return (
+                              <tr key={item.id || idx} className="hover:bg-purple-50/40 transition">
+                                <td className="p-2.5 text-center text-slate-400 font-bold">{rowStt}</td>
+                                <td className="p-2.5">
+                                  <span className="font-mono font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-300 text-[11px]">
+                                    {item.serialNo}
+                                  </span>
+                                </td>
+                                <td className="p-2.5 font-extrabold text-slate-800">
+                                  {item.model}
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  <span className="px-2 py-0.5 rounded text-[11px] bg-rose-50 text-rose-700 font-bold border border-rose-200">
+                                    {item.oldColor}
+                                  </span>
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  <ArrowRight className="w-3.5 h-3.5 text-purple-600 mx-auto" />
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  <span className="px-2 py-0.5 rounded text-[11px] bg-purple-100 text-purple-800 font-black border border-purple-300">
+                                    {item.newColor}
+                                  </span>
+                                </td>
+                                <td className="p-2.5 text-center font-mono font-bold text-slate-600">
+                                  {item.date}
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  {matchedOqc ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Đã cập nhật OQC
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                                      Đã lưu hồ sơ
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteColorChange(item)}
+                                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                    title="Xóa bản ghi đổi màu & hoàn tác về màu gốc"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Pagination Toolbar */}
+                    {colorChangeTotalPages > 1 && (
+                      <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs">
+                        <span className="font-medium text-slate-500">
+                          Đang hiển thị <strong>{(safeColorChangePage - 1) * colorChangePageSize + 1}</strong> - <strong>{Math.min(safeColorChangePage * colorChangePageSize, filteredColorChanges.length)}</strong> trên tổng số <strong>{filteredColorChanges.length}</strong> xe đổi màu
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={safeColorChangePage <= 1}
+                            onClick={() => setColorChangeCurrentPage(prev => Math.max(1, prev - 1))}
+                            className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 font-bold text-slate-700 transition"
+                          >
+                            <ChevronLeft className="w-4 h-4" /> Trang trước
+                          </button>
+                          <span className="px-3 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg font-bold font-mono text-[11px]">
+                            {safeColorChangePage} / {colorChangeTotalPages}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={safeColorChangePage >= colorChangeTotalPages}
+                            onClick={() => setColorChangeCurrentPage(prev => Math.min(colorChangeTotalPages, prev + 1))}
+                            className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 font-bold text-slate-700 transition"
+                          >
+                            Trang sau <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
-            ) : (
-              <div className="overflow-x-auto max-h-[560px] overflow-y-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-100/80 text-slate-700 sticky top-0 font-extrabold text-[11px] uppercase tracking-wide border-b border-slate-200 z-10">
-                    <tr>
-                      <th className="p-2.5 w-10 text-center">STT</th>
-                      <th className="p-2.5">Số Sêri / Khung</th>
-                      <th className="p-2.5">Dòng xe (Model)</th>
-                      <th className="p-2.5 text-center">Màu gốc (Cũ)</th>
-                      <th className="p-2.5 text-center w-8">➔</th>
-                      <th className="p-2.5 text-center">Màu mới (Sau đổi)</th>
-                      <th className="p-2.5 text-center">Ngày đổi màu</th>
-                      <th className="p-2.5 text-center">Trạng thái OQC</th>
-                      <th className="p-2.5 text-center w-16">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 font-medium text-slate-800">
-                    {filteredColorChanges.map((item, idx) => {
-                      const matchedOqc = oqcRecords.find(r => r.serialNo && r.serialNo.trim().toUpperCase() === item.serialNo.trim().toUpperCase());
-                      return (
-                        <tr key={item.id || idx} className="hover:bg-purple-50/40 transition">
-                          <td className="p-2.5 text-center text-slate-400 font-bold">{idx + 1}</td>
-                          <td className="p-2.5">
-                            <span className="font-mono font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-300 text-[11px]">
-                              {item.serialNo}
-                            </span>
-                          </td>
-                          <td className="p-2.5 font-extrabold text-slate-800">
-                            {item.model}
-                          </td>
-                          <td className="p-2.5 text-center">
-                            <span className="px-2 py-0.5 rounded text-[11px] bg-rose-50 text-rose-700 font-bold border border-rose-200">
-                              {item.oldColor}
-                            </span>
-                          </td>
-                          <td className="p-2.5 text-center">
-                            <ArrowRight className="w-3.5 h-3.5 text-purple-600 mx-auto" />
-                          </td>
-                          <td className="p-2.5 text-center">
-                            <span className="px-2 py-0.5 rounded text-[11px] bg-purple-100 text-purple-800 font-black border border-purple-300">
-                              {item.newColor}
-                            </span>
-                          </td>
-                          <td className="p-2.5 text-center font-mono font-bold text-slate-600">
-                            {item.date}
-                          </td>
-                          <td className="p-2.5 text-center">
-                            {matchedOqc ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Đã cập nhật OQC
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-                                Đã lưu hồ sơ
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-2.5 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteColorChange(item)}
-                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                              title="Xóa bản ghi đổi màu & hoàn tác về màu gốc"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+            );
+          })()}
         </div>
       )}
 
