@@ -2430,8 +2430,11 @@ export default function QualityInspectionRecords({
   const [stagedScans, setStagedScans] = useState<Array<{
     serialNo: string;
     model: string;
+    oldModel: string;
+    newModel: string;
     oldColor: string;
     newColor: string;
+    changeType: 'color' | 'status' | 'both';
     date: string;
     lsx?: string;
     partCode?: string;
@@ -2440,6 +2443,17 @@ export default function QualityInspectionRecords({
   const [scanError, setScanError] = useState('');
   const [scanLastSuccess, setScanLastSuccess] = useState<string | null>(null);
   const scannerInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Edit Color Change Record State
+  const [editingColorChangeRecord, setEditingColorChangeRecord] = useState<OqcColorChangeRecord | null>(null);
+  const [showEditColorChangeModal, setShowEditColorChangeModal] = useState(false);
+  const [editCcSerialNo, setEditCcSerialNo] = useState('');
+  const [editCcOldModel, setEditCcOldModel] = useState('');
+  const [editCcNewModel, setEditCcNewModel] = useState('');
+  const [editCcOldColor, setEditCcOldColor] = useState('');
+  const [editCcNewColor, setEditCcNewColor] = useState('');
+  const [editCcDate, setEditCcDate] = useState('');
+  const [editCcError, setEditCcError] = useState('');
 
   // Multi-dimensional filters for Color Change Subtab
   const [colorChangeSearchText, setColorChangeSearchText] = useState('');
@@ -4562,29 +4576,32 @@ export default function QualityInspectionRecords({
 
     // In-memory RAM lookup from oqcRecords
     const existingOqc = oqcRecords.find(r => r.serialNo && r.serialNo.trim().toUpperCase() === clean);
-    let model = existingOqc?.model || '';
+    let oldModel = existingOqc?.model || '';
     let oldColor = existingOqc?.color || '';
     let lsx = existingOqc?.lsx || '26-10';
-    let partCode = existingOqc?.partCode || 'TEMDV11202';
+    let partCode = existingOqc?.partCode || 'TEM-GEN';
     let isNewInOqc = false;
 
-    if (!model || !oldColor) {
+    if (!oldModel || !oldColor) {
       const matchedPart = lookupPartCode(partCode);
       if (matchedPart) {
-        if (!model) model = matchedPart.model || 'DK Nova';
-        if (!oldColor) oldColor = matchedPart.color || 'Đỏ';
-      } else {
-        if (!model) model = 'DK Nova';
-        if (!oldColor) oldColor = 'Đỏ';
+        if (!oldModel) oldModel = matchedPart.model || '';
+        if (!oldColor) oldColor = matchedPart.color || '';
       }
       if (!existingOqc) isNewInOqc = true;
     }
 
+    if (!oldModel) oldModel = modelNames[0] || 'DK Roma SX V2';
+    if (!oldColor) oldColor = 'Đen';
+
     const newEntry = {
       serialNo: clean,
-      model,
-      oldColor,
+      model: oldModel,
+      oldModel: oldModel,
+      newModel: oldModel,
+      oldColor: oldColor,
       newColor: '',
+      changeType: 'color' as const,
       date: scanDate || new Date().toLocaleDateString('vi-VN'),
       lsx,
       partCode,
@@ -4593,7 +4610,11 @@ export default function QualityInspectionRecords({
 
     // Staged into RAM list only - NO Firebase or localStorage write here!
     setStagedScans(prev => [newEntry, ...prev]);
-    setScanLastSuccess(`✓ Đã quét: ${clean} (${model} | Màu gốc: ${oldColor}) ➔ Mời chọn/sửa màu mới ở bảng bên dưới`);
+    if (isNewInOqc) {
+      setScanLastSuccess(`✓ Đã quét: ${clean} (Sêri mới chưa có trong KCS ➔ Có thể chọn/sửa Model & Màu gốc và Model & Màu mới ở bảng bên dưới)`);
+    } else {
+      setScanLastSuccess(`✓ Đã quét: ${clean} (${oldModel} | Màu gốc: ${oldColor}) ➔ Mời chọn/sửa Model & Màu mới ở bảng bên dưới`);
+    }
     playScanBeep(false);
     setScanSerialInput('');
     setTimeout(() => {
@@ -4601,27 +4622,59 @@ export default function QualityInspectionRecords({
     }, 50);
   };
 
-  const handleUpdateStagedItem = (index: number, field: 'newColor' | 'date' | 'model', val: string) => {
+  const handleUpdateStagedItem = (
+    index: number,
+    field: 'oldModel' | 'newModel' | 'oldColor' | 'newColor' | 'date',
+    val: string
+  ) => {
     setStagedScans(prev => {
       const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: val };
+      const current = { ...updated[index], [field]: val };
+      if (field === 'newModel') current.model = val;
+      const isMDiff = (current.oldModel || '').toLowerCase().trim() !== (current.newModel || '').toLowerCase().trim();
+      const isCDiff = (current.oldColor || '').toLowerCase().trim() !== (current.newColor || '').toLowerCase().trim();
+      if (isMDiff && isCDiff) current.changeType = 'both';
+      else if (isMDiff) current.changeType = 'status';
+      else current.changeType = 'color';
+      updated[index] = current;
       return updated;
     });
   };
 
   const handleApplyColorToAllStaged = (targetColor: string) => {
     if (!targetColor.trim()) return;
-    setStagedScans(prev => prev.map(item => ({ ...item, newColor: targetColor.trim() })));
+    setStagedScans(prev => prev.map(item => {
+      const isMDiff = (item.oldModel || '').toLowerCase().trim() !== (item.newModel || '').toLowerCase().trim();
+      const isCDiff = (item.oldColor || '').toLowerCase().trim() !== targetColor.trim().toLowerCase();
+      let changeType: 'color' | 'status' | 'both' = 'color';
+      if (isMDiff && isCDiff) changeType = 'both';
+      else if (isMDiff) changeType = 'status';
+      else changeType = 'color';
+      return { ...item, newColor: targetColor.trim(), changeType };
+    }));
+  };
+
+  const handleApplyModelToAllStaged = (targetModel: string) => {
+    if (!targetModel.trim()) return;
+    setStagedScans(prev => prev.map(item => {
+      const isMDiff = (item.oldModel || '').toLowerCase().trim() !== targetModel.trim().toLowerCase();
+      const isCDiff = (item.oldColor || '').toLowerCase().trim() !== (item.newColor || '').toLowerCase().trim();
+      let changeType: 'color' | 'status' | 'both' = 'color';
+      if (isMDiff && isCDiff) changeType = 'both';
+      else if (isMDiff) changeType = 'status';
+      else changeType = 'color';
+      return { ...item, newModel: targetModel.trim(), model: targetModel.trim(), changeType };
+    }));
   };
 
   // Commit all staged scans to database & cloud in a SINGLE ATOMIC BATCH
   const handleSaveStagedScans = () => {
     if (stagedScans.length === 0) return;
 
-    // Validate that all scanned cars have a new color specified
-    const unassignedColors = stagedScans.filter(s => !s.newColor || !s.newColor.trim());
-    if (unassignedColors.length > 0) {
-      setScanError(`Có ${unassignedColors.length} xe chưa được chọn/nhập Màu mới (Ví dụ: ${unassignedColors.slice(0, 3).map(x => x.serialNo).join(', ')}). Anh Thao vui lòng chọn hoặc gõ Màu mới cho các xe này trước khi Lưu!`);
+    // Validate that all scanned cars have a target specified (newColor or newModel changed)
+    const invalidItems = stagedScans.filter(s => (!s.newColor || !s.newColor.trim()) && (!s.newModel || s.newModel === s.oldModel));
+    if (invalidItems.length > 0) {
+      setScanError(`Có ${invalidItems.length} xe chưa được chọn/nhập Màu mới hoặc Model mới (Ví dụ: ${invalidItems.slice(0, 3).map(x => x.serialNo).join(', ')}). Anh Thao vui lòng chọn hoặc gõ Màu mới/Model mới cho các xe này trước khi Lưu!`);
       playScanBeep(true);
       return;
     }
@@ -4635,17 +4688,21 @@ export default function QualityInspectionRecords({
       // 1. Update OQC records in RAM
       const existingSerials = new Set<string>();
       const updatedOqc = oqcRecords.map(r => {
-        const sUpper = r.serialNo?.trim().toUpperCase() || '';
+        const sUpper = (r.serialNo || '').trim().toUpperCase();
         existingSerials.add(sUpper);
         const change = serialChangeMap.get(sUpper);
         if (change) {
+          const isStatusChanged = Boolean(change.oldModel && change.newModel && change.oldModel.toLowerCase().trim() !== change.newModel.toLowerCase().trim());
+          const isColorChanged = Boolean(change.oldColor && change.newColor && change.oldColor.toLowerCase().trim() !== change.newColor.toLowerCase().trim());
           return {
             ...r,
-            color: change.newColor,
-            oldColor: change.oldColor || r.color,
-            isColorChanged: true,
-            colorChangeDate: change.date,
-            model: change.model || r.model
+            model: change.newModel || change.model || r.model,
+            color: change.newColor || r.color,
+            oldModel: change.oldModel || r.oldModel || r.model,
+            oldColor: change.oldColor || r.oldColor || r.color,
+            isColorChanged: isColorChanged || r.isColorChanged,
+            isStatusChanged: isStatusChanged || r.isStatusChanged,
+            colorChangeDate: change.date
           };
         }
         return r;
@@ -4656,14 +4713,18 @@ export default function QualityInspectionRecords({
       stagedScans.forEach(item => {
         const sUpper = item.serialNo.trim().toUpperCase();
         if (!existingSerials.has(sUpper)) {
+          const isStatusChanged = Boolean(item.oldModel && item.newModel && item.oldModel.toLowerCase().trim() !== item.newModel.toLowerCase().trim());
+          const isColorChanged = Boolean(item.oldColor && item.newColor && item.oldColor.toLowerCase().trim() !== item.newColor.toLowerCase().trim());
           newOqcFromChanges.push({
             id: `OQC-${sUpper.replace(/[\/\s.#$\[\]]/g, '_')}`,
-            partCode: item.partCode || 'TEMDV11202',
+            partCode: item.partCode || 'TEM-GEN',
             serialNo: item.serialNo.trim(),
-            model: item.model,
-            color: item.newColor,
+            model: item.newModel || item.model,
+            color: item.newColor || item.oldColor,
+            oldModel: item.oldModel || item.model,
             oldColor: item.oldColor,
-            isColorChanged: true,
+            isColorChanged: isColorChanged,
+            isStatusChanged: isStatusChanged,
             colorChangeDate: item.date,
             status: 'Đạt',
             defectDetail: '',
@@ -4682,19 +4743,28 @@ export default function QualityInspectionRecords({
       const finalOqc = [...newOqcFromChanges, ...updatedOqc];
 
       // 2. Add records to oqcColorChanges
-      const newColorChangeRecords: OqcColorChangeRecord[] = stagedScans.map(item => ({
-        id: `CC-${item.serialNo.trim().toUpperCase()}-${item.date.replace(/\//g, '')}-${Date.now()}`,
-        serialNo: item.serialNo.trim(),
-        model: item.model,
-        oldModel: item.model,
-        newModel: item.model,
-        oldColor: item.oldColor,
-        newColor: item.newColor,
-        changeType: 'color',
-        date: item.date,
-        flag: true,
-        createdAt: new Date().toISOString()
-      }));
+      const newColorChangeRecords: OqcColorChangeRecord[] = stagedScans.map(item => {
+        const isModelDiff = (item.oldModel || '').toLowerCase().trim() !== (item.newModel || '').toLowerCase().trim();
+        const isColorDiff = (item.oldColor || '').toLowerCase().trim() !== (item.newColor || '').toLowerCase().trim();
+        let changeType: 'color' | 'status' | 'both' = 'color';
+        if (isModelDiff && isColorDiff) changeType = 'both';
+        else if (isModelDiff) changeType = 'status';
+        else changeType = 'color';
+
+        return {
+          id: `CC-${item.serialNo.trim().toUpperCase()}-${item.date.replace(/\//g, '')}-${Date.now()}`,
+          serialNo: item.serialNo.trim(),
+          model: item.newModel || item.model,
+          oldModel: item.oldModel || item.model,
+          newModel: item.newModel || item.model,
+          oldColor: item.oldColor,
+          newColor: item.newColor || item.oldColor,
+          changeType,
+          date: item.date,
+          flag: true,
+          createdAt: new Date().toISOString()
+        };
+      });
 
       const mergedChanges = [
         ...newColorChangeRecords,
@@ -4718,10 +4788,127 @@ export default function QualityInspectionRecords({
       const count = stagedScans.length;
       setStagedScans([]);
       setShowScanColorChangeModal(false);
-      alert(`✓ Đã lưu thành công đổi màu cho ${count} xe!\n\n(Dữ liệu đã tự động cập nhật vào OQC và đẩy lên Cloud an toàn)`);
+      alert(`🎉 Đã quét & lưu thành công ${count} xe chuyển đổi vào hệ thống KCS!\n\n(Dữ liệu đã tự động cập nhật vào OQC và đẩy lên Cloud an toàn)`);
     } catch (err: any) {
-      setScanError(`Lỗi khi lưu dữ liệu đổi màu: ${err.message || err}`);
+      setScanError(`Lỗi khi lưu dữ liệu: ${err.message || err}`);
     }
+  };
+
+  // Open Edit Modal for a single color/status change record
+  const handleOpenEditColorChange = (record: OqcColorChangeRecord) => {
+    const cls = getChangeClassification(record);
+    setEditingColorChangeRecord(record);
+    setEditCcSerialNo(record.serialNo);
+    setEditCcOldModel(cls.displayOldModel);
+    setEditCcNewModel(cls.displayNewModel);
+    setEditCcOldColor(cls.displayOldColor);
+    setEditCcNewColor(cls.displayNewColor);
+    setEditCcDate(record.date);
+    setEditCcError('');
+    setShowEditColorChangeModal(true);
+  };
+
+  // Save changes from Edit Modal
+  const handleSaveEditColorChange = (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingColorChangeRecord) return;
+    setEditCcError('');
+
+    const cleanSerial = editCcSerialNo.trim().toUpperCase();
+    const oldM = editCcOldModel.trim() || 'DK D2';
+    const newM = editCcNewModel.trim() || oldM;
+    const oldC = editCcOldColor.trim() || 'Tiêu chuẩn';
+    const newC = editCcNewColor.trim() || oldC;
+    const dateVal = editCcDate.trim() || new Date().toLocaleDateString('vi-VN');
+
+    if (!cleanSerial) {
+      setEditCcError('Số sêri không được để trống!');
+      return;
+    }
+
+    const isModelDiff = oldM.toLowerCase() !== newM.toLowerCase();
+    const isColorDiff = oldC.toLowerCase() !== newC.toLowerCase();
+    let changeType: 'color' | 'status' | 'both' = 'color';
+    if (isModelDiff && isColorDiff) changeType = 'both';
+    else if (isModelDiff) changeType = 'status';
+    else changeType = 'color';
+
+    // 1. Update in activeColorChanges
+    const updatedChanges = activeColorChanges.map(c => {
+      if (c.id === editingColorChangeRecord.id || (c.serialNo.trim().toUpperCase() === editingColorChangeRecord.serialNo.trim().toUpperCase() && c.date === editingColorChangeRecord.date)) {
+        return {
+          ...c,
+          serialNo: cleanSerial,
+          model: newM,
+          oldModel: oldM,
+          newModel: newM,
+          oldColor: oldC,
+          newColor: newC,
+          changeType,
+          date: dateVal
+        };
+      }
+      return c;
+    });
+
+    // 2. Update in oqcRecords
+    let hasMatchedOqc = false;
+    const updatedOqc = oqcRecords.map(r => {
+      if (r.serialNo && (r.serialNo.trim().toUpperCase() === editingColorChangeRecord.serialNo.trim().toUpperCase() || r.serialNo.trim().toUpperCase() === cleanSerial)) {
+        hasMatchedOqc = true;
+        return {
+          ...r,
+          serialNo: cleanSerial,
+          model: newM,
+          color: newC,
+          oldModel: oldM,
+          oldColor: oldC,
+          isColorChanged: isColorDiff || r.isColorChanged,
+          isStatusChanged: isModelDiff || r.isStatusChanged,
+          colorChangeDate: dateVal
+        };
+      }
+      return r;
+    });
+
+    let finalOqc = updatedOqc;
+    if (!hasMatchedOqc) {
+      finalOqc = [{
+        id: `OQC-${cleanSerial.replace(/[\/\s.#$\[\]]/g, '_')}`,
+        partCode: 'TEM-GEN',
+        serialNo: cleanSerial,
+        model: newM,
+        color: newC,
+        oldModel: oldM,
+        oldColor: oldC,
+        isColorChanged: isColorDiff,
+        isStatusChanged: isModelDiff,
+        colorChangeDate: dateVal,
+        status: 'Đạt',
+        defectDetail: '',
+        failedCount: 0,
+        rootCause: '',
+        lsx: '26-10',
+        checkTime: '08:30',
+        date: dateVal,
+        month: parseInt(dateVal.split('/')[1] || '5', 10),
+        year: parseInt(dateVal.split('/')[2] || '2026', 10),
+        totalLlr: 1
+      }, ...updatedOqc];
+    }
+
+    // 3. Persist & Sync
+    updateColorChanges(updatedChanges);
+    setOqcRecords(finalOqc);
+    safeStorage.setItem('dk_oqc_records', JSON.stringify(finalOqc));
+    try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+    if (typeof (window as any).syncToServer === 'function') {
+      (window as any).syncToServer('dk_oqc_records', finalOqc);
+    }
+
+    setShowEditColorChangeModal(false);
+    setEditingColorChangeRecord(null);
+    alert(`✓ Đã cập nhật thành công thông tin chuyển đổi cho xe [${cleanSerial}]!`);
   };
 
   // Revert & Delete a single color change record
@@ -8793,14 +8980,24 @@ export default function QualityInspectionRecords({
                                   )}
                                 </td>
                                 <td className="p-2.5 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteColorChange(item)}
-                                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                                    title="Xóa bản ghi & hoàn tác về trạng thái/màu gốc"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditColorChange(item)}
+                                      className="p-1 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition cursor-pointer"
+                                      title="Chỉnh sửa thông tin đổi màu / trạng thái xe này"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteColorChange(item)}
+                                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                      title="Xóa bản ghi & hoàn tác về trạng thái/màu gốc"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -11811,10 +12008,10 @@ export default function QualityInspectionRecords({
         </div>
       )}
 
-      {/* MODAL: HIGH-PERFORMANCE BARCODE SCANNER COLOR CHANGE (ZERO DISK SPAM DURING SCANNING) */}
+      {/* MODAL: HIGH-PERFORMANCE BARCODE SCANNER COLOR & STATUS CHANGE */}
       {showScanColorChangeModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-4 sm:p-6 border border-purple-300 text-xs text-slate-800 space-y-4 max-h-[94vh] flex flex-col">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-4 sm:p-6 border border-purple-300 text-xs text-slate-800 space-y-4 max-h-[94vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex justify-between items-center border-b border-purple-100 pb-3">
               <div className="flex items-center gap-2.5">
@@ -11823,10 +12020,10 @@ export default function QualityInspectionRecords({
                 </span>
                 <div>
                   <h3 className="font-black text-slate-800 text-sm sm:text-base uppercase flex items-center gap-2">
-                    🔫 Quét Mã Sêri Đổi Màu Xe Thành Phẩm KCS
+                    🔫 Quét Mã Sêri Đổi Màu &amp; Đổi Trạng Thái Xe (KCS)
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Sử dụng súng quét mã vạch / QR - Tự động đối soát Model &amp; Màu cũ từ OQC (Không tốn lượt đọc/ghi trong lúc quét)
+                    Sử dụng súng quét mã vạch / QR — Tự động tra Model &amp; Màu gốc từ KCS OQC và cho phép nhập/sửa trực tiếp
                   </p>
                 </div>
               </div>
@@ -11854,16 +12051,16 @@ export default function QualityInspectionRecords({
                   <Wrench className="w-4 h-4 text-purple-700" />
                 </span>
                 <div>
-                  <span className="font-extrabold text-xs block">Quy trình quét đổi màu xe nhanh:</span>
+                  <span className="font-extrabold text-xs block">Quy trình quét đổi màu/trạng thái xe nhanh:</span>
                   <span className="text-[11px] text-purple-700 font-medium">
-                    1. Bắn súng quét Sêri liên tục (tự tra Model & Màu gốc) ➔ 2. Tự chọn/sửa Màu mới trực tiếp ở bảng bên dưới ➔ 3. Bấm Lưu.
+                    1. Bắn súng quét Sêri liên tục (tự tra Model &amp; Màu gốc) ➔ 2. Nhập/chọn Model mới &amp; Màu mới ở bảng ➔ 3. Bấm Lưu.
                   </span>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
                 <label className="font-extrabold text-purple-900 text-[11px] uppercase tracking-wide">
-                  📅 Ngày đổi màu:
+                  📅 Ngày thực hiện:
                 </label>
                 <input
                   type="text"
@@ -11944,9 +12141,29 @@ export default function QualityInspectionRecords({
 
                 {stagedScans.length > 0 && (
                   <div className="flex items-center gap-2 flex-wrap">
+                    {/* Quick batch model helper */}
+                    <div className="flex items-center gap-1 bg-indigo-50 p-1 px-2 rounded-lg border border-indigo-200 text-[11px]">
+                      <span className="text-indigo-700 font-bold">Gán nhanh Model mới:</span>
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleApplyModelToAllStaged(e.target.value);
+                            e.target.value = '';
+                          }
+                        }}
+                        defaultValue=""
+                        className="bg-white border border-indigo-300 rounded px-1.5 py-0.5 text-[11px] font-bold text-indigo-900 focus:outline-none max-w-[140px]"
+                      >
+                        <option value="" disabled>-- Chọn Model --</option>
+                        {uniqueColorChangeModels.map(m => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
+
                     {/* Quick batch color helper */}
-                    <div className="flex items-center gap-1 bg-purple-50 p-1 px-2 rounded-lg border border-purple-200 text-[11px]">
-                      <span className="text-purple-700 font-bold">Gán nhanh tất cả:</span>
+                    <div className="flex items-center gap-1 bg-pink-50 p-1 px-2 rounded-lg border border-pink-200 text-[11px]">
+                      <span className="text-pink-700 font-bold">Gán nhanh Màu mới:</span>
                       <select
                         onChange={(e) => {
                           if (e.target.value) {
@@ -11955,10 +12172,10 @@ export default function QualityInspectionRecords({
                           }
                         }}
                         defaultValue=""
-                        className="bg-white border border-purple-300 rounded px-1.5 py-0.5 text-[11px] font-bold text-purple-900 focus:outline-none"
+                        className="bg-white border border-pink-300 rounded px-1.5 py-0.5 text-[11px] font-bold text-pink-900 focus:outline-none"
                       >
                         <option value="" disabled>-- Chọn màu --</option>
-                        {['Đen', 'Đen mờ', 'Đỏ', 'Đỏ đun', 'Trắng', 'Xanh cửu long', 'Xanh ngọc', 'Xanh rêu', 'Xám xi măng', 'Ghi bạc', 'Vàng', 'Cam', 'Hồng', 'Tím', 'Xanh xi măng'].map(c => (
+                        {['Đen', 'Đen mờ', 'Đen bóng', 'Đỏ', 'Đỏ đun', 'Trắng', 'Trắng đen', 'Trắng sứ', 'Xanh cửu long', 'Xanh ngọc', 'Xanh rêu', 'Xám xi măng', 'Ghi bạc', 'Cà phê', 'Vàng', 'Cam', 'Hồng', 'Tím', 'Xanh xi măng'].map(c => (
                           <option key={c} value={c}>{c}</option>
                         ))}
                       </select>
@@ -11973,7 +12190,7 @@ export default function QualityInspectionRecords({
                           scannerInputRef.current?.focus();
                         }
                       }}
-                      className="text-[10.5px] text-rose-600 hover:text-rose-800 font-bold hover:bg-rose-50 px-2 py-1 rounded transition"
+                      className="text-[10.5px] text-rose-600 hover:text-rose-800 font-bold hover:bg-rose-50 px-2 py-1 rounded transition cursor-pointer"
                     >
                       Xóa tất cả ({stagedScans.length})
                     </button>
@@ -11981,7 +12198,7 @@ export default function QualityInspectionRecords({
                 )}
               </div>
 
-              <div className="flex-1 max-h-[260px] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/50 shadow-inner">
+              <div className="flex-1 max-h-[280px] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/50 shadow-inner">
                 {stagedScans.length === 0 ? (
                   <div className="py-10 text-center text-slate-400 space-y-1.5">
                     <QrCode className="w-10 h-10 text-slate-300 mx-auto" />
@@ -11992,57 +12209,85 @@ export default function QualityInspectionRecords({
                   <table className="w-full text-left text-xs border-collapse">
                     <thead className="bg-purple-100/90 text-purple-900 sticky top-0 font-extrabold text-[10.5px] uppercase border-b border-purple-200 z-10">
                       <tr>
-                        <th className="p-2.5 w-10 text-center">STT</th>
-                        <th className="p-2.5">Số Sêri</th>
-                        <th className="p-2.5">Model (Tự đối soát)</th>
-                        <th className="p-2.5 text-center">Màu gốc (OQC)</th>
-                        <th className="p-2.5 text-center w-6">➔</th>
-                        <th className="p-2.5 w-48 text-left">🎨 Màu mới sau khi đổi</th>
-                        <th className="p-2.5 text-center w-28">Ngày đổi</th>
-                        <th className="p-2.5 text-center w-12">Xóa</th>
+                        <th className="p-2 w-8 text-center">STT</th>
+                        <th className="p-2 w-32">Số Sêri</th>
+                        <th className="p-2 w-36">Model GỐC</th>
+                        <th className="p-2 w-28">Màu GỐC</th>
+                        <th className="p-2 text-center w-6">➔</th>
+                        <th className="p-2 w-36">🔄 Model MỚI</th>
+                        <th className="p-2 w-36">🎨 Màu MỚI</th>
+                        <th className="p-2 text-center w-28">Ngày đổi</th>
+                        <th className="p-2 text-center w-10">Xóa</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-purple-100 font-medium">
                       {stagedScans.map((item, idx) => (
                         <tr key={idx} className="hover:bg-purple-50/30 bg-white transition">
-                          <td className="p-2.5 text-center text-slate-400 font-bold">{idx + 1}</td>
-                          <td className="p-2.5 font-mono font-black text-slate-900">
-                            <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[11px]">
+                          <td className="p-2 text-center text-slate-400 font-bold">{idx + 1}</td>
+                          <td className="p-2 font-mono font-black text-slate-900">
+                            <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-[11px] block">
                               {item.serialNo}
                             </span>
+                            {item.isNewInOqc && (
+                              <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-1 rounded border border-amber-200 mt-0.5 inline-block">
+                                Chưa có KCS
+                              </span>
+                            )}
                           </td>
-                          <td className="p-2.5 font-bold text-slate-800">{item.model}</td>
-                          <td className="p-2.5 text-center">
-                            <span className="px-2 py-0.5 rounded text-[11px] bg-rose-50 text-rose-700 font-bold border border-rose-200">
-                              {item.oldColor || 'Chưa rõ'}
-                            </span>
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              list="scan-model-presets-list"
+                              value={item.oldModel || item.model}
+                              onChange={(e) => handleUpdateStagedItem(idx, 'oldModel', e.target.value)}
+                              placeholder="Model cũ..."
+                              className="w-full bg-slate-50 border border-slate-200 rounded px-1.5 py-1 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-500"
+                            />
                           </td>
-                          <td className="p-2.5 text-center font-black text-purple-600">➔</td>
-                          <td className="p-2.5">
-                            <div className="flex items-center gap-1.5">
-                              <input
-                                type="text"
-                                list="scan-color-presets-list"
-                                value={item.newColor}
-                                onChange={(e) => handleUpdateStagedItem(idx, 'newColor', e.target.value)}
-                                placeholder="Chọn / gõ màu mới..."
-                                className={`w-full border rounded-lg px-2.5 py-1 text-xs font-black transition focus:outline-none focus:ring-2 ${
-                                  !item.newColor || !item.newColor.trim()
-                                    ? 'border-amber-400 bg-amber-50/60 text-amber-900 placeholder:text-amber-600/70 focus:border-amber-500 focus:ring-amber-200 animate-pulse'
-                                    : 'border-purple-300 bg-white text-purple-900 focus:border-purple-600 focus:ring-purple-200'
-                                }`}
-                              />
-                            </div>
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              list="scan-color-presets-list"
+                              value={item.oldColor}
+                              onChange={(e) => handleUpdateStagedItem(idx, 'oldColor', e.target.value)}
+                              placeholder="Màu cũ..."
+                              className="w-full bg-slate-50 border border-slate-200 rounded px-1.5 py-1 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-500"
+                            />
                           </td>
-                          <td className="p-2.5 text-center">
+                          <td className="p-2 text-center font-black text-purple-600">➔</td>
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              list="scan-model-presets-list"
+                              value={item.newModel || item.model}
+                              onChange={(e) => handleUpdateStagedItem(idx, 'newModel', e.target.value)}
+                              placeholder="Model mới..."
+                              className="w-full bg-indigo-50/50 border border-indigo-200 rounded px-1.5 py-1 text-xs font-bold text-indigo-900 focus:bg-white focus:outline-none focus:border-indigo-600"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              list="scan-color-presets-list"
+                              value={item.newColor}
+                              onChange={(e) => handleUpdateStagedItem(idx, 'newColor', e.target.value)}
+                              placeholder="Chọn/gõ màu mới..."
+                              className={`w-full border rounded px-1.5 py-1 text-xs font-black transition focus:outline-none focus:ring-2 ${
+                                !item.newColor || !item.newColor.trim()
+                                  ? 'border-amber-400 bg-amber-50/60 text-amber-900 placeholder:text-amber-600/70 focus:border-amber-500 focus:ring-amber-200 animate-pulse'
+                                  : 'border-pink-300 bg-pink-50/40 text-pink-900 focus:bg-white focus:border-pink-600 focus:ring-pink-200'
+                              }`}
+                            />
+                          </td>
+                          <td className="p-2 text-center">
                             <input
                               type="text"
                               value={item.date}
                               onChange={(e) => handleUpdateStagedItem(idx, 'date', e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded px-1.5 py-1 text-center font-mono text-[11px] font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-500"
+                              className="w-full bg-slate-50 border border-slate-200 rounded px-1 py-1 text-center font-mono text-[11px] font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-500"
                             />
                           </td>
-                          <td className="p-2.5 text-center">
+                          <td className="p-2 text-center">
                             <button
                               type="button"
                               onClick={() => {
@@ -12062,9 +12307,14 @@ export default function QualityInspectionRecords({
                 )}
               </div>
 
-              {/* Color Presets Datalist */}
+              {/* Datalists for models & colors */}
+              <datalist id="scan-model-presets-list">
+                {uniqueColorChangeModels.map(m => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
               <datalist id="scan-color-presets-list">
-                {['Đen', 'Đen mờ', 'Đỏ', 'Đỏ đun', 'Trắng', 'Xanh cửu long', 'Xanh ngọc', 'Xanh rêu', 'Xám xi măng', 'Ghi bạc', 'Vàng', 'Cam', 'Hồng', 'Tím', 'Xanh xi măng', ...uniqueOqcColors].filter((v, i, a) => a.indexOf(v) === i).map(c => (
+                {['Đen', 'Đen mờ', 'Đen bóng', 'Đỏ', 'Đỏ đun', 'Trắng', 'Trắng đen', 'Trắng hồng', 'Trắng sứ', 'Xanh cửu long', 'Xanh ngọc', 'Xanh rêu', 'Xám xi măng', 'Ghi bạc', 'Ghi pha lê', 'Ghi khói', 'Cà phê', 'Vàng', 'Cam', 'Hồng', 'Tím', 'Xanh xi măng', ...uniqueOqcColors].filter((v, i, a) => a.indexOf(v) === i).map(c => (
                   <option key={c} value={c} />
                 ))}
               </datalist>
@@ -12106,6 +12356,179 @@ export default function QualityInspectionRecords({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT SINGLE COLOR & STATUS SHIFT RECORD */}
+      {showEditColorChangeModal && editingColorChangeRecord && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-4 sm:p-6 border border-purple-300 text-xs text-slate-800 space-y-4 max-h-[94vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center border-b border-purple-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 bg-purple-100 text-purple-700 rounded-xl border border-purple-300 shadow-xs">
+                  <Pencil className="w-5 h-5 text-purple-700" />
+                </span>
+                <div>
+                  <h3 className="font-black text-slate-800 text-sm sm:text-base uppercase">
+                    ✏️ Sửa Thông Tin Xe Đổi Màu / Trạng Thái
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Cập nhật lại Model hoặc Màu sắc xe — Tự động lưu vào CSDL &amp; OQC
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowEditColorChangeModal(false);
+                  setEditingColorChangeRecord(null);
+                }}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer font-black text-base"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditColorChange} className="space-y-3.5">
+              {editCcError && (
+                <div className="p-2.5 bg-rose-50 text-rose-800 rounded-xl border border-rose-300 font-bold text-xs flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  {editCcError}
+                </div>
+              )}
+
+              {/* Serial No */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  Số Sêri / Số Khung:
+                </label>
+                <input
+                  type="text"
+                  value={editCcSerialNo}
+                  onChange={(e) => setEditCcSerialNo(e.target.value)}
+                  className="w-full bg-slate-100 border border-slate-300 rounded-xl p-2 font-mono font-black text-slate-900 text-xs focus:bg-white focus:outline-none focus:border-purple-600"
+                  required
+                />
+              </div>
+
+              {/* Model Old vs New */}
+              <div className="grid grid-cols-2 gap-3 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
+                <div>
+                  <label className="block text-[10.5px] font-bold text-slate-500 uppercase mb-1">
+                    Model CŨ (Gốc):
+                  </label>
+                  <input
+                    type="text"
+                    list="scan-model-presets-list"
+                    value={editCcOldModel}
+                    onChange={(e) => setEditCcOldModel(e.target.value)}
+                    placeholder="Nhập/chọn model cũ..."
+                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10.5px] font-bold text-indigo-700 uppercase mb-1">
+                    Model MỚI (Sau đổi):
+                  </label>
+                  <input
+                    type="text"
+                    list="scan-model-presets-list"
+                    value={editCcNewModel}
+                    onChange={(e) => setEditCcNewModel(e.target.value)}
+                    placeholder="Nhập/chọn model mới..."
+                    className="w-full bg-white border border-indigo-300 rounded-lg p-2 text-xs font-bold text-indigo-900 focus:outline-none focus:border-indigo-600"
+                  />
+                </div>
+              </div>
+
+              {/* Color Old vs New */}
+              <div className="grid grid-cols-2 gap-3 bg-pink-50/50 p-3 rounded-xl border border-pink-100">
+                <div>
+                  <label className="block text-[10.5px] font-bold text-slate-500 uppercase mb-1">
+                    Màu sắc CŨ (Gốc):
+                  </label>
+                  <input
+                    type="text"
+                    list="scan-color-presets-list"
+                    value={editCcOldColor}
+                    onChange={(e) => setEditCcOldColor(e.target.value)}
+                    placeholder="Nhập/chọn màu cũ..."
+                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-700 focus:outline-none focus:border-pink-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10.5px] font-bold text-pink-700 uppercase mb-1">
+                    Màu sắc MỚI (Sau đổi):
+                  </label>
+                  <input
+                    type="text"
+                    list="scan-color-presets-list"
+                    value={editCcNewColor}
+                    onChange={(e) => setEditCcNewColor(e.target.value)}
+                    placeholder="Nhập/chọn màu mới..."
+                    className="w-full bg-white border border-pink-300 rounded-lg p-2 text-xs font-bold text-pink-900 focus:outline-none focus:border-pink-600"
+                  />
+                </div>
+              </div>
+
+              {/* Date */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                  📅 Ngày thực hiện đổi (dd/mm/yyyy):
+                </label>
+                <input
+                  type="text"
+                  value={editCcDate}
+                  onChange={(e) => setEditCcDate(e.target.value)}
+                  placeholder="dd/mm/yyyy"
+                  className="w-full bg-white border border-slate-300 rounded-xl p-2 font-mono font-bold text-slate-800 text-xs focus:outline-none focus:border-purple-600"
+                  required
+                />
+              </div>
+
+              {/* Classification Preview Badge */}
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs flex items-center justify-between">
+                <span className="text-slate-500 font-bold">Phân loại nhận diện:</span>
+                <div>
+                  {editCcOldModel.trim().toLowerCase() !== editCcNewModel.trim().toLowerCase() && editCcOldColor.trim().toLowerCase() !== editCcNewColor.trim().toLowerCase() ? (
+                    <span className="px-2.5 py-0.5 rounded text-[11px] font-extrabold bg-purple-100 text-purple-800 border border-purple-300">
+                      ✨ Đổi cả 2 (Trạng thái &amp; Màu)
+                    </span>
+                  ) : editCcOldModel.trim().toLowerCase() !== editCcNewModel.trim().toLowerCase() ? (
+                    <span className="px-2.5 py-0.5 rounded text-[11px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-300">
+                      🔄 Đổi trạng thái / Phiên bản
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded text-[11px] font-extrabold bg-pink-50 text-pink-700 border border-pink-300">
+                      🎨 Đổi màu sơn xe
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditColorChangeModal(false);
+                    setEditingColorChangeRecord(null);
+                  }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl transition shadow-md shadow-purple-200 cursor-pointer flex items-center gap-1.5"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  Lưu cập nhật
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
