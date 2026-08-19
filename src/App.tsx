@@ -2403,7 +2403,7 @@ export function App() {
         'dk_tasks', 'dk_weekly_plans', 'dk_monthly_plans', 'dk_ptsp_tasks', 
         'dk_capas', 'dk_ecos', 'dk_daily_logs', 'dk_iqc_records', 
         'dk_pqc_records', 'dk_oqc_records', 'dk_staff', 'dk_dealers',
-        'dk_defects', 'dk_fmea', 'dk_improvement_actions'
+        'dk_defects', 'dk_fmea', 'dk_improvement_actions', 'dk_oqc_handover_list'
       ];
       localKeys.forEach(k => {
         const val = localStorage.getItem(k);
@@ -2425,6 +2425,7 @@ export function App() {
             else if (k === 'dk_iqc_records') setIqcRecords(sanitizedParsed);
             else if (k === 'dk_pqc_records') setPqcRecords(sanitizedParsed);
             else if (k === 'dk_oqc_records') setOqcRecords(sanitizedParsed);
+            else if (k === 'dk_oqc_handover_list') setOqcHandoverList(sanitizedParsed);
             else if (k === 'dk_staff') setStaff(sanitizedParsed);
             else if (k === 'dk_dealers') setDealers(sanitizedParsed);
             else if (k === 'dk_defects') setDefects(sanitizedParsed);
@@ -2730,6 +2731,7 @@ export function App() {
       }
       if (serverData.dk_oqc_handover_list !== undefined) {
         safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(serverData.dk_oqc_handover_list));
+        setOqcHandoverList(serverData.dk_oqc_handover_list);
       }
 
       // Sync plans and special matrices (IQC/PQC/OQC) from Firestore to LocalStorage on startup
@@ -3169,6 +3171,8 @@ export function App() {
             setOqcColorChanges(list);
           } else if (key === 'dk_supplier_production_audits') {
             setSupplierProductionAudits(list);
+          } else if (key === 'dk_oqc_handover_list') {
+            setOqcHandoverList(list);
           }
         }, (err) => {
           console.warn(`[Doc onSnapshot Warning] for ${key}:`, err);
@@ -5879,6 +5883,7 @@ export function App() {
   const [pqcRecords, setPqcRecords] = useState<PQCRecord[]>(() => getSavedState('dk_pqc_records', INITIAL_PQC_DATA));
   const [oqcRecords, setOqcRecords] = useState<OQCRecord[]>(() => getSavedState('dk_oqc_records', INITIAL_OQC_DATA));
   const [oqcColorChanges, setOqcColorChanges] = useState<OqcColorChangeRecord[]>(() => getSavedState('dk_oqc_color_changes', []));
+  const [oqcHandoverList, setOqcHandoverList] = useState<any[]>(() => getSavedState('dk_oqc_handover_list', []));
   const [supplierProductionAudits, setSupplierProductionAudits] = useState<SupplierProductionAudit[]>(() => getSavedState('dk_supplier_production_audits', INITIAL_SUPPLIER_AUDITS));
 
   // Auto-restore full massive datasets from IndexedDB as soon as IndexedDB completes async startup load
@@ -6074,6 +6079,12 @@ export function App() {
     try { localStorage.setItem('dk_oqc_color_changes', JSON.stringify(oqcColorChanges)); } catch (e) {}
     syncToServer('dk_oqc_color_changes', oqcColorChanges);
   }, [oqcColorChanges]);
+
+  useEffect(() => {
+    safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(oqcHandoverList));
+    try { localStorage.setItem('dk_oqc_handover_list', JSON.stringify(oqcHandoverList)); } catch (e) {}
+    syncToServer('dk_oqc_handover_list', oqcHandoverList);
+  }, [oqcHandoverList]);
 
   // Tự động giải phóng dung lượng & nén background các ảnh quá nặng của OQC, IQC, PQC cũ khi khởi chạy ứng dụng
   useEffect(() => {
@@ -11774,7 +11785,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       }
                     }
                   } catch (error: any) {
-                    alert(`Lỗi đăng nhập Google: ${error.message || error}\n\n* Môi trường Localhost: Vui lòng bấm chọn nút ĐĂNG NHẬP NHANH bên dưới hoặc bấm trực tiếp tên cán bộ trong danh sách!`);
+                    alert(`Lỗi đăng nhập Google: ${error.message || error}\n\nVui lòng thử lại hoặc chọn hình thức ĐĂNG NHẬP REDIRECT.`);
                   }
                 }}
                 className="flex items-center justify-center gap-2 py-3 px-4 bg-indigo-600 hover:bg-indigo-550 text-white rounded-xl font-bold font-sans shadow-lg shadow-indigo-600/25 cursor-pointer active:scale-98 transition duration-150 text-[11px]"
@@ -11802,68 +11813,35 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 ĐĂNG NHẬP REDIRECT
               </button>
             </div>
-
-            {/* Quick Dev/Local Login Option */}
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const defaultStaff = (staff && staff.length > 0 ? staff : INITIAL_STAFF)[0];
-                  const devUser = {
-                    uid: `dev_${defaultStaff.id}`,
-                    email: defaultStaff.email,
-                    displayName: defaultStaff.name,
-                    photoURL: undefined
-                  };
-                  localStorage.setItem('dk_qms_dev_user', JSON.stringify(devUser));
-                  setFirebaseUser(devUser);
-                }}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold font-sans shadow-lg shadow-emerald-600/20 cursor-pointer active:scale-98 transition duration-150 text-xs tracking-wide uppercase font-mono"
-                id="btn_quick_dev_login"
-              >
-                ⚡ ĐĂNG NHẬP NHANH LOCAL DEV (Anh Nguyễn Xuân Thao)
-              </button>
-            </div>
           </div>
 
-          {/* Guidelines on authorized personnel with Clickable Login */}
+          {/* Guidelines on authorized personnel - Read-only Directory */}
           <div className="bg-slate-950/40 rounded-2xl p-4 border border-slate-800/60 relative z-10 space-y-3">
             <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
               <span className="flex items-center gap-2">
                 <User className="w-3.5 h-3.5 text-indigo-400" />
                 Danh sách cán bộ được phê duyệt nội bộ:
               </span>
-              <span className="text-emerald-400 font-mono font-normal lowercase">bấm tên để chọn tài khoản</span>
+              <span className="text-slate-500 font-mono text-[9px]">Tài khoản Google</span>
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-slate-400 max-h-48 overflow-y-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-slate-400 max-h-48 overflow-y-auto pr-1">
               {(staff && staff.length > 0 ? staff : INITIAL_STAFF).map(st => (
-                <button
+                <div
                   key={st.id}
-                  type="button"
-                  onClick={() => {
-                    const devUser = {
-                      uid: `dev_${st.id}`,
-                      email: st.email,
-                      displayName: st.name,
-                      photoURL: undefined
-                    };
-                    localStorage.setItem('dk_qms_dev_user', JSON.stringify(devUser));
-                    setFirebaseUser(devUser);
-                  }}
-                  className="flex flex-col bg-slate-900/80 hover:bg-indigo-950 p-2.5 rounded-lg border border-slate-800 hover:border-emerald-500/50 text-left transition cursor-pointer group"
+                  className="flex flex-col bg-slate-900/80 p-2.5 rounded-lg border border-slate-800/80 text-left"
                 >
                   <div className="flex justify-between items-center w-full">
-                    <span className="font-bold text-slate-200 group-hover:text-emerald-300">${st.name}</span>
-                    <span className="text-[9px] text-emerald-400 font-mono opacity-80 group-hover:opacity-100 transition">▶ Đăng nhập</span>
+                    <span className="font-bold text-slate-200">{st.name}</span>
+                    <span className="text-[9px] text-indigo-300 font-medium px-1.5 py-0.5 bg-indigo-950/60 rounded border border-indigo-800/40">{st.role || (st as any).title || 'QLCL'}</span>
                   </div>
-                  <span className="text-[9px] text-indigo-400 font-mono truncate">${st.email}</span>
-                </button>
+                  <span className="text-[9px] text-slate-400 font-mono truncate mt-0.5">{st.email}</span>
+                </div>
               ))}
             </div>
             
-            <p className="text-[9px] text-slate-500 italic text-center">
-              * Khi chạy môi trường Localhost, anh Thao có thể bấm trực tiếp tên cán bộ ở danh sách trên để đăng nhập tức thì.
+            <p className="text-[10px] text-slate-400 text-center">
+              🔒 Vui lòng đăng nhập bằng tài khoản Google được cấp quyền trong danh sách trên.
             </p>
           </div>
 
@@ -20762,6 +20740,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
               setOqcRecords={setOqcRecords}
               oqcColorChanges={oqcColorChanges}
               setOqcColorChanges={setOqcColorChanges}
+              oqcHandoverList={oqcHandoverList}
+              setOqcHandoverList={setOqcHandoverList}
               supplierProductionAudits={supplierProductionAudits}
               setSupplierProductionAudits={setSupplierProductionAudits}
               suppliers={suppliers}

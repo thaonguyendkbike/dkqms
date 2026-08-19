@@ -360,6 +360,8 @@ interface QualityInspectionRecordsProps {
   onClearInitialValues?: () => void;
   oqcColorChanges?: OqcColorChangeRecord[];
   setOqcColorChanges?: (changes: OqcColorChangeRecord[]) => void;
+  oqcHandoverList?: any[];
+  setOqcHandoverList?: (list: any[]) => void;
 }
 
 /* ==================== SUB-COMPONENTS FOR KCS/OQC SCREENSHOT-PERFECT DASHBOARD ==================== */
@@ -1026,7 +1028,9 @@ export default function QualityInspectionRecords({
   initialPqcSearch,
   onClearInitialValues,
   oqcColorChanges = [],
-  setOqcColorChanges
+  setOqcColorChanges,
+  oqcHandoverList = [],
+  setOqcHandoverList
 }: QualityInspectionRecordsProps) {
   const [qcMainSubTab, setQcMainSubTab] = useState<'iqc' | 'pqc' | 'oqc' | 'color_change' | 'supplier_monitoring' | 'reports'>('iqc');
   const [selectedDashboardDefect, setSelectedDashboardDefect] = useState<{ name: string; count: number; modelName: string } | null>(null);
@@ -2674,6 +2678,7 @@ export default function QualityInspectionRecords({
   const [handoverScanInput, setHandoverScanInput] = useState('');
   const [showPasteHandoverModal, setShowPasteHandoverModal] = useState(false);
   const [handoverPasteText, setHandoverPasteText] = useState('');
+  const [handoverFilterDate, setHandoverFilterDate] = useState('All');
   const [handoverFilterModel, setHandoverFilterModel] = useState('All');
   const [handoverSearch, setHandoverSearch] = useState('');
   const [handoverScannedList, setHandoverScannedList] = useState<Array<{
@@ -2690,6 +2695,9 @@ export default function QualityInspectionRecords({
     date: string;
     scannedAt: string;
   }>>(() => {
+    if (Array.isArray(oqcHandoverList) && oqcHandoverList.length > 0) {
+      return oqcHandoverList;
+    }
     try {
       const saved = safeStorage.getItem('dk_oqc_handover_list');
       if (saved) {
@@ -2700,10 +2708,76 @@ export default function QualityInspectionRecords({
     return [];
   });
 
+  // Keep handoverScannedList synchronized in real-time when other devices scan or cloud updates
+  useEffect(() => {
+    if (Array.isArray(oqcHandoverList)) {
+      setHandoverScannedList(oqcHandoverList);
+    }
+  }, [oqcHandoverList]);
+
   const saveHandoverList = (list: any[]) => {
     setHandoverScannedList(list);
     safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(list));
+    try { localStorage.setItem('dk_oqc_handover_list', JSON.stringify(list)); } catch (e) {}
+    if (setOqcHandoverList) {
+      setOqcHandoverList(list);
+    } else if (typeof (window as any).syncToServer === 'function') {
+      (window as any).syncToServer('dk_oqc_handover_list', list);
+    }
   };
+
+  // Distinct dates in scanned handover records for date filtering (Sorted newest first)
+  const handoverAvailableDates = useMemo(() => {
+    const dates = new Set<string>();
+    handoverScannedList.forEach(item => {
+      if (item.date) {
+        dates.add(standardizeDate(item.date));
+      }
+    });
+    return Array.from(dates).sort((a, b) => {
+      const p1 = a.split('/');
+      const p2 = b.split('/');
+      const d1 = Number(p1[0]) || 1;
+      const m1 = Number(p1[1]) || 1;
+      const y1 = Number(p1[2]) || 2026;
+      const d2 = Number(p2[0]) || 1;
+      const m2 = Number(p2[1]) || 1;
+      const y2 = Number(p2[2]) || 2026;
+      const time1 = new Date(y1, m1 - 1, d1).getTime();
+      const time2 = new Date(y2, m2 - 1, d2).getTime();
+      return time2 - time1;
+    });
+  }, [handoverScannedList]);
+
+  const handoverDistinctModels = useMemo(() => {
+    return Array.from(new Set(handoverScannedList.map(x => x.model).filter(Boolean))).sort();
+  }, [handoverScannedList]);
+
+  const filteredHandoverList = useMemo(() => {
+    return handoverScannedList.filter(item => {
+      if (handoverFilterDate !== 'All') {
+        const itemDate = item.date ? standardizeDate(item.date) : '';
+        if (itemDate !== handoverFilterDate) return false;
+      }
+      if (handoverFilterModel !== 'All' && item.model !== handoverFilterModel) {
+        return false;
+      }
+      if (handoverSearch.trim()) {
+        const q = handoverSearch.trim().toLowerCase();
+        const matchSerial = (item.serialNo || '').toLowerCase().includes(q);
+        const matchChassis = (item.chassisNo || '').toLowerCase().includes(q);
+        const matchEngine = (item.engineNo || '').toLowerCase().includes(q);
+        const matchModel = (item.model || '').toLowerCase().includes(q);
+        const matchColor = (item.color || '').toLowerCase().includes(q);
+        const matchLsx = (item.lsx || '').toLowerCase().includes(q);
+        const matchPart = (item.partCode || '').toLowerCase().includes(q);
+        if (!matchSerial && !matchChassis && !matchEngine && !matchModel && !matchColor && !matchLsx && !matchPart) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [handoverScannedList, handoverFilterDate, handoverFilterModel, handoverSearch]);
 
   const handleExportKcsReportCSV = (
     type: 'weekly' | 'monthly',
@@ -6951,7 +7025,7 @@ export default function QualityInspectionRecords({
           {oqcSubView === 'handover' && (() => {
             const handoverModelSummary = (() => {
               const map: Record<string, { model: string; color: string; count: number }> = {};
-              handoverScannedList.forEach(item => {
+              filteredHandoverList.forEach(item => {
                 const key = `${item.model}___${item.color}`;
                 if (!map[key]) {
                   map[key] = { model: item.model, color: item.color, count: 0 };
@@ -6961,19 +7035,23 @@ export default function QualityInspectionRecords({
               return Object.values(map).sort((a, b) => b.count - a.count);
             })();
 
+            const todayFormatted = standardizeDate(new Date().toLocaleDateString('vi-VN'));
+            const isFilterActive = handoverFilterDate !== 'All' || handoverFilterModel !== 'All' || handoverSearch.trim() !== '';
+
             const handleExportHandoverExcelLocal = () => {
-              if (handoverScannedList.length === 0) {
-                alert('Danh sách quét bàn giao hiện đang trống!');
+              if (filteredHandoverList.length === 0) {
+                alert('Không có bản ghi quét bàn giao nào khớp với bộ lọc để xuất Excel!');
                 return;
               }
               const today = new Date().toLocaleDateString('vi-VN');
+              const displayDate = handoverFilterDate !== 'All' ? handoverFilterDate : today;
               const aoaData: any[][] = [];
               const rowTracker: { type: string; isZebra?: boolean }[] = [];
               const merges: any[] = [];
 
               const addRow = (row: any[], type: string, isZebra: boolean = false) => {
                 const fullRow = [...row];
-                while (fullRow.length < 10) {
+                while (fullRow.length < 11) {
                   fullRow.push("");
                 }
                 aoaData.push(fullRow);
@@ -6983,24 +7061,24 @@ export default function QualityInspectionRecords({
 
               // 1. Header Company & Title
               const r0 = addRow(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT - PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL)"], 'header-company');
-              merges.push({ s: { r: r0, c: 0 }, e: { r: r0, c: 9 } });
+              merges.push({ s: { r: r0, c: 0 }, e: { r: r0, c: 10 } });
 
               const r1 = addRow(["DKBike - Xe cho cả gia đình | Hệ thống Quản lý Chất lượng DK QMS"], 'header-department');
-              merges.push({ s: { r: r1, c: 0 }, e: { r: r1, c: 9 } });
+              merges.push({ s: { r: r1, c: 0 }, e: { r: r1, c: 10 } });
 
               const r2 = addRow(["BẢNG BÀN GIAO XE THÀNH PHẨM CHO BỘ PHẬN KHO"], 'header-title');
-              merges.push({ s: { r: r2, c: 0 }, e: { r: r2, c: 9 } });
+              merges.push({ s: { r: r2, c: 0 }, e: { r: r2, c: 10 } });
 
-              const r3 = addRow([`Ngày bàn giao: ${today}   |   Tổng số lượng: ${handoverScannedList.length} xe   |   Số dòng xe (Model): ${handoverModelSummary.length}`], 'header-date');
-              merges.push({ s: { r: r3, c: 0 }, e: { r: r3, c: 9 } });
+              const r3 = addRow([`Ngày quét bàn giao: ${displayDate}   |   Tổng số lượng: ${filteredHandoverList.length} xe   |   Số dòng xe (Model): ${handoverModelSummary.length}`], 'header-date');
+              merges.push({ s: { r: r3, c: 0 }, e: { r: r3, c: 10 } });
 
               addRow([], 'empty');
 
               // 2. Section 1: Summary by Model & Color
               const rSec1 = addRow(["I. TỔNG HỢP SỐ LƯỢNG BÀN GIAO THEO DÒNG XE & MÀU SẮC"], 'section-header');
-              merges.push({ s: { r: rSec1, c: 0 }, e: { r: rSec1, c: 9 } });
+              merges.push({ s: { r: rSec1, c: 0 }, e: { r: rSec1, c: 10 } });
 
-              addRow(["STT", "Dòng xe (Model)", "Màu sơn", "Số lượng bàn giao", "Ghi chú đối soát", "", "", "", "", ""], 'summary-header');
+              addRow(["STT", "Dòng xe (Model)", "Màu sơn", "Số lượng bàn giao", "Ghi chú đối soát", "", "", "", "", "", ""], 'summary-header');
 
               handoverModelSummary.forEach((s, idx) => {
                 addRow([
@@ -7009,7 +7087,7 @@ export default function QualityInspectionRecords({
                   s.color,
                   `${s.count} xe`,
                   "",
-                  "", "", "", "", ""
+                  "", "", "", "", "", ""
                 ], 'summary-row', idx % 2 === 1);
               });
 
@@ -7017,17 +7095,17 @@ export default function QualityInspectionRecords({
                 "TỔNG CỘNG",
                 "",
                 "",
-                `${handoverScannedList.length} xe`,
+                `${filteredHandoverList.length} xe`,
                 "Hoàn tất kiểm tra KCS",
-                "", "", "", "", ""
+                "", "", "", "", "", ""
               ], 'summary-total');
               merges.push({ s: { r: rTotal, c: 0 }, e: { r: rTotal, c: 2 } });
 
               addRow([], 'empty');
 
-              // 3. Section 2: Detailed List of Handed-over Vehicles (BỎ CỘT TÌNH TRẠNG)
+              // 3. Section 2: Detailed List of Handed-over Vehicles
               const rSec2 = addRow(["II. CHI TIẾT DANH SÁCH SỐ KHUNG / SÊRI BÀN GIAO (ĐỐI SOÁT & ĐÓNG DẤU NHẬN)"], 'section-header');
-              merges.push({ s: { r: rSec2, c: 0 }, e: { r: rSec2, c: 9 } });
+              merges.push({ s: { r: rSec2, c: 0 }, e: { r: rSec2, c: 10 } });
 
               addRow([
                 "STT",
@@ -7038,11 +7116,12 @@ export default function QualityInspectionRecords({
                 "Dòng xe (Model)",
                 "Màu Sắc",
                 "Lệnh Sản Xuất",
+                "Ngày Quét",
                 "Giờ Kiểm KCS",
                 "Giờ Bàn Giao"
               ], 'detail-header');
 
-              handoverScannedList.forEach((item, idx) => {
+              filteredHandoverList.forEach((item, idx) => {
                 addRow([
                   idx + 1,
                   item.serialNo,
@@ -7052,6 +7131,7 @@ export default function QualityInspectionRecords({
                   item.model,
                   item.color,
                   item.lsx,
+                  item.date || displayDate,
                   item.checkTime || '--:--',
                   item.scannedAt
                 ], 'detail-row', idx % 2 === 1);
@@ -7059,165 +7139,153 @@ export default function QualityInspectionRecords({
 
               addRow([], 'empty');
 
-              // 4. Section 3: Signatures & Stamping
-              const rSig1 = addRow([
+              // 4. Section 3: Signature Block
+              const rSec3 = addRow(["III. XÁC NHẬN BÀN GIAO & TIẾP NHẬN"], 'section-header');
+              merges.push({ s: { r: rSec3, c: 0 }, e: { r: rSec3, c: 10 } });
+
+              addRow([], 'empty');
+              const rSigTitles = addRow([
                 "ĐẠI DIỆN PHÒNG QUẢN LÝ CHẤT LƯỢNG (BÀN GIAO)", "", "", "",
-                "", "",
-                "ĐẠI DIỆN BỘ PHẬN KHO (ĐÓNG DẤU NHẬN)", "", "", ""
-              ], 'sig-header');
-              merges.push({ s: { r: rSig1, c: 0 }, e: { r: rSig1, c: 3 } });
-              merges.push({ s: { r: rSig1, c: 6 }, e: { r: rSig1, c: 9 } });
+                "ĐẠI DIỆN BỘ PHẬN KHO THÀNH PHẨM (TIẾP NHẬN)", "", "", "", "", "", ""
+              ], 'signature-title');
+              merges.push({ s: { r: rSigTitles, c: 0 }, e: { r: rSigTitles, c: 3 } });
+              merges.push({ s: { r: rSigTitles, c: 4 }, e: { r: rSigTitles, c: 10 } });
 
-              const rSig2 = addRow([
-                "(Ký, ghi rõ họ tên)", "", "", "",
-                "", "",
-                "(Ký, ghi rõ họ tên & Đóng dấu đỏ)", "", "", ""
-              ], 'sig-sub');
-              merges.push({ s: { r: rSig2, c: 0 }, e: { r: rSig2, c: 3 } });
-              merges.push({ s: { r: rSig2, c: 6 }, e: { r: rSig2, c: 9 } });
+              const rSigNotes = addRow([
+                "(Ký, ghi rõ họ tên và đóng dấu KCS)", "", "", "",
+                "(Ký, ghi rõ họ tên và kiểm đếm thực tế)", "", "", "", "", "", ""
+              ], 'signature-note');
+              merges.push({ s: { r: rSigNotes, c: 0 }, e: { r: rSigNotes, c: 3 } });
+              merges.push({ s: { r: rSigNotes, c: 4 }, e: { r: rSigNotes, c: 10 } });
 
-              addRow([], 'empty-sig');
-              addRow([], 'empty-sig');
-              addRow([], 'empty-sig');
-
-              const wb = XLSXStyle.utils.book_new();
-              const ws = XLSXStyle.utils.aoa_to_sheet(aoaData);
-
-              // Styling Engine
-              const decodedRange = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1:A1');
-              const totalRows = decodedRange.e.r + 1;
-              const totalCols = decodedRange.e.c + 1;
-
-              const borderThin = { style: "thin", color: { rgb: "CBD5E1" } };
-              const borderThick = { style: "medium", color: { rgb: "64748B" } };
-              const cellBordersNormal = {
-                top: borderThin, bottom: borderThin,
-                left: borderThin, right: borderThin
-              };
-
-              for (let r = 0; r < totalRows; r++) {
-                const tracker = rowTracker[r];
-                const rType = tracker?.type;
-                const isZebra = tracker?.isZebra;
-
-                for (let c = 0; c < totalCols; c++) {
-                  const cellRef = XLSXStyle.utils.encode_cell({ r, c });
-                  let cell = ws[cellRef];
-                  if (!cell) {
-                    cell = ws[cellRef] = { t: 's', v: '' };
-                  }
-
-                  if (rType === 'header-company') {
-                    cell.s = {
-                      font: { name: "Segoe UI", sz: 11, bold: true, color: { rgb: "1E3A8A" } },
-                      alignment: { horizontal: "left", vertical: "center" }
-                    };
-                  } else if (rType === 'header-department') {
-                    cell.s = {
-                      font: { name: "Segoe UI", sz: 9.5, italic: true, color: { rgb: "475569" } },
-                      alignment: { horizontal: "left", vertical: "center" }
-                    };
-                  } else if (rType === 'header-title') {
-                    cell.s = {
-                      font: { name: "Segoe UI", sz: 15, bold: true, color: { rgb: "1E3A8A" } },
-                      alignment: { horizontal: "center", vertical: "center" }
-                    };
-                  } else if (rType === 'header-date') {
-                    cell.s = {
-                      font: { name: "Segoe UI", sz: 10, bold: true, color: { rgb: "475569" } },
-                      alignment: { horizontal: "center", vertical: "center" }
-                    };
-                  } else if (rType === 'section-header') {
-                    cell.s = {
-                      fill: { fgColor: { rgb: "F1F5F9" } },
-                      font: { name: "Segoe UI", sz: 11, bold: true, color: { rgb: "1E3A8A" } },
-                      alignment: { horizontal: "left", vertical: "center" },
-                      border: { bottom: borderThick, top: borderThin }
-                    };
-                  } else if (rType === 'summary-header') {
-                    cell.s = {
-                      fill: { fgColor: { rgb: "1E3A8A" } },
-                      font: { name: "Segoe UI", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
-                      alignment: { horizontal: "center", vertical: "center" },
-                      border: cellBordersNormal
-                    };
-                  } else if (rType === 'summary-row') {
-                    cell.s = {
-                      fill: isZebra ? { fgColor: { rgb: "F8FAFC" } } : undefined,
-                      font: { name: "Segoe UI", sz: 10, color: { rgb: "1E293B" } },
-                      alignment: { 
-                        horizontal: c === 0 || c === 3 ? "center" : "left", 
-                        vertical: "center" 
-                      },
-                      border: cellBordersNormal
-                    };
-                  } else if (rType === 'summary-total') {
-                    cell.s = {
-                      fill: { fgColor: { rgb: "E2E8F0" } },
-                      font: { name: "Segoe UI", sz: 10.5, bold: true, color: { rgb: "0F172A" } },
-                      alignment: { 
-                        horizontal: c === 0 ? "left" : (c === 3 ? "center" : "left"), 
-                        vertical: "center" 
-                      },
-                      border: { top: borderThick, bottom: borderThick, left: borderThin, right: borderThin }
-                    };
-                  } else if (rType === 'detail-header') {
-                    cell.s = {
-                      fill: { fgColor: { rgb: "1E3A8A" } },
-                      font: { name: "Segoe UI", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
-                      alignment: { horizontal: "center", vertical: "center", wrapText: true },
-                      border: cellBordersNormal
-                    };
-                  } else if (rType === 'detail-row') {
-                    cell.s = {
-                      fill: isZebra ? { fgColor: { rgb: "F8FAFC" } } : undefined,
-                      font: { 
-                        name: (c === 1 || c === 2 || c === 3 || c === 4 || c === 7) ? "Consolas" : "Segoe UI", 
-                        sz: 10, 
-                        bold: c === 1,
-                        color: c === 1 ? { rgb: "1E3A8A" } : { rgb: "1E293B" } 
-                      },
-                      alignment: { 
-                        horizontal: (c === 5 || c === 6) ? "left" : "center", 
-                        vertical: "center" 
-                      },
-                      border: cellBordersNormal
-                    };
-                  } else if (rType === 'sig-header') {
-                    cell.s = {
-                      font: { name: "Segoe UI", sz: 10.5, bold: true, color: { rgb: "1E3A8A" } },
-                      alignment: { horizontal: "center", vertical: "center" }
-                    };
-                  } else if (rType === 'sig-sub') {
-                    cell.s = {
-                      font: { name: "Segoe UI", sz: 9.5, italic: true, color: { rgb: "64748B" } },
-                      alignment: { horizontal: "center", vertical: "center" }
-                    };
-                  }
-                }
+              for (let i = 0; i < 4; i++) {
+                addRow([], 'empty');
               }
 
+              // Professional Styling Palette
+              const PALETTE = {
+                headerCompanyFill: "1E293B",   // Slate-800
+                headerCompanyFont: "F8FAFC",   // Slate-50
+                headerDeptFill: "0F172A",      // Slate-900
+                headerDeptFont: "38BDF8",      // Sky-400
+                headerTitleFill: "1E3A8A",     // Blue-900
+                headerTitleFont: "FFFFFF",     // White
+                headerDateFill: "F1F5F9",      // Slate-100
+                headerDateFont: "475569",      // Slate-600
+                sectionFill: "0284C7",         // Sky-600
+                sectionFont: "FFFFFF",         // White
+                thFill: "334155",              // Slate-700
+                thFont: "FFFFFF",              // White
+                zebraEven: "FFFFFF",
+                zebraOdd: "F8FAFC",           // Slate-50
+                totalFill: "FEF08A",           // Yellow-200
+                totalFont: "854D0E",           // Yellow-800
+                borderColor: "CBD5E1"          // Slate-300
+              };
+
+              const ws = XLSXStyle.utils.aoa_to_sheet(aoaData);
               ws['!merges'] = merges;
 
-              // Row Heights
-              const rowHeights: any[] = [];
-              rowTracker.forEach(t => {
-                if (t.type === 'header-company') rowHeights.push({ hpt: 20 });
-                else if (t.type === 'header-department') rowHeights.push({ hpt: 16 });
-                else if (t.type === 'header-title') rowHeights.push({ hpt: 28 });
-                else if (t.type === 'header-date') rowHeights.push({ hpt: 18 });
-                else if (t.type === 'section-header') rowHeights.push({ hpt: 24 });
-                else if (t.type === 'summary-header' || t.type === 'detail-header') rowHeights.push({ hpt: 24 });
-                else if (t.type === 'summary-total') rowHeights.push({ hpt: 22 });
-                else if (t.type === 'summary-row' || t.type === 'detail-row') rowHeights.push({ hpt: 20 });
-                else if (t.type === 'sig-header') rowHeights.push({ hpt: 22 });
-                else if (t.type === 'sig-sub') rowHeights.push({ hpt: 18 });
-                else if (t.type === 'empty-sig') rowHeights.push({ hpt: 24 });
-                else rowHeights.push({ hpt: 12 });
-              });
-              ws['!rows'] = rowHeights;
+              const borderThin = {
+                top: { style: 'thin', color: { rgb: PALETTE.borderColor } },
+                bottom: { style: 'thin', color: { rgb: PALETTE.borderColor } },
+                left: { style: 'thin', color: { rgb: PALETTE.borderColor } },
+                right: { style: 'thin', color: { rgb: PALETTE.borderColor } }
+              };
 
-              // Column Widths (10 columns)
+              // Apply Styles
+              rowTracker.forEach((info, rIdx) => {
+                for (let cIdx = 0; cIdx <= 10; cIdx++) {
+                  const cellRef = XLSXStyle.utils.encode_cell({ r: rIdx, c: cIdx });
+                  if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
+                  const cell = ws[cellRef];
+
+                  switch (info.type) {
+                    case 'header-company':
+                      cell.s = {
+                        font: { name: 'Arial', sz: 12, bold: true, color: { rgb: PALETTE.headerCompanyFont } },
+                        fill: { fgColor: { rgb: PALETTE.headerCompanyFill } },
+                        alignment: { horizontal: 'center', vertical: 'center' }
+                      };
+                      break;
+                    case 'header-department':
+                      cell.s = {
+                        font: { name: 'Arial', sz: 10, italic: true, bold: true, color: { rgb: PALETTE.headerDeptFont } },
+                        fill: { fgColor: { rgb: PALETTE.headerDeptFill } },
+                        alignment: { horizontal: 'center', vertical: 'center' }
+                      };
+                      break;
+                    case 'header-title':
+                      cell.s = {
+                        font: { name: 'Arial', sz: 14, bold: true, color: { rgb: PALETTE.headerTitleFont } },
+                        fill: { fgColor: { rgb: PALETTE.headerTitleFill } },
+                        alignment: { horizontal: 'center', vertical: 'center' }
+                      };
+                      break;
+                    case 'header-date':
+                      cell.s = {
+                        font: { name: 'Arial', sz: 10, italic: true, color: { rgb: PALETTE.headerDateFont } },
+                        fill: { fgColor: { rgb: PALETTE.headerDateFill } },
+                        alignment: { horizontal: 'center', vertical: 'center' },
+                        border: borderThin
+                      };
+                      break;
+                    case 'section-header':
+                      cell.s = {
+                        font: { name: 'Arial', sz: 11, bold: true, color: { rgb: PALETTE.sectionFont } },
+                        fill: { fgColor: { rgb: PALETTE.sectionFill } },
+                        alignment: { horizontal: 'left', vertical: 'center' },
+                        border: borderThin
+                      };
+                      break;
+                    case 'summary-header':
+                    case 'detail-header':
+                      cell.s = {
+                        font: { name: 'Arial', sz: 10, bold: true, color: { rgb: PALETTE.thFont } },
+                        fill: { fgColor: { rgb: PALETTE.thFill } },
+                        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+                        border: borderThin
+                      };
+                      break;
+                    case 'summary-row':
+                    case 'detail-row':
+                      cell.s = {
+                        font: { name: 'Arial', sz: 9.5, color: { rgb: '1E293B' } },
+                        fill: { fgColor: { rgb: info.isZebra ? PALETTE.zebraOdd : PALETTE.zebraEven } },
+                        alignment: { 
+                          horizontal: cIdx === 0 || cIdx === 8 || cIdx === 9 || cIdx === 10 ? 'center' : (cIdx === 3 ? 'center' : 'left'), 
+                          vertical: 'center' 
+                        },
+                        border: borderThin
+                      };
+                      break;
+                    case 'summary-total':
+                      cell.s = {
+                        font: { name: 'Arial', sz: 10, bold: true, color: { rgb: PALETTE.totalFont } },
+                        fill: { fgColor: { rgb: PALETTE.totalFill } },
+                        alignment: { horizontal: 'center', vertical: 'center' },
+                        border: borderThin
+                      };
+                      break;
+                    case 'signature-title':
+                      cell.s = {
+                        font: { name: 'Arial', sz: 10, bold: true, color: { rgb: '0F172A' } },
+                        alignment: { horizontal: 'center', vertical: 'center' }
+                      };
+                      break;
+                    case 'signature-note':
+                      cell.s = {
+                        font: { name: 'Arial', sz: 9, italic: true, color: { rgb: '64748B' } },
+                        alignment: { horizontal: 'center', vertical: 'center' }
+                      };
+                      break;
+                    default:
+                      break;
+                  }
+                }
+              });
+
+              // Column Widths (11 columns)
               ws['!cols'] = [
                 { wch: 6 },   // 0: STT
                 { wch: 18 },  // 1: Số Sêri
@@ -7227,21 +7295,24 @@ export default function QualityInspectionRecords({
                 { wch: 22 },  // 5: Model
                 { wch: 16 },  // 6: Màu Sắc
                 { wch: 16 },  // 7: LSX
-                { wch: 14 },  // 8: Giờ Kiểm KCS
-                { wch: 14 }   // 9: Giờ Bàn Giao
+                { wch: 14 },  // 8: Ngày Quét
+                { wch: 14 },  // 9: Giờ Kiểm KCS
+                { wch: 14 }   // 10: Giờ Bàn Giao
               ];
 
+              const safeDateStr = displayDate.replace(/\//g, '_');
+              const wb = XLSXStyle.utils.book_new();
               XLSXStyle.utils.book_append_sheet(wb, ws, "Ban_Giao_Kho");
-              XLSXStyle.writeFile(wb, `DKBike_Ban_Giao_Kho_${today.replace(/\//g, '_')}.xlsx`);
+              XLSXStyle.writeFile(wb, `DKBike_Ban_Giao_Kho_${safeDateStr}.xlsx`);
             };
 
             const handleCopyHandoverTextLocal = () => {
-              if (handoverScannedList.length === 0) return;
-              const headers = "STT\tSố Sêri (Tem ĐT)\tSố Khung\tSố Động Cơ\tMã Quy Cách\tDòng xe (Model)\tMàu Sắc\tLệnh Sản Xuất\tGiờ Bàn Giao";
-              const rows = handoverScannedList.map((item, i) => `${i + 1}\t${item.serialNo}\t${item.chassisNo || '--'}\t${item.engineNo || '--'}\t${item.partCode || 'TEM-GEN'}\t${item.model}\t${item.color}\t${item.lsx}\t${item.scannedAt}`).join('\n');
+              if (filteredHandoverList.length === 0) return;
+              const headers = "STT\tSố Sêri (Tem ĐT)\tSố Khung\tSố Động Cơ\tMã Quy Cách\tDòng xe (Model)\tMàu Sắc\tLệnh Sản Xuất\tNgày Quét\tGiờ Bàn Giao";
+              const rows = filteredHandoverList.map((item, i) => `${i + 1}\t${item.serialNo}\t${item.chassisNo || '--'}\t${item.engineNo || '--'}\t${item.partCode || 'TEM-GEN'}\t${item.model}\t${item.color}\t${item.lsx}\t${item.date || ''}\t${item.scannedAt}`).join('\n');
               const text = `${headers}\n${rows}`;
               navigator.clipboard.writeText(text).then(() => {
-                alert(`Đã sao chép danh sách ${handoverScannedList.length} xe bàn giao vào clipboard!`);
+                alert(`Đã sao chép danh sách ${filteredHandoverList.length} xe bàn giao vào clipboard!`);
               });
             };
 
@@ -7264,6 +7335,7 @@ export default function QualityInspectionRecords({
                       // Lookup in master part codes if found has partCode
                       const pCode = found ? (found.partCode || 'TEM-GEN') : 'TEM-GEN';
                       const matchedPart = lookupPartCode(pCode);
+                      const currentDateStr = new Date().toLocaleDateString('vi-VN');
 
                       const newItem = {
                         id: `HO-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -7276,7 +7348,7 @@ export default function QualityInspectionRecords({
                         lsx: found ? (found.lsx || 'Ngoại bảng') : 'Ngoại bảng',
                         status: found ? (found.status || 'Chưa kiểm tra') : 'Chưa có dữ liệu KCS',
                         checkTime: found ? (found.checkTime || '--:--') : '--:--',
-                        date: found ? (found.date || new Date().toLocaleDateString('vi-VN')) : new Date().toLocaleDateString('vi-VN'),
+                        date: found ? (found.date || currentDateStr) : currentDateStr,
                         scannedAt: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
                       };
 
@@ -7321,6 +7393,7 @@ export default function QualityInspectionRecords({
                       type="button"
                       onClick={handleCopyHandoverTextLocal}
                       className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                      title="Sao chép danh sách đang lọc vào clipboard"
                     >
                       <Copy className="w-3.5 h-3.5" /> Sao chép
                     </button>
@@ -7348,16 +7421,138 @@ export default function QualityInspectionRecords({
                   </div>
                 </div>
 
+                {/* BỘ LỌC NGÀY THÁNG, DÒNG XE & TÌM KIẾM BÁO PHẨM BÀN GIAO */}
+                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-2.5 flex-1">
+                    {/* Bộ lọc ngày quét */}
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span className="font-bold text-slate-700 text-[11px] uppercase tracking-wider">Ngày quét:</span>
+                      <select
+                        value={handoverFilterDate}
+                        onChange={e => setHandoverFilterDate(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 focus:bg-white focus:ring-1 focus:ring-indigo-400 outline-hidden cursor-pointer"
+                      >
+                        <option value="All">📅 Tất cả các ngày ({handoverScannedList.length} xe)</option>
+                        {handoverAvailableDates.map(d => {
+                          const count = handoverScannedList.filter(x => (x.date ? standardizeDate(x.date) : '') === d).length;
+                          const isToday = d === todayFormatted;
+                          return (
+                            <option key={d} value={d}>
+                              {isToday ? `⭐ Hôm nay - ${d}` : `Ngày ${d}`} ({count} xe)
+                            </option>
+                          );
+                        })}
+                      </select>
+
+                      {/* Date Picker Input */}
+                      <input
+                        type="date"
+                        onChange={e => {
+                          if (e.target.value) {
+                            const [y, m, d] = e.target.value.split('-');
+                            setHandoverFilterDate(`${d}/${m}/${y}`);
+                          }
+                        }}
+                        className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 text-xs text-slate-700 focus:bg-white outline-hidden cursor-pointer w-32"
+                        title="Chọn ngày cụ thể từ lịch"
+                      />
+
+                      {/* Quick preset buttons */}
+                      <button
+                        type="button"
+                        onClick={() => setHandoverFilterDate(todayFormatted)}
+                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                          handoverFilterDate === todayFormatted 
+                            ? 'bg-indigo-600 text-white shadow-xs' 
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        Hôm nay
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setHandoverFilterDate('All')}
+                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                          handoverFilterDate === 'All' 
+                            ? 'bg-slate-800 text-white shadow-xs' 
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        Tất cả
+                      </button>
+                    </div>
+
+                    {/* Bộ lọc dòng xe */}
+                    <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
+                      <Tag className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="font-bold text-slate-700 text-[11px] uppercase tracking-wider">Dòng xe:</span>
+                      <select
+                        value={handoverFilterModel}
+                        onChange={e => setHandoverFilterModel(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800 focus:bg-white focus:ring-1 focus:ring-indigo-400 outline-hidden cursor-pointer max-w-[160px]"
+                      >
+                        <option value="All">Tất cả ({handoverDistinctModels.length} dòng xe)</option>
+                        {handoverDistinctModels.map(m => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Ô tìm kiếm */}
+                    <div className="relative min-w-[160px] max-w-xs flex-1">
+                      <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={handoverSearch}
+                        onChange={e => setHandoverSearch(e.target.value)}
+                        placeholder="Tìm sêri, khung, động cơ, LSX..."
+                        className="w-full pl-7 pr-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:bg-white focus:ring-1 focus:ring-indigo-400 outline-hidden"
+                      />
+                      {handoverSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setHandoverSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {isFilterActive && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHandoverFilterDate('All');
+                        setHandoverFilterModel('All');
+                        setHandoverSearch('');
+                      }}
+                      className="text-[11px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg transition cursor-pointer shrink-0"
+                    >
+                      ✕ Bỏ lọc
+                    </button>
+                  )}
+                </div>
+
                 {/* Minimalist Summary Strip */}
                 <div className="bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-xs space-y-2 text-xs">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-4">
-                      <span className="text-slate-600">Đã quét: <strong className="text-slate-900 font-mono font-bold">{handoverScannedList.length}</strong> xe</span>
-                      <span className="text-slate-600">Dòng xe: <strong className="font-mono font-bold">{new Set(handoverScannedList.map(x => x.model)).size}</strong></span>
-                      <span className="text-slate-600">Lệnh SX: <strong className="font-mono font-bold">{new Set(handoverScannedList.map(x => x.lsx)).size}</strong></span>
+                      <span className="text-slate-600">
+                        Đang hiển thị: <strong className="text-slate-900 font-mono font-bold">{filteredHandoverList.length}</strong> / <span className="font-mono text-slate-500">{handoverScannedList.length}</span> xe
+                      </span>
+                      <span className="text-slate-600">Dòng xe: <strong className="font-mono font-bold">{new Set(filteredHandoverList.map(x => x.model)).size}</strong></span>
+                      <span className="text-slate-600">Lệnh SX: <strong className="font-mono font-bold">{new Set(filteredHandoverList.map(x => x.lsx)).size}</strong></span>
+                      {handoverFilterDate !== 'All' && (
+                        <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold text-[11px] border border-indigo-200/60">
+                          📅 Ngày: {handoverFilterDate}
+                        </span>
+                      )}
                     </div>
                     <span className="text-[11px] text-slate-400">
-                      Súng quét Barcode / QR tự động nhận diện thông tin
+                      Súng quét Barcode / QR tự động nhận diện thông tin và đồng bộ thời gian thực
                     </span>
                   </div>
 
@@ -7374,36 +7569,44 @@ export default function QualityInspectionRecords({
 
                 {/* Table */}
                 <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-                  {handoverScannedList.length === 0 ? (
+                  {filteredHandoverList.length === 0 ? (
                     <div className="py-12 text-center text-slate-400 text-xs">
-                      Chưa có số Sêri / Số khung nào được quét. Bắn mã vạch vào ô trên để bắt đầu.
+                      {handoverScannedList.length === 0 ? (
+                        'Chưa có số Sêri / Số khung nào được quét. Bắn mã vạch vào ô trên để bắt đầu.'
+                      ) : (
+                        `Không tìm thấy xe bàn giao nào khớp với bộ lọc ngày (${handoverFilterDate}) hoặc từ khóa tìm kiếm.`
+                      )}
                     </div>
                   ) : (
-                    <div className="overflow-x-auto max-h-[500px]">
+                    <div className="overflow-x-auto max-h-[520px]">
                       <table className="min-w-full divide-y divide-slate-200 text-xs">
                         <thead className="bg-slate-800 text-white font-bold uppercase text-[10px] tracking-wider sticky top-0 z-10 select-none">
                           <tr>
                             <th scope="col" className="px-3 py-2.5 text-center w-10">STT</th>
                             <th scope="col" className="px-3 py-2.5 text-left">Số Sêri</th>
                             <th scope="col" className="px-3 py-2.5 text-left">Số Khung</th>
+                            <th scope="col" className="px-3 py-2.5 text-left">Số Động Cơ</th>
                             <th scope="col" className="px-3 py-2.5 text-left">Mã Quy Cách</th>
                             <th scope="col" className="px-3 py-2.5 text-left">Model</th>
                             <th scope="col" className="px-3 py-2.5 text-left">Màu Sắc</th>
                             <th scope="col" className="px-3 py-2.5 text-left">LSX</th>
+                            <th scope="col" className="px-3 py-2.5 text-center">Ngày Quét</th>
                             <th scope="col" className="px-3 py-2.5 text-center">Giờ Bàn Giao</th>
                             <th scope="col" className="px-3 py-2.5 text-center w-12">Xóa</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 bg-white font-medium text-slate-700">
-                          {handoverScannedList.map((item, idx) => (
+                          {filteredHandoverList.map((item, idx) => (
                             <tr key={item.id || idx} className="hover:bg-slate-50 transition-colors">
                               <td className="px-3 py-2 text-center font-mono text-slate-400">{idx + 1}</td>
                               <td className="px-3 py-2 font-mono font-bold text-slate-900">{item.serialNo}</td>
                               <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{item.chassisNo || '--'}</td>
+                              <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{item.engineNo || '--'}</td>
                               <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{item.partCode}</td>
                               <td className="px-3 py-2 font-bold text-slate-850">{item.model}</td>
                               <td className="px-3 py-2 text-slate-600">{item.color}</td>
                               <td className="px-3 py-2 font-mono text-slate-600">{item.lsx}</td>
+                              <td className="px-3 py-2 text-center font-mono text-slate-500">{item.date || '--'}</td>
                               <td className="px-3 py-2 text-center font-mono text-slate-500">{item.scannedAt}</td>
                               <td className="px-3 py-2 text-center">
                                 <button
@@ -7412,6 +7615,7 @@ export default function QualityInspectionRecords({
                                     saveHandoverList(handoverScannedList.filter(x => x.id !== item.id));
                                   }}
                                   className="text-slate-300 hover:text-rose-600 transition p-1 rounded cursor-pointer"
+                                  title="Xóa xe này khỏi danh sách bàn giao"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
