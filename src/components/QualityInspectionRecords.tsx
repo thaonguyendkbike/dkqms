@@ -2336,7 +2336,6 @@ export default function QualityInspectionRecords({
   // Scanner Mode States (In-Memory Staging, zero disk spam during continuous scan)
   const [showScanColorChangeModal, setShowScanColorChangeModal] = useState(false);
   const [scanSerialInput, setScanSerialInput] = useState('');
-  const [scanTargetNewColor, setScanTargetNewColor] = useState('Đen');
   const [scanDate, setScanDate] = useState(() => new Date().toLocaleDateString('vi-VN'));
   const [stagedScans, setStagedScans] = useState<Array<{
     serialNo: string;
@@ -4319,7 +4318,7 @@ export default function QualityInspectionRecords({
       serialNo: clean,
       model,
       oldColor,
-      newColor: scanTargetNewColor,
+      newColor: '',
       date: scanDate || new Date().toLocaleDateString('vi-VN'),
       lsx,
       partCode,
@@ -4328,7 +4327,7 @@ export default function QualityInspectionRecords({
 
     // Staged into RAM list only - NO Firebase or localStorage write here!
     setStagedScans(prev => [newEntry, ...prev]);
-    setScanLastSuccess(`✓ Đã quét: ${clean} (${model} | ${oldColor} ➔ ${scanTargetNewColor})`);
+    setScanLastSuccess(`✓ Đã quét: ${clean} (${model} | Màu gốc: ${oldColor}) ➔ Mời chọn/sửa màu mới ở bảng bên dưới`);
     playScanBeep(false);
     setScanSerialInput('');
     setTimeout(() => {
@@ -4336,9 +4335,30 @@ export default function QualityInspectionRecords({
     }, 50);
   };
 
+  const handleUpdateStagedItem = (index: number, field: 'newColor' | 'date' | 'model', val: string) => {
+    setStagedScans(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: val };
+      return updated;
+    });
+  };
+
+  const handleApplyColorToAllStaged = (targetColor: string) => {
+    if (!targetColor.trim()) return;
+    setStagedScans(prev => prev.map(item => ({ ...item, newColor: targetColor.trim() })));
+  };
+
   // Commit all staged scans to database & cloud in a SINGLE ATOMIC BATCH
   const handleSaveStagedScans = () => {
     if (stagedScans.length === 0) return;
+
+    // Validate that all scanned cars have a new color specified
+    const unassignedColors = stagedScans.filter(s => !s.newColor || !s.newColor.trim());
+    if (unassignedColors.length > 0) {
+      setScanError(`Có ${unassignedColors.length} xe chưa được chọn/nhập Màu mới (Ví dụ: ${unassignedColors.slice(0, 3).map(x => x.serialNo).join(', ')}). Anh Thao vui lòng chọn hoặc gõ Màu mới cho các xe này trước khi Lưu!`);
+      playScanBeep(true);
+      return;
+    }
 
     try {
       const serialChangeMap = new Map<string, typeof stagedScans[0]>();
@@ -11277,43 +11297,30 @@ export default function QualityInspectionRecords({
               </button>
             </div>
 
-            {/* Target Color & Date Setup Bar */}
-            <div className="bg-purple-50/70 p-3 rounded-xl border border-purple-200 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div>
-                <label className="font-extrabold text-purple-900 block text-[11px] mb-1 uppercase tracking-wide">
-                  🎨 Màu mới áp dụng cho các xe được quét:
-                </label>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={scanTargetNewColor}
-                    onChange={(e) => setScanTargetNewColor(e.target.value)}
-                    className="flex-1 bg-white border border-purple-300 rounded-lg p-2 text-xs font-black text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    {['Đen', 'Đen mờ', 'Đỏ', 'Đỏ đun', 'Trắng', 'Xanh cửu long', 'Xanh ngọc', 'Xanh rêu', 'Xám xi măng', 'Ghi bạc', 'Vàng', 'Cam', 'Hồng', 'Tím', 'Xanh xi măng'].map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    value={scanTargetNewColor}
-                    onChange={(e) => setScanTargetNewColor(e.target.value)}
-                    placeholder="Nhập màu khác..."
-                    className="w-28 bg-white border border-purple-300 rounded-lg p-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    title="Hoặc gõ trực tiếp tên màu mới"
-                  />
+            {/* Date and Quick Info Setup Bar */}
+            <div className="bg-purple-50/70 p-3 rounded-xl border border-purple-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs">
+              <div className="flex items-center gap-2 text-purple-900">
+                <span className="p-1.5 bg-purple-200/70 text-purple-800 rounded-lg">
+                  <Wrench className="w-4 h-4 text-purple-700" />
+                </span>
+                <div>
+                  <span className="font-extrabold text-xs block">Quy trình quét đổi màu xe nhanh:</span>
+                  <span className="text-[11px] text-purple-700 font-medium">
+                    1. Bắn súng quét Sêri liên tục (tự tra Model & Màu gốc) ➔ 2. Tự chọn/sửa Màu mới trực tiếp ở bảng bên dưới ➔ 3. Bấm Lưu.
+                  </span>
                 </div>
               </div>
 
-              <div>
-                <label className="font-extrabold text-purple-900 block text-[11px] mb-1 uppercase tracking-wide">
-                  📅 Ngày thực hiện đổi màu:
+              <div className="flex items-center gap-2 shrink-0">
+                <label className="font-extrabold text-purple-900 text-[11px] uppercase tracking-wide">
+                  📅 Ngày đổi màu:
                 </label>
                 <input
                   type="text"
                   value={scanDate}
                   onChange={(e) => setScanDate(e.target.value)}
                   placeholder="dd/mm/yyyy"
-                  className="w-full bg-white border border-purple-300 rounded-lg p-2 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-32 bg-white border border-purple-300 rounded-lg p-1.5 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
               </div>
             </div>
@@ -11376,81 +11383,126 @@ export default function QualityInspectionRecords({
             )}
 
             {/* Staging Scans Table (In RAM) */}
-            <div className="flex-1 flex flex-col min-h-0 space-y-1.5">
-              <div className="flex justify-between items-center">
+            <div className="flex-1 flex flex-col min-h-0 space-y-2">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <span className="font-extrabold text-xs text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
                   📋 Danh sách xe đã quét trong phiên:
                   <span className="bg-purple-600 text-white px-2 py-0.5 rounded-full font-mono text-[10px] font-black">
                     {stagedScans.length} xe
                   </span>
                 </span>
+
                 {stagedScans.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (confirm('Xác nhận xóa trắng danh sách các xe vừa quét?')) {
-                        setStagedScans([]);
-                        setScanLastSuccess(null);
-                        scannerInputRef.current?.focus();
-                      }
-                    }}
-                    className="text-[10.5px] text-rose-600 hover:text-rose-800 font-bold hover:bg-rose-50 px-2 py-0.5 rounded transition"
-                  >
-                    Xóa tất cả ({stagedScans.length})
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* Quick batch color helper */}
+                    <div className="flex items-center gap-1 bg-purple-50 p-1 px-2 rounded-lg border border-purple-200 text-[11px]">
+                      <span className="text-purple-700 font-bold">Gán nhanh tất cả:</span>
+                      <select
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleApplyColorToAllStaged(e.target.value);
+                            e.target.value = '';
+                          }
+                        }}
+                        defaultValue=""
+                        className="bg-white border border-purple-300 rounded px-1.5 py-0.5 text-[11px] font-bold text-purple-900 focus:outline-none"
+                      >
+                        <option value="" disabled>-- Chọn màu --</option>
+                        {['Đen', 'Đen mờ', 'Đỏ', 'Đỏ đun', 'Trắng', 'Xanh cửu long', 'Xanh ngọc', 'Xanh rêu', 'Xám xi măng', 'Ghi bạc', 'Vàng', 'Cam', 'Hồng', 'Tím', 'Xanh xi măng'].map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Xác nhận xóa trắng danh sách các xe vừa quét?')) {
+                          setStagedScans([]);
+                          setScanLastSuccess(null);
+                          scannerInputRef.current?.focus();
+                        }
+                      }}
+                      className="text-[10.5px] text-rose-600 hover:text-rose-800 font-bold hover:bg-rose-50 px-2 py-1 rounded transition"
+                    >
+                      Xóa tất cả ({stagedScans.length})
+                    </button>
+                  </div>
                 )}
               </div>
 
-              <div className="flex-1 max-h-[190px] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/50">
+              <div className="flex-1 max-h-[260px] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/50 shadow-inner">
                 {stagedScans.length === 0 ? (
-                  <div className="py-8 text-center text-slate-400 space-y-1">
-                    <QrCode className="w-8 h-8 text-slate-300 mx-auto" />
-                    <p className="text-xs font-bold">Chưa có xe nào được quét trong phiên này</p>
-                    <p className="text-[10.5px]">Hãy hướng súng quét vào tem sêri trên khung xe để bắt đầu</p>
+                  <div className="py-10 text-center text-slate-400 space-y-1.5">
+                    <QrCode className="w-10 h-10 text-slate-300 mx-auto" />
+                    <p className="text-xs font-black text-slate-600">Chưa có xe nào được quét trong phiên này</p>
+                    <p className="text-[11px] text-slate-400">Bắn súng quét mã vạch vào tem xe để nạp sêri &amp; hiển thị màu gốc ngay</p>
                   </div>
                 ) : (
-                  <table className="w-full text-left text-[11px] border-collapse">
-                    <thead className="bg-purple-100/80 text-purple-900 sticky top-0 font-black text-[10px] uppercase border-b border-purple-200">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-purple-100/90 text-purple-900 sticky top-0 font-extrabold text-[10.5px] uppercase border-b border-purple-200 z-10">
                       <tr>
-                        <th className="p-2 w-8 text-center">STT</th>
-                        <th className="p-2">Số Sêri</th>
-                        <th className="p-2">Model (Tự đối soát)</th>
-                        <th className="p-2 text-center">Màu gốc (OQC)</th>
-                        <th className="p-2 text-center w-6">➔</th>
-                        <th className="p-2 text-center">Màu mới</th>
-                        <th className="p-2 text-center">Ngày đổi</th>
-                        <th className="p-2 text-center w-10">Xóa</th>
+                        <th className="p-2.5 w-10 text-center">STT</th>
+                        <th className="p-2.5">Số Sêri</th>
+                        <th className="p-2.5">Model (Tự đối soát)</th>
+                        <th className="p-2.5 text-center">Màu gốc (OQC)</th>
+                        <th className="p-2.5 text-center w-6">➔</th>
+                        <th className="p-2.5 w-48 text-left">🎨 Màu mới sau khi đổi</th>
+                        <th className="p-2.5 text-center w-28">Ngày đổi</th>
+                        <th className="p-2.5 text-center w-12">Xóa</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-purple-100/70 font-medium">
+                    <tbody className="divide-y divide-purple-100 font-medium">
                       {stagedScans.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-white transition">
-                          <td className="p-2 text-center text-slate-400 font-bold">{idx + 1}</td>
-                          <td className="p-2 font-mono font-black text-slate-900">{item.serialNo}</td>
-                          <td className="p-2 font-bold text-slate-800">{item.model}</td>
-                          <td className="p-2 text-center">
-                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 font-bold border border-rose-200">
-                              {item.oldColor}
+                        <tr key={idx} className="hover:bg-purple-50/30 bg-white transition">
+                          <td className="p-2.5 text-center text-slate-400 font-bold">{idx + 1}</td>
+                          <td className="p-2.5 font-mono font-black text-slate-900">
+                            <span className="bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[11px]">
+                              {item.serialNo}
                             </span>
                           </td>
-                          <td className="p-2 text-center font-black text-purple-600">➔</td>
-                          <td className="p-2 text-center">
-                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-100 text-purple-800 font-black border border-purple-300">
-                              {item.newColor}
+                          <td className="p-2.5 font-bold text-slate-800">{item.model}</td>
+                          <td className="p-2.5 text-center">
+                            <span className="px-2 py-0.5 rounded text-[11px] bg-rose-50 text-rose-700 font-bold border border-rose-200">
+                              {item.oldColor || 'Chưa rõ'}
                             </span>
                           </td>
-                          <td className="p-2 text-center font-mono text-[10px] text-slate-500">{item.date}</td>
-                          <td className="p-2 text-center">
+                          <td className="p-2.5 text-center font-black text-purple-600">➔</td>
+                          <td className="p-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                list="scan-color-presets-list"
+                                value={item.newColor}
+                                onChange={(e) => handleUpdateStagedItem(idx, 'newColor', e.target.value)}
+                                placeholder="Chọn / gõ màu mới..."
+                                className={`w-full border rounded-lg px-2.5 py-1 text-xs font-black transition focus:outline-none focus:ring-2 ${
+                                  !item.newColor || !item.newColor.trim()
+                                    ? 'border-amber-400 bg-amber-50/60 text-amber-900 placeholder:text-amber-600/70 focus:border-amber-500 focus:ring-amber-200 animate-pulse'
+                                    : 'border-purple-300 bg-white text-purple-900 focus:border-purple-600 focus:ring-purple-200'
+                                }`}
+                              />
+                            </div>
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <input
+                              type="text"
+                              value={item.date}
+                              onChange={(e) => handleUpdateStagedItem(idx, 'date', e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded px-1.5 py-1 text-center font-mono text-[11px] font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-500"
+                            />
+                          </td>
+                          <td className="p-2.5 text-center">
                             <button
                               type="button"
                               onClick={() => {
                                 setStagedScans(prev => prev.filter((_, i) => i !== idx));
                                 setTimeout(() => scannerInputRef.current?.focus(), 50);
                               }}
-                              className="text-slate-400 hover:text-rose-600 p-1 hover:bg-rose-50 rounded transition"
+                              className="text-slate-400 hover:text-rose-600 p-1 hover:bg-rose-50 rounded-lg transition cursor-pointer"
                               title="Xóa xe này khỏi danh sách quét"
                             >
-                              <Trash2 className="w-3 h-3" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </td>
                         </tr>
@@ -11459,6 +11511,13 @@ export default function QualityInspectionRecords({
                   </table>
                 )}
               </div>
+
+              {/* Color Presets Datalist */}
+              <datalist id="scan-color-presets-list">
+                {['Đen', 'Đen mờ', 'Đỏ', 'Đỏ đun', 'Trắng', 'Xanh cửu long', 'Xanh ngọc', 'Xanh rêu', 'Xám xi măng', 'Ghi bạc', 'Vàng', 'Cam', 'Hồng', 'Tím', 'Xanh xi măng', ...uniqueOqcColors].filter((v, i, a) => a.indexOf(v) === i).map(c => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
 
             {/* Action Buttons */}
