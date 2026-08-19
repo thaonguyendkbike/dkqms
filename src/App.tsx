@@ -3872,8 +3872,8 @@ export function App() {
   useEffect(() => {
     if (firebaseUser) {
       const emailLower = firebaseUser.email?.toLowerCase().trim() || '';
-      const member = staff.find(s => s.email.toLowerCase().trim() === emailLower) ||
-                     INITIAL_STAFF.find(s => s.email.toLowerCase().trim() === emailLower);
+      const member = staff.find(s => s && s.email && s.email.toLowerCase().trim() === emailLower) ||
+                     INITIAL_STAFF.find(s => s && s.email && s.email.toLowerCase().trim() === emailLower);
       setCurrentUser({
         name: member ? member.name : (firebaseUser.displayName || firebaseUser.email || 'Google User'),
         email: firebaseUser.email || '',
@@ -3903,9 +3903,9 @@ export function App() {
   useEffect(() => {
     if (firebaseUser?.email) {
       const emailLower = firebaseUser.email.toLowerCase().trim();
-      const isAuth = staff.some(s => s.email.toLowerCase().trim() === emailLower) ||
-                     INITIAL_STAFF.some(s => s.email.toLowerCase().trim() === emailLower) ||
-                     emailLower === 'thaonguyendkbike@gmail.com';
+      const isAuth = emailLower === 'thaonguyendkbike@gmail.com' ||
+                     staff.some(s => s && s.email && s.email.toLowerCase().trim() === emailLower) ||
+                     INITIAL_STAFF.some(s => s && s.email && s.email.toLowerCase().trim() === emailLower);
       
       if (isAuth) {
         let hasDirty = false;
@@ -11950,9 +11950,11 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-slate-400 max-h-48 overflow-y-auto pr-1">
-              {(staff && staff.length > 0 ? staff : INITIAL_STAFF).map(st => (
+              {(staff && Array.isArray(staff) && staff.length > 0 ? staff : INITIAL_STAFF)
+                .filter(st => st && typeof st === 'object' && st.name && st.email)
+                .map((st, sIdx) => (
                 <div
-                  key={st.id}
+                  key={st.id || st.email || `st_${sIdx}`}
                   className="flex flex-col bg-slate-900/80 p-2.5 rounded-lg border border-slate-800/80 text-left"
                 >
                   <div className="flex justify-between items-center w-full">
