@@ -2034,11 +2034,100 @@ export default function QualityInspectionRecords({
     };
   }, []);
 
+  // Master Part Codes (Bảng mã xe / Mã quy cách) states
+  const [oqcPartCodes, setOqcPartCodes] = useState<OqcPartCodeItem[]>(() => {
+    try {
+      const saved = safeStorage.getItem('dk_oqc_part_codes');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_OQC_PART_CODES;
+  });
+
+  const saveOqcPartCodes = (list: OqcPartCodeItem[]) => {
+    setOqcPartCodes(list);
+    safeStorage.setItem('dk_oqc_part_codes', JSON.stringify(list));
+  };
+
+  const lookupPartCode = useCallback((code: string): OqcPartCodeItem | null => {
+    if (!code) return null;
+    const clean = code.trim().toUpperCase();
+    return oqcPartCodes.find(p => p.partCode.trim().toUpperCase() === clean) || null;
+  }, [oqcPartCodes]);
+
+  const getCleanModelName = useCallback((r: { model?: string; color?: string; partCode?: string }): string => {
+    let m = (r.model || '').trim();
+    const mLow = m.toLowerCase();
+    if (mLow === 'đạt' || mLow === 'lỗi' || mLow === 'chưa kiểm tra' || mLow === 'pass' || mLow === 'fail' || mLow === '0' || mLow === '1' || !m) {
+      if (r.color && r.color.includes(' - ')) {
+        m = r.color.split(' - ')[0].trim();
+      } else if (r.color && r.color.includes('-') && !/^\d/.test(r.color)) {
+        m = r.color.split('-')[0].trim();
+      } else if (r.partCode) {
+        const matched = lookupPartCode(r.partCode);
+        if (matched) m = matched.model;
+      }
+    }
+    const cleanLow = m.toLowerCase();
+    if (!m || cleanLow === 'đạt' || cleanLow === 'lỗi' || cleanLow === 'chưa kiểm tra' || cleanLow === 'tiêu chuẩn' || cleanLow === 'dòng khác' || cleanLow === 'khác') {
+      if (r.partCode) {
+        const pUp = r.partCode.toUpperCase();
+        if (pUp.includes('TEMDD') || pUp.includes('D2')) m = 'DK D2';
+        else if (pUp.includes('TEMDV') || pUp.includes('V2')) m = 'DK V2';
+        else if (pUp.includes('ROM') || pUp.includes('ROMA')) m = 'DK Roma SX V2';
+        else if (pUp.includes('GOGO') || pUp.includes('GG')) m = 'DK Gogo';
+        else if (pUp.includes('SAM')) m = 'DK Samurai';
+        else if (pUp.includes('XMEN') || pUp.includes('XMAN')) m = 'DK Xmen';
+        else if (pUp.includes('CREA')) m = 'DK Crea Mono';
+        else if (pUp.includes('EZ')) m = 'DK EZ3';
+        else if (pUp.includes('S1')) m = 'DK S1';
+        else if (pUp.includes('S2')) m = 'DK S2';
+        else if (pUp.includes('S3')) m = 'DK S3';
+        else if (pUp.includes('NOVA')) m = 'DK Nova';
+        else if (pUp.includes('ZMTP') || pUp.includes('ZMT')) m = 'DK Z-MTP';
+        else m = 'DK D2';
+      } else {
+        m = 'DK D2';
+      }
+    }
+    return m;
+  }, [lookupPartCode]);
+
+  // Auto-clean any legacy records with 'Lỗi' or 'Đạt' as model name
+  React.useEffect(() => {
+    if (!oqcRecords || oqcRecords.length === 0) return;
+    let hasDirtyModel = false;
+    const cleaned = oqcRecords.map(r => {
+      const mLow = (r.model || '').toLowerCase().trim();
+      if (mLow === 'lỗi' || mLow === 'đạt' || mLow === 'chưa kiểm tra' || mLow === 'pass' || mLow === 'fail' || !r.model) {
+        hasDirtyModel = true;
+        return {
+          ...r,
+          model: getCleanModelName(r)
+        };
+      }
+      return r;
+    });
+
+    if (hasDirtyModel) {
+      setOqcRecords(cleaned);
+      safeStorage.setItem('dk_oqc_records', JSON.stringify(cleaned));
+      try {
+        localStorage.setItem('dk_oqc_records_is_dirty', 'true');
+      } catch (e) {}
+      if (typeof (window as any).syncToServer === 'function') {
+        (window as any).syncToServer('dk_oqc_records', cleaned);
+      }
+    }
+  }, [oqcRecords, getCleanModelName, setOqcRecords]);
+
   const defectModelTokenCounts = useMemo(() => {
     const counts: { [model: string]: { [token: string]: number } } = {};
     oqcRecords.forEach(r => {
       if (r.status === 'Lỗi' && !isOqcRecordPassed(r) && r.defectDetail) {
-        const m = r.model || 'Chưa phân loại';
+        const m = getCleanModelName(r);
         if (!counts[m]) {
           counts[m] = {};
         }
@@ -2049,11 +2138,11 @@ export default function QualityInspectionRecords({
       }
     });
     return counts;
-  }, [oqcRecords, isOqcRecordPassed]);
+  }, [oqcRecords, isOqcRecordPassed, getCleanModelName]);
 
   const getRecordMaxDefectCount = useCallback((r: OQCRecord) => {
     if (r.status !== 'Lỗi' || isOqcRecordPassed(r) || !r.defectDetail) return 0;
-    const m = r.model || 'Chưa phân loại';
+    const m = getCleanModelName(r);
     const modelCounts = defectModelTokenCounts[m];
     if (!modelCounts) return 0;
     
@@ -2066,7 +2155,7 @@ export default function QualityInspectionRecords({
       }
     });
     return maxCount;
-  }, [defectModelTokenCounts, isOqcRecordPassed]);
+  }, [defectModelTokenCounts, isOqcRecordPassed, getCleanModelName]);
 
   const oqcPivotReport = useMemo(() => {
     const groups: {
@@ -2080,7 +2169,7 @@ export default function QualityInspectionRecords({
     } = {};
 
     filteredOqc.forEach(r => {
-      const m = r.model || 'Chưa phân loại';
+      const m = getCleanModelName(r);
       if (!groups[m]) {
         groups[m] = {
           model: m,
@@ -2123,7 +2212,7 @@ export default function QualityInspectionRecords({
         topErrors: sortedErrors.length > 0 ? sortedErrors.join(', ') : '✓ Không có lỗi > 10 lần'
       };
     });
-  }, [filteredOqc, isOqcRecordPassed]);
+  }, [filteredOqc, isOqcRecordPassed, getCleanModelName]);
 
   const oqcErrorsByModelReport = useMemo(() => {
     // Group failure details by model
@@ -2137,7 +2226,7 @@ export default function QualityInspectionRecords({
 
     filteredOqc.forEach(r => {
       if (r.status === 'Lỗi' && !isOqcRecordPassed(r) && r.defectDetail) {
-        const m = r.model || 'Chưa phân loại';
+        const m = getCleanModelName(r);
         if (!groups[m]) {
           groups[m] = {
             model: m,
@@ -2436,29 +2525,6 @@ export default function QualityInspectionRecords({
 
   // OQC Sub-view state: 'station' (Trạm KCS) | 'handover' (Báo phẩm bàn giao) | 'part_codes' (Bảng mã xe) | 'dashboard' (Đồ thị báo cáo)
   const [oqcSubView, setOqcSubView] = useState<'station' | 'handover' | 'part_codes' | 'dashboard'>('station');
-
-  // Master Part Codes (Bảng mã xe / Mã quy cách) states
-  const [oqcPartCodes, setOqcPartCodes] = useState<OqcPartCodeItem[]>(() => {
-    try {
-      const saved = safeStorage.getItem('dk_oqc_part_codes');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return INITIAL_OQC_PART_CODES;
-  });
-
-  const saveOqcPartCodes = (list: OqcPartCodeItem[]) => {
-    setOqcPartCodes(list);
-    safeStorage.setItem('dk_oqc_part_codes', JSON.stringify(list));
-  };
-
-  const lookupPartCode = useCallback((code: string): OqcPartCodeItem | null => {
-    if (!code) return null;
-    const clean = code.trim().toUpperCase();
-    return oqcPartCodes.find(p => p.partCode.trim().toUpperCase() === clean) || null;
-  }, [oqcPartCodes]);
 
   const [partCodeSearch, setPartCodeSearch] = useState('');
   const [partCodeModelFilter, setPartCodeModelFilter] = useState('All');
@@ -4150,7 +4216,7 @@ export default function QualityInspectionRecords({
           serialNo: serialNoVal,
           chassisNo: chassisNoVal,
           engineNo: engineNoVal,
-          model: modelVal,
+          model: getCleanModelName({ model: modelVal, color: colorVal, partCode: partCodeVal }),
           color: colorVal,
           status: statusVal,
           lsx: lsxVal,
@@ -7521,25 +7587,13 @@ export default function QualityInspectionRecords({
               const pieDatPercent = liveLapRapTotal > 0 ? Math.round((pieDatCount / liveLapRapTotal) * 100) : 0;
               const pieLoiPercent = liveLapRapTotal > 0 ? (100 - pieDatPercent) : 0;
 
-              // Helper to resolve clean model name
-              const getCleanModelName = (r: OQCRecord) => {
-                let m = (r.model || '').trim();
-                if (m === 'Đạt' || m === 'Lỗi' || m === 'Chưa kiểm tra' || !m) {
-                  if (r.color && r.color.includes(' - ')) {
-                    m = r.color.split(' - ')[0].trim();
-                  } else if (r.partCode) {
-                    const matched = lookupPartCode(r.partCode);
-                    if (matched) m = matched.model;
-                  }
-                }
-                return m || 'DK D2';
-              };
-
               // Process models mapping dynamically
               const liveModelsMap: Record<string, number> = {};
               filteredOqc.forEach(r => {
                 const m = getCleanModelName(r);
-                liveModelsMap[m] = (liveModelsMap[m] || 0) + 1;
+                if (m && m.toLowerCase() !== 'đạt' && m.toLowerCase() !== 'lỗi' && m.toLowerCase() !== 'chưa kiểm tra') {
+                  liveModelsMap[m] = (liveModelsMap[m] || 0) + 1;
+                }
               });
               let activeBarData = Object.entries(liveModelsMap).map(([name, count]) => ({ name, count }))
                 .sort((a, b) => b.count - a.count);
@@ -7557,24 +7611,28 @@ export default function QualityInspectionRecords({
               const liveModelDefects: Record<string, { name: string; count: number }[]> = {};
               filteredOqc.forEach(r => {
                 const modelName = getCleanModelName(r);
-                if (!liveModelDefects[modelName]) {
-                  liveModelDefects[modelName] = [];
-                }
-                if (r.status === 'Lỗi' && r.defectDetail) {
-                  const items = r.defectDetail.split(/[,;+\n]/).map(s => s.trim()).filter(Boolean);
-                  items.forEach(defect => {
-                    const existing = liveModelDefects[modelName].find(d => d.name === defect);
-                    if (existing) {
-                      existing.count += (r.failedCount || 1);
-                    } else {
-                      liveModelDefects[modelName].push({ name: defect, count: (r.failedCount || 1) });
-                    }
-                  });
+                if (modelName && modelName.toLowerCase() !== 'đạt' && modelName.toLowerCase() !== 'lỗi' && modelName.toLowerCase() !== 'chưa kiểm tra') {
+                  if (!liveModelDefects[modelName]) {
+                    liveModelDefects[modelName] = [];
+                  }
+                  if (r.status === 'Lỗi' && r.defectDetail) {
+                    const items = r.defectDetail.split(/[,;+\n]/).map(s => s.trim()).filter(Boolean);
+                    items.forEach(defect => {
+                      const existing = liveModelDefects[modelName].find(d => d.name === defect);
+                      if (existing) {
+                        existing.count += (r.failedCount || 1);
+                      } else {
+                        liveModelDefects[modelName].push({ name: defect, count: (r.failedCount || 1) });
+                      }
+                    });
+                  }
                 }
               });
 
-              // Get unique models dynamically from filtered OQC records
-              const assembledModels: string[] = Array.from(new Set(filteredOqc.map(getCleanModelName))).filter((m): m is string => Boolean(m) && m !== 'Đạt' && m !== 'Lỗi').sort();
+              // Get unique models dynamically from filtered OQC records (case-insensitive filter)
+              const assembledModels: string[] = Array.from(new Set(filteredOqc.map(getCleanModelName)))
+                .filter((m): m is string => Boolean(m) && m.toLowerCase() !== 'đạt' && m.toLowerCase() !== 'lỗi' && m.toLowerCase() !== 'chưa kiểm tra' && m.toLowerCase() !== 'pass' && m.toLowerCase() !== 'fail')
+                .sort();
 
               const currentAssembled = liveLapRapTotal;
 
@@ -7913,7 +7971,7 @@ export default function QualityInspectionRecords({
                     ) : (
                       (() => {
                         const modelStats = assembledModels.map(model => {
-                          const modelRecords = filteredOqc.filter(r => r.model === model);
+                          const modelRecords = filteredOqc.filter(r => getCleanModelName(r) === model);
                           const total = modelRecords.length;
                           const passed = modelRecords.filter(isOqcRecordPassed).length;
                           const failed = total - passed;
