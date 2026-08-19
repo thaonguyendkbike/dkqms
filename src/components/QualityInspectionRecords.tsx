@@ -42,7 +42,10 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Tag
+  Tag,
+  QrCode,
+  ArrowRight,
+  Palette
 } from 'lucide-react';
 import { IQCRecord, PQCRecord, OQCRecord, OqcColorChangeRecord, OqcPartCodeItem, INITIAL_OQC_PART_CODES } from '../qualityTestData';
 import { safeStorage } from '../safeStorage';
@@ -1023,7 +1026,7 @@ export default function QualityInspectionRecords({
   oqcColorChanges = [],
   setOqcColorChanges
 }: QualityInspectionRecordsProps) {
-  const [qcMainSubTab, setQcMainSubTab] = useState<'iqc' | 'pqc' | 'oqc' | 'supplier_monitoring' | 'reports'>('iqc');
+  const [qcMainSubTab, setQcMainSubTab] = useState<'iqc' | 'pqc' | 'oqc' | 'color_change' | 'supplier_monitoring' | 'reports'>('iqc');
   const [selectedDashboardDefect, setSelectedDashboardDefect] = useState<{ name: string; count: number; modelName: string } | null>(null);
   const [oqcDetailModalModel, setOqcDetailModalModel] = useState<string | null>(null);
   const [localZoomImage, setLocalZoomImage] = useState<string | null>(null);
@@ -2324,11 +2327,40 @@ export default function QualityInspectionRecords({
   const [oqcImportText, setOqcImportText] = useState('');
   const [oqcImportError, setOqcImportError] = useState('');
 
-  // OQC Color Change Import states & persistence
+  // OQC Color Change states, scanning & persistence
   const [showColorChangeModal, setShowColorChangeModal] = useState(false);
   const [colorChangeText, setColorChangeText] = useState('');
   const [colorChangeError, setColorChangeError] = useState('');
   const [colorChangeDefaultDate, setColorChangeDefaultDate] = useState(() => new Date().toLocaleDateString('vi-VN'));
+  
+  // Scanner Mode States (In-Memory Staging, zero disk spam during continuous scan)
+  const [showScanColorChangeModal, setShowScanColorChangeModal] = useState(false);
+  const [scanSerialInput, setScanSerialInput] = useState('');
+  const [scanTargetNewColor, setScanTargetNewColor] = useState('Đen');
+  const [scanDate, setScanDate] = useState(() => new Date().toLocaleDateString('vi-VN'));
+  const [stagedScans, setStagedScans] = useState<Array<{
+    serialNo: string;
+    model: string;
+    oldColor: string;
+    newColor: string;
+    date: string;
+    lsx?: string;
+    partCode?: string;
+    isNewInOqc?: boolean;
+  }>>([]);
+  const [scanError, setScanError] = useState('');
+  const [scanLastSuccess, setScanLastSuccess] = useState<string | null>(null);
+  const scannerInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Multi-dimensional filters for Color Change Subtab
+  const [colorChangeSearchText, setColorChangeSearchText] = useState('');
+  const [colorChangeFilterModel, setColorChangeFilterModel] = useState('Tất cả');
+  const [colorChangeFilterOldColor, setColorChangeFilterOldColor] = useState('Tất cả');
+  const [colorChangeFilterNewColor, setColorChangeFilterNewColor] = useState('Tất cả');
+  const [colorChangeFilterMonth, setColorChangeFilterMonth] = useState('Tất cả');
+  const [colorChangeFilterYear, setColorChangeFilterYear] = useState('Tất cả');
+  const [isColorChangeFilterExpanded, setIsColorChangeFilterExpanded] = useState(false);
+
   const [localColorChanges, setLocalColorChanges] = useState<OqcColorChangeRecord[]>(() => {
     if (oqcColorChanges && oqcColorChanges.length > 0) return oqcColorChanges;
     const saved = safeStorage.getItem('dk_oqc_color_changes');
@@ -4117,6 +4149,25 @@ export default function QualityInspectionRecords({
     document.body.removeChild(link);
   };
 
+  // Audio Beep Feedback for Barcode Scanner
+  const playScanBeep = useCallback((isError = false) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = isError ? 'sawtooth' : 'sine';
+      osc.frequency.setValueAtTime(isError ? 220 : 960, ctx.currentTime);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (isError ? 0.25 : 0.09));
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + (isError ? 0.25 : 0.09));
+    } catch (e) {}
+  }, []);
+
   // Parser helper for Color Change rows (Số seri | Model | Màu cũ | Màu mới | Ngày đổi màu)
   const parseColorChangeRows = useCallback((text: string, defaultDate: string) => {
     if (!text || !text.trim()) return [];
@@ -4195,12 +4246,12 @@ export default function QualityInspectionRecords({
       }
 
       if (!model) {
-        const existingOqc = oqcRecords.find(r => r.serialNo.trim().toUpperCase() === serialNo.toUpperCase());
+        const existingOqc = oqcRecords.find(r => r.serialNo && r.serialNo.trim().toUpperCase() === serialNo.toUpperCase());
         model = existingOqc ? existingOqc.model : 'DK Nova';
       }
 
       if (!oldColor) {
-        const existingOqc = oqcRecords.find(r => r.serialNo.trim().toUpperCase() === serialNo.toUpperCase());
+        const existingOqc = oqcRecords.find(r => r.serialNo && r.serialNo.trim().toUpperCase() === serialNo.toUpperCase());
         oldColor = existingOqc ? existingOqc.color : 'Đỏ';
       }
 
@@ -4225,6 +4276,218 @@ export default function QualityInspectionRecords({
     return parseColorChangeRows(colorChangeText, colorChangeDefaultDate);
   }, [colorChangeText, colorChangeDefaultDate, parseColorChangeRows]);
 
+  // High-performance barcode scanner in-memory handler (O(1) in RAM, zero disk write during scanning)
+  const handleProcessScanSerial = () => {
+    setScanError('');
+    setScanLastSuccess(null);
+    const clean = scanSerialInput.trim().toUpperCase();
+    if (!clean) {
+      setScanError('Vui lòng quét hoặc nhập số sêri!');
+      playScanBeep(true);
+      return;
+    }
+
+    // Check if already in current staged session
+    if (stagedScans.some(s => s.serialNo.toUpperCase() === clean)) {
+      setScanError(`Xe có số sêri [${clean}] đã được quét trong phiên này rồi!`);
+      playScanBeep(true);
+      return;
+    }
+
+    // In-memory RAM lookup from oqcRecords
+    const existingOqc = oqcRecords.find(r => r.serialNo && r.serialNo.trim().toUpperCase() === clean);
+    let model = existingOqc?.model || '';
+    let oldColor = existingOqc?.color || '';
+    let lsx = existingOqc?.lsx || '26-10';
+    let partCode = existingOqc?.partCode || 'TEMDV11202';
+    let isNewInOqc = false;
+
+    if (!model || !oldColor) {
+      const matchedPart = lookupPartCode(partCode);
+      if (matchedPart) {
+        if (!model) model = matchedPart.model || 'DK Nova';
+        if (!oldColor) oldColor = matchedPart.color || 'Đỏ';
+      } else {
+        if (!model) model = 'DK Nova';
+        if (!oldColor) oldColor = 'Đỏ';
+      }
+      if (!existingOqc) isNewInOqc = true;
+    }
+
+    const newEntry = {
+      serialNo: clean,
+      model,
+      oldColor,
+      newColor: scanTargetNewColor,
+      date: scanDate || new Date().toLocaleDateString('vi-VN'),
+      lsx,
+      partCode,
+      isNewInOqc
+    };
+
+    // Staged into RAM list only - NO Firebase or localStorage write here!
+    setStagedScans(prev => [newEntry, ...prev]);
+    setScanLastSuccess(`✓ Đã quét: ${clean} (${model} | ${oldColor} ➔ ${scanTargetNewColor})`);
+    playScanBeep(false);
+    setScanSerialInput('');
+    setTimeout(() => {
+      scannerInputRef.current?.focus();
+    }, 50);
+  };
+
+  // Commit all staged scans to database & cloud in a SINGLE ATOMIC BATCH
+  const handleSaveStagedScans = () => {
+    if (stagedScans.length === 0) return;
+
+    try {
+      const serialChangeMap = new Map<string, typeof stagedScans[0]>();
+      stagedScans.forEach(item => {
+        serialChangeMap.set(item.serialNo.trim().toUpperCase(), item);
+      });
+
+      // 1. Update OQC records in RAM
+      const existingSerials = new Set<string>();
+      const updatedOqc = oqcRecords.map(r => {
+        const sUpper = r.serialNo?.trim().toUpperCase() || '';
+        existingSerials.add(sUpper);
+        const change = serialChangeMap.get(sUpper);
+        if (change) {
+          return {
+            ...r,
+            color: change.newColor,
+            oldColor: change.oldColor || r.color,
+            isColorChanged: true,
+            colorChangeDate: change.date,
+            model: change.model || r.model
+          };
+        }
+        return r;
+      });
+
+      // Insert any serials that did not exist yet in OQC
+      const newOqcFromChanges: OQCRecord[] = [];
+      stagedScans.forEach(item => {
+        const sUpper = item.serialNo.trim().toUpperCase();
+        if (!existingSerials.has(sUpper)) {
+          newOqcFromChanges.push({
+            id: `OQC-${sUpper.replace(/[\/\s.#$\[\]]/g, '_')}`,
+            partCode: item.partCode || 'TEMDV11202',
+            serialNo: item.serialNo.trim(),
+            model: item.model,
+            color: item.newColor,
+            oldColor: item.oldColor,
+            isColorChanged: true,
+            colorChangeDate: item.date,
+            status: 'Đạt',
+            defectDetail: '',
+            failedCount: 0,
+            rootCause: '',
+            lsx: item.lsx || '26-10',
+            checkTime: '08:30',
+            date: item.date,
+            month: parseInt(item.date.split('/')[1] || '5', 10),
+            year: parseInt(item.date.split('/')[2] || '2026', 10),
+            totalLlr: 1
+          });
+        }
+      });
+
+      const finalOqc = [...newOqcFromChanges, ...updatedOqc];
+
+      // 2. Add records to oqcColorChanges
+      const newColorChangeRecords: OqcColorChangeRecord[] = stagedScans.map(item => ({
+        id: `CC-${item.serialNo.trim().toUpperCase()}-${item.date.replace(/\//g, '')}-${Date.now()}`,
+        serialNo: item.serialNo.trim(),
+        model: item.model,
+        oldColor: item.oldColor,
+        newColor: item.newColor,
+        date: item.date,
+        flag: true,
+        createdAt: new Date().toISOString()
+      }));
+
+      const mergedChanges = [
+        ...newColorChangeRecords,
+        ...activeColorChanges.filter(c => 
+          !stagedScans.some(v => v.serialNo.trim().toUpperCase() === c.serialNo.trim().toUpperCase() && v.date === c.date)
+        )
+      ];
+
+      // 3. PERSIST ONCE: Single disk write & Single Cloud sync
+      setOqcRecords(finalOqc);
+      updateColorChanges(mergedChanges);
+      safeStorage.setItem('dk_oqc_records', JSON.stringify(finalOqc));
+      try {
+        localStorage.setItem('dk_oqc_records_is_dirty', 'true');
+      } catch (e) {}
+
+      if (typeof (window as any).syncToServer === 'function') {
+        (window as any).syncToServer('dk_oqc_records', finalOqc);
+      }
+
+      const count = stagedScans.length;
+      setStagedScans([]);
+      setShowScanColorChangeModal(false);
+      alert(`✓ Đã lưu thành công đổi màu cho ${count} xe!\n\n(Dữ liệu đã tự động cập nhật vào OQC và đẩy lên Cloud an toàn)`);
+    } catch (err: any) {
+      setScanError(`Lỗi khi lưu dữ liệu đổi màu: ${err.message || err}`);
+    }
+  };
+
+  // Revert & Delete a single color change record
+  const handleDeleteColorChange = (record: OqcColorChangeRecord) => {
+    if (!confirm(`Anh Thao có chắc chắn muốn xóa bản ghi đổi màu xe [${record.serialNo}] không?\n\n(Màu xe trong OQC sẽ được hoàn tác về màu gốc: ${record.oldColor || 'Màu gốc'})`)) {
+      return;
+    }
+
+    const newChanges = activeColorChanges.filter(c => c.id !== record.id && !(c.serialNo === record.serialNo && c.date === record.date));
+    updateColorChanges(newChanges);
+
+    // Revert in OQC records
+    const updatedOqc = oqcRecords.map(r => {
+      if (r.serialNo && r.serialNo.trim().toUpperCase() === record.serialNo.trim().toUpperCase()) {
+        return {
+          ...r,
+          color: record.oldColor || r.color,
+          oldColor: undefined,
+          isColorChanged: false,
+          colorChangeDate: undefined
+        };
+      }
+      return r;
+    });
+
+    setOqcRecords(updatedOqc);
+    safeStorage.setItem('dk_oqc_records', JSON.stringify(updatedOqc));
+    try {
+      localStorage.setItem('dk_oqc_records_is_dirty', 'true');
+    } catch (e) {}
+    if (typeof (window as any).syncToServer === 'function') {
+      (window as any).syncToServer('dk_oqc_records', updatedOqc);
+    }
+  };
+
+  // Export Color Change CSV
+  const handleExportColorChangeCSV = () => {
+    const csvHeaders = ["STT", "Số Sêri", "Dòng xe (Model)", "Màu gốc (Cũ)", "Màu mới (Sau đổi)", "Ngày đổi màu", "Trạng thái"];
+    const csvContent = filteredColorChanges.map((r, i) => [
+      i + 1,
+      r.serialNo,
+      r.model,
+      r.oldColor,
+      r.newColor,
+      r.date,
+      r.flag ? 'Đã đổi' : 'Đang xử lý'
+    ]);
+    let csvString = "\uFEFF" + [csvHeaders.join(","), ...csvContent.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `Danh_Sach_Xe_Doi_Mau_KCS_DKBike_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+  };
+
+  // Bulk Excel import submit handler
   const handleImportColorChangeSubmit = (e: FormEvent) => {
     e.preventDefault();
     setColorChangeError('');
@@ -4288,7 +4551,7 @@ export default function QualityInspectionRecords({
         }
       });
 
-      setOqcRecords([...newOqcFromChanges, ...updatedOqc]);
+      const finalOqc = [...newOqcFromChanges, ...updatedOqc];
 
       // 2. Add records to oqcColorChanges
       const newColorChangeRecords: OqcColorChangeRecord[] = validItems.map(item => ({
@@ -4309,9 +4572,19 @@ export default function QualityInspectionRecords({
         )
       ];
 
+      // 3. PERSIST ONCE: Single disk write & Single Cloud sync
+      setOqcRecords(finalOqc);
       updateColorChanges(mergedChanges);
+      safeStorage.setItem('dk_oqc_records', JSON.stringify(finalOqc));
+      try {
+        localStorage.setItem('dk_oqc_records_is_dirty', 'true');
+      } catch (e) {}
 
-      // 3. Summaries for alert
+      if (typeof (window as any).syncToServer === 'function') {
+        (window as any).syncToServer('dk_oqc_records', finalOqc);
+      }
+
+      // 4. Summaries for alert
       const groups: Record<string, { model: string; oldColor: string; newColor: string; count: number }> = {};
       validItems.forEach(item => {
         const k = `${item.model}___${item.oldColor}___${item.newColor}`;
@@ -4329,6 +4602,71 @@ export default function QualityInspectionRecords({
       setColorChangeError(`Lỗi khi xử lý dữ liệu đổi màu: ${err.message || err}`);
     }
   };
+
+  // Filtered color changes for the Subtab
+  const filteredColorChanges = useMemo(() => {
+    return activeColorChanges.filter(c => {
+      if (colorChangeSearchText.trim()) {
+        const q = colorChangeSearchText.trim().toLowerCase();
+        const match = (c.serialNo || '').toLowerCase().includes(q) ||
+                      (c.model || '').toLowerCase().includes(q) ||
+                      (c.oldColor || '').toLowerCase().includes(q) ||
+                      (c.newColor || '').toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      if (colorChangeFilterModel !== 'Tất cả' && c.model !== colorChangeFilterModel) return false;
+      if (colorChangeFilterOldColor !== 'Tất cả' && c.oldColor !== colorChangeFilterOldColor) return false;
+      if (colorChangeFilterNewColor !== 'Tất cả' && c.newColor !== colorChangeFilterNewColor) return false;
+      if (colorChangeFilterMonth !== 'Tất cả') {
+        const m = c.date ? c.date.split('/')[1] : '';
+        if (parseInt(m, 10) !== parseInt(colorChangeFilterMonth, 10)) return false;
+      }
+      if (colorChangeFilterYear !== 'Tất cả') {
+        const y = c.date ? c.date.split('/')[2] : '';
+        if (y !== colorChangeFilterYear) return false;
+      }
+      return true;
+    });
+  }, [activeColorChanges, colorChangeSearchText, colorChangeFilterModel, colorChangeFilterOldColor, colorChangeFilterNewColor, colorChangeFilterMonth, colorChangeFilterYear]);
+
+  // Unique filter options for Color Change subtab
+  const uniqueColorChangeModels = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.model).filter(Boolean))), [activeColorChanges]);
+  const uniqueColorChangeOldColors = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.oldColor).filter(Boolean))), [activeColorChanges]);
+  const uniqueColorChangeNewColors = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.newColor).filter(Boolean))), [activeColorChanges]);
+  const uniqueColorChangeMonths = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.date ? parseInt(c.date.split('/')[1] || '0', 10) : null).filter(Boolean))).sort((a, b) => Number(a) - Number(b)), [activeColorChanges]);
+  const uniqueColorChangeYears = useMemo(() => Array.from(new Set(activeColorChanges.map(c => c.date ? c.date.split('/')[2] : null).filter(Boolean))).sort(), [activeColorChanges]);
+
+  // Color Change Dashboard KPI Stats
+  const colorChangeDashboardStats = useMemo(() => {
+    const total = activeColorChanges.length;
+    const uniqueModels = new Set(activeColorChanges.map(c => c.model).filter(Boolean)).size;
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    const thisMonthCount = activeColorChanges.filter(c => {
+      if (!c.date) return false;
+      const parts = c.date.split('/');
+      return parseInt(parts[1], 10) === currentMonth && parseInt(parts[2], 10) === currentYear;
+    }).length;
+
+    // Grouping top color shift pairs
+    const pairMap: Record<string, { model: string; oldColor: string; newColor: string; count: number }> = {};
+    activeColorChanges.forEach(c => {
+      const key = `${c.model || 'Chưa rõ'}___${c.oldColor || 'Gốc'}___${c.newColor || 'Mới'}`;
+      if (!pairMap[key]) {
+        pairMap[key] = { model: c.model || 'Chưa rõ', oldColor: c.oldColor || 'Gốc', newColor: c.newColor || 'Mới', count: 0 };
+      }
+      pairMap[key].count++;
+    });
+    const topPairs = Object.values(pairMap).sort((a, b) => b.count - a.count);
+
+    return {
+      total,
+      uniqueModels,
+      thisMonthCount,
+      topPairs
+    };
+  }, [activeColorChanges]);
 
   return (
     <div className="space-y-6 overflow-y-auto max-h-[calc(100vh-10rem)] pr-2 animate-in fade-in duration-300" id="view_quality_inspection_content">
@@ -4411,13 +4749,40 @@ export default function QualityInspectionRecords({
               <button 
                 id="btn-color-change"
                 onClick={() => {
+                  setQcMainSubTab('color_change');
+                }}
+                className="bg-white hover:bg-purple-50 text-purple-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-purple-200 transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="Mở phân hệ đổi màu xe KCS"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-purple-600" /> Đổi màu xe
+              </button>
+            </div>
+          )}
+          {qcMainSubTab === 'color_change' && (
+            <div className="flex items-center gap-2">
+              <button 
+                id="btn-scan-color-change"
+                onClick={() => {
+                  setScanError('');
+                  setScanLastSuccess(null);
+                  setShowScanColorChangeModal(true);
+                  setTimeout(() => scannerInputRef.current?.focus(), 150);
+                }}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs shadow-purple-200"
+                title="Bật chế độ quét mã sêri bằng máy quét hoặc camera"
+              >
+                <QrCode className="w-3.5 h-3.5 text-white" /> 🔫 Quét mã Sêri
+              </button>
+              <button 
+                id="btn-import-color-change-excel"
+                onClick={() => {
                   setColorChangeError('');
                   setShowColorChangeModal(true);
                 }}
-                className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-                title="Nhập danh sách xe đổi màu hàng loạt"
+                className="bg-white hover:bg-purple-50 text-purple-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-purple-200 transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="Dán danh sách xe đổi màu hàng loạt từ file Excel"
               >
-                <RefreshCw className="w-3.5 h-3.5 text-slate-500" /> Đổi màu xe
+                <FileSpreadsheet className="w-3.5 h-3.5 text-purple-600" /> 📋 Nhập từ Excel
               </button>
             </div>
           )}
@@ -4439,7 +4804,9 @@ export default function QualityInspectionRecords({
               onClick={
                 qcMainSubTab === 'iqc' ? handleExportIqcCSV :
                 qcMainSubTab === 'pqc' ? handleExportPqcCSV : 
-                qcMainSubTab === 'oqc' ? handleExportOqcCSV : () => alert('Hồ sơ xuất Excel giám sát nhà cung cấp đang đồng bộ trực tiếp lên server.')
+                qcMainSubTab === 'oqc' ? handleExportOqcCSV :
+                qcMainSubTab === 'color_change' ? handleExportColorChangeCSV :
+                () => alert('Hồ sơ xuất Excel giám sát nhà cung cấp đang đồng bộ trực tiếp lên server.')
               }
               className="bg-white hover:bg-slate-50 shadow-sm border border-slate-200 text-slate-700 font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
             >
@@ -4474,6 +4841,14 @@ export default function QualityInspectionRecords({
         >
           <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
           OQC ({oqcRecords.length})
+        </button>
+        <button
+          id="subtab-btn-color-change"
+          onClick={() => setQcMainSubTab('color_change')}
+          className={`flex-1 py-1 sm:py-1.5 text-center text-[10.5px] sm:text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1 ${qcMainSubTab === 'color_change' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-600 hover:text-purple-950 hover:bg-white/30'}`}
+        >
+          <RefreshCw className="w-3.5 h-3.5 text-purple-600" />
+          Đổi màu xe ({activeColorChanges.length})
         </button>
         <button
           id="subtab-btn-sqc"
@@ -7469,6 +7844,444 @@ export default function QualityInspectionRecords({
         </div>
       )}
 
+      {/* ==================== SUBTAB: COLOR CHANGE (ĐỔI MÀU XE) ==================== */}
+      {qcMainSubTab === 'color_change' && (
+        <div className="space-y-5 animate-in fade-in duration-300">
+          
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-lg border border-purple-500/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-purple-600/30 rounded-xl border border-purple-400/40 text-purple-300">
+                <RefreshCw className="w-6 h-6 animate-spin" style={{ animationDuration: '8s' }} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-wide">
+                    Phân Hệ Đổi Màu Xe Thành Phẩm KCS (OQC Color Shift)
+                  </h3>
+                  <span className="bg-purple-500/40 text-purple-200 text-[10px] px-2 py-0.5 rounded-full font-bold border border-purple-400/30 font-mono">
+                    {activeColorChanges.length} xe
+                  </span>
+                </div>
+                <p className="text-xs text-purple-200/90 mt-0.5">
+                  Tự động đối soát dữ liệu OQC, đồng bộ thông tin Model & Màu sắc và liên kết Báo cáo ngày Email cho Ban Giám Đốc.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setScanError('');
+                  setScanLastSuccess(null);
+                  setShowScanColorChangeModal(true);
+                  setTimeout(() => scannerInputRef.current?.focus(), 150);
+                }}
+                className="flex-1 md:flex-initial bg-purple-500 hover:bg-purple-600 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-md shadow-purple-900/40 flex items-center justify-center gap-1.5 cursor-pointer border border-purple-400/50"
+              >
+                <QrCode className="w-4 h-4 text-purple-100" /> 🔫 Quét mã Sêri
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setColorChangeError('');
+                  setShowColorChangeModal(true);
+                }}
+                className="flex-1 md:flex-initial bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border border-white/20"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400" /> 📋 Nhập Excel
+              </button>
+              <button
+                type="button"
+                onClick={handleExportColorChangeCSV}
+                className="bg-white/10 hover:bg-white/20 text-white font-bold text-xs px-3 py-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border border-white/20"
+                title="Xuất file CSV danh sách xe đổi màu"
+              >
+                <Download className="w-4 h-4 text-slate-300" />
+              </button>
+            </div>
+          </div>
+
+          {/* Dashboard Summary Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">Tổng xe đã đổi màu</span>
+                  <span className="text-xl sm:text-2xl font-black text-purple-700 font-mono mt-1 block">
+                    {colorChangeDashboardStats.total}
+                  </span>
+                </div>
+                <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
+                  <RefreshCw className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-2 text-[10.5px] text-slate-500 font-medium">
+                Tỷ lệ: <strong className="text-slate-800 font-mono">{oqcRecords.length > 0 ? ((colorChangeDashboardStats.total / oqcRecords.length) * 100).toFixed(1) : 0}%</strong> tổng số xe KCS
+              </div>
+            </div>
+
+            <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">Số Model xe đổi màu</span>
+                  <span className="text-xl sm:text-2xl font-black text-indigo-700 font-mono mt-1 block">
+                    {colorChangeDashboardStats.uniqueModels}
+                  </span>
+                </div>
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                  <Tag className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-2 text-[10.5px] text-slate-500 truncate">
+                {uniqueColorChangeModels.slice(0, 3).join(', ')}{uniqueColorChangeModels.length > 3 ? '...' : ''}
+              </div>
+            </div>
+
+            <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">Đổi trong tháng này</span>
+                  <span className="text-xl sm:text-2xl font-black text-emerald-700 font-mono mt-1 block">
+                    {colorChangeDashboardStats.thisMonthCount}
+                  </span>
+                </div>
+                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                  <Calendar className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-2 text-[10.5px] text-emerald-600 font-bold">
+                Tháng {new Date().getMonth() + 1}/{new Date().getFullYear()}
+              </div>
+            </div>
+
+            <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">Cặp màu đổi nhiều nhất</span>
+                  <span className="text-xs sm:text-sm font-black text-rose-700 mt-1 block truncate max-w-[160px]">
+                    {colorChangeDashboardStats.topPairs[0] 
+                      ? `${colorChangeDashboardStats.topPairs[0].oldColor} ➔ ${colorChangeDashboardStats.topPairs[0].newColor}`
+                      : 'Chưa có dữ liệu'}
+                  </span>
+                </div>
+                <div className="p-2 bg-rose-50 text-rose-600 rounded-lg">
+                  <Palette className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-2 text-[10.5px] text-slate-500 font-medium">
+                {colorChangeDashboardStats.topPairs[0] 
+                  ? `${colorChangeDashboardStats.topPairs[0].model} (${colorChangeDashboardStats.topPairs[0].count} xe)`
+                  : 'Sẵn sàng ghi nhận'}
+              </div>
+            </div>
+          </div>
+
+          {/* Grouping Breakdown Pills */}
+          {colorChangeDashboardStats.topPairs.length > 0 && (
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-purple-600" />
+                  Phân bố các luồng đổi màu theo dòng xe & màu sắc:
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  {colorChangeDashboardStats.topPairs.length} nhóm chuyển đổi
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {colorChangeDashboardStats.topPairs.map((pair, idx) => (
+                  <div 
+                    key={idx}
+                    className="flex items-center gap-2 bg-purple-50/60 hover:bg-purple-100/80 border border-purple-200 rounded-lg px-2.5 py-1 text-xs transition"
+                  >
+                    <span className="font-extrabold text-slate-800 text-[11px]">{pair.model}</span>
+                    <div className="flex items-center gap-1 text-[10px]">
+                      <span className="px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 font-bold border border-rose-200">
+                        {pair.oldColor}
+                      </span>
+                      <ArrowRight className="w-3 h-3 text-purple-600" />
+                      <span className="px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 font-bold border border-purple-300">
+                        {pair.newColor}
+                      </span>
+                    </div>
+                    <span className="font-mono font-black text-purple-900 bg-white px-1.5 py-0.2 rounded border border-purple-200 text-[10px]">
+                      {pair.count} xe
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Filter Toolbar */}
+          <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row gap-2 justify-between items-stretch sm:items-center">
+              {/* Search input */}
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={colorChangeSearchText}
+                  onChange={(e) => setColorChangeSearchText(e.target.value)}
+                  placeholder="Tìm theo Số Sêri / Số khung / Model / Màu sắc..."
+                  className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-500"
+                />
+                {colorChangeSearchText && (
+                  <button 
+                    onClick={() => setColorChangeSearchText('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Filter toggle button */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsColorChangeFilterExpanded(!isColorChangeFilterExpanded)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border ${
+                    isColorChangeFilterExpanded || colorChangeFilterModel !== 'Tất cả' || colorChangeFilterOldColor !== 'Tất cả' || colorChangeFilterNewColor !== 'Tất cả' || colorChangeFilterMonth !== 'Tất cả' || colorChangeFilterYear !== 'Tất cả'
+                      ? 'bg-purple-50 text-purple-700 border-purple-300'
+                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <Filter className="w-3.5 h-3.5 text-purple-600" />
+                  Bộ lọc nâng cao
+                  {(colorChangeFilterModel !== 'Tất cả' || colorChangeFilterOldColor !== 'Tất cả' || colorChangeFilterNewColor !== 'Tất cả' || colorChangeFilterMonth !== 'Tất cả' || colorChangeFilterYear !== 'Tất cả') && (
+                    <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                  )}
+                </button>
+
+                {(colorChangeSearchText || colorChangeFilterModel !== 'Tất cả' || colorChangeFilterOldColor !== 'Tất cả' || colorChangeFilterNewColor !== 'Tất cả' || colorChangeFilterMonth !== 'Tất cả' || colorChangeFilterYear !== 'Tất cả') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setColorChangeSearchText('');
+                      setColorChangeFilterModel('Tất cả');
+                      setColorChangeFilterOldColor('Tất cả');
+                      setColorChangeFilterNewColor('Tất cả');
+                      setColorChangeFilterMonth('Tất cả');
+                      setColorChangeFilterYear('Tất cả');
+                    }}
+                    className="text-xs text-rose-600 hover:text-rose-800 font-bold px-2 py-1 hover:bg-rose-50 rounded-lg transition"
+                  >
+                    Xóa lọc
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Expanded Filters */}
+            {isColorChangeFilterExpanded && (
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2 border-t border-slate-100 text-xs animate-in fade-in duration-200">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Model xe:</label>
+                  <select
+                    value={colorChangeFilterModel}
+                    onChange={(e) => setColorChangeFilterModel(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-600"
+                  >
+                    <option value="Tất cả">Tất cả ({uniqueColorChangeModels.length} model)</option>
+                    {uniqueColorChangeModels.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Màu gốc (Cũ):</label>
+                  <select
+                    value={colorChangeFilterOldColor}
+                    onChange={(e) => setColorChangeFilterOldColor(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-600"
+                  >
+                    <option value="Tất cả">Tất cả màu gốc</option>
+                    {uniqueColorChangeOldColors.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Màu mới (Sau đổi):</label>
+                  <select
+                    value={colorChangeFilterNewColor}
+                    onChange={(e) => setColorChangeFilterNewColor(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-600"
+                  >
+                    <option value="Tất cả">Tất cả màu mới</option>
+                    {uniqueColorChangeNewColors.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Tháng đổi:</label>
+                  <select
+                    value={colorChangeFilterMonth}
+                    onChange={(e) => setColorChangeFilterMonth(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-600"
+                  >
+                    <option value="Tất cả">Tất cả các tháng</option>
+                    {uniqueColorChangeMonths.map(m => (
+                      <option key={m} value={String(m)}>Tháng {m}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Năm:</label>
+                  <select
+                    value={colorChangeFilterYear}
+                    onChange={(e) => setColorChangeFilterYear(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-700 focus:bg-white focus:outline-none focus:border-purple-600"
+                  >
+                    <option value="Tất cả">Tất cả các năm</option>
+                    {uniqueColorChangeYears.map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Main Table: Color Changes List */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-slate-700 uppercase tracking-wide">
+                  Danh Sách Xe Đổi Màu Chi Tiết ({filteredColorChanges.length} xe)
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-500">
+                Hiển thị {filteredColorChanges.length} / {activeColorChanges.length} bản ghi
+              </span>
+            </div>
+
+            {filteredColorChanges.length === 0 ? (
+              <div className="text-center py-12 px-4 space-y-3">
+                <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-full flex items-center justify-center mx-auto border border-purple-200">
+                  <RefreshCw className="w-6 h-6" />
+                </div>
+                <h4 className="font-black text-slate-700 text-sm">
+                  {activeColorChanges.length === 0 ? 'Chưa có bản ghi đổi màu xe nào!' : 'Không tìm thấy xe nào khớp với bộ lọc!'}
+                </h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  {activeColorChanges.length === 0 
+                    ? 'Anh Thao có thể sử dụng tính năng Quét mã Sêri hoặc Dán từ Excel để ghi nhận các xe đổi màu.'
+                    : 'Thử điều chỉnh lại từ khóa tìm kiếm hoặc bấm nút "Xóa lọc" phía trên.'}
+                </p>
+                {activeColorChanges.length === 0 && (
+                  <div className="flex justify-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setScanError('');
+                        setScanLastSuccess(null);
+                        setShowScanColorChangeModal(true);
+                        setTimeout(() => scannerInputRef.current?.focus(), 150);
+                      }}
+                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow shadow-purple-200"
+                    >
+                      <QrCode className="w-3.5 h-3.5" /> 🔫 Bắt đầu Quét mã Sêri
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setColorChangeError('');
+                        setShowColorChangeModal(true);
+                      }}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> 📋 Dán từ Excel
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto max-h-[560px] overflow-y-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-100/80 text-slate-700 sticky top-0 font-extrabold text-[11px] uppercase tracking-wide border-b border-slate-200 z-10">
+                    <tr>
+                      <th className="p-2.5 w-10 text-center">STT</th>
+                      <th className="p-2.5">Số Sêri / Khung</th>
+                      <th className="p-2.5">Dòng xe (Model)</th>
+                      <th className="p-2.5 text-center">Màu gốc (Cũ)</th>
+                      <th className="p-2.5 text-center w-8">➔</th>
+                      <th className="p-2.5 text-center">Màu mới (Sau đổi)</th>
+                      <th className="p-2.5 text-center">Ngày đổi màu</th>
+                      <th className="p-2.5 text-center">Trạng thái OQC</th>
+                      <th className="p-2.5 text-center w-16">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 font-medium text-slate-800">
+                    {filteredColorChanges.map((item, idx) => {
+                      const matchedOqc = oqcRecords.find(r => r.serialNo && r.serialNo.trim().toUpperCase() === item.serialNo.trim().toUpperCase());
+                      return (
+                        <tr key={item.id || idx} className="hover:bg-purple-50/40 transition">
+                          <td className="p-2.5 text-center text-slate-400 font-bold">{idx + 1}</td>
+                          <td className="p-2.5">
+                            <span className="font-mono font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-300 text-[11px]">
+                              {item.serialNo}
+                            </span>
+                          </td>
+                          <td className="p-2.5 font-extrabold text-slate-800">
+                            {item.model}
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <span className="px-2 py-0.5 rounded text-[11px] bg-rose-50 text-rose-700 font-bold border border-rose-200">
+                              {item.oldColor}
+                            </span>
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <ArrowRight className="w-3.5 h-3.5 text-purple-600 mx-auto" />
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <span className="px-2 py-0.5 rounded text-[11px] bg-purple-100 text-purple-800 font-black border border-purple-300">
+                              {item.newColor}
+                            </span>
+                          </td>
+                          <td className="p-2.5 text-center font-mono font-bold text-slate-600">
+                            {item.date}
+                          </td>
+                          <td className="p-2.5 text-center">
+                            {matchedOqc ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Đã cập nhật OQC
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                                Đã lưu hồ sơ
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteColorChange(item)}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                              title="Xóa bản ghi đổi màu & hoàn tác về màu gốc"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ==================== SUBTAB: SUPPLIER MONITORING ==================== */}
       {qcMainSubTab === 'supplier_monitoring' && (
         <div className="space-y-6">
@@ -10353,6 +11166,266 @@ export default function QualityInspectionRecords({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: HIGH-PERFORMANCE BARCODE SCANNER COLOR CHANGE (ZERO DISK SPAM DURING SCANNING) */}
+      {showScanColorChangeModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-4 sm:p-6 border border-purple-300 text-xs text-slate-800 space-y-4 max-h-[94vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center border-b border-purple-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 bg-purple-100 text-purple-700 rounded-xl border border-purple-300 shadow-xs">
+                  <QrCode className="w-5 h-5 text-purple-700 animate-pulse" />
+                </span>
+                <div>
+                  <h3 className="font-black text-slate-800 text-sm sm:text-base uppercase flex items-center gap-2">
+                    🔫 Quét Mã Sêri Đổi Màu Xe Thành Phẩm KCS
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Sử dụng súng quét mã vạch / QR - Tự động đối soát Model &amp; Màu cũ từ OQC (Không tốn lượt đọc/ghi trong lúc quét)
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  if (stagedScans.length > 0) {
+                    if (!confirm(`Anh Thao có chắc muốn đóng? ${stagedScans.length} xe vừa quét chưa được lưu vào hệ thống.`)) return;
+                  }
+                  setShowScanColorChangeModal(false);
+                  setStagedScans([]);
+                  setScanError('');
+                  setScanLastSuccess(null);
+                }}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer font-black text-base"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Target Color & Date Setup Bar */}
+            <div className="bg-purple-50/70 p-3 rounded-xl border border-purple-200 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="font-extrabold text-purple-900 block text-[11px] mb-1 uppercase tracking-wide">
+                  🎨 Màu mới áp dụng cho các xe được quét:
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={scanTargetNewColor}
+                    onChange={(e) => setScanTargetNewColor(e.target.value)}
+                    className="flex-1 bg-white border border-purple-300 rounded-lg p-2 text-xs font-black text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    {['Đen', 'Đen mờ', 'Đỏ', 'Đỏ đun', 'Trắng', 'Xanh cửu long', 'Xanh ngọc', 'Xanh rêu', 'Xám xi măng', 'Ghi bạc', 'Vàng', 'Cam', 'Hồng', 'Tím', 'Xanh xi măng'].map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    value={scanTargetNewColor}
+                    onChange={(e) => setScanTargetNewColor(e.target.value)}
+                    placeholder="Nhập màu khác..."
+                    className="w-28 bg-white border border-purple-300 rounded-lg p-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    title="Hoặc gõ trực tiếp tên màu mới"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-extrabold text-purple-900 block text-[11px] mb-1 uppercase tracking-wide">
+                  📅 Ngày thực hiện đổi màu:
+                </label>
+                <input
+                  type="text"
+                  value={scanDate}
+                  onChange={(e) => setScanDate(e.target.value)}
+                  placeholder="dd/mm/yyyy"
+                  className="w-full bg-white border border-purple-300 rounded-lg p-2 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+
+            {/* Scanner Input Box */}
+            <div className="space-y-2">
+              <label className="font-black text-slate-800 block text-xs flex items-center justify-between">
+                <span>🎯 Ô nhận tín hiệu máy quét mã vạch (Focus liên tục):</span>
+                <span className="text-[10px] text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                  ⚡ Súng quét bắn Enter để tự thêm
+                </span>
+              </label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <QrCode className="w-5 h-5 text-purple-600 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    ref={scannerInputRef}
+                    type="text"
+                    value={scanSerialInput}
+                    onChange={(e) => setScanSerialInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleProcessScanSerial();
+                      }
+                    }}
+                    placeholder="Bắn súng quét mã vạch vào tem xe hoặc gõ số sêri..."
+                    autoFocus
+                    className="w-full pl-10 pr-3 py-2.5 bg-purple-50/40 border-2 border-purple-400 rounded-xl font-mono text-sm font-black text-purple-950 focus:bg-white focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 placeholder:text-slate-400 placeholder:font-sans placeholder:text-xs placeholder:font-normal"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleProcessScanSerial}
+                  className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-sm shadow-purple-200 cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4" /> Thêm xe
+                </button>
+              </div>
+            </div>
+
+            {/* Instant scan feedback alert */}
+            {scanLastSuccess && (
+              <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-300 font-bold text-xs flex items-center justify-between animate-in fade-in duration-150">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  {scanLastSuccess}
+                </span>
+                <span className="text-[10px] text-emerald-600 font-mono bg-emerald-100 px-1.5 py-0.5 rounded">
+                  Đã ghi vào RAM
+                </span>
+              </div>
+            )}
+
+            {scanError && (
+              <div className="p-2.5 bg-rose-50 text-rose-800 rounded-xl border border-rose-300 font-bold text-xs flex items-center gap-1.5 animate-in shake duration-200">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                {scanError}
+              </div>
+            )}
+
+            {/* Staging Scans Table (In RAM) */}
+            <div className="flex-1 flex flex-col min-h-0 space-y-1.5">
+              <div className="flex justify-between items-center">
+                <span className="font-extrabold text-xs text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                  📋 Danh sách xe đã quét trong phiên:
+                  <span className="bg-purple-600 text-white px-2 py-0.5 rounded-full font-mono text-[10px] font-black">
+                    {stagedScans.length} xe
+                  </span>
+                </span>
+                {stagedScans.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('Xác nhận xóa trắng danh sách các xe vừa quét?')) {
+                        setStagedScans([]);
+                        setScanLastSuccess(null);
+                        scannerInputRef.current?.focus();
+                      }
+                    }}
+                    className="text-[10.5px] text-rose-600 hover:text-rose-800 font-bold hover:bg-rose-50 px-2 py-0.5 rounded transition"
+                  >
+                    Xóa tất cả ({stagedScans.length})
+                  </button>
+                )}
+              </div>
+
+              <div className="flex-1 max-h-[190px] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/50">
+                {stagedScans.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 space-y-1">
+                    <QrCode className="w-8 h-8 text-slate-300 mx-auto" />
+                    <p className="text-xs font-bold">Chưa có xe nào được quét trong phiên này</p>
+                    <p className="text-[10.5px]">Hãy hướng súng quét vào tem sêri trên khung xe để bắt đầu</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-[11px] border-collapse">
+                    <thead className="bg-purple-100/80 text-purple-900 sticky top-0 font-black text-[10px] uppercase border-b border-purple-200">
+                      <tr>
+                        <th className="p-2 w-8 text-center">STT</th>
+                        <th className="p-2">Số Sêri</th>
+                        <th className="p-2">Model (Tự đối soát)</th>
+                        <th className="p-2 text-center">Màu gốc (OQC)</th>
+                        <th className="p-2 text-center w-6">➔</th>
+                        <th className="p-2 text-center">Màu mới</th>
+                        <th className="p-2 text-center">Ngày đổi</th>
+                        <th className="p-2 text-center w-10">Xóa</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-purple-100/70 font-medium">
+                      {stagedScans.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-white transition">
+                          <td className="p-2 text-center text-slate-400 font-bold">{idx + 1}</td>
+                          <td className="p-2 font-mono font-black text-slate-900">{item.serialNo}</td>
+                          <td className="p-2 font-bold text-slate-800">{item.model}</td>
+                          <td className="p-2 text-center">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 font-bold border border-rose-200">
+                              {item.oldColor}
+                            </span>
+                          </td>
+                          <td className="p-2 text-center font-black text-purple-600">➔</td>
+                          <td className="p-2 text-center">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-100 text-purple-800 font-black border border-purple-300">
+                              {item.newColor}
+                            </span>
+                          </td>
+                          <td className="p-2 text-center font-mono text-[10px] text-slate-500">{item.date}</td>
+                          <td className="p-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStagedScans(prev => prev.filter((_, i) => i !== idx));
+                                setTimeout(() => scannerInputRef.current?.focus(), 50);
+                              }}
+                              className="text-slate-400 hover:text-rose-600 p-1 hover:bg-rose-50 rounded transition"
+                              title="Xóa xe này khỏi danh sách quét"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-between items-center border-t border-slate-200 pt-3 text-xs">
+              <div className="text-slate-500 text-[11px]">
+                {stagedScans.length > 0 && (
+                  <span>
+                    🚀 Sẵn sàng lưu <strong>{stagedScans.length} xe</strong> (Chỉ tốn 1 lần ghi Cloud)
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (stagedScans.length > 0) {
+                      if (!confirm(`Anh Thao có chắc muốn đóng? ${stagedScans.length} xe vừa quét chưa được lưu vào hệ thống.`)) return;
+                    }
+                    setShowScanColorChangeModal(false);
+                    setStagedScans([]);
+                    setScanError('');
+                    setScanLastSuccess(null);
+                  }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveStagedScans}
+                  disabled={stagedScans.length === 0}
+                  className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl transition shadow-md shadow-purple-200 cursor-pointer flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  💾 Xác nhận &amp; Lưu Đổi Màu ({stagedScans.length} xe)
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
