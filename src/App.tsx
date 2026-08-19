@@ -2102,6 +2102,7 @@ export function App() {
           'dk_defects', 'dk_ecos', 'dk_copqs', 'dk_fmea', 'dk_custom_forms', 'dk_staff',
           'dk_models', 'dk_dealers', 'dk_daily_logs', 'dk_equipments', 'dk_maintenance_logs',
           'dk_equipment_incidents', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
+          'dk_oqc_handover_list', 'dk_oqc_color_changes', 'dk_oqc_part_codes', 'dk_supplier_production_audits',
           'dk_weekly_plans', 'dk_monthly_plans', 'dk_weekly_assemblies_all', 'dk_monthly_assemblies_all',
           'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
           'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
@@ -5951,6 +5952,43 @@ export function App() {
   const [oqcColorChanges, setOqcColorChanges] = useState<OqcColorChangeRecord[]>(() => getSavedState('dk_oqc_color_changes', []));
   const [oqcHandoverList, setOqcHandoverList] = useState<any[]>(() => getSavedState('dk_oqc_handover_list', []));
   const [supplierProductionAudits, setSupplierProductionAudits] = useState<SupplierProductionAudit[]>(() => getSavedState('dk_supplier_production_audits', INITIAL_SUPPLIER_AUDITS));
+
+  // Tải tức thời và lắng nghe thời gian thực cho Báo Phẩm Bàn Giao (dk_oqc_handover_list) trên mọi thiết bị
+  useEffect(() => {
+    let isMounted = true;
+    const docRef = doc(db, 'dk_db_sync', 'dk_oqc_handover_list');
+
+    // 1. Tải tức thời trực tiếp từ Firestore khi khởi động
+    getDoc(docRef).then((snap) => {
+      if (!isMounted || !snap.exists()) return;
+      const d = snap.data();
+      if (d && Array.isArray(d.data) && d.data.length > 0) {
+        setOqcHandoverList(d.data);
+        safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(d.data));
+        try { localStorage.setItem('dk_oqc_handover_list', JSON.stringify(d.data)); } catch (e) {}
+      }
+    }).catch(err => {
+      console.warn("[Global Handover Fetch Notice]:", err?.message || err);
+    });
+
+    // 2. Lắng nghe real-time liên tục
+    const unsub = onSnapshot(docRef, (snap) => {
+      if (!isMounted || !snap.exists()) return;
+      const d = snap.data();
+      if (d && Array.isArray(d.data)) {
+        setOqcHandoverList(d.data);
+        safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(d.data));
+        try { localStorage.setItem('dk_oqc_handover_list', JSON.stringify(d.data)); } catch (e) {}
+      }
+    }, (err) => {
+      console.warn("[Global Handover Snapshot Notice]:", err?.message || err);
+    });
+
+    return () => {
+      isMounted = false;
+      unsub();
+    };
+  }, []);
 
   // Auto-restore full massive datasets from IndexedDB as soon as IndexedDB completes async startup load
   useEffect(() => {
