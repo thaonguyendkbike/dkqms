@@ -2478,6 +2478,12 @@ export default function QualityInspectionRecords({
     return [];
   });
 
+  useEffect(() => {
+    if (oqcColorChanges && Array.isArray(oqcColorChanges)) {
+      setLocalColorChanges(oqcColorChanges);
+    }
+  }, [oqcColorChanges]);
+
   const activeColorChanges = oqcColorChanges && oqcColorChanges.length > 0 ? oqcColorChanges : localColorChanges;
   const updateColorChanges = (newChanges: OqcColorChangeRecord[]) => {
     if (setOqcColorChanges) {

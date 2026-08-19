@@ -2568,6 +2568,10 @@ export function App() {
         'dk_maintenance_logs',
         'dk_equipment_incidents',
         'dk_qc_detailed_tasks',
+        'dk_oqc_color_changes',
+        'dk_oqc_part_codes',
+        'dk_oqc_handover_list',
+        'dk_supplier_production_audits',
         'dk_custom_pqc_items',
         'dk_pqc_saved_history_templates',
         'dk_custom_fpy_targets',
@@ -2708,6 +2712,25 @@ export function App() {
       if (serverData.dk_maintenance_logs !== undefined) setMaintenanceLogs(ensureUniqueIds(serverData.dk_maintenance_logs, 'MNL'));
       if (serverData.dk_equipment_incidents !== undefined) setEquipmentIncidents(ensureUniqueIds(serverData.dk_equipment_incidents, 'EQI'));
       if (serverData.dk_qc_detailed_tasks !== undefined) setQcDetailedTasks(serverData.dk_qc_detailed_tasks);
+      if (serverData.dk_oqc_color_changes !== undefined && Array.isArray(serverData.dk_oqc_color_changes)) {
+        setOqcColorChanges(serverData.dk_oqc_color_changes);
+        safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(serverData.dk_oqc_color_changes));
+      }
+      if (serverData.dk_supplier_production_audits !== undefined && Array.isArray(serverData.dk_supplier_production_audits)) {
+        setSupplierProductionAudits(serverData.dk_supplier_production_audits);
+        safeStorage.setItem('dk_supplier_production_audits', JSON.stringify(serverData.dk_supplier_production_audits));
+      }
+      if (serverData.dk_oqc_records !== undefined && Array.isArray(serverData.dk_oqc_records)) {
+        const deduped = deduplicateOqcRecords(serverData.dk_oqc_records);
+        safeStorage.setItem('dk_oqc_records', JSON.stringify(deduped));
+        setOqcRecords(deduped);
+      }
+      if (serverData.dk_oqc_part_codes !== undefined) {
+        safeStorage.setItem('dk_oqc_part_codes', JSON.stringify(serverData.dk_oqc_part_codes));
+      }
+      if (serverData.dk_oqc_handover_list !== undefined) {
+        safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(serverData.dk_oqc_handover_list));
+      }
 
       // Sync plans and special matrices (IQC/PQC/OQC) from Firestore to LocalStorage on startup
       const planningKeys = [
@@ -3089,16 +3112,17 @@ export function App() {
           const serialized = JSON.stringify(finalDisplayData);
           lastSyncedValues.current[key] = JSON.stringify(assembledList);
           lastSeenValues.current[key] = serialized;
-          localStorage.setItem(key, serialized);
+          safeStorage.setItem(key, serialized);
+          try { localStorage.setItem(key, serialized); } catch (e) {}
           if (serverTime) {
-            localStorage.setItem(`${key}_last_synced_at`, serverTime);
+            try { localStorage.setItem(`${key}_last_synced_at`, serverTime); } catch (e) {}
             serverTimestamps.current[key] = serverTime;
           }
 
           if (isDirty) {
             const isIdentical = isFunctionallyIdentical(serialized, JSON.stringify(assembledList), key);
             if (isIdentical) {
-              localStorage.setItem(`${key}_is_dirty`, 'false');
+              try { localStorage.setItem(`${key}_is_dirty`, 'false'); } catch (e) {}
               localDirtyKeys.current.delete(key);
               console.log(`[Chunked onSnapshot Catch-up] Server caught up with local state for ${key}. Clearing dirty flags.`);
             }
@@ -3122,6 +3146,33 @@ export function App() {
             setSyncStatus('error');
             setSyncLoaded(true);
           }
+        });
+        unsubscribes.current.push(unsub);
+      });
+
+      // Set up real-time onSnapshot listeners for standalone documents (Color Changes, Part codes, Audits, etc.)
+      const STANDARD_DOC_SYNC_KEYS = [
+        'dk_oqc_color_changes',
+        'dk_oqc_part_codes',
+        'dk_oqc_handover_list',
+        'dk_supplier_production_audits'
+      ];
+
+      STANDARD_DOC_SYNC_KEYS.forEach((key) => {
+        const docRef = doc(db, 'dk_db_sync', key);
+        const unsub = onSnapshot(docRef, (docSnap) => {
+          if (!docSnap.exists()) return;
+          const metaData = docSnap.data();
+          const list = Array.isArray(metaData?.data) ? metaData.data : [];
+          safeStorage.setItem(key, JSON.stringify(list));
+          try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) {}
+          if (key === 'dk_oqc_color_changes') {
+            setOqcColorChanges(list);
+          } else if (key === 'dk_supplier_production_audits') {
+            setSupplierProductionAudits(list);
+          }
+        }, (err) => {
+          console.warn(`[Doc onSnapshot Warning] for ${key}:`, err);
         });
         unsubscribes.current.push(unsub);
       });
@@ -6020,7 +6071,8 @@ export function App() {
   }, [oqcRecords]);
 
   useEffect(() => {
-    localStorage.setItem('dk_oqc_color_changes', JSON.stringify(oqcColorChanges));
+    safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(oqcColorChanges));
+    try { localStorage.setItem('dk_oqc_color_changes', JSON.stringify(oqcColorChanges)); } catch (e) {}
     syncToServer('dk_oqc_color_changes', oqcColorChanges);
   }, [oqcColorChanges]);
 
