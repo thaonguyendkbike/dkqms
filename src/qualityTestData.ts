@@ -58,8 +58,10 @@ export interface OQCRecord {
   evaluation?: string;
   treatment?: string;
   oldColor?: string;
+  oldModel?: string;
   colorChangeDate?: string;
   isColorChanged?: boolean;
+  isStatusChanged?: boolean;
 }
 
 export interface OqcColorChangeRecord {
@@ -72,6 +74,9 @@ export interface OqcColorChangeRecord {
   flag?: string | boolean;
   createdAt?: string;
   note?: string;
+  oldModel?: string;
+  newModel?: string;
+  changeType?: 'color' | 'status' | 'both';
 }
 
 export * from './oqcPartCodesData';

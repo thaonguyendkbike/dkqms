@@ -4393,20 +4393,37 @@ export default function QualityInspectionRecords({
     } catch (e) {}
   }, []);
 
-  // Parser helper for Color Change rows (Số seri | Model | Màu cũ | Màu mới | Ngày đổi màu)
+  // Parser helper for Color & Status Shift rows (Số seri | Tên cũ (Model - Màu) | Tên mới (Model - Màu) | Ngày đổi)
   const parseColorChangeRows = useCallback((text: string, defaultDate: string) => {
     if (!text || !text.trim()) return [];
-    const lines = text.split('\n');
+    const lines = text.split(/\r?\n/);
     const results: Array<{
       serialNo: string;
       model: string;
+      oldModel: string;
+      newModel: string;
       oldColor: string;
       newColor: string;
+      changeType: 'color' | 'status' | 'both';
       date: string;
       flag: string | boolean;
       isValid: boolean;
       error?: string;
     }> = [];
+
+    const splitModelAndColor = (combined: string): { model: string; color: string } => {
+      if (!combined) return { model: '', color: '' };
+      const raw = combined.trim();
+      if (raw.includes(' - ')) {
+        const parts = raw.split(' - ');
+        return { model: parts[0].trim(), color: parts.slice(1).join(' - ').trim() };
+      }
+      if (raw.includes('-') && !/^\d{1,2}[\/\-]/.test(raw)) {
+        const parts = raw.split('-');
+        return { model: parts[0].trim(), color: parts.slice(1).join('-').trim() };
+      }
+      return { model: raw, color: '' };
+    };
 
     for (let i = 0; i < lines.length; i++) {
       const rawLine = lines[i].trim();
@@ -4415,42 +4432,39 @@ export default function QualityInspectionRecords({
       const lower = rawLine.toLowerCase();
       if (
         (lower.includes('seri') || lower.includes('sêri') || lower.includes('serial')) && 
-        (lower.includes('model') || lower.includes('màu') || lower.includes('color') || lower.includes('ngày'))
+        (lower.includes('model') || lower.includes('màu') || lower.includes('color') || lower.includes('ngày') || lower.includes('trước') || lower.includes('sau'))
       ) {
         continue;
       }
 
       let cols: string[] = [];
       if (rawLine.includes('\t')) {
-        cols = rawLine.split('\t').map(c => c.trim());
+        cols = rawLine.split('\t').map(c => c.replace(/^["']|["']$/g, '').trim());
       } else if (rawLine.includes('|')) {
-        cols = rawLine.split('|').map(c => c.trim());
-      } else if (rawLine.includes(';') && (rawLine.match(/;/g) || []).length >= 3) {
-        cols = rawLine.split(';').map(c => c.trim());
-      } else if (rawLine.includes(',') && (rawLine.match(/,/g) || []).length >= 3) {
-        cols = rawLine.split(',').map(c => c.trim());
+        cols = rawLine.split('|').map(c => c.replace(/^["']|["']$/g, '').trim());
+      } else if (rawLine.includes(';') && (rawLine.match(/;/g) || []).length >= 2) {
+        cols = rawLine.split(';').map(c => c.replace(/^["']|["']$/g, '').trim());
+      } else if (rawLine.includes(',') && (rawLine.match(/,/g) || []).length >= 2) {
+        cols = rawLine.split(',').map(c => c.replace(/^["']|["']$/g, '').trim());
       } else {
-        cols = rawLine.split(/\s{2,}|\t/).map(c => c.trim());
+        cols = rawLine.split(/\s{2,}|\t/).map(c => c.replace(/^["']|["']$/g, '').trim());
       }
 
-      if (cols.length < 3) {
-        const spaceParts = rawLine.split(/\s+/).map(c => c.trim());
-        if (spaceParts.length >= 4) {
-          cols = spaceParts;
-        }
+      if (cols.length < 2) {
+        continue;
       }
 
       const serialNo = (cols[0] || '').trim();
-      let model = (cols[1] || '').trim();
-      let oldColor = (cols[2] || '').trim();
-      let newColor = (cols[3] || '').trim();
-
+      let oldModel = '';
+      let newModel = '';
+      let oldColor = '';
+      let newColor = '';
       let dateVal = defaultDate || new Date().toLocaleDateString('vi-VN');
       let flagVal: string | boolean = true;
 
+      // Date detection across columns
       const dateRegex = /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/;
-      const dateColIdx = cols.findIndex((c, idx) => idx >= 3 && dateRegex.test(c));
-      
+      const dateColIdx = cols.findIndex((c, idx) => idx >= 2 && dateRegex.test(c));
       if (dateColIdx !== -1) {
         const match = cols[dateColIdx].match(dateRegex);
         if (match) {
@@ -4461,36 +4475,61 @@ export default function QualityInspectionRecords({
         }
       }
 
-      for (let cIdx = 4; cIdx < cols.length; cIdx++) {
-        if (cIdx !== dateColIdx) {
-          const val = cols[cIdx].toUpperCase();
-          if (val === 'TRUE' || val === 'FALSE' || val === 'OK') {
-            flagVal = val === 'TRUE' || val === 'OK';
-          }
-        }
+      // Check format style:
+      // Format 1 (Standard 4 columns):
+      // Col 0: Serial | Col 1: Old (Model - Color) | Col 2: New (Model - Color) | Col 3: Date
+      if (cols.length <= 4 || cols[1]?.includes('-') || cols[2]?.includes('-')) {
+        const oldParsed = splitModelAndColor(cols[1] || '');
+        const newParsed = splitModelAndColor(cols[2] || '');
+
+        oldModel = oldParsed.model;
+        oldColor = oldParsed.color;
+        newModel = newParsed.model;
+        newColor = newParsed.color;
+      } else if (cols.length >= 4) {
+        // Format 2 (Legacy 5 columns: Serial | Model | OldColor | NewColor | Date)
+        oldModel = (cols[1] || '').trim();
+        newModel = (cols[1] || '').trim();
+        oldColor = (cols[2] || '').trim();
+        newColor = (cols[3] || '').trim();
       }
 
-      if (!model) {
-        const existingOqc = oqcRecords.find(r => r.serialNo && r.serialNo.trim().toUpperCase() === serialNo.toUpperCase());
-        model = existingOqc ? existingOqc.model : 'DK Nova';
+      // Look up existing OQC record to fill in missing parts
+      const existingOqc = oqcRecords.find(r => r.serialNo && r.serialNo.trim().toUpperCase() === serialNo.toUpperCase());
+      if (existingOqc) {
+        if (!oldModel) oldModel = existingOqc.model || '';
+        if (!newModel) newModel = oldModel;
+        if (!oldColor) oldColor = existingOqc.color || '';
+        if (!newColor) newColor = oldColor;
       }
 
-      if (!oldColor) {
-        const existingOqc = oqcRecords.find(r => r.serialNo && r.serialNo.trim().toUpperCase() === serialNo.toUpperCase());
-        oldColor = existingOqc ? existingOqc.color : 'Đỏ';
-      }
+      if (!newModel && oldModel) newModel = oldModel;
+      if (!oldModel && newModel) oldModel = newModel;
+      if (!newColor && oldColor) newColor = oldColor;
+      if (!oldColor && newColor) oldColor = newColor;
 
-      const isValid = Boolean(serialNo && newColor);
+      const isModelChanged = Boolean(oldModel && newModel && oldModel.toLowerCase().trim() !== newModel.toLowerCase().trim());
+      const isColorChanged = Boolean(oldColor && newColor && oldColor.toLowerCase().trim() !== newColor.toLowerCase().trim());
+
+      let changeType: 'color' | 'status' | 'both' = 'color';
+      if (isModelChanged && isColorChanged) changeType = 'both';
+      else if (isModelChanged) changeType = 'status';
+      else changeType = 'color';
+
+      const isValid = Boolean(serialNo && (newModel || newColor) && (isModelChanged || isColorChanged || oldColor || oldModel));
 
       results.push({
         serialNo,
-        model,
-        oldColor,
-        newColor,
+        model: newModel || oldModel || 'DK D2',
+        oldModel: oldModel || newModel || 'DK D2',
+        newModel: newModel || oldModel || 'DK D2',
+        oldColor: oldColor || 'Tiêu chuẩn',
+        newColor: newColor || oldColor || 'Tiêu chuẩn',
+        changeType,
         date: dateVal,
         flag: flagVal,
         isValid,
-        error: !serialNo ? 'Thiếu số sêri' : (!newColor ? 'Thiếu màu mới' : undefined)
+        error: !serialNo ? 'Thiếu số sêri' : (!isValid ? 'Không phát hiện thay đổi' : undefined)
       });
     }
 
@@ -4645,8 +4684,11 @@ export default function QualityInspectionRecords({
         id: `CC-${item.serialNo.trim().toUpperCase()}-${item.date.replace(/\//g, '')}-${Date.now()}`,
         serialNo: item.serialNo.trim(),
         model: item.model,
+        oldModel: item.model,
+        newModel: item.model,
         oldColor: item.oldColor,
         newColor: item.newColor,
+        changeType: 'color',
         date: item.date,
         flag: true,
         createdAt: new Date().toISOString()
@@ -4682,7 +4724,7 @@ export default function QualityInspectionRecords({
 
   // Revert & Delete a single color change record
   const handleDeleteColorChange = (record: OqcColorChangeRecord) => {
-    if (!confirm(`Anh Thao có chắc chắn muốn xóa bản ghi đổi màu xe [${record.serialNo}] không?\n\n(Màu xe trong OQC sẽ được hoàn tác về màu gốc: ${record.oldColor || 'Màu gốc'})`)) {
+    if (!confirm(`Anh Thao có chắc chắn muốn xóa bản ghi đổi màu/trạng thái xe [${record.serialNo}] không?\n\n(Dữ liệu xe trong OQC sẽ được hoàn tác về Model/Màu gốc: ${record.oldModel || record.model} - ${record.oldColor || 'Màu gốc'})`)) {
       return;
     }
 
@@ -8186,14 +8228,14 @@ export default function QualityInspectionRecords({
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-wide">
-                    Phân Hệ Đổi Màu Xe Thành Phẩm KCS (OQC Color Shift)
+                    Phân Hệ Đổi Màu &amp; Đổi Trạng Thái Xe (Color &amp; Status Shift)
                   </h3>
                   <span className="bg-purple-500/40 text-purple-200 text-[10px] px-2 py-0.5 rounded-full font-bold border border-purple-400/30 font-mono">
                     {activeColorChanges.length} xe
                   </span>
                 </div>
                 <p className="text-xs text-purple-200/90 mt-0.5">
-                  Tự động đối soát dữ liệu OQC, đồng bộ thông tin Model & Màu sắc và liên kết Báo cáo ngày Email cho Ban Giám Đốc.
+                  Quản lý thay đổi Màu sắc và Trạng thái/Phiên bản xe (trước dấu '-' là trạng thái, sau dấu '-' là màu sắc) — Tự động đồng bộ vào CSDL KCS &amp; Báo cáo ngày.
                 </p>
               </div>
             </div>
@@ -8576,11 +8618,10 @@ export default function QualityInspectionRecords({
                           <tr>
                             <th className="p-2.5 w-10 text-center">STT</th>
                             <th className="p-2.5">Số Sêri / Khung</th>
-                            <th className="p-2.5">Dòng xe (Model)</th>
-                            <th className="p-2.5 text-center">Màu gốc (Cũ)</th>
-                            <th className="p-2.5 text-center w-8">➔</th>
-                            <th className="p-2.5 text-center">Màu mới (Sau đổi)</th>
-                            <th className="p-2.5 text-center">Ngày đổi màu</th>
+                            <th className="p-2.5 text-center">Loại chuyển đổi</th>
+                            <th className="p-2.5">Trạng thái / Model (Cũ ➔ Mới)</th>
+                            <th className="p-2.5 text-center">Màu sắc (Cũ ➔ Mới)</th>
+                            <th className="p-2.5 text-center">Ngày thực hiện</th>
                             <th className="p-2.5 text-center">Trạng thái OQC</th>
                             <th className="p-2.5 text-center w-16">Thao tác</th>
                           </tr>
@@ -8589,6 +8630,9 @@ export default function QualityInspectionRecords({
                           {paginatedColorChanges.map((item, idx) => {
                             const matchedOqc = oqcRecords.find(r => r.serialNo && r.serialNo.trim().toUpperCase() === item.serialNo.trim().toUpperCase());
                             const rowStt = (safeColorChangePage - 1) * colorChangePageSize + idx + 1;
+                            const isStatusShift = Boolean(item.oldModel && item.newModel && item.oldModel.toLowerCase().trim() !== item.newModel.toLowerCase().trim());
+                            const isColorShift = Boolean(item.oldColor && item.newColor && item.oldColor.toLowerCase().trim() !== item.newColor.toLowerCase().trim());
+                            
                             return (
                               <tr key={item.id || idx} className="hover:bg-purple-50/40 transition">
                                 <td className="p-2.5 text-center text-slate-400 font-bold">{rowStt}</td>
@@ -8597,21 +8641,52 @@ export default function QualityInspectionRecords({
                                     {item.serialNo}
                                   </span>
                                 </td>
-                                <td className="p-2.5 font-extrabold text-slate-800">
-                                  {item.model}
+                                <td className="p-2.5 text-center">
+                                  {isStatusShift && isColorShift ? (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-300 shadow-2xs">
+                                      ✨ Đổi cả 2
+                                    </span>
+                                  ) : isStatusShift ? (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-300 shadow-2xs">
+                                      🔄 Đổi trạng thái
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-pink-50 text-pink-700 border border-pink-300 shadow-2xs">
+                                      🎨 Đổi màu xe
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-2.5">
+                                  {isStatusShift ? (
+                                    <div className="flex items-center gap-1 text-xs">
+                                      <span className="line-through text-slate-400 font-medium">{item.oldModel}</span>
+                                      <ArrowRight className="w-3 h-3 text-indigo-600 shrink-0" />
+                                      <span className="font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                                        {item.newModel}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="font-extrabold text-slate-800">
+                                      {item.model || item.newModel || item.oldModel}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="p-2.5 text-center">
-                                  <span className="px-2 py-0.5 rounded text-[11px] bg-rose-50 text-rose-700 font-bold border border-rose-200">
-                                    {item.oldColor}
-                                  </span>
-                                </td>
-                                <td className="p-2.5 text-center">
-                                  <ArrowRight className="w-3.5 h-3.5 text-purple-600 mx-auto" />
-                                </td>
-                                <td className="p-2.5 text-center">
-                                  <span className="px-2 py-0.5 rounded text-[11px] bg-purple-100 text-purple-800 font-black border border-purple-300">
-                                    {item.newColor}
-                                  </span>
+                                  {isColorShift ? (
+                                    <div className="flex items-center justify-center gap-1 text-xs">
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 font-bold border border-rose-200">
+                                        {item.oldColor}
+                                      </span>
+                                      <ArrowRight className="w-3 h-3 text-purple-600 shrink-0" />
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-100 text-purple-800 font-black border border-purple-300">
+                                        {item.newColor}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded text-[10px] bg-slate-100 text-slate-700 font-bold border border-slate-200">
+                                      {item.newColor || item.oldColor}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="p-2.5 text-center font-mono font-bold text-slate-600">
                                   {item.date}
@@ -8632,7 +8707,7 @@ export default function QualityInspectionRecords({
                                     type="button"
                                     onClick={() => handleDeleteColorChange(item)}
                                     className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                                    title="Xóa bản ghi đổi màu & hoàn tác về màu gốc"
+                                    title="Xóa bản ghi & hoàn tác về trạng thái/màu gốc"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -11945,21 +12020,21 @@ export default function QualityInspectionRecords({
         </div>
       )}
 
-      {/* MODAL: BATCH COLOR CHANGE IMPORT FOR OQC */}
+      {/* MODAL: BATCH COLOR & STATUS CHANGE IMPORT FOR OQC */}
       {showColorChangeModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-4 sm:p-6 border border-purple-200 text-xs text-slate-800 space-y-4 max-h-[92vh] flex flex-col">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full p-4 sm:p-6 border border-purple-200 text-xs text-slate-800 space-y-4 max-h-[94vh] flex flex-col">
             <div className="flex justify-between items-center border-b pb-3">
-              <div className="flex items-center gap-2">
-                <span className="p-2 bg-purple-50 text-purple-700 rounded-xl border border-purple-200">
-                  <RefreshCw className="w-5 h-5 text-purple-600" />
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 bg-purple-100 text-purple-700 rounded-xl border border-purple-300 shadow-2xs">
+                  <RefreshCw className="w-5 h-5 text-purple-600 animate-spin-slow" />
                 </span>
                 <div>
                   <h3 className="font-black text-slate-800 text-sm sm:text-base uppercase">
-                    Nhập Danh Sách Xe Đổi Màu Hàng Loạt (KCS OQC)
+                    Nhập Danh Sách Xe Đổi Màu &amp; Đổi Trạng Thái (KCS OQC)
                   </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Cập nhật màu sắc mới cho xe KCS và tự động liên kết vào Báo cáo ngày Email
+                  <p className="text-[11px] text-slate-500">
+                    Cập nhật đồng thời Màu sơn và Phiên bản/Trạng thái xe — Tự động đồng bộ vào CSDL OQC &amp; Cloud Firebase
                   </p>
                 </div>
               </div>
@@ -11969,31 +12044,35 @@ export default function QualityInspectionRecords({
                   setShowColorChangeModal(false);
                   setColorChangeError('');
                 }}
-                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer font-black text-base"
               >
                 ✕
               </button>
             </div>
 
             {/* Instruction Guide */}
-            <div className="bg-purple-50/50 p-3 rounded-xl border border-purple-150 text-[11px] text-purple-950 space-y-1.5 leading-relaxed">
-              <div className="font-extrabold flex items-center justify-between">
-                <span>📋 Thứ tự các cột dữ liệu theo chuẩn:</span>
+            <div className="bg-purple-50/60 p-3.5 rounded-xl border border-purple-200 text-[11px] text-purple-950 space-y-2 leading-relaxed">
+              <div className="font-extrabold flex flex-wrap items-center justify-between gap-1.5">
+                <span className="flex items-center gap-1.5">
+                  📋 Thứ tự các cột dữ liệu theo bảng tính Excel (4 cột chuẩn):
+                </span>
                 <button
                   type="button"
                   onClick={() => {
-                    setColorChangeText("24DK12161\tDK Nova\tĐỏ\tĐen\tTRUE\t12/08/2026\n24DK12162\tDK Nova\tĐỏ\tĐen\tTRUE\t12/08/2026\n24DK12163\tDK Nova\tĐỏ\tĐen\tTRUE\t12/08/2026\n24DK12164\tDK Nova\tĐỏ\tĐen\tTRUE\t12/08/2026\n24DK12165\tDK Nova\tĐỏ\tĐen\tTRUE\t12/08/2026\n24DK12166\tDK Nova\tĐỏ\tĐen\tTRUE\t12/08/2026");
+                    setColorChangeText("26DK00166\tDK S2 App - Cà phê\tDK S2 - Cà phê\t03/01/2026\n26DK00167\tDK S2 App - Cà phê\tDK S2 - Cà phê\t03/01/2026\n26DK00665\tDK S88 (EZ2_App) - Trắng đen\tDK S88 (EZ2_App) - Trắng hồng\t13/01/2026\n25DK26866\tDK ROMA SX v2_App - Ghi pha lê\tDK ROMA SX v2_App - Ghi khói\t17/10/2025\n25DK29694\tDK ROMA SX v2_App - Xám khói tuyết\tDK ROMA SX v2_App - Cafe\t08/12/2025");
                   }}
-                  className="text-purple-700 hover:text-purple-900 bg-purple-100 hover:bg-purple-200 px-2 py-0.5 rounded-md font-bold text-[10px] transition cursor-pointer border border-purple-300"
+                  className="text-purple-800 hover:text-purple-950 bg-purple-100 hover:bg-purple-200 px-2.5 py-1 rounded-lg font-black text-[10.5px] transition cursor-pointer border border-purple-300 flex items-center gap-1"
                 >
-                  ⚡ Dán mẫu ví dụ (6 xe DK Nova)
+                  ⚡ Dán mẫu ví dụ (5 xe từ ảnh)
                 </button>
               </div>
-              <div className="font-mono bg-white px-2.5 py-1.5 rounded-lg border border-purple-200 text-[10.5px] text-purple-800 font-bold">
-                Số seri &nbsp;|&nbsp; Model &nbsp;|&nbsp; Màu cũ &nbsp;|&nbsp; Màu mới &nbsp;|&nbsp; Ngày đổi màu (dd/mm/yyyy)
+              <div className="font-mono bg-white px-3 py-2 rounded-lg border border-purple-200 text-[11px] text-purple-900 font-black overflow-x-auto whitespace-nowrap">
+                1. Số Sêri &nbsp;|&nbsp; 2. Model &amp; Màu Cũ (trước đổi) &nbsp;|&nbsp; 3. Model &amp; Màu Mới (sau đổi) &nbsp;|&nbsp; 4. Ngày đổi (dd/mm/yyyy)
               </div>
-              <div className="text-slate-500 italic text-[10px]">
-                * Hỗ trợ copy-paste trực tiếp từ Excel (Tab-separated) hoặc dán phân tách bằng dấu gạch đứng | / dấu phẩy.
+              <div className="text-slate-600 text-[10.5px] space-y-0.5 bg-white/70 p-2 rounded-lg border border-purple-100">
+                <p>• <strong>Trước dấu "-"</strong> là Dòng xe / Phiên bản / Trạng thái xe (Ví dụ: <code>DK S2 App</code> ➔ <code>DK S2</code>).</p>
+                <p>• <strong>Sau dấu "-"</strong> là Màu sắc xe (Ví dụ: <code>Trắng đen</code> ➔ <code>Trắng hồng</code>, <code>Ghi pha lê</code> ➔ <code>Ghi khói</code>).</p>
+                <p className="text-purple-700 font-bold">✨ Hệ thống tự động so sánh và phân loại: <strong>Đổi màu xe</strong>, <strong>Đổi trạng thái</strong> hoặc <strong>Đổi cả hai</strong>.</p>
               </div>
             </div>
 
@@ -12001,13 +12080,13 @@ export default function QualityInspectionRecords({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="font-bold text-slate-600 block text-[11px] mb-1">
-                    Ngày đổi màu mặc định (nếu dòng dán không có ngày):
+                    Ngày thực hiện mặc định (nếu dòng dán thiếu cột ngày):
                   </label>
                   <input
                     type="text"
                     value={colorChangeDefaultDate}
                     onChange={(e) => setColorChangeDefaultDate(e.target.value)}
-                    placeholder="dd/mm/yyyy (Ví dụ: 12/08/2026)"
+                    placeholder="dd/mm/yyyy (Ví dụ: 03/01/2026)"
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg py-1.5 px-2.5 text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:border-purple-600 font-mono"
                   />
                 </div>
@@ -12023,7 +12102,7 @@ export default function QualityInspectionRecords({
                 <textarea
                   value={colorChangeText}
                   onChange={(e) => setColorChangeText(e.target.value)}
-                  placeholder="24DK12161&#9;DK Nova&#9;Đỏ&#9;Đen&#9;TRUE&#9;12/08/2026&#10;24DK12162&#9;DK Nova&#9;Đỏ&#9;Đen&#9;TRUE&#9;12/08/2026"
+                  placeholder="26DK00166&#9;DK S2 App - Cà phê&#9;DK S2 - Cà phê&#9;03/01/2026&#10;26DK00665&#9;DK S88 (EZ2_App) - Trắng đen&#9;DK S88 (EZ2_App) - Trắng hồng&#9;13/01/2026"
                   className="w-full flex-1 min-h-[120px] bg-slate-50 border p-2.5 font-mono text-[11px] focus:bg-white rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none resize-none overflow-y-auto border-slate-300"
                 />
               </div>
@@ -12033,42 +12112,81 @@ export default function QualityInspectionRecords({
                 <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
                     <span className="font-extrabold text-[11px] text-slate-700 uppercase">
-                      Xem trước ({liveParsedColorChanges.length} dòng):
+                      Xem trước phân tích ({liveParsedColorChanges.length} dòng):
                     </span>
                   </div>
-                  <div className="max-h-[120px] overflow-y-auto rounded-lg border border-slate-200 bg-slate-50">
+                  <div className="max-h-[140px] overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 shadow-inner">
                     <table className="w-full text-left text-[11px] border-collapse">
-                      <thead className="bg-purple-100/70 text-purple-900 sticky top-0 font-bold text-[10px] uppercase">
+                      <thead className="bg-purple-100/80 text-purple-900 sticky top-0 font-bold text-[10px] uppercase border-b border-purple-200 z-10">
                         <tr>
                           <th className="p-1.5 w-8 text-center">STT</th>
-                          <th className="p-1.5">Số Seri</th>
-                          <th className="p-1.5">Model</th>
-                          <th className="p-1.5">Màu cũ</th>
-                          <th className="p-1.5 text-center">➔</th>
-                          <th className="p-1.5">Màu mới</th>
+                          <th className="p-1.5">Số Sêri</th>
+                          <th className="p-1.5 text-center">Loại đổi</th>
+                          <th className="p-1.5">Trạng thái / Model (Cũ ➔ Mới)</th>
+                          <th className="p-1.5 text-center">Màu sắc (Cũ ➔ Mới)</th>
                           <th className="p-1.5 text-center">Ngày</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200/60 font-medium">
-                        {liveParsedColorChanges.map((item, idx) => (
-                          <tr key={idx} className={item.isValid ? "hover:bg-white" : "bg-red-50 text-red-700"}>
-                            <td className="p-1.5 text-center text-slate-400 font-bold">{idx + 1}</td>
-                            <td className="p-1.5 font-mono font-bold">{item.serialNo || '<Thiếu>'}</td>
-                            <td className="p-1.5 font-extrabold text-slate-800">{item.model}</td>
-                            <td className="p-1.5">
-                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-rose-50 text-rose-700 font-bold border border-rose-200">
-                                {item.oldColor}
-                              </span>
-                            </td>
-                            <td className="p-1.5 text-center text-purple-600 font-black">➔</td>
-                            <td className="p-1.5">
-                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700 font-bold border border-blue-200">
-                                {item.newColor}
-                              </span>
-                            </td>
-                            <td className="p-1.5 text-center font-mono text-[10px] text-slate-500">{item.date}</td>
-                          </tr>
-                        ))}
+                        {liveParsedColorChanges.map((item, idx) => {
+                          const isStatusShift = Boolean(item.oldModel && item.newModel && item.oldModel.toLowerCase().trim() !== item.newModel.toLowerCase().trim());
+                          const isColorShift = Boolean(item.oldColor && item.newColor && item.oldColor.toLowerCase().trim() !== item.newColor.toLowerCase().trim());
+
+                          return (
+                            <tr key={idx} className={item.isValid ? "hover:bg-white bg-slate-50/50" : "bg-red-50 text-red-700"}>
+                              <td className="p-1.5 text-center text-slate-400 font-bold">{idx + 1}</td>
+                              <td className="p-1.5 font-mono font-bold">{item.serialNo || '<Thiếu>'}</td>
+                              <td className="p-1.5 text-center">
+                                {isStatusShift && isColorShift ? (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-purple-100 text-purple-800 border border-purple-300">
+                                    ✨ Đổi cả 2
+                                  </span>
+                                ) : isStatusShift ? (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    🔄 Trạng thái
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-pink-50 text-pink-700 border border-pink-200">
+                                    🎨 Đổi màu
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-1.5">
+                                {isStatusShift ? (
+                                  <div className="flex items-center gap-1 text-[10px]">
+                                    <span className="line-through text-slate-400 font-medium">{item.oldModel}</span>
+                                    <ArrowRight className="w-2.5 h-2.5 text-indigo-600 shrink-0" />
+                                    <span className="font-bold text-indigo-700 bg-indigo-50 px-1 rounded border border-indigo-200">
+                                      {item.newModel}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="font-extrabold text-slate-800 text-[10px]">
+                                    {item.model || item.newModel || item.oldModel}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-1.5 text-center">
+                                {isColorShift ? (
+                                  <div className="flex items-center justify-center gap-1 text-[10px]">
+                                    <span className="px-1 py-0.2 rounded bg-rose-50 text-rose-700 font-bold border border-rose-200">
+                                      {item.oldColor}
+                                    </span>
+                                    <ArrowRight className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+                                    <span className="px-1 py-0.2 rounded bg-purple-100 text-purple-800 font-bold border border-purple-300">
+                                      {item.newColor}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-100 text-slate-700 font-bold border border-slate-200">
+                                    {item.newColor || item.oldColor}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-1.5 text-center font-mono text-[10px] text-slate-500">{item.date}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -12099,7 +12217,7 @@ export default function QualityInspectionRecords({
                   className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl transition shadow shadow-purple-200 cursor-pointer flex items-center gap-1.5"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
-                  Xác nhận đổi màu ({liveParsedColorChanges.filter(p => p.isValid).length} xe)
+                  Xác nhận &amp; Lưu CSDL ({liveParsedColorChanges.filter(p => p.isValid).length} xe)
                 </button>
               </div>
             </form>
