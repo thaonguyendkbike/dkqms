@@ -3836,27 +3836,27 @@ export default function QualityInspectionRecords({
       const parsedRecords: OQCRecord[] = [];
       let skippedCount = 0;
 
-      // --- DYNAMIC COLUMN INDEX DETECTION ---
-      let partCodeColIdx = -1;
-      let serialNoColIdx = -1;
+      // --- STANDARD 17-COLUMN LAYOUT DEFAULTS ---
+      // 0: Mã quy cách | 1: Số Sêri | 2: Màu xe | 3: Tình trạng | 4: Đạt | 5: Chi tiết lỗi | 6: Số lỗi | 7: Nguyên nhân | 8: Chi tiết nguyên nhân | 9: LSX | 10: Model | 11: Tính toán giờ ngày | 12: Giờ kiểm tra x | 13: Ngày | 14: Tháng | 15: Năm | 16: SLLR
+      let partCodeColIdx = 0;
+      let serialNoColIdx = 1;
+      let colorColIdx = 2;
+      let statusColIdx = 3;
+      let passColIdx = 4;
+      let defectColIdx = 5;
+      let failedCountColIdx = 6;
+      let causeColIdx1 = 7;
+      let causeColIdx2 = 8;
+      let lsxColIdx = 9;
+      let modelColIdx = 10;
+      let checkTimeColIdx = 12;
+      let dColIdx = 13;
+      let mColIdx = 14;
+      let yColIdx = 15;
+      let totalLlrColIdx = 16;
       let chassisNoColIdx = -1;
       let engineNoColIdx = -1;
-      let colorColIdx = -1;
-      let modelColIdx = -1;
-      let modelAndColorColIdx = -1;
-      let statusColIdx = -1;
-      let passColIdx = -1;
-      let defectColIdx = -1;
-      let failedCountColIdx = -1;
-      let causeColIdx1 = -1;
-      let causeColIdx2 = -1;
-      let lsxColIdx = -1;
-      let checkTimeColIdx = -1;
       let fullDateColIdx = -1;
-      let dColIdx = -1;
-      let mColIdx = -1;
-      let yColIdx = -1;
-      let totalLlrColIdx = -1;
 
       // Detect header row if present
       const firstLine = lines[0];
@@ -3868,7 +3868,7 @@ export default function QualityInspectionRecords({
         
         isHeader = firstCols.some(col => {
           const l = col.replace(/\u00a0/g, ' ').toLowerCase().trim();
-          return l.includes('mã') || l.includes('quy cách') || l.includes('sêri') || l.includes('seri') || l.includes('serial') || l.includes('lệnh') || l.includes('model') || l.includes('mẫu') || l.includes('lsx') || l.includes('ngày') || l.includes('tháng') || l.includes('tình trạng') || l.includes('đạt') || l.includes('stt') || l.includes('số tt') || l.includes('khung') || l.includes('màu xe');
+          return l === 'mã quy cách' || l === 'số sêri' || l === 'số seri' || l === 'màu xe' || l === 'tình trạng' || l === 'chi tiết lỗi' || l === 'số lỗi' || l === 'nguyên nhân' || l === 'lsx' || l === 'sllr';
         });
 
         if (isHeader) {
@@ -3885,13 +3885,11 @@ export default function QualityInspectionRecords({
               serialNoColIdx = idx;
             } else if (cleanCol.includes('mã quy') || cleanCol.includes('mã qc') || cleanCol.includes('mã tem') || cleanCol === 'mã' || cleanCol.includes('part')) {
               partCodeColIdx = idx;
-            } else if (cleanCol.includes('model') && cleanCol.includes('màu')) {
-              modelAndColorColIdx = idx;
             } else if (cleanCol === 'màu xe' || cleanCol === 'màu' || cleanCol.includes('màu sắc') || cleanCol.includes('sơn') || cleanCol.includes('color')) {
               colorColIdx = idx;
             } else if (cleanCol === 'model' || cleanCol === 'mẫu xe' || cleanCol.includes('dòng xe') || cleanCol.includes('tên xe')) {
               modelColIdx = idx;
-            } else if (cleanCol.includes('tình trạng') || cleanCol === 'trạng thái' || cleanCol === 'status' || cleanCol.includes('kết quả')) {
+            } else if (cleanCol.includes('tình trạng') || cleanCol === 'trạng thái' || cleanCol === 'status') {
               statusColIdx = idx;
             } else if (cleanCol === 'đạt' || cleanCol === 'có đạt' || cleanCol === 'pass' || cleanCol === 'kết quả đạt' || cleanCol === 'ok') {
               passColIdx = idx;
@@ -3920,22 +3918,6 @@ export default function QualityInspectionRecords({
             }
           });
         }
-      }
-
-      // If fallback without header or serialNo column not matched by exact name
-      if (serialNoColIdx === -1) {
-        // Fallback standard DKBike CSV export layout:
-        // STT (0), Mã quy cách (1), Số Sêri (2), Model & Màu (3), Tình trạng (4), Chi tiết lỗi (5), Số lỗi (6), Nguyên nhân (7), LSX (8), Giờ kiểm (9), Ngày (10)
-        partCodeColIdx = 1;
-        serialNoColIdx = 2;
-        modelAndColorColIdx = 3;
-        statusColIdx = 4;
-        defectColIdx = 5;
-        failedCountColIdx = 6;
-        causeColIdx1 = 7;
-        lsxColIdx = 8;
-        checkTimeColIdx = 9;
-        fullDateColIdx = 10;
       }
 
       const startRow = isHeader ? 1 : 0;
@@ -3967,53 +3949,56 @@ export default function QualityInspectionRecords({
           continue;
         }
 
-        const rawCheckTimeCol = (checkTimeColIdx !== -1 && cols[checkTimeColIdx] !== undefined) ? cols[checkTimeColIdx] : '';
-        if (
-          rawCheckTimeCol.toLowerCase() === 'chưa kiểm tra' ||
-          rawCheckTimeCol.toLowerCase() === 'chua kiem tra'
-        ) {
-          skippedCount++;
-          continue;
+        const rawPartCode = (partCodeColIdx !== -1 && cols[partCodeColIdx] !== undefined) ? cols[partCodeColIdx] : (cols[0] || '');
+        let rawSerial = (serialNoColIdx !== -1 && cols[serialNoColIdx] !== undefined) ? cols[serialNoColIdx] : (cols[1] || '');
+        let rawColorCol = (colorColIdx !== -1 && cols[colorColIdx] !== undefined) ? cols[colorColIdx] : (cols[2] || '');
+        let rawStatusCol = (statusColIdx !== -1 && cols[statusColIdx] !== undefined) ? cols[statusColIdx] : (cols[3] || '');
+        let rawPassCol = (passColIdx !== -1 && cols[passColIdx] !== undefined) ? cols[passColIdx] : (cols[4] || '');
+        let rawDefectCol = (defectColIdx !== -1 && cols[defectColIdx] !== undefined) ? cols[defectColIdx] : (cols[5] || '');
+        let rawFailedCountCol = (failedCountColIdx !== -1 && cols[failedCountColIdx] !== undefined) ? cols[failedCountColIdx] : (cols[6] || '');
+        let rawCause1Col = (causeColIdx1 !== -1 && cols[causeColIdx1] !== undefined) ? cols[causeColIdx1] : (cols[7] || '');
+        let rawCause2Col = (causeColIdx2 !== -1 && cols[causeColIdx2] !== undefined) ? cols[causeColIdx2] : (cols[8] || '');
+        let rawLsxCol = (lsxColIdx !== -1 && cols[lsxColIdx] !== undefined) ? cols[lsxColIdx] : (cols[9] || '');
+        let rawModelCol = (modelColIdx !== -1 && cols[modelColIdx] !== undefined) ? cols[modelColIdx] : (cols[10] || '');
+        let rawChassisCol = (chassisNoColIdx !== -1 && cols[chassisNoColIdx] !== undefined) ? cols[chassisNoColIdx] : '';
+        let rawEngineCol = (engineNoColIdx !== -1 && cols[engineNoColIdx] !== undefined) ? cols[engineNoColIdx] : '';
+        let rawTimeCol = (checkTimeColIdx !== -1 && cols[checkTimeColIdx] !== undefined) ? cols[checkTimeColIdx] : (cols[12] || '');
+
+        // 1. SERIAL NUMBER INTELLIGENCE:
+        let serialNoVal = rawSerial;
+        // If rawSerial is not a serial or contains status words, scan all cols for serial pattern (26DK... or 7+ alphanumeric)
+        if (!serialNoVal || serialNoVal.toLowerCase() === 'đạt' || serialNoVal.toLowerCase() === 'lỗi' || serialNoVal.toLowerCase() === 'chưa kiểm tra') {
+          for (let c = 0; c < cols.length; c++) {
+            const cell = cols[c];
+            if (/^26[A-Z0-9]{5,}/i.test(cell) || /^[A-Z0-9]{7,18}$/i.test(cell)) {
+              serialNoVal = cell;
+              break;
+            }
+          }
+        }
+        if (!serialNoVal) {
+          serialNoVal = `XE-${i + 1}-${Date.now().toString(36)}`;
         }
 
-        const rawPartCode = (partCodeColIdx !== -1 && cols[partCodeColIdx] !== undefined) ? cols[partCodeColIdx] : '';
-        const rawSerial = (serialNoColIdx !== -1 && cols[serialNoColIdx] !== undefined) ? cols[serialNoColIdx] : '';
-        const rawColorCol = (colorColIdx !== -1 && cols[colorColIdx] !== undefined) ? cols[colorColIdx] : '';
-        const rawStatusCol = (statusColIdx !== -1 && cols[statusColIdx] !== undefined) ? cols[statusColIdx] : '';
-        const rawPassCol = (passColIdx !== -1 && cols[passColIdx] !== undefined) ? cols[passColIdx] : '';
-        const rawDefectCol = (defectColIdx !== -1 && cols[defectColIdx] !== undefined) ? cols[defectColIdx] : '';
-        const rawFailedCountCol = (failedCountColIdx !== -1 && cols[failedCountColIdx] !== undefined) ? cols[failedCountColIdx] : '';
-        const rawCause1Col = (causeColIdx1 !== -1 && cols[causeColIdx1] !== undefined) ? cols[causeColIdx1] : '';
-        const rawCause2Col = (causeColIdx2 !== -1 && cols[causeColIdx2] !== undefined) ? cols[causeColIdx2] : '';
-        const rawLsxCol = (lsxColIdx !== -1 && cols[lsxColIdx] !== undefined) ? cols[lsxColIdx] : '';
-        const rawModelCol = (modelColIdx !== -1 && cols[modelColIdx] !== undefined) ? cols[modelColIdx] : '';
-        const rawChassisCol = (chassisNoColIdx !== -1 && cols[chassisNoColIdx] !== undefined) ? cols[chassisNoColIdx] : '';
-        const rawEngineCol = (engineNoColIdx !== -1 && cols[engineNoColIdx] !== undefined) ? cols[engineNoColIdx] : '';
-
-        let serialNoVal = rawSerial;
         let partCodeVal = rawPartCode || 'TEM-GEN';
         let chassisNoVal = rawChassisCol;
         let engineNoVal = rawEngineCol;
         let lsxVal = rawLsxCol || '26-10';
 
-        // Extract Model and Color (handles combined "DK D2 - Ghi đen" or separate columns)
+        // 2. MODEL AND COLOR INTELLIGENCE:
+        // Never allow status strings in Model or Color
+        if (rawModelCol.toLowerCase() === 'đạt' || rawModelCol.toLowerCase() === 'lỗi' || rawModelCol.toLowerCase() === 'chưa kiểm tra') {
+          rawModelCol = '';
+        }
+        if (rawColorCol.toLowerCase() === 'đạt' || rawColorCol.toLowerCase() === 'lỗi' || rawColorCol.toLowerCase() === 'chưa kiểm tra') {
+          rawColorCol = '';
+        }
+
         let modelVal = rawModelCol;
         let colorVal = rawColorCol;
 
-        if (modelAndColorColIdx !== -1 && cols[modelAndColorColIdx]) {
-          const combined = cols[modelAndColorColIdx];
-          if (combined.includes(' - ')) {
-            const parts = combined.split(' - ');
-            if (!modelVal) modelVal = parts[0].trim();
-            if (!colorVal) colorVal = parts.slice(1).join(' - ').trim();
-          } else if (combined.includes('-')) {
-            const parts = combined.split('-');
-            if (!modelVal) modelVal = parts[0].trim();
-            if (!colorVal) colorVal = parts.slice(1).join('-').trim();
-          } else {
-            if (!modelVal) modelVal = combined;
-          }
-        } else if (colorVal.includes(' - ')) {
+        // If color contains "DK D2 - Ghi đen", split into Model and Color
+        if (colorVal.includes(' - ')) {
           const parts = colorVal.split(' - ');
           if (!modelVal) modelVal = parts[0].trim();
           colorVal = parts.slice(1).join(' - ').trim();
@@ -4023,33 +4008,37 @@ export default function QualityInspectionRecords({
           colorVal = parts.slice(1).join('-').trim();
         }
 
-        // Auto-fix if serial is in partCode or chassisNo column
-        if (!serialNoVal && partCodeVal && (/^26[A-Z0-9]+/.test(partCodeVal) || /^[A-Z0-9]{8,}$/.test(partCodeVal))) {
-          serialNoVal = partCodeVal;
-          partCodeVal = 'TEM-GEN';
-        }
-        if (!serialNoVal && chassisNoVal && (/^26[A-Z0-9]+/.test(chassisNoVal) || /^[A-Z0-9]{8,}$/.test(chassisNoVal))) {
-          serialNoVal = chassisNoVal;
-        }
-        if (!serialNoVal) {
-          skippedCount++;
-          continue;
-        }
-
-        // Auto-lookup Model and Color from OQC Part Codes dictionary if missing
-        const matchedPart = lookupPartCode(partCodeVal);
-        if (matchedPart) {
-          if (!modelVal || modelVal === 'DK Gogo') {
-            modelVal = matchedPart.model || modelVal;
-          }
-          if (!colorVal) {
-            colorVal = matchedPart.color || '';
+        // If model still empty, lookup from OQC Part Codes dictionary
+        if (!modelVal || modelVal === 'DK Gogo') {
+          const matchedPart = lookupPartCode(partCodeVal);
+          if (matchedPart) {
+            modelVal = matchedPart.model;
+            if (!colorVal && matchedPart.color) colorVal = matchedPart.color;
           }
         }
-        if (!colorVal) colorVal = 'Trắng';
-        if (!modelVal) modelVal = 'DK Gogo';
 
-        // Extract defect detail
+        // Fallback Model from prefix
+        if (!modelVal) {
+          const pUp = partCodeVal.toUpperCase();
+          if (pUp.includes('TEMDD') || pUp.includes('D2')) modelVal = 'DK D2';
+          else if (pUp.includes('TEMDV') || pUp.includes('V2')) modelVal = 'DK V2';
+          else if (pUp.includes('ROM') || pUp.includes('ROMA')) modelVal = 'DK Roma SX V2';
+          else if (pUp.includes('GOGO') || pUp.includes('GG')) modelVal = 'DK Gogo';
+          else if (pUp.includes('SAM')) modelVal = 'DK Samurai';
+          else if (pUp.includes('XMEN') || pUp.includes('XMAN')) modelVal = 'DK Xmen';
+          else if (pUp.includes('CREA')) modelVal = 'DK Crea Mono';
+          else if (pUp.includes('EZ')) modelVal = 'DK EZ3';
+          else if (pUp.includes('S1')) modelVal = 'DK S1';
+          else if (pUp.includes('S2')) modelVal = 'DK S2';
+          else if (pUp.includes('S3')) modelVal = 'DK S3';
+          else if (pUp.includes('NOVA')) modelVal = 'DK Nova';
+          else if (pUp.includes('ZMTP') || pUp.includes('ZMT')) modelVal = 'DK Z-MTP';
+          else modelVal = 'DK D2';
+        }
+
+        if (!colorVal) colorVal = 'Tiêu chuẩn';
+
+        // 3. DEFECT AND CAUSE EXTRACTION:
         let defectDetailVal = rawDefectCol;
         if (
           defectDetailVal === '0' || 
@@ -4062,7 +4051,6 @@ export default function QualityInspectionRecords({
           defectDetailVal = '';
         }
 
-        // Extract root cause
         let rootCauseVal = '';
         if (rawCause1Col && rawCause2Col && rawCause1Col !== rawCause2Col) {
           rootCauseVal = `${rawCause1Col} - ${rawCause2Col}`;
@@ -4070,49 +4058,26 @@ export default function QualityInspectionRecords({
           rootCauseVal = rawCause1Col || rawCause2Col || '';
         }
 
-        // Robust Pass / Fail determination
+        // 4. PASS / FAIL STATUS INTELLIGENCE:
         const sNorm = rawStatusCol.toLowerCase();
         const pNorm = rawPassCol.toLowerCase();
         const parsedFailedNum = parseInt(rawFailedCountCol, 10);
 
-        const isExplicitFail = 
-          sNorm.includes('lỗi') || 
-          sNorm.includes('ng') || 
-          sNorm.includes('hỏng') || 
-          sNorm.includes('fail') || 
-          sNorm.includes('k đạt') || 
-          sNorm.includes('không đạt') ||
-          pNorm === '0' || 
-          pNorm === 'lỗi' || 
-          pNorm === 'ng' || 
-          pNorm === 'false' || 
-          pNorm === 'k đạt' || 
-          pNorm === 'không đạt' ||
-          (!isNaN(parsedFailedNum) && parsedFailedNum > 0);
-
-        const isExplicitPass = 
-          sNorm.includes('đạt') || 
-          sNorm.includes('pass') || 
-          sNorm.includes('ok') ||
-          pNorm === '1' || 
-          pNorm === 'đạt' || 
-          pNorm === 'pass' || 
-          pNorm === 'ok' || 
-          pNorm === 'true' || 
-          pNorm === 'x' || 
-          pNorm === 'v';
-
-        const isExplicitPending = sNorm.includes('chưa') || sNorm.includes('pending') || pNorm.includes('chưa');
-
         let statusVal: 'Đạt' | 'Lỗi' | 'Chưa kiểm tra' = 'Đạt';
-        if (isExplicitFail) {
+        if (
+          sNorm === 'lỗi' || sNorm === 'fail' || sNorm === 'ng' ||
+          pNorm === '0' ||
+          (!isNaN(parsedFailedNum) && parsedFailedNum > 0) ||
+          (defectDetailVal && defectDetailVal.length > 0)
+        ) {
           statusVal = 'Lỗi';
-        } else if (isExplicitPass) {
+        } else if (
+          sNorm === 'đạt' || sNorm === 'pass' || sNorm === 'ok' ||
+          pNorm === '1' || pNorm === 'đạt' || pNorm === 'pass'
+        ) {
           statusVal = 'Đạt';
-        } else if (isExplicitPending) {
+        } else if (sNorm.includes('chưa') || pNorm.includes('chưa')) {
           statusVal = 'Chưa kiểm tra';
-        } else if (defectDetailVal) {
-          statusVal = 'Lỗi';
         } else {
           statusVal = 'Đạt';
         }
@@ -4122,14 +4087,14 @@ export default function QualityInspectionRecords({
           failedCountVal = (!isNaN(parsedFailedNum) && parsedFailedNum > 0) ? parsedFailedNum : 1;
         }
 
-        // Date extraction: Prefer separate Ngày, Tháng, Năm columns if present
+        // 5. DATE AND TIME INTELLIGENCE:
         let dateVal = defaultDateStr;
         let monthVal = defaultMonth;
         let yearVal = defaultYear;
 
-        const dVal = (dColIdx !== -1 && cols[dColIdx] !== undefined) ? cols[dColIdx] : '';
-        const mVal = (mColIdx !== -1 && cols[mColIdx] !== undefined) ? cols[mColIdx] : '';
-        const yVal = (yColIdx !== -1 && cols[yColIdx] !== undefined) ? cols[yColIdx] : '';
+        const dVal = (dColIdx !== -1 && cols[dColIdx] !== undefined) ? cols[dColIdx] : (cols[13] || '');
+        const mVal = (mColIdx !== -1 && cols[mColIdx] !== undefined) ? cols[mColIdx] : (cols[14] || '');
+        const yVal = (yColIdx !== -1 && cols[yColIdx] !== undefined) ? cols[yColIdx] : (cols[15] || '');
 
         if (dVal && mVal) {
           const dayNum = parseInt(dVal, 10) || 1;
@@ -4152,13 +4117,11 @@ export default function QualityInspectionRecords({
             const dateMatch = rawDateStr.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/) || rawDateStr.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
             if (dateMatch) {
               if (dateMatch[1].length === 4) {
-                // yyyy-mm-dd
                 yearVal = parseInt(dateMatch[1], 10) || defaultYear;
                 monthVal = parseInt(dateMatch[2], 10) || defaultMonth;
                 const dayVal = String(parseInt(dateMatch[3], 10) || 1).padStart(2, '0');
                 dateVal = `${dayVal}/${String(monthVal).padStart(2, '0')}/${yearVal}`;
               } else {
-                // dd/mm/yyyy
                 const dayVal = String(parseInt(dateMatch[1], 10) || 1).padStart(2, '0');
                 monthVal = parseInt(dateMatch[2], 10) || defaultMonth;
                 yearVal = parseInt(dateMatch[3], 10) || defaultYear;
@@ -4168,8 +4131,8 @@ export default function QualityInspectionRecords({
           }
         }
 
-        // Extract Check Time
-        let checkTimeVal = rawCheckTimeCol || '08:30';
+        // Check Time
+        let checkTimeVal = rawTimeCol || '08:30';
         if (checkTimeVal.includes(' ') && !/^\d{1,2}:\d{2}/.test(checkTimeVal)) {
           const timeParts = checkTimeVal.split(' ');
           const potentialTime = timeParts[timeParts.length - 1];
@@ -4178,7 +4141,7 @@ export default function QualityInspectionRecords({
           }
         }
 
-        const totalLlrVal = Number(totalLlrColIdx !== -1 && cols[totalLlrColIdx] !== undefined ? cols[totalLlrColIdx] : '') || 1;
+        const totalLlrVal = Number(totalLlrColIdx !== -1 && cols[totalLlrColIdx] !== undefined ? cols[totalLlrColIdx] : (cols[16] || '')) || 1;
 
         parsedRecords.push({
           id: `OQC-${serialNoVal.toUpperCase().replace(/[\/\s.#$\[\]]/g, '_')}`,
@@ -7558,20 +7521,34 @@ export default function QualityInspectionRecords({
               const pieDatPercent = liveLapRapTotal > 0 ? Math.round((pieDatCount / liveLapRapTotal) * 100) : 0;
               const pieLoiPercent = liveLapRapTotal > 0 ? (100 - pieDatPercent) : 0;
 
+              // Helper to resolve clean model name
+              const getCleanModelName = (r: OQCRecord) => {
+                let m = (r.model || '').trim();
+                if (m === 'Đạt' || m === 'Lỗi' || m === 'Chưa kiểm tra' || !m) {
+                  if (r.color && r.color.includes(' - ')) {
+                    m = r.color.split(' - ')[0].trim();
+                  } else if (r.partCode) {
+                    const matched = lookupPartCode(r.partCode);
+                    if (matched) m = matched.model;
+                  }
+                }
+                return m || 'DK D2';
+              };
+
               // Process models mapping dynamically
               const liveModelsMap: Record<string, number> = {};
               filteredOqc.forEach(r => {
-                const m = r.model || 'Dòng khác';
+                const m = getCleanModelName(r);
                 liveModelsMap[m] = (liveModelsMap[m] || 0) + 1;
               });
               let activeBarData = Object.entries(liveModelsMap).map(([name, count]) => ({ name, count }))
                 .sort((a, b) => b.count - a.count);
               if (activeBarData.length === 0) {
                 activeBarData = [
-                  { name: 'DK ROMA SX v2_App', count: 0 },
+                  { name: 'DK Roma SX V2', count: 0 },
                   { name: 'DK Nova', count: 0 },
-                  { name: 'DK Gogo S', count: 0 },
-                  { name: 'DK EZ3 _ App', count: 0 },
+                  { name: 'DK Gogo', count: 0 },
+                  { name: 'DK EZ3', count: 0 },
                   { name: 'DK D2', count: 0 }
                 ];
               }
@@ -7579,7 +7556,7 @@ export default function QualityInspectionRecords({
               // Build live model defects list
               const liveModelDefects: Record<string, { name: string; count: number }[]> = {};
               filteredOqc.forEach(r => {
-                const modelName = r.model || 'Khác';
+                const modelName = getCleanModelName(r);
                 if (!liveModelDefects[modelName]) {
                   liveModelDefects[modelName] = [];
                 }
@@ -7597,7 +7574,7 @@ export default function QualityInspectionRecords({
               });
 
               // Get unique models dynamically from filtered OQC records
-              const assembledModels: string[] = Array.from(new Set(filteredOqc.map(r => r.model))).filter((m): m is string => Boolean(m)).sort();
+              const assembledModels: string[] = Array.from(new Set(filteredOqc.map(getCleanModelName))).filter((m): m is string => Boolean(m) && m !== 'Đạt' && m !== 'Lỗi').sort();
 
               const currentAssembled = liveLapRapTotal;
 
@@ -9206,12 +9183,23 @@ export default function QualityInspectionRecords({
             // Model Quality Comparison
             const modelQualityMap: Record<string, { total: number; passed: number }> = {};
             currentOqc.forEach(r => {
-              if (!modelQualityMap[r.model]) {
-                modelQualityMap[r.model] = { total: 0, passed: 0 };
+              let m = (r.model || '').trim();
+              if (m === 'Đạt' || m === 'Lỗi' || m === 'Chưa kiểm tra' || !m) {
+                if (r.color && r.color.includes(' - ')) {
+                  m = r.color.split(' - ')[0].trim();
+                } else if (r.partCode) {
+                  const matched = lookupPartCode(r.partCode);
+                  if (matched) m = matched.model;
+                }
               }
-              modelQualityMap[r.model].total += 1;
+              if (!m || m === 'Đạt' || m === 'Lỗi') m = 'DK D2';
+
+              if (!modelQualityMap[m]) {
+                modelQualityMap[m] = { total: 0, passed: 0 };
+              }
+              modelQualityMap[m].total += 1;
               if (r.status === 'Đạt') {
-                modelQualityMap[r.model].passed += 1;
+                modelQualityMap[m].passed += 1;
               }
             });
             const modelQualityArray = Object.entries(modelQualityMap).map(([modelName, info]) => {
