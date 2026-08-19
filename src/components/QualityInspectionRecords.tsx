@@ -4074,25 +4074,76 @@ export default function QualityInspectionRecords({
       }
       const finalParsed = Object.values(mergedParsed);
 
-      // Build updated list: OVERWRITE existing record in oqcRecords if serialNo matches!
+      // Helper to check whether two records have any meaningful difference
+      const isOqcRecordDifferent = (oldRec: OQCRecord, newRec: OQCRecord): boolean => {
+        const norm = (v: any) => String(v ?? '').trim().toLowerCase();
+        
+        // Status ('Đạt', 'Lỗi', 'Chưa kiểm tra')
+        if (norm(oldRec.status) !== norm(newRec.status)) return true;
+        
+        // Defect details
+        if (norm(oldRec.defectDetail) !== norm(newRec.defectDetail)) return true;
+        
+        // Failed count
+        if (Number(oldRec.failedCount || 0) !== Number(newRec.failedCount || 0)) return true;
+        
+        // Root cause
+        if (norm(oldRec.rootCause) !== norm(newRec.rootCause)) return true;
+        
+        // Model & Color
+        if (newRec.model && norm(oldRec.model) !== norm(newRec.model)) return true;
+        if (newRec.color && norm(oldRec.color) !== norm(newRec.color)) return true;
+        
+        // LSX
+        if (newRec.lsx && norm(oldRec.lsx) !== norm(newRec.lsx)) return true;
+        
+        // Part code (ignore placeholder TEM-GEN if old already had real code)
+        if (newRec.partCode && newRec.partCode !== 'TEM-GEN' && norm(oldRec.partCode) !== norm(newRec.partCode)) return true;
+        
+        // Date / Month / Year
+        if (newRec.date && norm(oldRec.date) !== norm(newRec.date)) return true;
+        if (newRec.month && Number(oldRec.month) !== Number(newRec.month)) return true;
+        if (newRec.year && Number(oldRec.year) !== Number(newRec.year)) return true;
+        
+        // Check time
+        if (newRec.checkTime && norm(oldRec.checkTime) !== norm(newRec.checkTime)) return true;
+        
+        // Chassis & Engine numbers (if provided in newRec)
+        if (newRec.chassisNo && norm(oldRec.chassisNo) !== norm(newRec.chassisNo)) return true;
+        if (newRec.engineNo && norm(oldRec.engineNo) !== norm(newRec.engineNo)) return true;
+        
+        return false;
+      };
+
+      // Build updated list: Compare with existing record in oqcRecords
       const finalParsedMap = new Map<string, OQCRecord>();
       finalParsed.forEach(r => finalParsedMap.set(r.serialNo.trim().toUpperCase(), r));
 
       const updatedExistingRecords: OQCRecord[] = [];
       const matchedSerials = new Set<string>();
+      let updatedCount = 0;
+      let unchangedCount = 0;
+      let addedCount = 0;
 
       oqcRecords.forEach(oldRec => {
         const sUpper = (oldRec.serialNo || oldRec.id || '').trim().toUpperCase();
         if (finalParsedMap.has(sUpper)) {
           const newRec = finalParsedMap.get(sUpper)!;
-          // Ghi đè ưu tiên toàn bộ dữ liệu mới (status, defectDetail, failedCount, rootCause, color, model, date, lsx, etc.)
-          updatedExistingRecords.push({
-            ...oldRec,
-            ...newRec,
-            id: oldRec.id || newRec.id,
-            chassisNo: newRec.chassisNo || oldRec.chassisNo,
-            engineNo: newRec.engineNo || oldRec.engineNo
-          });
+          const hasDiff = isOqcRecordDifferent(oldRec, newRec);
+          if (hasDiff) {
+            updatedCount++;
+            // Ghi đè ưu tiên toàn bộ dữ liệu mới (status, defectDetail, failedCount, rootCause, color, model, date, lsx, etc.)
+            updatedExistingRecords.push({
+              ...oldRec,
+              ...newRec,
+              id: oldRec.id || newRec.id,
+              chassisNo: newRec.chassisNo || oldRec.chassisNo,
+              engineNo: newRec.engineNo || oldRec.engineNo
+            });
+          } else {
+            unchangedCount++;
+            updatedExistingRecords.push(oldRec);
+          }
           matchedSerials.add(sUpper);
         } else {
           updatedExistingRecords.push(oldRec);
@@ -4105,12 +4156,23 @@ export default function QualityInspectionRecords({
         const sUpper = (newRec.serialNo || newRec.id || '').trim().toUpperCase();
         if (!matchedSerials.has(sUpper)) {
           brandNewRecords.push(newRec);
+          addedCount++;
         }
       });
 
+      const hasAnyChange = addedCount > 0 || updatedCount > 0;
+
+      if (!hasAnyChange) {
+        // KHÔNG CÓ THAY ĐỔI: Không ghi đè và KHÔNG đẩy lên Firebase
+        setOqcImportText('');
+        setShowImportOqcModal(false);
+        alert(`ℹ️ Đối chiếu dữ liệu KCS hoàn tất:\n\n• Toàn bộ ${finalParsed.length} xe dán lên đều TRÙNG KHỚP 100% với dữ liệu hiện có trong hệ thống.\n• Không có bản ghi nào thay đổi nên hệ thống giữ nguyên và KHÔNG cần đẩy lên Cloud Firebase.`);
+        return;
+      }
+
       const finalUpdatedList = [...brandNewRecords, ...updatedExistingRecords];
 
-      // --- CRITICAL: IMMEDIATE PERSISTENCE TO SAFE STORAGE, DIRTY FLAG & INSTANT CLOUD SYNC ---
+      // --- CÓ THAY ĐỔI: GHI ĐÈ BỘ NHỚ VÀ ĐỒNG BỘ LÊN FIREBASE ---
       setOqcRecords(finalUpdatedList);
       safeStorage.setItem('dk_oqc_records', JSON.stringify(finalUpdatedList));
       try {
@@ -4124,7 +4186,7 @@ export default function QualityInspectionRecords({
 
       setOqcImportText('');
       setShowImportOqcModal(false);
-      alert(`Nhập thành công ${finalParsed.length} chiếc xe KCS nghiệm thu! (Đã lưu an toàn vào bộ nhớ & đẩy ngay lên Cloud, Tháng: ${finalParsed[0]?.month || defaultMonth}/${finalParsed[0]?.year || defaultYear}, Bỏ qua: ${skippedCount} hàng trống/tiêu đề/chưa kiểm tra)`);
+      alert(`🎉 Đối chiếu & Đồng bộ KCS thành công!\n\nChi tiết đối chiếu:\n• Đã cập nhật & thay thế: ${updatedCount} xe có dữ liệu mới\n• Thêm mới: ${addedCount} xe\n• Trùng khớp giữ nguyên: ${unchangedCount} xe\n\n(Dữ liệu có thay đổi đã được tự động lưu an toàn và đồng bộ lên Cloud Firebase)`);
     } catch (err: any) {
       setOqcImportError(`Lỗi phân rã dữ liệu: ${err.message || err}`);
     }
@@ -10289,34 +10351,66 @@ export default function QualityInspectionRecords({
                     return;
                   }
 
-                  // Merge with existing oqcRecords (preserve checked status if already in system)
+                  // Merge with existing oqcRecords with diff checking
                   const existingMap = new Map<string, OQCRecord>();
                   oqcRecords.forEach(r => {
                     if (r.serialNo) existingMap.set(r.serialNo.trim().toUpperCase(), r);
                   });
 
-                  const finalRecords = [...oqcRecords];
                   let addedCount = 0;
+                  let updatedCount = 0;
+                  let unchangedCount = 0;
 
+                  const norm = (v: any) => String(v ?? '').trim().toLowerCase();
+                  const updatedRecords = oqcRecords.map(oldRec => {
+                    const key = (oldRec.serialNo || '').trim().toUpperCase();
+                    const newRec = newRecords.find(n => n.serialNo.trim().toUpperCase() === key);
+                    if (newRec) {
+                      let hasDiff = false;
+                      if (newRec.lsx && norm(oldRec.lsx) !== norm(newRec.lsx)) hasDiff = true;
+                      if (newRec.model && norm(oldRec.model) !== norm(newRec.model)) hasDiff = true;
+                      if (newRec.color && norm(oldRec.color) !== norm(newRec.color)) hasDiff = true;
+                      if (newRec.partCode && newRec.partCode !== 'TEM-GEN' && norm(oldRec.partCode) !== norm(newRec.partCode)) hasDiff = true;
+                      if (newRec.chassisNo && norm(oldRec.chassisNo) !== norm(newRec.chassisNo)) hasDiff = true;
+                      if (newRec.engineNo && norm(oldRec.engineNo) !== norm(newRec.engineNo)) hasDiff = true;
+
+                      if (hasDiff) {
+                        updatedCount++;
+                        return {
+                          ...oldRec,
+                          lsx: newRec.lsx || oldRec.lsx,
+                          model: newRec.model || oldRec.model,
+                          color: newRec.color || oldRec.color,
+                          partCode: newRec.partCode || oldRec.partCode,
+                          chassisNo: newRec.chassisNo || oldRec.chassisNo,
+                          engineNo: newRec.engineNo || oldRec.engineNo
+                        };
+                      } else {
+                        unchangedCount++;
+                        return oldRec;
+                      }
+                    }
+                    return oldRec;
+                  });
+
+                  const brandNewLsx: OQCRecord[] = [];
                   newRecords.forEach(newRec => {
                     const key = newRec.serialNo.trim().toUpperCase();
                     if (!existingMap.has(key)) {
-                      finalRecords.unshift(newRec);
-                      existingMap.set(key, newRec);
+                      brandNewLsx.unshift(newRec);
                       addedCount++;
-                    } else {
-                      const existing = existingMap.get(key)!;
-                      if (existing.status !== 'Đạt' && existing.status !== 'Lỗi') {
-                        existing.lsx = newRec.lsx;
-                        existing.model = newRec.model;
-                        existing.color = newRec.color;
-                        existing.partCode = newRec.partCode;
-                        if (newRec.chassisNo) existing.chassisNo = newRec.chassisNo;
-                        if (newRec.engineNo) existing.engineNo = newRec.engineNo;
-                      }
                     }
                   });
 
+                  const hasAnyChange = addedCount > 0 || updatedCount > 0;
+                  if (!hasAnyChange) {
+                    setLsxImportText('');
+                    setShowImportLsxModal(false);
+                    alert(`ℹ️ Đối chiếu LSX hoàn tất:\n\n• Toàn bộ ${newRecords.length} xe dán lên đều đã có trong hệ thống và trùng khớp dữ liệu 100%.\n• Không phát sinh thay đổi nên hệ thống giữ nguyên và KHÔNG cần đẩy lên Cloud Firebase.`);
+                    return;
+                  }
+
+                  const finalRecords = [...brandNewLsx, ...updatedRecords];
                   setOqcRecords(finalRecords);
                   safeStorage.setItem('dk_oqc_records', JSON.stringify(finalRecords));
                   try {
@@ -10331,7 +10425,7 @@ export default function QualityInspectionRecords({
                   setKcsSelectedLsx(defaultLsx);
                   setLsxImportText('');
                   setShowImportLsxModal(false);
-                  alert(`Nạp thành công ${addedCount} xe mới vào Lệnh Sản Xuất ${defaultLsx}! Trạm KCS đã sẵn sàng kiểm định (Đã đồng bộ an toàn lên Cloud).`);
+                  alert(`🎉 Đối chiếu & Nạp LSX ${defaultLsx} thành công!\n\nChi tiết đối chiếu:\n• Thêm mới: ${addedCount} xe\n• Cập nhật thông tin: ${updatedCount} xe\n• Giữ nguyên (trùng khớp): ${unchangedCount} xe\n\n(Dữ liệu có thay đổi đã được đồng bộ an toàn lên Cloud Firebase)`);
                 } catch (err: any) {
                   setLsxImportError(`Lỗi phân tách dữ liệu LSX: ${err.message || err}`);
                 }
