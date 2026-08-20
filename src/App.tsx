@@ -905,6 +905,18 @@ export function App() {
   const [syncLoaded, setSyncLoaded] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [syncSource, setSyncSource] = useState<'express' | 'firestore' | 'local'>('local');
+  const [lastSyncedTime, setLastSyncedTime] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('dk_last_synced_global_time');
+      if (saved) {
+        const d = new Date(saved);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+      }
+    } catch (e) { }
+    return new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  });
 
   // Forced Sync State variables for anh Thao
   const [forcingSync, setForcingSync] = useState(false);
@@ -1758,11 +1770,17 @@ export function App() {
         lastSeenValues.current[key] = JSON.stringify(val);
       });
 
-      // Successfully synced: transition immediately to green, and back to idle after 1s
+      // Successfully synced: transition immediately to green, and back to idle after 1.5s
+      const syncTimeFormatted = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      setLastSyncedTime(syncTimeFormatted);
+      try {
+        localStorage.setItem('dk_last_synced_global_time', new Date().toISOString());
+      } catch (e) { }
+
       setSyncStatus('synced');
       setTimeout(() => {
         setSyncStatus('idle');
-      }, 1000);
+      }, 1800);
     } catch (err: any) {
       console.error("[Debounced Cloud Sync Error]:", err);
       // Đánh dấu lại các khóa bị lỗi là dirty để có thể thử lại lúc khác hoặc chặn bị ghi đè thô bạo
@@ -2349,14 +2367,39 @@ export function App() {
     }
   };
 
+  const handleForcePullCloudData = async () => {
+    if (!confirm("Kính gửi anh Thao!\n\nAnh có muốn TẢI LẠI TOÀN BỘ dữ liệu mới nhất từ Cloud Firestore về máy này không?\n\n- Thao tác này sẽ đồng bộ lại toàn bộ kế hoạch, bảng biểu và báo cáo theo dữ liệu mới nhất trên máy chủ đám mây.")) {
+      return;
+    }
+    setForcingSync(true);
+    try {
+      Object.keys(localStorage).forEach((key) => {
+        if (key.endsWith('_is_dirty')) {
+          localStorage.setItem(key, 'false');
+        }
+      });
+      localDirtyKeys.current.clear();
+      triggerToast("Đang tải lại dữ liệu mới nhất từ Cloud Firestore...", "info");
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    } catch (err: any) {
+      alert("Lỗi khi tải lại dữ liệu từ Cloud: " + (err?.message || String(err)));
+      setForcingSync(false);
+    }
+  };
+
   // Expose to window so any component (like QualityPlanning.tsx) can call this directly without monkey patching!
   useEffect(() => {
     (window as any).syncToServer = syncToServer;
     (window as any).handleManualSyncRetry = handleManualSyncRetry;
     (window as any).handleForceCloudSync = handleForceCloudSync;
+    (window as any).handleForcePullCloudData = handleForcePullCloudData;
     return () => {
       delete (window as any).syncToServer;
       delete (window as any).handleManualSyncRetry;
+      delete (window as any).handleForceCloudSync;
+      delete (window as any).handleForcePullCloudData;
     };
   }, [syncLoaded, syncToServer]);
 
@@ -12215,52 +12258,96 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 <span className="md:inline hidden">[Ai] Hệ Thống quản lý chất lượng DKBike</span>
                 <span className="inline md:hidden">Hệ Thống Chất Lượng</span>
               </span>
-              {!firebaseUser ? (
-                <button
-                  onClick={() => {
-                    handleManualSyncRetry();
-                    setShowSyncErrorModal(true);
-                  }}
-                  className="bg-amber-100/90 hover:bg-amber-200/90 text-amber-900 border border-amber-300 rounded-md px-2 py-0.5 font-bold text-[8px] md:text-[9px] flex items-center gap-1 shrink-0 cursor-pointer active:scale-95 transition-all"
-                  title="Nhấp để xem chi tiết trạng thái và kích hoạt đồng bộ dữ liệu Cloud"
-                >
-                  <span className="w-1 md:w-1.5 h-1 md:h-1.5 bg-amber-600 rounded-full animate-ping"></span>
-                  <span>Cloud sync: Chế độ Cục bộ (Bấm để quản lý/đồng bộ)</span>
-                </button>
-              ) : (
-                <div className="flex items-center gap-1.5 flex-wrap">
+              {(() => {
+                const unsyncedGroups = getUnsyncedChanges();
+                const totalUnsynced = unsyncedGroups.reduce((acc, g) => acc + g.count, 0);
+
+                if (!firebaseUser) {
+                  return (
+                    <button
+                      onClick={() => {
+                        handleManualSyncRetry();
+                        setShowSyncErrorModal(true);
+                      }}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-md px-2 py-0.5 font-bold text-[8px] md:text-[9px] flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-all shadow-2xs"
+                      title="Dữ liệu đang được bảo vệ an toàn trên bộ nhớ thiết bị. Bấm để quản lý đồng bộ hoặc đăng nhập Google."
+                    >
+                      <HardDrive className="w-3 h-3 text-indigo-600" />
+                      <span>Bộ nhớ Cục bộ {totalUnsynced > 0 ? `(${totalUnsynced} thay đổi)` : ''} • Bấm quản lý</span>
+                    </button>
+                  );
+                }
+
+                if (syncStatus === 'syncing') {
+                  return (
+                    <button
+                      onClick={() => setShowSyncErrorModal(true)}
+                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 rounded-md px-2 py-0.5 font-bold text-[8px] md:text-[9px] flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-all shadow-2xs animate-pulse"
+                      title="Đang tải và đồng bộ các thay đổi lên máy chủ Cloud Firestore..."
+                    >
+                      <RefreshCw className="w-3 h-3 text-blue-600 animate-spin" />
+                      <span>Đang đồng bộ Cloud...</span>
+                    </button>
+                  );
+                }
+
+                if (syncStatus === 'error') {
+                  return (
+                    <button
+                      onClick={() => {
+                        setShowSyncErrorModal(true);
+                      }}
+                      className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 rounded-md px-2 py-0.5 font-bold text-[8px] md:text-[9px] flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-all shadow-2xs animate-bounce"
+                      title={`Lỗi đồng bộ Cloud: ${lastSyncErrorMsg || 'Nhấp để xem chi tiết và thử lại'}`}
+                    >
+                      <AlertCircle className="w-3 h-3 text-rose-600" />
+                      <span>Lỗi đồng bộ {totalUnsynced > 0 ? `(${totalUnsynced} thay đổi)` : ''} • Bấm khắc phục</span>
+                    </button>
+                  );
+                }
+
+                if (totalUnsynced > 0) {
+                  return (
+                    <button
+                      onClick={() => {
+                        handleManualSyncRetry();
+                        setShowSyncErrorModal(true);
+                      }}
+                      className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-md px-2 py-0.5 font-bold text-[8px] md:text-[9px] flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-all shadow-2xs"
+                      title={`Có ${totalUnsynced} thay đổi đang lưu an toàn trên máy và chờ đồng bộ lên Cloud. Nhấp để đồng bộ ngay.`}
+                    >
+                      <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-ping"></span>
+                      <span>Chờ đồng bộ ({totalUnsynced} thay đổi) • Gửi ngay</span>
+                    </button>
+                  );
+                }
+
+                if (syncStatus === 'synced') {
+                  return (
+                    <button
+                      onClick={() => setShowSyncErrorModal(true)}
+                      className="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 rounded-md px-2 py-0.5 font-bold text-[8px] md:text-[9px] flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-all shadow-2xs"
+                      title="Toàn bộ dữ liệu đã được đồng bộ thành công lên Cloud Firestore!"
+                    >
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                      <span>Đã đồng bộ Cloud xong ✓</span>
+                    </button>
+                  );
+                }
+
+                // Default: idle, connected, in-sync
+                return (
                   <button
-                    onClick={() => {
-                      handleManualSyncRetry();
-                      setShowSyncErrorModal(true);
-                    }}
-                    title="Nhấp để hiển thị chi tiết dữ liệu và thử đồng bộ lại thủ công lên Cloud"
-                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] md:text-[9px] font-bold border shrink-0 hover:opacity-90 active:scale-95 transition-all cursor-pointer ${syncStatus === 'syncing'
-                        ? 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse'
-                        : syncStatus === 'error'
-                          ? 'bg-rose-50 text-rose-700 border-rose-200 animate-bounce'
-                          : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                      }`}
+                    onClick={() => setShowSyncErrorModal(true)}
+                    className="bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-md px-2 py-0.5 font-bold text-[8px] md:text-[9px] flex items-center gap-1.5 shrink-0 cursor-pointer active:scale-95 transition-all shadow-2xs"
+                    title={`Cloud Firestore: Đã kết nối & Đồng bộ thời gian thực. Lần đồng bộ gần nhất: ${lastSyncedTime}`}
                   >
-                    <span className={`w-1 md:w-1.5 h-1 md:h-1.5 rounded-full ${syncStatus === 'syncing'
-                        ? 'bg-blue-500'
-                        : syncStatus === 'error'
-                          ? 'bg-rose-500'
-                          : 'bg-emerald-500'
-                      }`}></span>
-                    <span className="md:inline hidden">
-                      {syncStatus === 'syncing' && 'ĐANG ĐỒNG BỘ CLOUD...'}
-                      {syncStatus === 'error' && 'LỖI ĐỒNG BỘ (Bấm để thử lại)'}
-                      {syncStatus !== 'syncing' && syncStatus !== 'error' && 'Cloud Sync: Connected (Offline Cache Active)'}
-                    </span>
-                    <span className="inline md:hidden">
-                      {syncStatus === 'syncing' && 'Đồng bộ...'}
-                      {syncStatus === 'error' && 'Lỗi Sync (Thử lại)'}
-                      {syncStatus !== 'syncing' && syncStatus !== 'error' && 'Connected (Offline)'}
-                    </span>
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                    <span className="md:inline hidden">Cloud Sync: Đã đồng bộ ({lastSyncedTime})</span>
+                    <span className="inline md:hidden">Đã đồng bộ ({lastSyncedTime})</span>
                   </button>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -29205,7 +29292,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   <Cloud className="w-5 h-5 animate-pulse" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-black tracking-widest uppercase font-mono text-indigo-300">TRUNG TÂM BẢO MẬT DỮ LIỆU QMS</span>
+                  <span className="text-[10px] font-black tracking-widest uppercase font-mono text-indigo-300">TRUNG TÂM ĐỒNG BỘ DỮ LIỆU QMS</span>
                   <h3 className="text-sm font-extrabold text-slate-100 mt-0.5 flex items-center gap-2">
                     Trạng Thái Đồng Bộ Cloud Firestore
                   </h3>
@@ -29261,14 +29348,15 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             'text-emerald-700 font-extrabold'
                       }>
                         {syncStatus === 'syncing' && 'Đang tải dữ liệu lên Cloud...'}
-                        {syncStatus === 'error' && 'Phát hiện lỗi đồng bộ'}
+                        {syncStatus === 'error' && 'Phát hiện lỗi đồng bộ (Đã lưu an toàn ngoại tuyến)'}
                         {syncStatus === 'synced' && 'Đã đồng bộ hoàn tất'}
-                        {syncStatus === 'idle' && 'Đang hoạt động (Offline Cache sẵn sàng)'}
+                        {syncStatus === 'idle' && 'Đang hoạt động (Đồng bộ thời gian thực)'}
                       </span>
                     </div>
                   </div>
-                  <div className="text-[10px] text-slate-500 font-medium mt-2">
-                    Cơ sở dữ liệu: <span className="font-mono text-indigo-700 font-bold">ai-studio-24f3ad28</span>
+                  <div className="text-[10px] text-slate-500 font-medium mt-2 flex justify-between items-center">
+                    <span>Đồng bộ lần cuối: <strong className="text-slate-700 font-mono">{lastSyncedTime || 'Chưa ghi nhận'}</strong></span>
+                    <span className="font-mono text-indigo-700 font-bold">ai-studio-24f3ad28</span>
                   </div>
                 </div>
               </div>
@@ -29277,7 +29365,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
               {forcingSync && forceSyncProgress && (
                 <div className="bg-indigo-50 border border-indigo-200 p-4 rounded-2xl space-y-2 animate-pulse">
                   <div className="flex justify-between items-center text-xs font-bold text-indigo-900">
-                    <span>Đang cưỡng bức đồng bộ toàn bộ dữ liệu...</span>
+                    <span>Đang tiến hành xử lý dữ liệu...</span>
                     <span>{forceSyncProgress.currentPart} / {forceSyncProgress.totalParts} phần</span>
                   </div>
                   <p className="text-[11px] text-indigo-700 font-medium">{forceSyncProgress.statusText}</p>
@@ -29296,7 +29384,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         <Database className="w-4 h-4 text-indigo-600" /> Bản ghi chờ đồng bộ lên Cloud ({totalUnsynced})
                       </h4>
                       <span className="text-[10px] text-slate-500 font-bold">
-                        {totalUnsynced === 0 ? 'Dữ liệu trùng khớp 100%' : `${unsyncedGroups.length} phân hệ bẩn`}
+                        {totalUnsynced === 0 ? 'Dữ liệu khớp 100% với Cloud' : `${unsyncedGroups.length} phân hệ có thay đổi mới`}
                       </span>
                     </div>
 
@@ -29304,7 +29392,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       <div className="bg-emerald-50/70 border border-emerald-200 p-4 rounded-2xl text-center space-y-1">
                         <CheckCircle className="w-6 h-6 text-emerald-600 mx-auto" />
                         <p className="font-bold text-emerald-900 text-xs">Toàn bộ dữ liệu đã được lưu trữ an toàn trên đám mây Cloud Firestore</p>
-                        <p className="text-[11px] text-emerald-700">Không có bản ghi bẩn nào bị đọng lại trên bộ nhớ cục bộ thiết bị.</p>
+                        <p className="text-[11px] text-emerald-700">Tất cả các bản ghi cục bộ trên máy này đều đã trùng khớp 100% với máy chủ Cloud.</p>
                       </div>
                     ) : (
                       <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
@@ -29326,17 +29414,17 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
               })()}
 
               {/* Control Action Buttons */}
-              <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row gap-2.5 justify-end">
+              <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-2.5 justify-end">
                 <button
                   onClick={() => {
                     handleManualSyncRetry();
-                    triggerToast("Đã kích hoạt tiến trình đồng bộ dữ liệu thủ công!");
+                    triggerToast("Đang kích hoạt đồng bộ dữ liệu lên Cloud Firestore...", "info");
                   }}
                   disabled={forcingSync}
                   className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold py-2.5 px-4 rounded-xl transition shadow-xs cursor-pointer flex items-center justify-center gap-2"
                 >
                   <RefreshCw className={`w-4 h-4 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
-                  Thử đồng bộ lại ngay
+                  Đồng bộ ngay (Push)
                 </button>
 
                 <button
@@ -29347,7 +29435,19 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   className="bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-bold py-2.5 px-4 rounded-xl transition shadow-xs cursor-pointer flex items-center justify-center gap-2"
                 >
                   <Cloud className="w-4 h-4 text-amber-400" />
-                  Cưỡng bức đẩy toàn bộ lên Cloud
+                  Cưỡng bức đẩy toàn bộ (Force Push)
+                </button>
+
+                <button
+                  onClick={() => {
+                    handleForcePullCloudData();
+                  }}
+                  disabled={forcingSync}
+                  className="bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-slate-700 hover:text-indigo-700 font-bold py-2.5 px-4 rounded-xl transition shadow-xs cursor-pointer flex items-center justify-center gap-2"
+                  title="Tải lại toàn bộ dữ liệu mới nhất từ Firestore về máy"
+                >
+                  <Download className="w-4 h-4 text-indigo-600" />
+                  Tải mới từ Cloud (Force Pull)
                 </button>
 
                 <button
