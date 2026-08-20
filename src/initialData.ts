@@ -14,7 +14,7 @@ export const INITIAL_STAFF: QualityStaff[] = [
   { id: 'STF-11', name: 'Đoàn Anh Hùng', role: 'QC', email: 'doananhhung.22031981@gmail.com', permission: 'edit' },
   { id: 'STF-12', name: 'MKT', role: 'MKT', email: 'dkbike.mkt@gmail.com', permission: 'view' },
   { id: 'STF-13', name: 'Đoàn Minh Cương', role: 'Đăng kiểm', email: 'cuong.doan@dkbike.vn', permission: 'view' },
-  { id: 'STF-14', name: 'Trần Thanh Hiển', role: 'Kho TP', email: 'hieno8092@gmail.com', permission: 'edit' }
+  { id: 'STF-14', name: 'Trần Thanh Hiển', role: 'Kho TP', email: 'hieno0o92@gmail.com', permission: 'edit' }
 ];
 
 export const INITIAL_MODELS: DKBikeModel[] = [
