@@ -2549,10 +2549,9 @@ export function App() {
             }
 
             if (rawData !== null) {
+              serverData[key] = rawData;
               if (SUBCOLLECTION_KEYS.includes(key)) {
                 legacyRootData[key] = rawData;
-              } else {
-                serverData[key] = rawData;
               }
             }
           }
@@ -2729,6 +2728,48 @@ export function App() {
         }
       }
       if (serverData.dk_projects !== undefined) setProjects(serverData.dk_projects);
+      if (serverData.dk_tasks !== undefined && Array.isArray(serverData.dk_tasks)) {
+        setTasks(serverData.dk_tasks);
+        safeStorage.setItem('dk_tasks', JSON.stringify(serverData.dk_tasks));
+      }
+      if (serverData.dk_weekly_plans !== undefined && Array.isArray(serverData.dk_weekly_plans)) {
+        setWeeklyPlans(serverData.dk_weekly_plans);
+        safeStorage.setItem('dk_weekly_plans', JSON.stringify(serverData.dk_weekly_plans));
+      }
+      if (serverData.dk_monthly_plans !== undefined && Array.isArray(serverData.dk_monthly_plans)) {
+        setMonthlyPlans(serverData.dk_monthly_plans);
+        safeStorage.setItem('dk_monthly_plans', JSON.stringify(serverData.dk_monthly_plans));
+      }
+      if (serverData.dk_ptsp_tasks !== undefined && Array.isArray(serverData.dk_ptsp_tasks)) {
+        const resequenced = resequencePtspTasks(serverData.dk_ptsp_tasks);
+        setPtspTasks(resequenced);
+        safeStorage.setItem('dk_ptsp_tasks', JSON.stringify(resequenced));
+      }
+      if (serverData.dk_capas !== undefined && Array.isArray(serverData.dk_capas)) {
+        setCapas(serverData.dk_capas);
+        safeStorage.setItem('dk_capas', JSON.stringify(serverData.dk_capas));
+      }
+      if (serverData.dk_ecos !== undefined && Array.isArray(serverData.dk_ecos)) {
+        setEcos(serverData.dk_ecos);
+        safeStorage.setItem('dk_ecos', JSON.stringify(serverData.dk_ecos));
+      }
+      if (serverData.dk_daily_logs !== undefined && Array.isArray(serverData.dk_daily_logs)) {
+        const sanitized = sanitizeDailyLogs(serverData.dk_daily_logs);
+        setDailyLogs(sanitized);
+        safeStorage.setItem('dk_daily_logs', JSON.stringify(sanitized));
+      }
+      if (serverData.dk_iqc_records !== undefined && Array.isArray(serverData.dk_iqc_records)) {
+        setIqcRecords(serverData.dk_iqc_records);
+        safeStorage.setItem('dk_iqc_records', JSON.stringify(serverData.dk_iqc_records));
+      }
+      if (serverData.dk_pqc_records !== undefined && Array.isArray(serverData.dk_pqc_records)) {
+        setPqcRecords(serverData.dk_pqc_records);
+        safeStorage.setItem('dk_pqc_records', JSON.stringify(serverData.dk_pqc_records));
+      }
+      if (serverData.dk_improvement_actions !== undefined && Array.isArray(serverData.dk_improvement_actions)) {
+        setImprovementActions(serverData.dk_improvement_actions);
+        safeStorage.setItem('dk_improvement_actions', JSON.stringify(serverData.dk_improvement_actions));
+      }
       if (serverData.dk_defects !== undefined) setDefects(serverData.dk_defects);
       if (serverData.dk_copqs !== undefined) setCopqs(serverData.dk_copqs);
       if (serverData.dk_fmea !== undefined) setFmea(serverData.dk_fmea);
@@ -2830,8 +2871,11 @@ export function App() {
           });
 
           let finalDisplayData = list;
-          if (key === 'dk_daily_logs' && Array.isArray(list)) {
-            finalDisplayData = sanitizeDailyLogs(list);
+          if (list.length === 0 && (serverData[key] || legacyRootData[key]) && Array.isArray(serverData[key] || legacyRootData[key])) {
+            finalDisplayData = serverData[key] || legacyRootData[key];
+          }
+          if (key === 'dk_daily_logs' && Array.isArray(finalDisplayData)) {
+            finalDisplayData = sanitizeDailyLogs(finalDisplayData);
           }
 
           // Local conflict/dirty checks
@@ -11936,20 +11980,20 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     if (user) {
                       const userEmailLower = user.email?.toLowerCase().trim() || '';
                       // Tự động kiểm tra trực tiếp từ Firestore nếu dữ liệu RAM chưa kịp cập nhật
-                      let currentStaffList = staff;
-                      if (userEmailLower !== 'thaonguyendkbike@gmail.com' && !currentStaffList.some(s => s && s.email && s.email.toLowerCase().trim() === userEmailLower)) {
-                        try {
-                          const staffSnap = await getDoc(doc(db, 'dk_db_sync', 'dk_staff'));
-                          if (staffSnap.exists()) {
-                            const d = staffSnap.data();
-                            if (Array.isArray(d?.data)) {
-                              currentStaffList = d.data;
-                              setStaff(currentStaffList);
-                              safeStorage.setItem('dk_staff', JSON.stringify(currentStaffList));
-                            }
+                      let currentStaffList = (staff && Array.isArray(staff) && staff.length > 0) ? staff : INITIAL_STAFF;
+                      try {
+                        const staffSnap = await getDoc(doc(db, 'dk_db_sync', 'dk_staff'));
+                        if (staffSnap.exists()) {
+                          const d = staffSnap.data();
+                          const list = Array.isArray(d?.data) ? d.data : (Array.isArray(d) ? d : []);
+                          if (list.length > 0) {
+                            currentStaffList = list;
+                            setStaff(list);
+                            safeStorage.setItem('dk_staff', JSON.stringify(list));
+                            try { localStorage.setItem('dk_staff', JSON.stringify(list)); } catch (e) {}
                           }
-                        } catch (e) {}
-                      }
+                        }
+                      } catch (e) {}
 
                       const isAuth = userEmailLower === 'thaonguyendkbike@gmail.com' ||
                                      currentStaffList.some(s => s && s.email && s.email.toLowerCase().trim() === userEmailLower) ||
