@@ -2889,6 +2889,11 @@ export function App() {
         (window as any).__skip_cloud_sync = false;
       }, 1000);
 
+      // Kích hoạt ngay trạng thái tải hoàn tất để hiển thị toàn bộ số liệu trên màn hình không phải chờ đợi
+      setSyncSource('firestore');
+      setSyncStatus('idle');
+      setSyncLoaded(true);
+
       // Reconcile and check for conflicts on startup before snapshot registration
       const initialConflicts: string[] = [];
       SUBCOLLECTION_KEYS.forEach((key) => {
