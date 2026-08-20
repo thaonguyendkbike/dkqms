@@ -127,10 +127,14 @@ export async function testConnection() {
   try {
     await getDocFromServer(doc(db, 'test-connection-placeholder', 'connection-check'));
     console.log("Firebase connection test performed successfully.");
+    localStorage.setItem('dk_firebase_quota_exceeded', 'false');
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     const isOffline = errorMsg.toLowerCase().includes('offline') || errorMsg.toLowerCase().includes('could not reach');
-    const isQuota = errorMsg.toLowerCase().includes('quota') || errorMsg.toLowerCase().includes('exhausted') || errorMsg.toLowerCase().includes('limit') || (error && (error as any).code === 'resource-exhausted');
+    const isQuota = (error && (error as any).code === 'resource-exhausted') || 
+                    errorMsg.toLowerCase().includes('quota exceeded') || 
+                    errorMsg.toLowerCase().includes('resource has been exhausted') || 
+                    errorMsg.toLowerCase().includes('daily limit exceeded');
     if (isQuota) {
       localStorage.setItem('dk_firebase_quota_exceeded', 'true');
     }

@@ -2496,6 +2496,16 @@ export default function QualityInspectionRecords({
     }
     setLocalColorChanges(newChanges);
     safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(newChanges));
+    try {
+      localStorage.setItem('dk_oqc_color_changes', JSON.stringify(newChanges));
+      localStorage.setItem('dk_oqc_color_changes_is_dirty', 'true');
+    } catch (e) {}
+    if (typeof (window as any).syncToServer === 'function') {
+      (window as any).syncToServer('dk_oqc_color_changes', newChanges);
+    }
+    try {
+      window.dispatchEvent(new CustomEvent('dk_color_changes_updated', { detail: newChanges }));
+    } catch (e) {}
   };
 
   // IQC Import & Edit states
@@ -2719,12 +2729,19 @@ export default function QualityInspectionRecords({
   const saveHandoverList = (list: any[]) => {
     setHandoverScannedList(list);
     safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(list));
-    try { localStorage.setItem('dk_oqc_handover_list', JSON.stringify(list)); } catch (e) {}
+    try {
+      localStorage.setItem('dk_oqc_handover_list', JSON.stringify(list));
+      localStorage.setItem('dk_oqc_handover_list_is_dirty', 'true');
+    } catch (e) {}
     if (setOqcHandoverList) {
       setOqcHandoverList(list);
-    } else if (typeof (window as any).syncToServer === 'function') {
+    }
+    if (typeof (window as any).syncToServer === 'function') {
       (window as any).syncToServer('dk_oqc_handover_list', list);
     }
+    try {
+      window.dispatchEvent(new CustomEvent('dk_handover_updated', { detail: list }));
+    } catch (e) {}
   };
 
   // Distinct dates in scanned handover records for date filtering (Sorted newest first)

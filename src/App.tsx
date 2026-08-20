@@ -1718,9 +1718,9 @@ export function App() {
       setLastSyncErrorMsg(errMsg);
 
       const isQuota = err?.code === 'resource-exhausted' || 
-                      errMsg.toLowerCase().includes('quota') || 
-                      errMsg.toLowerCase().includes('exhausted') || 
-                      errMsg.toLowerCase().includes('limit');
+                      errMsg.toLowerCase().includes('quota exceeded') || 
+                      errMsg.toLowerCase().includes('resource has been exhausted') || 
+                      errMsg.toLowerCase().includes('daily limit exceeded');
                       
       if (isQuota) {
         isFirebaseQuotaExceeded.current = true;
@@ -2282,14 +2282,14 @@ export function App() {
         return;
       }
 
-      // 3. Thực thi chunking batch viết theo từng mảng max 450 bản ghi
-      const CHUNK_SIZE = 450;
+      // 3. Thực thi chunking batch viết theo từng mảng an toàn tối đa 80 bản ghi
+      const CHUNK_SIZE = 80;
       const totalParts = Math.ceil(ops.length / CHUNK_SIZE);
 
       setForceSyncProgress({
         totalParts,
         currentPart: 0,
-        statusText: `Tổng phân tích có ${ops.length} tác vụ cần đẩy. Đã chia thành ${totalParts} gói. Bắt đầu đẩy dữ liệu...`,
+        statusText: `Tổng phân tích có ${ops.length} tác vụ cần đẩy. Đã chia thành ${totalParts} gói an toàn. Bắt đầu đẩy dữ liệu...`,
         completed: false
       });
 
@@ -2306,7 +2306,7 @@ export function App() {
 
         chunk.forEach((op) => {
           if (op.type === 'set') {
-            chunkBatch.set(op.ref, op.data);
+            chunkBatch.set(op.ref, sanitizeFirestorePayload(op.data));
           } else {
             chunkBatch.delete(op.ref);
           }
@@ -2318,14 +2318,18 @@ export function App() {
           handleFirestoreError(commitErr, OperationType.WRITE, `dk_db_sync_batch_part_${partIndex}`);
         }
 
-        // Tạm nghỉ 120ms để tránh quá tải Stream hoặc Firestore Burst Limit
-        await new Promise(resolve => setTimeout(resolve, 120));
+        // Tạm nghỉ 80ms để tránh quá tải Stream hoặc Firestore Burst Limit
+        await new Promise(resolve => setTimeout(resolve, 80));
       }
 
       // 4. Xóa cờ is_dirty đối với tất cả phím đã đồng bộ cưỡng bức thành công
       localKeys.forEach((key) => {
         localStorage.setItem(`${key}_is_dirty`, 'false');
       });
+
+      // Đặt lại cờ Quota về false vì đã đẩy thành công toàn bộ
+      isFirebaseQuotaExceeded.current = false;
+      localStorage.setItem('dk_firebase_quota_exceeded', 'false');
 
       setForceSyncProgress({
         totalParts,
@@ -2334,7 +2338,7 @@ export function App() {
         completed: true
       });
 
-      alert(`Tuyệt vời anh Thao! Hệ thống đã hoàn tất đẩy toàn bộ ${ops.length} bản ghi lên Cloud Firestore mà không gặp bất kỳ lỗi giới hạn nào. Trình duyệt sẽ tự động làm mới để cập nhật trạng thái đồng bộ.`);
+      alert(`Tuyệt vời anh Thao! Hệ thống đã hoàn tất đẩy toàn bộ ${ops.length} bản ghi lên Cloud Firestore mà không gặp bất kỳ lỗi nào. Trình duyệt sẽ tự động làm mới để cập nhật trạng thái đồng bộ.`);
 
       setTimeout(() => {
         window.location.reload();
@@ -2344,9 +2348,10 @@ export function App() {
       console.error("[Forced Sync Error]:", err);
       const errMsg = err?.message || String(err);
       
-      const isQuota = errMsg.toLowerCase().includes('quota') || 
-                      errMsg.toLowerCase().includes('exhausted') || 
-                      errMsg.toLowerCase().includes('limit');
+      const isQuota = err?.code === 'resource-exhausted' || 
+                      errMsg.toLowerCase().includes('quota exceeded') || 
+                      errMsg.toLowerCase().includes('resource has been exhausted') || 
+                      errMsg.toLowerCase().includes('daily limit exceeded');
                       
       if (isQuota) {
         isFirebaseQuotaExceeded.current = true;
@@ -2455,7 +2460,10 @@ export function App() {
           localStorage.setItem('dk_firebase_quota_exceeded', 'false');
         } catch (recoveryErr: any) {
           const errMsg = recoveryErr?.message || String(recoveryErr);
-          const isQuota = errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('exhausted') || errMsg.toLowerCase().includes('limit') || recoveryErr?.code === 'resource-exhausted';
+          const isQuota = recoveryErr?.code === 'resource-exhausted' || 
+                          errMsg.toLowerCase().includes('quota exceeded') || 
+                          errMsg.toLowerCase().includes('resource has been exhausted') || 
+                          errMsg.toLowerCase().includes('daily limit exceeded');
           if (isQuota) {
             console.warn("[Quota Check]: Hạn ngạch Google vẫn đang cạn kiệt. Chạy chế độ offline an toàn sử dụng bộ nhớ cục bộ.");
             setSyncSource('local');
@@ -2489,7 +2497,10 @@ export function App() {
       } catch (err: any) {
         console.warn("[Staff Load Warning]: Không thể tải trực tiếp dk_staff:", err?.message || err);
         const errMsg = err?.message || String(err);
-        const isQuota = errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('limit') || errMsg.toLowerCase().includes('exhausted') || err?.code === 'resource-exhausted';
+        const isQuota = err?.code === 'resource-exhausted' || 
+                        errMsg.toLowerCase().includes('quota exceeded') || 
+                        errMsg.toLowerCase().includes('resource has been exhausted') || 
+                        errMsg.toLowerCase().includes('daily limit exceeded');
         if (isQuota) {
           isFirebaseQuotaExceeded.current = true;
           localStorage.setItem('dk_firebase_quota_exceeded', 'true');
@@ -2549,7 +2560,10 @@ export function App() {
       } catch (firestoreErr: any) {
         console.warn("[Firestore Top Level Load Warning]:", firestoreErr?.message || firestoreErr);
         const errMsg = firestoreErr?.message || String(firestoreErr);
-        const isQuota = errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('limit') || errMsg.toLowerCase().includes('exhausted') || firestoreErr?.code === 'resource-exhausted';
+        const isQuota = firestoreErr?.code === 'resource-exhausted' || 
+                        errMsg.toLowerCase().includes('quota exceeded') || 
+                        errMsg.toLowerCase().includes('resource has been exhausted') || 
+                        errMsg.toLowerCase().includes('daily limit exceeded');
         if (isQuota) {
           isFirebaseQuotaExceeded.current = true;
           localStorage.setItem('dk_firebase_quota_exceeded', 'true');
@@ -5962,7 +5976,7 @@ export function App() {
     getDoc(docRef).then((snap) => {
       if (!isMounted || !snap.exists()) return;
       const d = snap.data();
-      if (d && Array.isArray(d.data) && d.data.length > 0) {
+      if (d && Array.isArray(d.data)) {
         setOqcHandoverList(d.data);
         safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(d.data));
         try { localStorage.setItem('dk_oqc_handover_list', JSON.stringify(d.data)); } catch (e) {}
@@ -5979,9 +5993,48 @@ export function App() {
         setOqcHandoverList(d.data);
         safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(d.data));
         try { localStorage.setItem('dk_oqc_handover_list', JSON.stringify(d.data)); } catch (e) {}
+        try { window.dispatchEvent(new CustomEvent('dk_handover_updated', { detail: d.data })); } catch (e) {}
       }
     }, (err) => {
       console.warn("[Global Handover Snapshot Notice]:", err?.message || err);
+    });
+
+    return () => {
+      isMounted = false;
+      unsub();
+    };
+  }, []);
+
+  // Tải tức thời và lắng nghe thời gian thực cho Xe Đổi Màu (dk_oqc_color_changes) trên mọi thiết bị
+  useEffect(() => {
+    let isMounted = true;
+    const docRef = doc(db, 'dk_db_sync', 'dk_oqc_color_changes');
+
+    // 1. Tải tức thời trực tiếp từ Firestore khi khởi động
+    getDoc(docRef).then((snap) => {
+      if (!isMounted || !snap.exists()) return;
+      const d = snap.data();
+      if (d && Array.isArray(d.data)) {
+        setOqcColorChanges(d.data);
+        safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(d.data));
+        try { localStorage.setItem('dk_oqc_color_changes', JSON.stringify(d.data)); } catch (e) {}
+      }
+    }).catch(err => {
+      console.warn("[Global Color Change Fetch Notice]:", err?.message || err);
+    });
+
+    // 2. Lắng nghe real-time liên tục
+    const unsub = onSnapshot(docRef, (snap) => {
+      if (!isMounted || !snap.exists()) return;
+      const d = snap.data();
+      if (d && Array.isArray(d.data)) {
+        setOqcColorChanges(d.data);
+        safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(d.data));
+        try { localStorage.setItem('dk_oqc_color_changes', JSON.stringify(d.data)); } catch (e) {}
+        try { window.dispatchEvent(new CustomEvent('dk_color_changes_updated', { detail: d.data })); } catch (e) {}
+      }
+    }, (err) => {
+      console.warn("[Global Color Change Snapshot Notice]:", err?.message || err);
     });
 
     return () => {
