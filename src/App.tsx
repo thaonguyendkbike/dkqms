@@ -1550,80 +1550,13 @@ export function App() {
           });
 
           console.log(`[Batch Sync Chunked] Key: ${key}. Split ${currentList.length} records into ${totalChunks} documents.`);
-        } else if (SUBCOLLECTION_KEYS.includes(key)) {
-          // Process large array as independent documents in subcollections
-          const currentList = Array.isArray(val) ? val : [];
-          let prevList: any[] = [];
-          try {
-            const prevStr = lastSyncedValues.current[key];
-            if (prevStr) {
-              prevList = JSON.parse(prevStr);
-              if (!Array.isArray(prevList)) {
-                prevList = [];
-              }
-            }
-          } catch (e) {
-            prevList = [];
-          }
-
-          const prevMap = new Map();
-          prevList.forEach((item, idx) => {
-            prevMap.set(getItemId(item, key, idx), item);
-          });
-
-          const currentMap = new Map();
-          currentList.forEach((item, idx) => {
-            currentMap.set(getItemId(item, key, idx), item);
-          });
-
-          const changedItems: { id: string; data: any }[] = [];
-          currentList.forEach((item, idx) => {
-            const itemId = getItemId(item, key, idx);
-            const prevItem = prevMap.get(itemId);
-            if (!prevItem || !areSubcollectionItemsEqual(prevItem, item)) {
-              changedItems.push({ id: itemId, data: item });
-            }
-          });
-
-          const deletedIds: string[] = [];
-          prevList.forEach((item, idx) => {
-            const itemId = getItemId(item, key, idx);
-            if (!currentMap.has(itemId)) {
-              deletedIds.push(itemId);
-            }
-          });
-
-          // Queue subcollection set docs
-          changedItems.forEach(({ id, data }) => {
-            const recordRef = doc(db, 'dk_db_sync', key, 'records', id);
-            ops.push({ type: 'set', ref: recordRef, data });
-          });
-
-          // Queue subcollection delete docs
-          deletedIds.forEach((id) => {
-            const recordRef = doc(db, 'dk_db_sync', key, 'records', id);
-            ops.push({ type: 'delete', ref: recordRef });
-          });
-
-          // Meta document tracking changes
-          ops.push({
-            type: 'set',
-            ref: docRef,
-            data: {
-              hasSubcollection: true,
-              count: currentList.length,
-              updatedBy: email,
-              updatedAt: timestamp
-            }
-          });
-
-          console.log(`[Batch Sync Subcollection] Key: ${key}. Added/Changed: ${changedItems.length}, Deleted: ${deletedIds.length}. Total records: ${currentList.length}`);
         } else {
-          // Standard document storage for small metadata or settings
+          // Lưu trữ tài liệu đơn siêu tối ưu cho toàn bộ phân hệ (1 write thay vì hàng ngàn writes)
           const payload: any = {
             data: val,
             updatedBy: email,
-            updatedAt: timestamp
+            updatedAt: timestamp,
+            count: Array.isArray(val) ? val.length : 1
           };
           if (key === 'dk_staff' && Array.isArray(val)) {
             payload.allowedEmails = val
@@ -2161,112 +2094,28 @@ export function App() {
               forcedSync: true
             }
           });
-        } else if (SUBCOLLECTION_KEYS.includes(key)) {
-          const currentList = Array.isArray(parsed) ? parsed : [];
-
-          // Lấy dữ liệu nền tảng đã đồng bộ lần cuối từ máy chủ đám mây
-          let serverList: any[] = [];
-          const serverStr = lastSyncedValues.current[key];
-          if (serverStr) {
-            try {
-              serverList = JSON.parse(serverStr);
-              if (!Array.isArray(serverList)) serverList = [];
-            } catch (e) {
-              serverList = [];
-            }
-          }
-
-          const serverMap = new Map();
-          serverList.forEach((item, idx) => {
-            serverMap.set(getItemId(item, key, idx), item);
-          });
-
-          const currentMap = new Map();
-          currentList.forEach((item, idx) => {
-            currentMap.set(getItemId(item, key, idx), item);
-          });
-
-          // Xác định các phần tử đã thay đổi nội dung hoặc thêm mới
-          const changedOrAdded: any[] = [];
-          currentList.forEach((item, idx) => {
-            const itemId = getItemId(item, key, idx);
-            const serverItem = serverMap.get(itemId);
-            if (!serverItem || !areSubcollectionItemsEqual(serverItem, item)) {
-              changedOrAdded.push({ id: itemId, data: item });
-            }
-          });
-
-          // Xác định các phần tử đã bị xóa ở máy cục bộ nhưng vẫn còn trên đám mây
-          const deletedIds: string[] = [];
-          serverList.forEach((item, idx) => {
-            const itemId = getItemId(item, key, idx);
-            if (!currentMap.has(itemId)) {
-              deletedIds.push(itemId);
-            }
-          });
-
-          // Chỉ thêm vào hàng đợi đồng bộ các mục thực sự có sự thay đổi
-          changedOrAdded.forEach(({ id, data }) => {
-            const recordRef = doc(db, 'dk_db_sync', key, 'records', id);
-            ops.push({
-              type: 'set',
-              ref: recordRef,
-              data
-            });
-          });
-
-          deletedIds.forEach((id) => {
-            const recordRef = doc(db, 'dk_db_sync', key, 'records', id);
-            ops.push({
-              type: 'delete',
-              ref: recordRef,
-              data: null
-            });
-          });
-
-          // Cập nhật tài liệu Root của phân hệ kèm toàn bộ mảng dữ liệu để máy mới nạp được ngay lập tức
-          if (changedOrAdded.length > 0 || deletedIds.length > 0) {
-            ops.push({
-              type: 'set',
-              ref: docRef,
-              data: {
-                hasSubcollection: true,
-                data: currentList,
-                count: currentList.length,
-                updatedBy: email,
-                updatedAt: timestamp,
-                forcedSync: true
-              }
-            });
-          }
-
         } else {
-          // Xử lý các tài liệu đơn cấu hình chuẩn của hệ thống
-          const serverStr = lastSyncedValues.current[key];
-          const currentStr = JSON.stringify(parsed);
-
-          if (!isFunctionallyIdentical(currentStr, serverStr, key)) {
-            const payload: any = {
-              data: parsed,
-              updatedBy: email,
-              updatedAt: timestamp,
-              forcedSync: true
-            };
-            if (key === 'dk_staff' && Array.isArray(parsed)) {
-              payload.allowedEmails = parsed
-                .map((item: any) => (item && item.email) ? item.email.toLowerCase().trim() : '')
-                .filter(Boolean);
-              payload.allowedEditorEmails = parsed
-                .filter((item: any) => item && (item.permission === 'edit' || item.permission === 'admin'))
-                .map((item: any) => (item && item.email) ? item.email.toLowerCase().trim() : '')
-                .filter(Boolean);
-            }
-            ops.push({
-              type: 'set',
-              ref: docRef,
-              data: payload
-            });
+          // Xử lý các tài liệu đơn cấu hình chuẩn của hệ thống (Siêu tối ưu 1 write)
+          const payload: any = {
+            data: parsed,
+            updatedBy: email,
+            updatedAt: timestamp,
+            forcedSync: true
+          };
+          if (key === 'dk_staff' && Array.isArray(parsed)) {
+            payload.allowedEmails = parsed
+              .map((item: any) => (item && item.email) ? item.email.toLowerCase().trim() : '')
+              .filter(Boolean);
+            payload.allowedEditorEmails = parsed
+              .filter((item: any) => item && (item.permission === 'edit' || item.permission === 'admin'))
+              .map((item: any) => (item && item.email) ? item.email.toLowerCase().trim() : '')
+              .filter(Boolean);
           }
+          ops.push({
+            type: 'set',
+            ref: docRef,
+            data: payload
+          });
         }
       });
 
@@ -2909,16 +2758,15 @@ export function App() {
       const totalListeners = SUBCOLLECTION_KEYS.length + CHUNKED_KEYS.length;
 
       SUBCOLLECTION_KEYS.forEach((key) => {
-        const subCollectionRef = collection(db, 'dk_db_sync', key, 'records');
-        const unsub = onSnapshot(subCollectionRef, (querySnap) => {
-          const list: any[] = [];
-          querySnap.forEach((docSnap) => {
+        const docRef = doc(db, 'dk_db_sync', key);
+        const unsub = onSnapshot(docRef, (docSnap) => {
+          let list: any[] = [];
+          if (docSnap.exists()) {
             const d = docSnap.data();
-            if (d) {
-              d.id = docSnap.id;
-              list.push(d);
+            if (d && Array.isArray(d.data)) {
+              list = d.data;
             }
-          });
+          }
 
           let finalDisplayData = list;
           if (list.length === 0) {
