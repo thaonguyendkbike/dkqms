@@ -2,11 +2,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Primary Admin Superuser access - grant full access bypasses helper pre-fetches
+    // QMS Access Rules - Cho phép tất cả cán bộ đã đăng nhập xác thực được đọc và ghi dữ liệu QMS
     match /{document=**} {
-      allow read, write: if request.auth != null && 
-                            request.auth.token.email != null && 
-                            request.auth.token.email == 'thaonguyendkbike@gmail.com';
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
 
     // Allow anyone to read the connection check document to verify connection status

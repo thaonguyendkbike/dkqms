@@ -2532,17 +2532,54 @@ export function App() {
       const serverData: Record<string, any> = {};
       const legacyRootData: Record<string, any> = {};
 
-      // 2. Tải tất cả các tài liệu cấp cao nhất (thu thu thập cả dữ liệu lịch sử của SUBCOLLECTION_KEYS để tự động di chuyển)
+      // 2. Tải tất cả các tài liệu cấp cao nhất từ dk_db_sync
       try {
-        const snapshot = await getDocs(collection(db, 'dk_db_sync'));
+        const ALL_SYNC_KEYS = [
+          'dk_tasks', 'dk_kpis', 'dk_suppliers', 'dk_capas', 'dk_projects', 'dk_ptsp_tasks',
+          'dk_defects', 'dk_ecos', 'dk_copqs', 'dk_fmea', 'dk_custom_forms', 'dk_staff',
+          'dk_models', 'dk_dealers', 'dk_daily_logs', 'dk_equipments', 'dk_maintenance_logs',
+          'dk_equipment_incidents', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
+          'dk_oqc_handover_list', 'dk_oqc_color_changes', 'dk_oqc_part_codes', 'dk_supplier_production_audits',
+          'dk_weekly_plans', 'dk_monthly_plans', 'dk_weekly_assemblies_all', 'dk_monthly_assemblies_all',
+          'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
+          'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
+          'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
+          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions'
+        ];
+
         const rawDocMap: Record<string, any> = {};
-        snapshot.forEach((docSnap) => {
-          const d = docSnap.data();
-          rawDocMap[docSnap.id] = d;
-          if (d && d.updatedAt) {
-            serverTimestamps.current[docSnap.id] = d.updatedAt;
-          }
-        });
+
+        // Thử lấy toàn bộ qua getDocs trước
+        try {
+          const snapshot = await getDocs(collection(db, 'dk_db_sync'));
+          snapshot.forEach((docSnap) => {
+            const d = docSnap.data();
+            rawDocMap[docSnap.id] = d;
+            if (d && d.updatedAt) {
+              serverTimestamps.current[docSnap.id] = d.updatedAt;
+            }
+          });
+        } catch (colErr: any) {
+          console.warn("[getDocs Collection Notice]: Chuyển sang nạp trực tiếp từng phân hệ độc lập...", colErr?.message || colErr);
+        }
+
+        // Nếu getDocs không lấy được (hoặc bị giới hạn phân quyền trên Cloud), nạp trực tiếp từng Document
+        const missingKeys = ALL_SYNC_KEYS.filter(k => !rawDocMap[k]);
+        if (missingKeys.length > 0) {
+          const docPromises = missingKeys.map(async (key) => {
+            try {
+              const snap = await getDoc(doc(db, 'dk_db_sync', key));
+              if (snap.exists()) {
+                const d = snap.data();
+                rawDocMap[key] = d;
+                if (d && d.updatedAt) {
+                  serverTimestamps.current[key] = d.updatedAt;
+                }
+              }
+            } catch (singleErr) {}
+          });
+          await Promise.allSettled(docPromises);
+        }
 
         Object.keys(rawDocMap).forEach((key) => {
           if (key.includes('_chunk_')) {
