@@ -2224,13 +2224,14 @@ export function App() {
             });
           });
 
-          // Chỉ cập nhật tài liệu metadata đầu mục của phân hệ nếu có thay đổi thực sự xảy ra
+          // Cập nhật tài liệu Root của phân hệ kèm toàn bộ mảng dữ liệu để máy mới nạp được ngay lập tức
           if (changedOrAdded.length > 0 || deletedIds.length > 0) {
             ops.push({
               type: 'set',
               ref: docRef,
               data: {
                 hasSubcollection: true,
+                data: currentList,
                 count: currentList.length,
                 updatedBy: email,
                 updatedAt: timestamp,
@@ -2628,38 +2629,21 @@ export function App() {
         }
       }
 
-      // Reconcile local storage with Firestore server data on startup
-      const nonSubcollectionKeys = [
-        'dk_staff',
-        'dk_kpis',
-        'dk_suppliers',
-        'dk_projects',
-        'dk_copqs',
-        'dk_custom_forms',
-        'dk_models',
-        'dk_dealers',
-        'dk_equipments',
-        'dk_maintenance_logs',
-        'dk_equipment_incidents',
-        'dk_qc_detailed_tasks',
-        'dk_oqc_color_changes',
-        'dk_oqc_part_codes',
-        'dk_oqc_handover_list',
-        'dk_supplier_production_audits',
-        'dk_custom_pqc_items',
-        'dk_pqc_saved_history_templates',
-        'dk_custom_fpy_targets',
-        'dk_custom_sqc_items',
-        'dk_custom_iqc_notes',
-        'dk_iqc_saved_notes',
-        'dk_weekly_assemblies_all',
-        'dk_monthly_assemblies_all',
-        'dk_weekly_supplies_all',
-        'dk_monthly_supplies_all',
-        'dk_weekly_timelines_all',
-        'dk_monthly_timelines_all'
+      // Reconcile local storage with Firestore server data on startup (cho TẤT CẢ các phân hệ của hệ thống)
+      const ALL_RECONCILE_KEYS = [
+        'dk_tasks', 'dk_kpis', 'dk_suppliers', 'dk_capas', 'dk_projects', 'dk_ptsp_tasks',
+        'dk_defects', 'dk_ecos', 'dk_copqs', 'dk_fmea', 'dk_custom_forms', 'dk_staff',
+        'dk_models', 'dk_dealers', 'dk_daily_logs', 'dk_equipments', 'dk_maintenance_logs',
+        'dk_equipment_incidents', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
+        'dk_oqc_handover_list', 'dk_oqc_color_changes', 'dk_oqc_part_codes', 'dk_supplier_production_audits',
+        'dk_weekly_plans', 'dk_monthly_plans', 'dk_weekly_assemblies_all', 'dk_monthly_assemblies_all',
+        'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
+        'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
+        'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
+        'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions'
       ];
-      nonSubcollectionKeys.forEach((key) => {
+
+      ALL_RECONCILE_KEYS.forEach((key) => {
         const serverVal = serverData[key];
         const isServerEmpty = serverVal === undefined || serverVal === null || (Array.isArray(serverVal) && serverVal.length === 0);
         if (isServerEmpty) {
@@ -2669,6 +2653,9 @@ export function App() {
               const parsedLocal = JSON.parse(localSaved);
               if (parsedLocal && (!Array.isArray(parsedLocal) || parsedLocal.length > 0)) {
                 serverData[key] = parsedLocal;
+                if (SUBCOLLECTION_KEYS.includes(key)) {
+                  legacyRootData[key] = parsedLocal;
+                }
                 localStorage.setItem(`${key}_is_dirty`, 'true');
                 if (localDirtyKeys.current) {
                   localDirtyKeys.current.add(key);
