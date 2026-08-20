@@ -2892,8 +2892,21 @@ export function App() {
           });
 
           let finalDisplayData = list;
-          if (list.length === 0 && (serverData[key] || legacyRootData[key]) && Array.isArray(serverData[key] || legacyRootData[key])) {
-            finalDisplayData = serverData[key] || legacyRootData[key];
+          if (list.length === 0) {
+            const rootFallback = serverData[key] || legacyRootData[key];
+            if (Array.isArray(rootFallback) && rootFallback.length > 0) {
+              finalDisplayData = rootFallback;
+            } else {
+              const localSavedFallback = localStorage.getItem(key);
+              if (localSavedFallback) {
+                try {
+                  const parsedFallback = JSON.parse(localSavedFallback);
+                  if (Array.isArray(parsedFallback) && parsedFallback.length > 0) {
+                    finalDisplayData = parsedFallback;
+                  }
+                } catch (e) {}
+              }
+            }
           }
           if (key === 'dk_daily_logs' && Array.isArray(finalDisplayData)) {
             finalDisplayData = sanitizeDailyLogs(finalDisplayData);
@@ -2949,7 +2962,7 @@ export function App() {
           if (SUBCOLLECTION_KEYS.includes(key) && !isDirty && localSaved) {
             try {
               let parsedLocal = JSON.parse(localSaved);
-              if (Array.isArray(parsedLocal)) {
+              if (Array.isArray(parsedLocal) && parsedLocal.length > 0) {
                 const deletedKey = `${key}_deleted_ids`;
                 const deletedStr = localStorage.getItem(deletedKey);
                 const deletedIds = deletedStr ? JSON.parse(deletedStr) : [];
@@ -2960,7 +2973,7 @@ export function App() {
                   const itemId = getItemId(item, key, idx);
                   return !serverIds.has(itemId) && !deletedSet.has(itemId);
                 });
-                if (missingLocalItems.length > 0) {
+                if (missingLocalItems.length > 0 && list.length > 0) {
                   console.log(`[${key} Race Protection]: Preserving ${missingLocalItems.length} local records not yet present on Firestore server.`);
                   finalDisplayData = [...list, ...missingLocalItems];
 
@@ -3004,9 +3017,11 @@ export function App() {
           const serialized = JSON.stringify(finalDisplayData);
           lastSyncedValues.current[key] = JSON.stringify(sanitizedServerList); // Use sanitized server snapshot as sync baseline
           lastSeenValues.current[key] = serialized;
-          localStorage.setItem(key, serialized);
-          const serverTime = serverTimestamps.current[key] || new Date().toISOString();
-          localStorage.setItem(`${key}_last_synced_at`, serverTime);
+          if (finalDisplayData.length > 0) {
+            localStorage.setItem(key, serialized);
+            const serverTime = serverTimestamps.current[key] || new Date().toISOString();
+            localStorage.setItem(`${key}_last_synced_at`, serverTime);
+          }
 
           // Dispatch reload event for components listening to window storage changes in real-time
           try {
@@ -3047,21 +3062,6 @@ export function App() {
           else if (key === 'dk_fmea') setFmea(finalDisplayData);
           else if (key === 'dk_improvement_actions') setImprovementActions(finalDisplayData);
 
-          // Check if legacy data exists and auto-migrate if subcollection is empty (and user hasn't explicitly deleted or modified items)
-          if (['dk_iqc_records', 'dk_pqc_records', 'dk_defects', 'dk_fmea', 'dk_ecos', 'dk_capas', 'dk_daily_logs', 'dk_tasks', 'dk_ptsp_tasks', 'dk_weekly_plans', 'dk_monthly_plans', 'dk_qms_quality_planning_tasks'].includes(key)) {
-            const deletedStr = localStorage.getItem(`${key}_deleted_ids`);
-            const deletedCount = deletedStr ? JSON.parse(deletedStr).length : 0;
-            if (finalDisplayData.length === 0 && !isDirty && deletedCount === 0 && legacyRootData[key] && legacyRootData[key].length > 0) {
-              if (!attemptedMigrations.current.has(key)) {
-                attemptedMigrations.current.add(key);
-                console.warn(`[Auto-Migration Recovery]: Khôi phục ${legacyRootData[key].length} bản ghi ${key} từ Root Document.`);
-                setTimeout(() => {
-                  syncToServer(key, legacyRootData[key]);
-                }, 1000);
-              }
-            }
-          }
-
           // Mark this listener as initialized
           listenersInitialized++;
           if (listenersInitialized >= totalListeners) {
@@ -3071,35 +3071,44 @@ export function App() {
             setSyncLoaded(true);
           }
         }, (err) => {
-          console.error(`[onSnapshot Error] for ${key}:`, err);
-          // Fallback to local storage if permissions or connection fails
-          const localSaved = localStorage.getItem(key);
-          if (localSaved) {
-            try {
-              const parsed = JSON.parse(localSaved);
-              const sanitizedParsed = key === 'dk_daily_logs' ? sanitizeDailyLogs(parsed) : (key === 'dk_defects' ? sanitizeDefects(parsed) : parsed);
-
-              const serialized = JSON.stringify(sanitizedParsed);
-              lastSyncedValues.current[key] = serialized;
-              lastSeenValues.current[key] = serialized;
-
-              if (key === 'dk_tasks') setTasks(sanitizedParsed);
-              else if (key === 'dk_weekly_plans') setWeeklyPlans(sanitizedParsed);
-              else if (key === 'dk_monthly_plans') setMonthlyPlans(sanitizedParsed);
-              else if (key === 'dk_ptsp_tasks') setPtspTasks(resequencePtspTasks(sanitizedParsed));
-              else if (key === 'dk_capas') setCapas(sanitizedParsed);
-              else if (key === 'dk_ecos') setEcos(sanitizedParsed);
-              else if (key === 'dk_daily_logs') setDailyLogs(sanitizedParsed);
-              else if (key === 'dk_iqc_records') setIqcRecords(sanitizedParsed);
-              else if (key === 'dk_pqc_records') setPqcRecords(sanitizedParsed);
-              else if (key === 'dk_defects') setDefects(sanitizedParsed);
-              else if (key === 'dk_fmea') setFmea(sanitizedParsed);
-              else if (key === 'dk_improvement_actions') setImprovementActions(sanitizedParsed);
-            } catch (e) { }
+          console.warn(`[onSnapshot Notice] for ${key}:`, err?.message || err);
+          // Fallback to serverData / local storage if permissions or connection fails
+          const rootFallback = serverData[key] || legacyRootData[key];
+          let fallbackData = Array.isArray(rootFallback) && rootFallback.length > 0 ? rootFallback : null;
+          
+          if (!fallbackData) {
+            const localSaved = localStorage.getItem(key);
+            if (localSaved) {
+              try {
+                const parsed = JSON.parse(localSaved);
+                fallbackData = Array.isArray(parsed) ? parsed : null;
+              } catch (e) { }
+            }
           }
+
+          if (fallbackData) {
+            const sanitizedParsed = key === 'dk_daily_logs' ? sanitizeDailyLogs(fallbackData) : (key === 'dk_defects' ? sanitizeDefects(fallbackData) : fallbackData);
+            const serialized = JSON.stringify(sanitizedParsed);
+            lastSyncedValues.current[key] = serialized;
+            lastSeenValues.current[key] = serialized;
+
+            if (key === 'dk_tasks') setTasks(sanitizedParsed);
+            else if (key === 'dk_weekly_plans') setWeeklyPlans(sanitizedParsed);
+            else if (key === 'dk_monthly_plans') setMonthlyPlans(sanitizedParsed);
+            else if (key === 'dk_ptsp_tasks') setPtspTasks(resequencePtspTasks(sanitizedParsed));
+            else if (key === 'dk_capas') setCapas(sanitizedParsed);
+            else if (key === 'dk_ecos') setEcos(sanitizedParsed);
+            else if (key === 'dk_daily_logs') setDailyLogs(sanitizedParsed);
+            else if (key === 'dk_iqc_records') setIqcRecords(sanitizedParsed);
+            else if (key === 'dk_pqc_records') setPqcRecords(sanitizedParsed);
+            else if (key === 'dk_defects') setDefects(sanitizedParsed);
+            else if (key === 'dk_fmea') setFmea(sanitizedParsed);
+            else if (key === 'dk_improvement_actions') setImprovementActions(sanitizedParsed);
+          }
+
           listenersInitialized++;
           if (listenersInitialized >= totalListeners) {
-            setSyncStatus('error');
+            setSyncStatus('idle');
             setSyncLoaded(true);
           }
         });
