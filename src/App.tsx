@@ -1104,6 +1104,137 @@ export function App() {
     return JSON.stringify(clean1) === JSON.stringify(clean2);
   };
 
+  // =========================================================================
+  // THUẬT TOÁN HỢP NHẤT DỮ LIỆU THÔNG MINH (SMART ITEM & FIELD-LEVEL MERGE)
+  // Xử lý xung đột khi nhiều máy cùng sửa dữ liệu lúc offline / mất mạng
+  // =========================================================================
+  const smartMergeSingleItem = (serverItem: any, localItem: any, key: string): any => {
+    if (!serverItem) return localItem;
+    if (!localItem) return serverItem;
+    if (typeof serverItem !== 'object' || typeof localItem !== 'object') return localItem;
+
+    const serverTimeStr = serverItem.updatedAt || serverItem.lastModified || serverItem.checkedDate || serverItem.date || '';
+    const localTimeStr = localItem.updatedAt || localItem.lastModified || localItem.checkedDate || localItem.date || '';
+    const serverTime = serverTimeStr ? new Date(serverTimeStr).getTime() : 0;
+    const localTime = localTimeStr ? new Date(localTimeStr).getTime() : 0;
+
+    // Field-level merge: Khởi tạo với tất cả trường của serverItem
+    const mergedItem: any = { ...serverItem };
+
+    Object.keys(localItem).forEach((field) => {
+      const localVal = localItem[field];
+      const serverVal = serverItem[field];
+
+      if (localVal === undefined || localVal === null || localVal === '') {
+        if (serverVal !== undefined && serverVal !== null && serverVal !== '') {
+          mergedItem[field] = serverVal;
+        }
+        return;
+      }
+
+      if (serverVal === undefined || serverVal === null || serverVal === '') {
+        mergedItem[field] = localVal;
+        return;
+      }
+
+      // Khi cả 2 nơi cùng có giá trị:
+      if (JSON.stringify(localVal) === JSON.stringify(serverVal)) {
+        mergedItem[field] = localVal;
+      } else {
+        // Xung đột cùng 1 trường dữ liệu: Ưu tiên mốc thời gian sửa sau cùng
+        if (localTime >= serverTime) {
+          mergedItem[field] = localVal;
+        } else {
+          mergedItem[field] = serverVal;
+        }
+      }
+    });
+
+    // Cập nhật timestamp chuẩn cho bản ghi hợp nhất
+    const maxTime = Math.max(serverTime || 0, localTime || 0, Date.now());
+    mergedItem.updatedAt = new Date(maxTime).toISOString();
+    return mergedItem;
+  };
+
+  const smartMergeArrays = (serverList: any[], localList: any[], key: string): any[] => {
+    const rawServer = Array.isArray(serverList) ? serverList : [];
+    const rawLocal = Array.isArray(localList) ? localList : [];
+
+    if (rawServer.length === 0) return rawLocal;
+    if (rawLocal.length === 0) return rawServer;
+
+    const serverMap = new Map<string, any>();
+    const serverOrderedIds: string[] = [];
+    rawServer.forEach((item, idx) => {
+      const id = getItemId(item, key, idx);
+      if (id) {
+        serverMap.set(id, item);
+        serverOrderedIds.push(id);
+      }
+    });
+
+    const localMap = new Map<string, any>();
+    const localOrderedIds: string[] = [];
+    rawLocal.forEach((item, idx) => {
+      const id = getItemId(item, key, idx);
+      if (id) {
+        localMap.set(id, item);
+        localOrderedIds.push(id);
+      }
+    });
+
+    // Lấy danh sách ID đã bị xóa cục bộ
+    const deletedKey = `${key}_deleted_ids`;
+    let deletedSet = new Set<string>();
+    try {
+      const delStr = localStorage.getItem(deletedKey);
+      if (delStr) {
+        const arr = JSON.parse(delStr);
+        if (Array.isArray(arr)) deletedSet = new Set(arr);
+      }
+    } catch (e) { }
+
+    const mergedMap = new Map<string, any>();
+
+    // 1. Xử lý các bản ghi từ Server
+    serverOrderedIds.forEach((id) => {
+      if (deletedSet.has(id)) {
+        // Bản ghi đã bị xóa có chủ đích -> không khôi phục
+        return;
+      }
+      const sItem = serverMap.get(id);
+      const lItem = localMap.get(id);
+
+      if (lItem) {
+        // Cả 2 máy cùng có bản ghi -> Hợp nhất cấp thuộc tính (Field-Level Merge)
+        mergedMap.set(id, smartMergeSingleItem(sItem, lItem, key));
+      } else {
+        // Chỉ server có -> Giữ nguyên từ server
+        mergedMap.set(id, sItem);
+      }
+    });
+
+    // 2. Xử lý các bản ghi tạo mới ở Local lúc offline
+    localOrderedIds.forEach((id) => {
+      if (!mergedMap.has(id) && !deletedSet.has(id)) {
+        const lItem = localMap.get(id);
+        if (lItem) {
+          mergedMap.set(id, lItem);
+        }
+      }
+    });
+
+    let result = Array.from(mergedMap.values());
+
+    // Chuẩn hóa và làm sạch đặc thù phân hệ
+    if (key === 'dk_daily_logs') result = sanitizeDailyLogs(result);
+    else if (key === 'dk_oqc_records') result = deduplicateOqcRecords(result);
+    else if (key === 'dk_defects') result = sanitizeDefects(result);
+    else if (key === 'dk_ptsp_tasks') result = resequencePtspTasks(result);
+
+    return result;
+  };
+
   const getFriendlyModuleName = (key: string): string => {
     const names: Record<string, string> = {
       dk_tasks: 'Kế hoạch kiểm soát chất lượng (Tasks)',
@@ -1292,23 +1423,7 @@ export function App() {
         let localRecords = localSaved ? JSON.parse(localSaved) : [];
         if (!Array.isArray(localRecords)) localRecords = [];
 
-        let mergedList = [...localRecords];
-        const deletedKey = `${key}_deleted_ids`;
-        const deletedStr = localStorage.getItem(deletedKey);
-        const deletedIds = deletedStr ? JSON.parse(deletedStr) : [];
-        const deletedSet = new Set(Array.isArray(deletedIds) ? deletedIds : []);
-
-        const localIds = new Set(localRecords.map((item: any, idx: number) => getItemId(item, key, idx)));
-        const serverItemsToKeep = serverRecords.filter((item: any, idx: number) => {
-          const itemId = getItemId(item, key, idx);
-          return !localIds.has(itemId) && !deletedSet.has(itemId);
-        });
-
-        mergedList = [...mergedList, ...serverItemsToKeep];
-
-        if (key === 'dk_daily_logs') mergedList = sanitizeDailyLogs(mergedList);
-        else if (key === 'dk_oqc_records') mergedList = deduplicateOqcRecords(mergedList);
-        else if (key === 'dk_defects') mergedList = sanitizeDefects(mergedList);
+        let mergedList = smartMergeArrays(serverRecords, localRecords, key);
 
         const serialized = JSON.stringify(mergedList);
         localStorage.setItem(key, serialized);
@@ -1552,17 +1667,27 @@ export function App() {
           console.log(`[Batch Sync Chunked] Key: ${key}. Split ${currentList.length} records into ${totalChunks} documents.`);
         } else {
           // Lưu trữ tài liệu đơn siêu tối ưu cho toàn bộ phân hệ (1 write thay vì hàng ngàn writes)
+          let finalVal = val;
+          if (Array.isArray(val) && lastSyncedValues.current[key]) {
+            try {
+              const baseline = JSON.parse(lastSyncedValues.current[key]);
+              if (Array.isArray(baseline) && baseline.length > 0) {
+                finalVal = smartMergeArrays(baseline, val, key);
+              }
+            } catch (e) { }
+          }
+
           const payload: any = {
-            data: val,
+            data: finalVal,
             updatedBy: email,
             updatedAt: timestamp,
-            count: Array.isArray(val) ? val.length : 1
+            count: Array.isArray(finalVal) ? finalVal.length : 1
           };
-          if (key === 'dk_staff' && Array.isArray(val)) {
-            payload.allowedEmails = val
+          if (key === 'dk_staff' && Array.isArray(finalVal)) {
+            payload.allowedEmails = finalVal
               .map((item: any) => (item && item.email) ? item.email.toLowerCase().trim() : '')
               .filter(Boolean);
-            payload.allowedEditorEmails = val
+            payload.allowedEditorEmails = finalVal
               .filter((item: any) => item && (item.permission === 'edit' || item.permission === 'admin'))
               .map((item: any) => (item && item.email) ? item.email.toLowerCase().trim() : '')
               .filter(Boolean);
@@ -2803,32 +2928,7 @@ export function App() {
             try {
               let parsedLocal = JSON.parse(localSaved);
               if (!Array.isArray(parsedLocal)) parsedLocal = [];
-              if (key === 'dk_daily_logs' && Array.isArray(parsedLocal)) {
-                parsedLocal = sanitizeDailyLogs(parsedLocal);
-              }
-
-              // Smart merge: Keep all local changes (since it's dirty),
-              // but also keep any other server items that are not in local storage and not explicitly deleted.
-              const deletedKey = `${key}_deleted_ids`;
-              const deletedStr = localStorage.getItem(deletedKey);
-              const deletedIds = deletedStr ? JSON.parse(deletedStr) : [];
-              const deletedSet = new Set(Array.isArray(deletedIds) ? deletedIds : []);
-
-              const localIds = new Set(parsedLocal.map((item: any, idx: number) => getItemId(item, key, idx)));
-              const serverItemsToKeep = list.filter((item: any, idx: number) => {
-                const itemId = getItemId(item, key, idx);
-                return !localIds.has(itemId) && !deletedSet.has(itemId);
-              });
-
-              // Merge local items and valid server items to prevent data loss
-              finalDisplayData = [...parsedLocal, ...serverItemsToKeep];
-
-              // Clean up and prevent duplicates from building up during the merge by sanitizing the final merged list
-              if (key === 'dk_daily_logs' && Array.isArray(finalDisplayData)) {
-                finalDisplayData = sanitizeDailyLogs(finalDisplayData);
-              } else if (key === 'dk_defects' && Array.isArray(finalDisplayData)) {
-                finalDisplayData = sanitizeDefects(finalDisplayData);
-              }
+              finalDisplayData = smartMergeArrays(list, parsedLocal, key);
             } catch (e) {
               console.error(`[Smart Merge Error] for ${key}:`, e);
             }
@@ -3064,12 +3164,7 @@ export function App() {
 
           if (isDirty && localSaved) {
             try {
-              const localIds = new Set(parsedLocalData.map((item: any, idx: number) => getItemId(item, key, idx)));
-              const serverItemsToKeep = assembledList.filter((item: any, idx: number) => {
-                const itemId = getItemId(item, key, idx);
-                return !localIds.has(itemId);
-              });
-              finalDisplayData = deduplicateOqcRecords([...parsedLocalData, ...serverItemsToKeep]);
+              finalDisplayData = smartMergeArrays(assembledList, parsedLocalData, key);
             } catch (e) {
               console.error(`[Smart Merge Error] for ${key}:`, e);
             }
