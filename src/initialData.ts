@@ -1,13 +1,20 @@
 import { Task, KPI, Supplier, CAPA, PTSPProject, MarketDefect, ECOChange, COPQMetric, CustomForm, QualityStaff, DKBikeModel, EquipmentItem, MaintenanceLog, EquipmentIncident, Dealer } from './types';
 
 export const INITIAL_STAFF: QualityStaff[] = [
-  { id: 'STF-01', name: 'Nguyễn Xuân Thao', role: 'Trưởng phòng Quản lý chất lượng, phó bộ phận PTSP (QA/QC Head)', email: 'thaonguyendkbike@gmail.com', permission: 'edit' },
-  { id: 'STF-02', name: 'Hà Khắc Việt', role: 'Phụ trách kiểm tra đầu ra (OQC Section Lead)', email: 'khacviet.ha@dkbike.vn', permission: 'edit' },
-  { id: 'STF-03', name: 'Hoàng Văn Phấn', role: 'Tổ trưởng Tổ kiểm soát chất lượng lắp ráp trong dây chuyền (PQC Line Supervisor)', email: 'vanphan.hoang@dkbike.vn', permission: 'edit' },
-  { id: 'STF-04', name: 'Đoàn Anh Hùng', role: 'Chuyên viên kiểm tra, xử lý linh kiện đầu vào DK, đầu vào dây chuyền', email: 'anhhung.doan@dkbike.vn', permission: 'edit' },
+  { id: 'STF-01', name: 'Nguyễn Xuân Thao', role: 'Trưởng phòng Quản lý chất lượng, phó bộ phận PTSP (SQC, CAPA, IQC)', email: 'thaonguyendkbike@gmail.com', permission: 'edit' },
+  { id: 'STF-02', name: 'Hà Khắc Việt', role: 'Phụ trách kiểm tra đầu vào (IQC Section Lead)', email: 'khacvietls@gmail.com', permission: 'edit' },
+  { id: 'STF-03', name: 'Hoàng Văn Phấn', role: 'Tổ trưởng Tổ kiểm soát chất lượng lắp ráp trong dây chuyền (PQC Line Supervisor)', email: 'hoangphan250991@gmail.com', permission: 'edit' },
+  { id: 'STF-04', name: 'Đoàn Anh Hùng', role: 'Chuyên viên kiểm tra, xử lý linh kiện đầu vào DK, đầu vào dây chuyền', email: 'anhhung.doan@dkbike.vn', permission: 'view' },
   { id: 'STF-05', name: 'Liễu Tùng Lâm', role: 'Sát hạch viên, nhân viên kiểm thử OQC (OQC Quality Assurance)', email: 'tunglam.lieu@dkbike.vn', permission: 'view' },
-  { id: 'STF-06', name: 'Lành Xuân Hải', role: 'Sát hạch viên, nhân viên kiểm thử OQC', email: 'xuanhai.lanh@dkbike.vn', permission: 'view' },
-  { id: 'STF-07', name: 'Nguyễn Văn Diệm', role: 'Kỹ sư giám sát quy trình, kiểm soát lỗi công nghệ (SQC/IQC Specialist)', email: 'vandiem.nguyen@dkbike.vn', permission: 'view' }
+  { id: 'STF-06', name: 'Lành Xuân Hải', role: 'Sát hạch viên, nhân viên kiểm thử OQC (OQC Quality Assurance)', email: 'lanhxuanhai1990@gmail.com', permission: 'edit' },
+  { id: 'STF-07', name: 'Nguyễn Đức Linh', role: 'Phó Giám đốc Sản xuất', email: 'linh.nguyen@dkbike.vn', permission: 'edit' },
+  { id: 'STF-08', name: 'Nguyễn Văn Diệm', role: 'Bảo hành/sự cố thị trường', email: 'diemnguyenls@gmail.com', permission: 'view' },
+  { id: 'STF-09', name: 'Nguyễn Văn A', role: 'QC', email: 'ngutrenbanphim@gmail.com', permission: 'edit' },
+  { id: 'STF-10', name: 'Hoàng Thị Huệ', role: 'HCNS', email: 'hue.hoang@dkbike.vn', permission: 'view' },
+  { id: 'STF-11', name: 'Đoàn Anh Hùng', role: 'QC', email: 'doananhhung.22031981@gmail.com', permission: 'edit' },
+  { id: 'STF-12', name: 'MKT', role: 'MKT', email: 'dkbike.mkt@gmail.com', permission: 'view' },
+  { id: 'STF-13', name: 'Đoàn Minh Cương', role: 'Đăng kiểm', email: 'cuong.doan@dkbike.vn', permission: 'view' },
+  { id: 'STF-14', name: 'Trần Thanh Hiển', role: 'Kho TP', email: 'hieno8092@gmail.com', permission: 'edit' }
 ];
 
 export const INITIAL_MODELS: DKBikeModel[] = [

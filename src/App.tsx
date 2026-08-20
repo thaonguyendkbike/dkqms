@@ -2405,6 +2405,27 @@ export function App() {
 
     if (!firebaseUser) {
       console.log("[Firestore Sync]: Chưa đăng nhập Firebase. Khởi tạo dữ liệu từ LocalStorage.");
+      // Chủ động tải trước danh sách cán bộ dk_staff từ Cloud để hiển thị chính xác ngoài màn hình đăng nhập
+      getDoc(doc(db, 'dk_db_sync', 'dk_staff')).then((staffSnap) => {
+        if (staffSnap.exists()) {
+          const docData = staffSnap.data();
+          const list = Array.isArray(docData?.data) ? docData.data : (Array.isArray(docData) ? docData : []);
+          if (list.length > 0) {
+            const cleanedStaff = list.map((s: any) => {
+              if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
+                return { ...s, permission: 'edit' as const };
+              }
+              return s;
+            });
+            setStaff(cleanedStaff);
+            safeStorage.setItem('dk_staff', JSON.stringify(cleanedStaff));
+            try { localStorage.setItem('dk_staff', JSON.stringify(cleanedStaff)); } catch (e) {}
+          }
+        }
+      }).catch((e) => {
+        console.warn("[Pre-auth Staff Fetch Notice]:", e?.message || e);
+      });
+
       const localKeys = [
         'dk_tasks', 'dk_weekly_plans', 'dk_monthly_plans', 'dk_ptsp_tasks', 
         'dk_capas', 'dk_ecos', 'dk_daily_logs', 'dk_iqc_records', 
