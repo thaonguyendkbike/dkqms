@@ -6509,6 +6509,10 @@ export default function QualityInspectionRecords({
               }
             };
 
+            const handleClearAllDefectsFromCar = (record: OQCRecord) => {
+              handleQuickPass(record);
+            };
+
             const handleQuickPass = (record: OQCRecord, nextIndex?: number) => {
               if (typeof nextIndex === 'number' && nextIndex < paginatedRecords.length) {
                 const nextInput = document.getElementById(`kcs-pass-input-${nextIndex}`);
@@ -6525,13 +6529,11 @@ export default function QualityInspectionRecords({
               const updated = [...oqcRecords];
               const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
               if (index !== -1) {
-                const existingDefect = updated[index].defectDetail || record.defectDetail || '';
-                const existingRootCause = updated[index].rootCause || record.rootCause || '';
                 updated[index] = {
                   ...updated[index],
                   status: 'Đạt' as const,
-                  defectDetail: existingDefect,
-                  rootCause: existingRootCause,
+                  defectDetail: '',
+                  rootCause: '',
                   failedCount: 0,
                   checkTime: nowTime,
                   date: nowDate,
@@ -6579,18 +6581,33 @@ export default function QualityInspectionRecords({
               const updated = [...oqcRecords];
               const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
               if (index !== -1) {
-                updated[index] = {
-                  ...updated[index],
-                  status: 'Lỗi' as const,
-                  defectDetail: defectDetail || 'Lỗi KCS',
-                  rootCause: rootCause || '',
-                  failedCount: 1,
-                  checkTime: nowTime,
-                  date: nowDate,
-                  month: nowMonth,
-                  year: nowYear,
-                  checkedBy: 'Liễu Tùng Lâm'
-                };
+                if (!defectDetail || !defectDetail.trim()) {
+                  updated[index] = {
+                    ...updated[index],
+                    status: 'Đạt' as const,
+                    defectDetail: '',
+                    rootCause: '',
+                    failedCount: 0,
+                    checkTime: nowTime,
+                    date: nowDate,
+                    month: nowMonth,
+                    year: nowYear,
+                    checkedBy: 'Liễu Tùng Lâm'
+                  };
+                } else {
+                  updated[index] = {
+                    ...updated[index],
+                    status: 'Lỗi' as const,
+                    defectDetail: defectDetail,
+                    rootCause: rootCause || '',
+                    failedCount: 1,
+                    checkTime: nowTime,
+                    date: nowDate,
+                    month: nowMonth,
+                    year: nowYear,
+                    checkedBy: 'Liễu Tùng Lâm'
+                  };
+                }
               }
 
               saveOqcRecordsOptimized(updated);
@@ -7057,6 +7074,17 @@ export default function QualityInspectionRecords({
                                         </button>
                                       </span>
                                     ))}
+
+                                    {carDefects.length > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleClearAllDefectsFromCar(r)}
+                                        className="text-[10px] bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold px-1.5 py-0.5 rounded border border-rose-300 transition cursor-pointer shrink-0"
+                                        title="Xóa sạch toàn bộ lỗi của xe này và đặt lại thành Đạt"
+                                      >
+                                        🧹 Xóa hết
+                                      </button>
+                                    )}
 
                                     <div className="flex items-center gap-1 flex-1 min-w-[130px]">
                                       <AutocompleteInput
