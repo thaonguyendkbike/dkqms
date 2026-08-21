@@ -1046,6 +1046,10 @@ export default function QualityInspectionRecords({
   const [isPqcFilterExpanded, setIsPqcFilterExpanded] = useState<boolean>(false);
   const [isOqcFilterExpanded, setIsOqcFilterExpanded] = useState<boolean>(false);
 
+  // Multi-Defect Touch Picker Modal State
+  const [activeMultiDefectModalRecord, setActiveMultiDefectModalRecord] = useState<OQCRecord | null>(null);
+  const [selectedModalDefects, setSelectedModalDefects] = useState<string[]>([]);
+
   // High-Performance Zero-Latency Save Helper for OQC Quick Pass / Defect Entry
   const asyncOqcSaveTimer = useRef<any>(null);
   const saveOqcRecordsOptimized = useCallback((updated: OQCRecord[]) => {
@@ -6410,6 +6414,65 @@ export default function QualityInspectionRecords({
             const safeCurrentPage = Math.min(kcsCurrentPage, totalPages);
             const paginatedRecords = displayLsxRecords.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
 
+            const TOP_COMMON_DEFECTS = [
+              '🎨 Xước sơn sườn',
+              '⚡ Lỏng rắc cắm nguồn',
+              '🧱 Hở bavia nhựa',
+              '🚲 Phanh đĩa bó',
+              '💡 Đèn pha không sáng',
+              '🔊 Tiếng kêu lạ động cơ',
+              '⚡ Đồng hồ không lên',
+              '🔧 Lệch cổ phốt',
+              '🔋 Pin / Ắc quy ngắt'
+            ];
+
+            const DEFECT_CATEGORIES = [
+              {
+                category: '🎨 Sơn & Thân Vỏ',
+                items: ['Xước sơn sườn', 'Bong tróc sơn', 'Lệch màu nhựa', 'Hở bavia mộc', 'Bạc màu sơn', 'Móp sườn khung']
+              },
+              {
+                category: '⚡ Hệ Thống Điện & Cảm Biến',
+                items: ['Lỏng rắc cắm nguồn', 'Đèn pha không sáng', 'Đồng hồ không lên', 'Còi không kêu', 'Pin / Ắc quy ngắt', 'Động cơ ngắt chập chờn', 'Xi nhan không nháy']
+              },
+              {
+                category: '🔩 Cơ Khí & Khung Gầm',
+                items: ['Phanh đĩa bó', 'Lệch cổ phốt', 'Tiếng kêu lạ động cơ', 'Giảm xóc kêu', 'Lỏng ốc bánh xe', 'Cần phanh nặng', 'Xích tải chùng']
+              }
+            ];
+
+            const parseDefects = (str?: string): string[] => {
+              if (!str || !str.trim()) return [];
+              return str
+                .split(/[,;\n]/)
+                .map(s => s.trim())
+                .filter(Boolean);
+            };
+
+            const stringifyDefects = (list: string[]): string => {
+              const unique = Array.from(new Set(list.filter(Boolean)));
+              return unique.join(', ');
+            };
+
+            const handleAddDefectToCar = (record: OQCRecord, newDefect: string) => {
+              if (!newDefect || !newDefect.trim()) return;
+              const current = parseDefects(record.defectDetail);
+              const updatedList = Array.from(new Set([...current, newDefect.trim()]));
+              const updatedStr = stringifyDefects(updatedList);
+              handleQuickFail(record, updatedStr, record.rootCause || '');
+            };
+
+            const handleRemoveDefectFromCar = (record: OQCRecord, defectIndex: number) => {
+              const current = parseDefects(record.defectDetail);
+              const updatedList = current.filter((_, idx) => idx !== defectIndex);
+              const updatedStr = stringifyDefects(updatedList);
+              if (updatedList.length === 0) {
+                handleQuickPass(record);
+              } else {
+                handleQuickFail(record, updatedStr, record.rootCause || '');
+              }
+            };
+
             const handleQuickPass = (record: OQCRecord, nextIndex?: number) => {
               if (typeof nextIndex === 'number' && nextIndex < paginatedRecords.length) {
                 const nextInput = document.getElementById(`kcs-pass-input-${nextIndex}`);
@@ -6789,6 +6852,38 @@ export default function QualityInspectionRecords({
                   </span>
                 </div>
 
+                {/* Dải Thẻ Chọn Lỗi Nhanh 1-Chạm (Quick Defect Chips Bar) */}
+                <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-3 rounded-xl border border-indigo-900/50 shadow-md text-xs space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-white font-black text-xs">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                      <span>⚡ DẢI THẺ CHỌN LỖI NHANH 1-CHẠM (GẮN 1 HOẶC NHIỀU LỖI CHO XE)</span>
+                    </div>
+                    <span className="text-[10.5px] text-slate-300 italic">
+                      Click các nút bên dưới để cộng dồn thêm lỗi vào xe đang được chọn
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    {TOP_COMMON_DEFECTS.map((defectLabel, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          const targetCar = paginatedRecords.find(r => r.status === 'Lỗi') || paginatedRecords[0];
+                          if (targetCar) {
+                            handleAddDefectToCar(targetCar, defectLabel.replace(/^[^\s]+\s/, ''));
+                          } else {
+                            alert('Vui lòng thêm hoặc chọn xe trong bảng bên dưới để gán lỗi!');
+                          }
+                        }}
+                        className="px-2.5 py-1 bg-white/10 hover:bg-rose-600/80 text-white rounded-lg border border-white/15 text-[11px] font-semibold transition cursor-pointer active:scale-95 flex items-center gap-1 hover:border-rose-400"
+                      >
+                        <span>{defectLabel}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Table */}
                 <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
                   {paginatedRecords.length === 0 ? (
@@ -6807,8 +6902,8 @@ export default function QualityInspectionRecords({
                             <th scope="col" className="px-3 py-2.5 text-left">Model</th>
                             <th scope="col" className="px-3 py-2.5 text-left">Màu sắc</th>
                             <th scope="col" className="px-3 py-2.5 text-center w-32">KCS (Phím 1)</th>
-                            <th scope="col" className="px-3 py-2.5 text-left min-w-[200px]">Chi tiết lỗi</th>
-                            <th scope="col" className="px-3 py-2.5 text-left min-w-[160px]">Nguyên nhân</th>
+                            <th scope="col" className="px-3 py-2.5 text-left min-w-[260px]">Chi tiết lỗi (Thẻ lỗi 1, 2, 3)</th>
+                            <th scope="col" className="px-3 py-2.5 text-left min-w-[150px]">Nguyên nhân</th>
                             <th scope="col" className="px-3 py-2.5 text-center w-20">Giờ</th>
                             <th scope="col" className="px-3 py-2.5 text-center w-14">Xóa</th>
                           </tr>
@@ -6818,6 +6913,7 @@ export default function QualityInspectionRecords({
                             const globalIdx = (safeCurrentPage - 1) * pageSize + rowIdx + 1;
                             const isPassed = r.status === 'Đạt';
                             const isFailed = r.status === 'Lỗi';
+                            const carDefects = parseDefects(r.defectDetail);
 
                             return (
                               <tr
@@ -6893,29 +6989,64 @@ export default function QualityInspectionRecords({
                                   </div>
                                 </td>
 
-                                {/* Defect Autocomplete */}
-                                <td className="px-3 py-2">
-                                  <AutocompleteInput
-                                    value={r.defectDetail || ''}
-                                    placeholder={isPassed ? (r.defectDetail ? r.defectDetail : '-- Không lỗi --') : 'Gõ từ khóa lỗi...'}
-                                    disabled={false}
-                                    options={defectDictionary}
-                                    onCommit={val => {
-                                      if (r.status === 'Đạt') {
-                                        handleUpdateDefectNote(r, val);
-                                      } else {
-                                        handleQuickFail(r, val, r.rootCause || '');
-                                      }
-                                    }}
-                                    onChange={() => {}}
-                                    className={`w-full text-xs px-2 py-1 rounded border outline-hidden transition ${
-                                      isPassed
-                                        ? (r.defectDetail ? 'bg-amber-50/70 text-amber-900 border-amber-300 font-semibold' : 'bg-slate-50 text-slate-400 border-slate-200 focus:bg-white text-center')
-                                        : isFailed
-                                        ? 'bg-rose-50 text-rose-900 border-rose-300 focus:bg-white font-semibold'
-                                        : 'bg-slate-50 text-slate-700 border-slate-200 focus:bg-white'
-                                    }`}
-                                  />
+                                {/* Multi-Defect Tag Cell */}
+                                <td className="px-3 py-2 min-w-[260px]">
+                                  <div className="flex flex-wrap items-center gap-1.5 min-h-[30px]">
+                                    {carDefects.map((dItem, dIdx) => (
+                                      <span
+                                        key={dIdx}
+                                        className="inline-flex items-center gap-1 bg-rose-50 text-rose-900 border border-rose-300 text-[11px] font-bold px-2 py-0.5 rounded-full shadow-xs group transition hover:bg-rose-100"
+                                      >
+                                        <span>🔴 {dItem}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveDefectFromCar(r, dIdx)}
+                                          className="text-rose-400 hover:text-rose-900 font-extrabold ml-0.5 cursor-pointer leading-none text-xs"
+                                          title="Xóa lỗi này"
+                                        >
+                                          ×
+                                        </button>
+                                      </span>
+                                    ))}
+
+                                    <div className="flex items-center gap-1 flex-1 min-w-[130px]">
+                                      <AutocompleteInput
+                                        id={`kcs-defect-input-${rowIdx}`}
+                                        value=""
+                                        placeholder={
+                                          carDefects.length > 0
+                                            ? '+ Thêm lỗi...'
+                                            : (isPassed ? '-- Không lỗi --' : 'Gõ từ khóa lỗi...')
+                                        }
+                                        disabled={false}
+                                        options={defectDictionary}
+                                        onCommit={val => {
+                                          if (val && val.trim()) {
+                                            handleAddDefectToCar(r, val.trim());
+                                          }
+                                        }}
+                                        onChange={() => {}}
+                                        className={`w-full text-xs px-2 py-1 rounded border outline-hidden transition ${
+                                          isPassed
+                                            ? (r.defectDetail ? 'bg-amber-50/70 text-amber-900 border-amber-300 font-semibold' : 'bg-slate-50 text-slate-400 border-slate-200 focus:bg-white text-center')
+                                            : isFailed
+                                            ? 'bg-rose-50 text-rose-900 border-rose-300 focus:bg-white font-semibold'
+                                            : 'bg-slate-50 text-slate-700 border-slate-200 focus:bg-white'
+                                        }`}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveMultiDefectModalRecord(r);
+                                          setSelectedModalDefects(parseDefects(r.defectDetail));
+                                        }}
+                                        className="px-1.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded border border-rose-300 text-[10.5px] font-bold transition cursor-pointer flex items-center gap-0.5 shrink-0 active:scale-95"
+                                        title="Mở bảng nút chọn nhiều lỗi"
+                                      >
+                                        ⚡
+                                      </button>
+                                    </div>
+                                  </div>
                                 </td>
 
                                 {/* Root Cause Autocomplete */}
@@ -15601,6 +15732,167 @@ export default function QualityInspectionRecords({
                 className="bg-black/60 hover:bg-black/80 backdrop-blur text-white font-bold rounded-full h-8 w-8 flex items-center justify-center border border-white/25 transition shadow cursor-pointer text-sm animate-pulse"
               >
                 ✕
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OQC TOUCH-FRIENDLY MULTI-DEFECT PICKER MODAL */}
+      {activeMultiDefectModalRecord && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-[999] animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <span>⚡ Gán Nhiều Lỗi OQC Cho Xe Sêri:</span>
+                  <span className="font-mono text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                    {activeMultiDefectModalRecord.serialNo}
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Model: <strong>{activeMultiDefectModalRecord.model}</strong> | LSX: <strong>{activeMultiDefectModalRecord.lsx}</strong>
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveMultiDefectModalRecord(null)}
+                className="text-slate-400 hover:text-slate-700 font-bold text-lg p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Currently selected defects */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 block">
+                Danh sách lỗi đang chọn ({selectedModalDefects.length}):
+              </label>
+              <div className="flex flex-wrap items-center gap-1.5 p-3 bg-slate-50 rounded-xl border border-slate-200 min-h-[44px]">
+                {selectedModalDefects.length === 0 ? (
+                  <span className="text-xs text-slate-400 italic">Chưa chọn lỗi nào (Bấm chọn ở danh mục bên dưới)</span>
+                ) : (
+                  selectedModalDefects.map((def, idx) => (
+                    <span key={idx} className="inline-flex items-center gap-1 bg-rose-600 text-white font-bold text-xs px-2.5 py-1 rounded-full shadow-xs">
+                      <span>🔴 {def}</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedModalDefects(prev => prev.filter((_, i) => i !== idx))}
+                        className="hover:text-amber-200 font-black ml-1 cursor-pointer"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Categories */}
+            <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
+              {[
+                {
+                  category: '🎨 Sơn & Thân Vỏ',
+                  items: ['Xước sơn sườn', 'Bong tróc sơn', 'Lệch màu nhựa', 'Hở bavia mộc', 'Bạc màu sơn', 'Móp sườn khung']
+                },
+                {
+                  category: '⚡ Hệ Thống Điện & Cảm Biến',
+                  items: ['Lỏng rắc cắm nguồn', 'Đèn pha không sáng', 'Đồng hồ không lên', 'Còi không kêu', 'Pin / Ắc quy ngắt', 'Động cơ ngắt chập chờn', 'Xi nhan không nháy']
+                },
+                {
+                  category: '🔩 Cơ Khí & Khung Gầm',
+                  items: ['Phanh đĩa bó', 'Lệch cổ phốt', 'Tiếng kêu lạ động cơ', 'Giảm xóc kêu', 'Lỏng ốc bánh xe', 'Cần phanh nặng', 'Xích tải chùng']
+                }
+              ].map((catGroup, gIdx) => (
+                <div key={gIdx} className="space-y-1.5">
+                  <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-tight bg-slate-100 px-2.5 py-1 rounded">
+                    {catGroup.category}
+                  </h4>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {catGroup.items.map((item, itemIdx) => {
+                      const isSelected = selectedModalDefects.includes(item);
+                      return (
+                        <button
+                          key={itemIdx}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedModalDefects(prev => prev.filter(d => d !== item));
+                            } else {
+                              setSelectedModalDefects(prev => [...prev, item]);
+                            }
+                          }}
+                          className={`p-2 rounded-xl border text-left text-xs font-bold transition flex items-center justify-between cursor-pointer active:scale-95 ${
+                            isSelected
+                              ? 'bg-rose-50 border-rose-400 text-rose-900 shadow-xs'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>{item}</span>
+                          <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${isSelected ? 'bg-rose-600 text-white' : 'border border-slate-300 text-transparent'}`}>
+                            ✓
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  const unique = Array.from(new Set(selectedModalDefects.filter(Boolean)));
+                  const updatedStr = unique.join(', ');
+                  const targetSerial = activeMultiDefectModalRecord.serialNo ? activeMultiDefectModalRecord.serialNo.trim().toUpperCase() : '';
+                  const updated = [...oqcRecords];
+                  const index = updated.findIndex(r => r.id === activeMultiDefectModalRecord.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
+                  if (index !== -1) {
+                    const now = new Date();
+                    const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+                    const nowDate = now.toLocaleDateString('vi-VN');
+                    const nowMonth = now.getMonth() + 1;
+                    const nowYear = now.getFullYear();
+
+                    if (unique.length === 0) {
+                      updated[index] = {
+                        ...updated[index],
+                        status: 'Đạt' as const,
+                        defectDetail: '',
+                        failedCount: 0,
+                        checkTime: nowTime,
+                        date: nowDate,
+                        month: nowMonth,
+                        year: nowYear
+                      };
+                    } else {
+                      updated[index] = {
+                        ...updated[index],
+                        status: 'Lỗi' as const,
+                        defectDetail: updatedStr,
+                        failedCount: 1,
+                        checkTime: nowTime,
+                        date: nowDate,
+                        month: nowMonth,
+                        year: nowYear
+                      };
+                    }
+                  }
+                  saveOqcRecordsOptimized(updated);
+                  setActiveMultiDefectModalRecord(null);
+                }}
+                className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-rose-600/30 transition cursor-pointer active:scale-95 text-center"
+              >
+                💾 Lưu Danh Sách Lỗi Cho Xe ({selectedModalDefects.length} lỗi)
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveMultiDefectModalRecord(null)}
+                className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Hủy
               </button>
             </div>
           </div>
