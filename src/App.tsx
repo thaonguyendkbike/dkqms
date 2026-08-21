@@ -2991,11 +2991,6 @@ export function App() {
                   const parsedFallback = JSON.parse(localSavedFallback);
                   if (Array.isArray(parsedFallback) && parsedFallback.length > 0) {
                     finalDisplayData = parsedFallback;
-                    // Tự động đẩy dữ liệu cục bộ lên Cloud nếu server phân hệ này đang trống
-                    localStorage.setItem(`${key}_is_dirty`, 'true');
-                    if (localDirtyKeys.current) localDirtyKeys.current.add(key);
-                    pendingSyncBuffer.current[key] = parsedFallback;
-                    setTimeout(() => triggerCloudSynchronization(), 800);
                   }
                 } catch (e) {}
               }
@@ -3051,12 +3046,6 @@ export function App() {
                   } else if (key === 'dk_defects' && Array.isArray(finalDisplayData)) {
                     finalDisplayData = sanitizeDefects(finalDisplayData);
                   }
-
-                  // Tự động đẩy các bản ghi cục bộ chưa có trên Server lên Cloud Firestore
-                  localStorage.setItem(`${key}_is_dirty`, 'true');
-                  if (localDirtyKeys.current) localDirtyKeys.current.add(key);
-                  pendingSyncBuffer.current[key] = finalDisplayData;
-                  setTimeout(() => triggerCloudSynchronization(), 1000);
                 }
               }
             } catch (e) {
