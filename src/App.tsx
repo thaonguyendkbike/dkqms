@@ -1925,7 +1925,7 @@ export function App() {
     // AUTO-DETECT DELETED RECORD IDs
     if (Array.isArray(data)) {
       try {
-        const previousStored = localStorage.getItem(key) || lastSyncedValues.current[key];
+        const previousStored = lastSeenValues.current[key] || lastSyncedValues.current[key] || localStorage.getItem(key);
         if (previousStored) {
           const prevArray = JSON.parse(previousStored);
           if (Array.isArray(prevArray)) {
@@ -3032,6 +3032,20 @@ export function App() {
               console.error(`[${key} Race Protection Error]:`, e);
             }
           }
+
+          // Absolutely enforce deleted_ids filtering on finalDisplayData so deleted records NEVER reappear!
+          try {
+            const deletedKey = `${key}_deleted_ids`;
+            const deletedStr = localStorage.getItem(deletedKey);
+            const deletedIds = deletedStr ? JSON.parse(deletedStr) : [];
+            if (Array.isArray(deletedIds) && deletedIds.length > 0) {
+              const deletedSet = new Set(deletedIds);
+              finalDisplayData = finalDisplayData.filter((item: any, idx: number) => {
+                const itemId = getItemId(item, key, idx);
+                return !deletedSet.has(itemId);
+              });
+            }
+          } catch (e) {}
 
           // Safe clearing of the dirty flag once the server has received all our local writes (completely caught up)
           const sanitizedServerList = key === 'dk_daily_logs'

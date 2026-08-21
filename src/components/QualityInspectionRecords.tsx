@@ -51,6 +51,7 @@ import {
 } from 'lucide-react';
 import { IQCRecord, PQCRecord, OQCRecord, OqcColorChangeRecord, OqcPartCodeItem, INITIAL_OQC_PART_CODES } from '../qualityTestData';
 import { safeStorage } from '../safeStorage';
+import { trackDeletedId } from '../App';
 import { compressImageFile } from '../imageCompressor';
 import { Supplier, PTSPTask, MarketDefect, CAPA, SupplierProductionAudit, MonthlyPlan } from '../types';
 import { DailyLogRecord } from '../dailyLogsData';
@@ -3725,7 +3726,14 @@ export default function QualityInspectionRecords({
 
   const handleDeleteIqcClick = (id: string) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa phiếu kiểm nhập IQC này không? Hành động này không thể khôi phục.')) {
-      setIqcRecords(iqcRecords.filter(r => r.id !== id));
+      trackDeletedId('dk_iqc_records', id);
+      const updated = iqcRecords.filter(r => r.id !== id);
+      setIqcRecords(updated);
+      safeStorage.setItem('dk_iqc_records', JSON.stringify(updated));
+      try { localStorage.setItem('dk_iqc_records_is_dirty', 'true'); } catch (e) {}
+      if (typeof (window as any).syncToServer === 'function') {
+        (window as any).syncToServer('dk_iqc_records', updated);
+      }
       alert('Đã xóa phiếu kiểm nhập IQC thành công! Hệ thống đang đồng bộ tự động lên Cloud...');
     }
   };
@@ -3751,17 +3759,23 @@ export default function QualityInspectionRecords({
 
   const handleDeletePqcClick = (id: string) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa bản ghi kiểm soát công đoạn PQC này không? Hành động này không thể khôi phục.')) {
-      setPqcRecords(pqcRecords.filter(r => r.id !== id));
+      trackDeletedId('dk_pqc_records', id);
+      const updated = pqcRecords.filter(r => r.id !== id);
+      setPqcRecords(updated);
+      safeStorage.setItem('dk_pqc_records', JSON.stringify(updated));
+      try { localStorage.setItem('dk_pqc_records_is_dirty', 'true'); } catch (e) {}
+      if (typeof (window as any).syncToServer === 'function') {
+        (window as any).syncToServer('dk_pqc_records', updated);
+      }
       alert('Đã xóa bản ghi PQC thành công! Hệ thống đang đồng bộ tự động lên Cloud...');
     }
   };
 
   const handleDeleteOqcClick = (id: string) => {
     if (window.confirm('Bạn có chắc chắn muốn xóa bản ghi đóng thùng OQC này không? Hành động này không thể khôi phục.')) {
+      trackDeletedId('dk_oqc_records', id);
       const updated = oqcRecords.filter(r => r.id !== id);
-      setOqcRecords(updated);
-      safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-      try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+      saveOqcRecordsOptimized(updated);
       alert('Đã xóa bản ghi OQC thành công! Hệ thống đang đồng bộ tự động lên Cloud...');
     }
   };
@@ -3772,7 +3786,14 @@ export default function QualityInspectionRecords({
       return;
     }
     if (window.confirm(`Bạn có chắc chắn muốn xóa hàng loạt ${selectedIqcIds.length} phiếu IQC đã chọn không?`)) {
-      setIqcRecords(iqcRecords.filter(r => !selectedIqcIds.includes(r.id)));
+      selectedIqcIds.forEach(id => trackDeletedId('dk_iqc_records', id));
+      const updated = iqcRecords.filter(r => !selectedIqcIds.includes(r.id));
+      setIqcRecords(updated);
+      safeStorage.setItem('dk_iqc_records', JSON.stringify(updated));
+      try { localStorage.setItem('dk_iqc_records_is_dirty', 'true'); } catch (e) {}
+      if (typeof (window as any).syncToServer === 'function') {
+        (window as any).syncToServer('dk_iqc_records', updated);
+      }
       setSelectedIqcIds([]);
       alert(`Đã xóa thành công ${selectedIqcIds.length} phiếu IQC! Hệ thống đang đồng bộ tự động lên Cloud...`);
     }
@@ -3784,10 +3805,9 @@ export default function QualityInspectionRecords({
       return;
     }
     if (window.confirm(`Bạn có chắc chắn muốn xóa hàng loạt ${selectedOqcIds.length} bản ghi OQC đã chọn không?`)) {
+      selectedOqcIds.forEach(id => trackDeletedId('dk_oqc_records', id));
       const updated = oqcRecords.filter(r => !selectedOqcIds.includes(r.id));
-      setOqcRecords(updated);
-      safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-      try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+      saveOqcRecordsOptimized(updated);
       setSelectedOqcIds([]);
       alert(`Đã xóa thành công ${selectedOqcIds.length} bản ghi OQC! Hệ thống đang đồng bộ tự động lên Cloud...`);
     }
@@ -6479,6 +6499,9 @@ export default function QualityInspectionRecords({
 
             const handleDeleteCar = (record: OQCRecord) => {
               if (!window.confirm(`Xóa xe Sêri ${record.serialNo} khỏi hệ thống?`)) return;
+              if (record.id) {
+                trackDeletedId('dk_oqc_records', record.id);
+              }
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = oqcRecords.filter(r => r.id !== record.id && (!targetSerial || !r.serialNo || r.serialNo.trim().toUpperCase() !== targetSerial));
               saveOqcRecordsOptimized(updated);
