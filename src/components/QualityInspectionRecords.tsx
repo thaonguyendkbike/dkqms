@@ -1045,6 +1045,29 @@ export default function QualityInspectionRecords({
   const [isPqcFilterExpanded, setIsPqcFilterExpanded] = useState<boolean>(false);
   const [isOqcFilterExpanded, setIsOqcFilterExpanded] = useState<boolean>(false);
 
+  // High-Performance Zero-Latency Save Helper for OQC Quick Pass / Defect Entry
+  const asyncOqcSaveTimer = useRef<any>(null);
+  const saveOqcRecordsOptimized = useCallback((updated: OQCRecord[]) => {
+    // 1. Phản hồi giao diện tức thì (< 1ms UI update)
+    if (typeof (React as any).startTransition === 'function') {
+      (React as any).startTransition(() => {
+        setOqcRecords(updated);
+      });
+    } else {
+      setOqcRecords(updated);
+    }
+
+    // 2. Chuyển thao tác nén JSON và ghi lưu đĩa xuống background macro-task (debounced 200ms)
+    if (asyncOqcSaveTimer.current) clearTimeout(asyncOqcSaveTimer.current);
+    asyncOqcSaveTimer.current = setTimeout(() => {
+      safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+      try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+      if (typeof (window as any).syncToServer === 'function') {
+        (window as any).syncToServer('dk_oqc_records', updated);
+      }
+    }, 200);
+  }, [setOqcRecords]);
+
   // Check if there is an active IQC plan in Lập kế hoạch (weeklyPlans)
   const hasIqcPlanInSystem = useMemo(() => {
     return (weeklyPlans || []).some(plan => 
@@ -6399,12 +6422,7 @@ export default function QualityInspectionRecords({
                 };
               }
 
-              setOqcRecords(updated);
-              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-              try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
-              if (typeof (window as any).syncToServer === 'function') {
-                (window as any).syncToServer('dk_oqc_records', updated);
-              }
+              saveOqcRecordsOptimized(updated);
             };
 
             const handleUpdateDefectNote = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
@@ -6428,12 +6446,7 @@ export default function QualityInspectionRecords({
                   year: nowYear
                 };
               }
-              setOqcRecords(updated);
-              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-              try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
-              if (typeof (window as any).syncToServer === 'function') {
-                (window as any).syncToServer('dk_oqc_records', updated);
-              }
+              saveOqcRecordsOptimized(updated);
             };
 
             const handleQuickFail = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
@@ -6461,24 +6474,14 @@ export default function QualityInspectionRecords({
                 };
               }
 
-              setOqcRecords(updated);
-              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-              try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
-              if (typeof (window as any).syncToServer === 'function') {
-                (window as any).syncToServer('dk_oqc_records', updated);
-              }
+              saveOqcRecordsOptimized(updated);
             };
 
             const handleDeleteCar = (record: OQCRecord) => {
               if (!window.confirm(`Xóa xe Sêri ${record.serialNo} khỏi hệ thống?`)) return;
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = oqcRecords.filter(r => r.id !== record.id && (!targetSerial || !r.serialNo || r.serialNo.trim().toUpperCase() !== targetSerial));
-              setOqcRecords(updated);
-              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-              try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
-              if (typeof (window as any).syncToServer === 'function') {
-                (window as any).syncToServer('dk_oqc_records', updated);
-              }
+              saveOqcRecordsOptimized(updated);
             };
 
             const handleBatchPassAllPending = () => {
@@ -6515,9 +6518,7 @@ export default function QualityInspectionRecords({
                 }
                 return r;
               });
-              React.startTransition(() => {
-                setOqcRecords(updated);
-              });
+              saveOqcRecordsOptimized(updated);
             };
 
             return (
