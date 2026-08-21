@@ -1051,7 +1051,41 @@ export default function QualityInspectionRecords({
   const [selectedModalDefects, setSelectedModalDefects] = useState<string[]>([]);
 
   // High-Performance Zero-Latency Save Helper for OQC Quick Pass / Defect Entry
+  // Immediate UI (<1ms) & LocalStorage (<5ms) save; Debounced 30s Batch Cloud Push
   const asyncOqcSaveTimer = useRef<any>(null);
+  const latestOqcRecordsRef = useRef<OQCRecord[]>(oqcRecords);
+
+  useEffect(() => {
+    latestOqcRecordsRef.current = oqcRecords;
+  }, [oqcRecords]);
+
+  const flushOqcSaveToCloud = useCallback(() => {
+    if (asyncOqcSaveTimer.current) {
+      clearTimeout(asyncOqcSaveTimer.current);
+      asyncOqcSaveTimer.current = null;
+    }
+    const currentList = latestOqcRecordsRef.current;
+    if (currentList && currentList.length > 0) {
+      if (typeof (window as any).syncToServer === 'function') {
+        (window as any).syncToServer('dk_oqc_records', currentList);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (asyncOqcSaveTimer.current) {
+        flushOqcSaveToCloud();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+    };
+  }, [flushOqcSaveToCloud]);
+
   const saveOqcRecordsOptimized = useCallback((updated: OQCRecord[]) => {
     // 1. Phản hồi giao diện tức thì (< 1ms UI update)
     if (typeof (React as any).startTransition === 'function') {
@@ -1062,15 +1096,17 @@ export default function QualityInspectionRecords({
       setOqcRecords(updated);
     }
 
-    // 2. Chuyển thao tác nén JSON và ghi lưu đĩa xuống background macro-task (debounced 200ms)
+    // 2. Ghi đĩa cục bộ an toàn lập tức (< 5ms Local Storage Save)
+    safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+    try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+
+    // 3. Gom đẩy Cloud ngầm sau 30 giây (Debounced 30s Batch Push)
     if (asyncOqcSaveTimer.current) clearTimeout(asyncOqcSaveTimer.current);
     asyncOqcSaveTimer.current = setTimeout(() => {
-      safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-      try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
       if (typeof (window as any).syncToServer === 'function') {
         (window as any).syncToServer('dk_oqc_records', updated);
       }
-    }, 200);
+    }, 30000);
   }, [setOqcRecords]);
 
   // Check if there is an active IQC plan in Lập kế hoạch (weeklyPlans)
@@ -6847,9 +6883,22 @@ export default function QualityInspectionRecords({
                     <span className="text-slate-500">Chờ: <strong className="font-mono font-bold">{pendingLsxCars}</strong></span>
                     <span className="text-blue-700 font-bold">Tỉ lệ đạt: <strong className="font-mono font-bold">{lsxYield}%</strong></span>
                   </div>
-                  <span className="text-[11px] text-slate-400">
-                    Gõ <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-[10px]">1</kbd> = Đạt • Tự động nhảy dòng
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[11px] text-slate-400">
+                      Gõ <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-[10px]">1</kbd> = Đạt • Tự động nhảy dòng
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        flushOqcSaveToCloud();
+                        alert('Đã đẩy ép đồng bộ toàn bộ dữ liệu OQC lên Cloud thành công!');
+                      }}
+                      className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 text-[11px] font-bold transition cursor-pointer flex items-center gap-1 active:scale-95"
+                      title="Gom đẩy toàn bộ dữ liệu OQC chưa đồng bộ lên Cloud lập tức"
+                    >
+                      ☁️ Đồng bộ Cloud ngay
+                    </button>
+                  </div>
                 </div>
 
                 {/* Dải Thẻ Chọn Lỗi Nhanh 1-Chạm (Quick Defect Chips Bar) */}
