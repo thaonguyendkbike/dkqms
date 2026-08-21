@@ -55,10 +55,10 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
             <div className="space-y-2">
               <h2 className="text-lg font-black text-white uppercase tracking-tight">
-                Hệ Thống Đang Tự Động Phục Hồi
+                Hệ Thống Đang Làm Mới
               </h2>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Đã phát hiện xung đột hiển thị trên thiết bị. Dữ liệu của anh đã được lưu trữ an toàn trong bộ nhớ.
+                Ứng dụng gặp sự cố khởi tạo tạm thời. Dữ liệu của anh đã được bảo vệ an toàn 100% trong bộ nhớ.
               </p>
             </div>
 
