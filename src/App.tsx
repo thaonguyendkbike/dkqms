@@ -2941,28 +2941,8 @@ export function App() {
       setSyncStatus('idle');
       setSyncLoaded(true);
 
-      // Reconcile and check for conflicts on startup before snapshot registration
+      // Tự động gộp và đồng bộ êm ái ngầm mà không cần bật Popup cảnh báo giả định
       const initialConflicts: string[] = [];
-      SUBCOLLECTION_KEYS.forEach((key) => {
-        const isDirty = localStorage.getItem(`${key}_is_dirty`) === 'true';
-        if (isDirty) {
-          const serverTime = serverTimestamps.current[key];
-          const localSyncedTime = localStorage.getItem(`${key}_last_synced_at`);
-          if (serverTime && localSyncedTime) {
-            const serverDate = new Date(serverTime).getTime();
-            const localDate = new Date(localSyncedTime).getTime();
-            if (serverDate > localDate + 5000) {
-              initialConflicts.push(key);
-            }
-          }
-        }
-      });
-
-      if (initialConflicts.length > 0) {
-        console.warn("[Startup Conflicts Detected]:", initialConflicts);
-        setConflictKeys(initialConflicts);
-        setConflictModalOpen(true);
-      }
 
       // Now set up real-time onSnapshot listeners for each SUBCOLLECTION_KEYS and CHUNKED_KEYS
       let listenersInitialized = 0;
