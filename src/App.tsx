@@ -1984,7 +1984,7 @@ export function App() {
 
     syncDebounceTimer.current = setTimeout(() => {
       triggerCloudSynchronization();
-    }, 850);
+    }, 3000);
   };
 
   const getUnsyncedChanges = () => {
