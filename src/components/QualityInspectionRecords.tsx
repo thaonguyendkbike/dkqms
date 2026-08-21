@@ -6918,37 +6918,6 @@ export default function QualityInspectionRecords({
                   </div>
                 </div>
 
-                {/* Dải Thẻ Chọn Lỗi Nhanh 1-Chạm (Quick Defect Chips Bar) */}
-                <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-3 rounded-xl border border-indigo-900/50 shadow-md text-xs space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 text-white font-black text-xs">
-                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
-                      <span>⚡ DẢI THẺ CHỌN LỖI NHANH 1-CHẠM (GẮN 1 HOẶC NHIỀU LỖI CHO XE)</span>
-                    </div>
-                    <span className="text-[10.5px] text-slate-300 italic">
-                      Click các nút bên dưới để cộng dồn thêm lỗi vào xe đang được chọn
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                    {TOP_COMMON_DEFECTS.map((defectLabel, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          const targetCar = paginatedRecords.find(r => r.status === 'Lỗi') || paginatedRecords[0];
-                          if (targetCar) {
-                            handleAddDefectToCar(targetCar, defectLabel.replace(/^[^\s]+\s/, ''));
-                          } else {
-                            alert('Vui lòng thêm hoặc chọn xe trong bảng bên dưới để gán lỗi!');
-                          }
-                        }}
-                        className="px-2.5 py-1 bg-white/10 hover:bg-rose-600/80 text-white rounded-lg border border-white/15 text-[11px] font-semibold transition cursor-pointer active:scale-95 flex items-center gap-1 hover:border-rose-400"
-                      >
-                        <span>{defectLabel}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
 
                 {/* Table */}
                 <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
