@@ -1098,7 +1098,7 @@ export function App() {
     if (typeof obj === 'object') {
       const cleaned: any = {};
       Object.keys(obj).sort().forEach(k => {
-        if (isSubcollection && k === 'id') return; // Bypass Firestore/runtime 'id' key for payload comparisons only on true subcollections
+        if (isSubcollection && (k === 'id' || k === 'updatedAt' || k === 'lastModified')) return; // Bypass Firestore/runtime 'id' and timestamp keys for payload comparisons only on true subcollections
         const val = obj[k];
         if (val !== undefined && val !== null && val !== '') {
           cleaned[k] = cleanAndSortObjectSubcollection(val, isSubcollection);
@@ -1162,9 +1162,13 @@ export function App() {
       }
     });
 
-    // Cập nhật timestamp chuẩn cho bản ghi hợp nhất
-    const maxTime = Math.max(serverTime || 0, localTime || 0, Date.now());
-    mergedItem.updatedAt = new Date(maxTime).toISOString();
+    // Cập nhật timestamp chuẩn cho bản ghi hợp nhất (giữ nguyên mốc cũ nếu không có sửa đổi thực sự)
+    const maxTime = Math.max(serverTime || 0, localTime || 0);
+    if (maxTime > 0) {
+      mergedItem.updatedAt = new Date(maxTime).toISOString();
+    } else if (serverTimeStr || localTimeStr) {
+      mergedItem.updatedAt = serverTimeStr || localTimeStr;
+    }
     return mergedItem;
   };
 
@@ -1602,6 +1606,12 @@ export function App() {
 
     setSyncStatus('syncing');
 
+    // Timeout an toàn 15 giây tránh treo trạng thái syncing nếu mạng chờ quá lâu
+    const safetyTimeout = setTimeout(() => {
+      console.warn("[Cloud Sync Safety Timeout]: Quá 15s chưa nhận phản hồi từ server, giải phóng trạng thái hiển thị.");
+      setSyncStatus((prev) => (prev === 'syncing' ? 'idle' : prev));
+    }, 15000);
+
     try {
       const email = auth.currentUser.email || 'Hệ thống Quản lý Chất lượng DKBike';
       const timestamp = new Date().toISOString();
@@ -1725,20 +1735,15 @@ export function App() {
 
       console.log(`[Batch Cloud Sync]: Đã đồng bộ thành công ${dirtyKeys.length} khóa lên Firestore`);
 
-      // CẬP NHẬT LOGIC LOCALSTORAGE: Chỉ đồng bộ trạng thái sau khi Firestore xác nhận đã ghi thành công.
+      // CẬP NHẬT LOGIC LOCALSTORAGE: Đã ghi thành công lên Firestore Server -> giải phóng cờ bẩn an toàn
       dirtyKeys.forEach((key) => {
         const val = dirtyItems[key];
-        const isSubcollection = SUBCOLLECTION_KEYS.includes(key);
-
-        if (!isSubcollection) {
-          localStorage.setItem(`${key}_is_dirty`, 'false'); // Hủy cờ dirty ngay lập tức cho non-subcollections
-          localStorage.setItem(`${key}_deleted_ids`, JSON.stringify([]));
+        localStorage.setItem(`${key}_is_dirty`, 'false');
+        localStorage.setItem(`${key}_deleted_ids`, JSON.stringify([]));
+        if (localDirtyKeys.current) {
           localDirtyKeys.current.delete(key);
-        } else {
-          // Đối với subcollection, chúng ta KHÔNG hủy cờ bẩn ngay lập tức để tránh cuộc đua dữ liệu (race condition) với snapshot trễ.
-          // Cờ bẩn sẽ được hủy một cách an toàn bên trong listener onSnapshot khi snapshot thực tế từ server gửi về trùng khớp hoàn toàn với dữ liệu cục bộ.
-          console.log(`[Batch Cloud Sync]: Trì hoãn việc hủy cờ dirty cho subcollection '${key}'. Sẽ được xử lý bởi listener onSnapshot.`);
         }
+
         const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
         if (!isMetadataKey) {
           localStorage.setItem(key, JSON.stringify(val));
@@ -1770,6 +1775,8 @@ export function App() {
         lastSeenValues.current[key] = JSON.stringify(val);
       });
 
+      clearTimeout(safetyTimeout);
+
       // Successfully synced: transition immediately to green, and back to idle after 1.5s
       const syncTimeFormatted = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       setLastSyncedTime(syncTimeFormatted);
@@ -1782,11 +1789,14 @@ export function App() {
         setSyncStatus('idle');
       }, 1800);
     } catch (err: any) {
+      clearTimeout(safetyTimeout);
       console.error("[Debounced Cloud Sync Error]:", err);
       // Đánh dấu lại các khóa bị lỗi là dirty để có thể thử lại lúc khác hoặc chặn bị ghi đè thô bạo
       dirtyKeys.forEach((key) => {
         localStorage.setItem(`${key}_is_dirty`, 'true');
-        localDirtyKeys.current.add(key); // Đánh dấu lại bẩn trong bộ nhớ trong khi lỗi
+        if (localDirtyKeys.current) {
+          localDirtyKeys.current.add(key); // Đánh dấu lại bẩn trong bộ nhớ trong khi lỗi
+        }
       });
       setSyncStatus('error');
 
@@ -2489,6 +2499,13 @@ export function App() {
     setSyncStatus('syncing');
 
     const loadFromFirestore = async () => {
+      // Timeout an toàn 15s khởi động tránh treo trạng thái syncing
+      const startupTimeout = setTimeout(() => {
+        setSyncSource('local');
+        setSyncStatus('idle');
+        setSyncLoaded(true);
+      }, 15000);
+
       // PROACTIVELY TEST QUOTA RESTORATION ON STARTUP IF IT WAS PREVIOUSLY EXCEEDED
       if (isFirebaseQuotaExceeded.current) {
         console.log("[Quota Recovery Check]: Đang kiểm tra khôi phục hạn ngạch Google Firestore...");
@@ -2894,6 +2911,7 @@ export function App() {
       }, 1000);
 
       // Kích hoạt ngay trạng thái tải hoàn tất để hiển thị toàn bộ số liệu trên màn hình không phải chờ đợi
+      clearTimeout(startupTimeout);
       setSyncSource('firestore');
       setSyncStatus('idle');
       setSyncLoaded(true);
