@@ -1718,8 +1718,8 @@ export function App() {
         }
       });
 
-      // Commit operations in batches of 50 (prevents network timeouts on massive document payloads)
-      const CHUNK_LIMIT = 50;
+      // Commit operations in batches of 15 (prevents network timeouts on massive document payloads)
+      const CHUNK_LIMIT = 15;
       for (let i = 0; i < ops.length; i += CHUNK_LIMIT) {
         const chunk = ops.slice(i, i + CHUNK_LIMIT);
         const chunkBatch = writeBatch(db);
@@ -1730,7 +1730,10 @@ export function App() {
             chunkBatch.delete(op.ref);
           }
         });
-        await chunkBatch.commit();
+        await Promise.race([
+          chunkBatch.commit(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Batch Commit Timeout (10s)")), 10000))
+        ]);
       }
 
       console.log(`[Batch Cloud Sync]: Đã đồng bộ thành công ${dirtyKeys.length} khóa lên Firestore`);
@@ -2301,8 +2304,8 @@ export function App() {
         return;
       }
 
-      // 3. Thực thi chunking batch viết theo từng mảng an toàn tối đa 80 bản ghi
-      const CHUNK_SIZE = 80;
+      // 3. Thực thi chunking batch viết theo từng mảng nhỏ an toàn 15 bản ghi để tránh quá tải dung lượng kết nối gRPC
+      const CHUNK_SIZE = 15;
       const totalParts = Math.ceil(ops.length / CHUNK_SIZE);
 
       setForceSyncProgress({
@@ -2332,13 +2335,18 @@ export function App() {
         });
 
         try {
-          await chunkBatch.commit();
-        } catch (commitErr) {
+          // Bọc Timeout an toàn 10s cho mỗi đợt commit mạng tránh treo luồng
+          await Promise.race([
+            chunkBatch.commit(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Batch Commit Timeout (10s)")), 10000))
+          ]);
+        } catch (commitErr: any) {
+          console.warn(`[Force Sync Batch Warning Part ${partIndex}]:`, commitErr?.message || commitErr);
           handleFirestoreError(commitErr, OperationType.WRITE, `dk_db_sync_batch_part_${partIndex}`);
         }
 
-        // Tạm nghỉ 80ms để tránh quá tải Stream hoặc Firestore Burst Limit
-        await new Promise(resolve => setTimeout(resolve, 80));
+        // Tạm nghỉ 50ms để giải phóng CPU và stream
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
 
       // 4. Xóa cờ is_dirty đối với tất cả phím đã đồng bộ cưỡng bức thành công
