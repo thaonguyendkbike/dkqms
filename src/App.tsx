@@ -1824,17 +1824,33 @@ export function App() {
       const dirtyKeysList: string[] = [];
       try {
         Object.keys(localStorage).forEach((key) => {
-          if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
-            const moduleKey = key.replace('_is_dirty', '');
-            if (!conflictKeys.includes(moduleKey)) {
-              dirtyKeysList.push(moduleKey);
+          if (key.startsWith('dk_') && !key.endsWith('_is_dirty') && !key.endsWith('_last_synced_at') && !key.endsWith('_deleted_ids') && key !== 'dk_current_user') {
+            const isExplicitlyDirty = localStorage.getItem(`${key}_is_dirty`) === 'true';
+            const localSaved = localStorage.getItem(key);
+            let hasUnsyncedData = false;
+            if (localSaved) {
+              try {
+                const parsed = JSON.parse(localSaved);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  const baseline = lastSyncedValues.current[key];
+                  if (!baseline || baseline === '[]' || baseline === 'null') {
+                    hasUnsyncedData = true;
+                  }
+                }
+              } catch (e) { }
+            }
+
+            if ((isExplicitlyDirty || hasUnsyncedData) && !conflictKeys.includes(key)) {
+              dirtyKeysList.push(key);
+              localStorage.setItem(`${key}_is_dirty`, 'true');
+              if (localDirtyKeys.current) localDirtyKeys.current.add(key);
             }
           }
         });
       } catch (e) { }
 
       if (dirtyKeysList.length > 0) {
-        console.log("[Startup Sync]: Tự động đồng bộ các phân hệ an toàn (không xung đột):", dirtyKeysList);
+        console.log("[Startup Sync]: Tự động quét và đẩy các phân hệ dữ liệu cục bộ chưa lên Cloud:", dirtyKeysList);
         dirtyKeysList.forEach((key) => {
           const localSaved = localStorage.getItem(key);
           if (localSaved) {
@@ -2694,9 +2710,10 @@ export function App() {
                 if (localDirtyKeys.current) {
                   localDirtyKeys.current.add(key);
                 }
+                pendingSyncBuffer.current[key] = parsedLocal; // Xếp hàng để tự động đẩy lên Cloud
                 lastSyncedValues.current[key] = '[]';
                 lastSeenValues.current[key] = localSaved;
-                console.log(`[Startup Reconciliation]: Phát hiện dữ liệu cục bộ chưa có trên server cho phân hệ '${key}'. Sẽ tự động đẩy lên đám mây.`);
+                console.log(`[Startup Reconciliation]: Phát hiện dữ liệu cục bộ chưa có trên server cho phân hệ '${key}'. Tự động xếp hàng đẩy lên đám mây.`);
               }
             } catch (e) {
               console.warn(`[Reconciliation Warning]: Lỗi phân tích dữ liệu cục bộ cho '${key}':`, e);
@@ -2966,6 +2983,11 @@ export function App() {
                   const parsedFallback = JSON.parse(localSavedFallback);
                   if (Array.isArray(parsedFallback) && parsedFallback.length > 0) {
                     finalDisplayData = parsedFallback;
+                    // Tự động đẩy dữ liệu cục bộ lên Cloud nếu server phân hệ này đang trống
+                    localStorage.setItem(`${key}_is_dirty`, 'true');
+                    if (localDirtyKeys.current) localDirtyKeys.current.add(key);
+                    pendingSyncBuffer.current[key] = parsedFallback;
+                    setTimeout(() => triggerCloudSynchronization(), 800);
                   }
                 } catch (e) {}
               }
@@ -3021,6 +3043,12 @@ export function App() {
                   } else if (key === 'dk_defects' && Array.isArray(finalDisplayData)) {
                     finalDisplayData = sanitizeDefects(finalDisplayData);
                   }
+
+                  // Tự động đẩy các bản ghi cục bộ chưa có trên Server lên Cloud Firestore
+                  localStorage.setItem(`${key}_is_dirty`, 'true');
+                  if (localDirtyKeys.current) localDirtyKeys.current.add(key);
+                  pendingSyncBuffer.current[key] = finalDisplayData;
+                  setTimeout(() => triggerCloudSynchronization(), 1000);
                 }
               }
             } catch (e) {
