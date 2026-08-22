@@ -2047,6 +2047,122 @@ export default function QualityInspectionRecords({
     return Array.from(set);
   }, [oqcRecords]);
 
+  // Master Part Codes (Bảng mã xe / Mã quy cách) states
+  const [oqcPartCodes, setOqcPartCodes] = useState<OqcPartCodeItem[]>(() => {
+    try {
+      const saved = safeStorage.getItem('dk_oqc_part_codes');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_OQC_PART_CODES;
+  });
+
+  const saveOqcPartCodes = (list: OqcPartCodeItem[]) => {
+    setOqcPartCodes(list);
+    safeStorage.setItem('dk_oqc_part_codes', JSON.stringify(list));
+  };
+
+  const lookupPartCode = useCallback((code: string): OqcPartCodeItem | null => {
+    if (!code) return null;
+    const clean = code.trim().toUpperCase();
+    return oqcPartCodes.find(p => p.partCode.trim().toUpperCase() === clean) || null;
+  }, [oqcPartCodes]);
+
+  const getCleanModelName = useCallback((r: { model?: string; color?: string; partCode?: string }): string => {
+    // 1. Authoritative lookup from partCode dictionary if available
+    if (r.partCode) {
+      const matched = lookupPartCode(r.partCode);
+      if (matched && matched.model) return matched.model.trim();
+    }
+
+    let m = (r.model || '').trim();
+    const mLow = m.toLowerCase();
+
+    // Check if model string is empty, status text, or a vehicle color name
+    const isInvalidModel = !m || 
+      mLow === 'đạt' || mLow === 'lỗi' || mLow === 'chưa kiểm tra' || 
+      mLow === 'pass' || mLow === 'fail' || mLow === '0' || mLow === '1' || 
+      mLow === 'tiêu chuẩn' || mLow === 'dòng khác' || mLow === 'khác' ||
+      isColorOnlyString(m);
+
+    if (isInvalidModel) {
+      m = '';
+      // Try to extract model from color if color string format is "DK Roma SX - Đỏ"
+      if (r.color && (r.color.includes(' - ') || (r.color.includes('-') && !/^\d/.test(r.color)))) {
+        const delim = r.color.includes(' - ') ? ' - ' : '-';
+        const parts = r.color.split(delim).map(s => s.trim());
+        if (parts[0] && isKnownModelString(parts[0]) && !isColorOnlyString(parts[0])) {
+          m = parts[0];
+        }
+      }
+    }
+
+    // 2. Fallback lookup by partCode prefix
+    if (!m && r.partCode) {
+      const pUp = r.partCode.toUpperCase();
+      if (pUp.includes('TEMDD') || pUp.includes('D2')) m = 'DK D2';
+      else if (pUp.includes('TEMDV') || pUp.includes('V2')) m = 'DK V2';
+      else if (pUp.includes('ROM') || pUp.includes('ROMA')) m = 'DK Roma SX V2';
+      else if (pUp.includes('GOGO') || pUp.includes('GG')) m = 'DK Gogo';
+      else if (pUp.includes('SAM')) m = 'DK Samurai';
+      else if (pUp.includes('XMEN') || pUp.includes('XMAN')) m = 'DK Xmen';
+      else if (pUp.includes('CREA')) m = 'DK Crea Mono';
+      else if (pUp.includes('EZ')) m = 'DK EZ3';
+      else if (pUp.includes('S1')) m = 'DK S1';
+      else if (pUp.includes('S2')) m = 'DK S2';
+      else if (pUp.includes('S3')) m = 'DK S3';
+      else if (pUp.includes('NOVA')) m = 'DK Nova';
+      else if (pUp.includes('ZMTP') || pUp.includes('ZMT')) m = 'DK Z-MTP';
+    }
+
+    if (!m || isColorOnlyString(m)) {
+      m = 'DK D2';
+    }
+
+    return m;
+  }, [lookupPartCode]);
+
+  const isOqcRecordPassed = useCallback((r: OQCRecord) => {
+    if (r.status === 'Đạt') return true;
+    if (r.status === 'Lỗi') return false;
+    if (r.passFlag === 1) return true;
+    if (r.failedCount && r.failedCount > 0) return false;
+    const text = ((r.defectDetail || '') + ' ' + (r.rootCause || '')).trim().toLowerCase();
+    if (!text || text === 'không' || text === 'ok' || text === 'pass' || text === 'đạt' || text === 'sạch không lỗi') {
+      return true;
+    }
+    return false;
+  }, []);
+
+  const getRowCapaData = useCallback((defectDetail: string | undefined, evaluation: string | undefined, rootCause: string | undefined, treatment: string | undefined) => {
+    const txt = (defectDetail || '').toLowerCase();
+    let defaultImpact = evaluation || 'Suy giảm chất lượng ngoại quan hoặc hiệu suất vận hành lắp ráp.';
+    let defaultRoot = rootCause || 'Công nhân thao tác chưa đúng dải lực thiết lập tiêu chuẩn.';
+    let defaultTreatment = treatment || 'Yêu cầu hiệu chuẩn gá định vị định kỳ và đào tạo kỹ năng SOP.';
+    
+    if (txt.includes('bms') || txt.includes('sụt áp') || txt.includes('nguồn')) {
+      defaultImpact = evaluation || 'Nguy cơ sụt áp đột ngột gây tắt máy giữa hành trình lên dốc, đe dọa an toàn tính mạng nghiêm trọng.';
+      defaultRoot = rootCause || 'Cơ cấu chân giắc lỏng lẻo phát sinh hồ quang điện, hoặc bong mối hàn bảo vệ rơ-le BMS do buồng sấy nhiệt vượt quá 65°C.';
+      defaultTreatment = treatment || 'Gia tăng lực kẹp chốt bảo vệ đầu giắc, khống chế nhiệt độ lò sấy dán tem tối đa 60°C và áp dụng keo bảo vệ chuyên dụng.';
+    } else if (txt.includes('tem') || txt.includes('lệch')) {
+      defaultImpact = evaluation || 'Mất mỹ quan bề mặt thành phẩm cao cấp, ảnh hưởng trực tiếp đến hình ảnh dán tem chính hãng dán của DKBike.';
+      defaultRoot = rootCause || 'Cữ gá dán tem định vị thủ công bị rơ lỏng mài mòn dải chặn căn mép.';
+      defaultTreatment = treatment || 'Chấn chỉnh và thay thế cữ định vị chặn dán cơ khí mới, bổ sung thước laser định hướng dán tem chuẩn chỉ.';
+    } else if (txt.includes('phanh') || txt.includes('bó cứng') || txt.includes('bó')) {
+      defaultImpact = evaluation || 'Kẹt phanh bó đĩa tăng sinh nhiệt ma sát cao, làm mòn má đĩa phanh nhanh và tiêu hao năng lượng pin lớn.';
+      defaultRoot = rootCause || 'Hành trình tay bóp phanh xiết quá mức dải tự do hành trình tay, pittông xilanh kẹt bẩn dầu thủy lực hồi trễ.';
+      defaultTreatment = treatment || 'Căn chỉnh khe hở má phanh và dải bóp phanh tự do đạt 10-15mm tiêu chuẩn, xả gió bọt khí đường ống phanh dầu.';
+    }
+    
+    return {
+      impact: defaultImpact,
+      rootCause: defaultRoot,
+      treatment: defaultTreatment
+    };
+  }, []);
+
   // Helper to compare dates of IQC records
   const parseDateToNumber = (dateStr: string): number => {
     if (!dateStr) return 0;
@@ -2183,17 +2299,7 @@ export default function QualityInspectionRecords({
     });
   }, [oqcRecords, oqcSearch, oqcFilterModel, oqcFilterColor, oqcFilterDate, oqcFilterMonth, oqcFilterYear, oqcFilterWeek, getCleanModelName]);
 
-  const isOqcRecordPassed = useCallback((r: OQCRecord) => {
-    if (r.status === 'Đạt') return true;
-    if (r.status === 'Lỗi') return false;
-    if (r.passFlag === 1) return true;
-    if (r.failedCount && r.failedCount > 0) return false;
-    const text = ((r.defectDetail || '') + ' ' + (r.rootCause || '')).trim().toLowerCase();
-    if (!text || text === 'không' || text === 'ok' || text === 'pass' || text === 'đạt' || text === 'sạch không lỗi') {
-      return true;
-    }
-    return false;
-  }, []);
+
 
   const oqcDashboardStats = useMemo(() => {
     const liveLapRapTotal = filteredOqc.length;
@@ -2291,108 +2397,7 @@ export default function QualityInspectionRecords({
     };
   }, [filteredOqc, isOqcRecordPassed, getCleanModelName]);
 
-  const getRowCapaData = useCallback((defectDetail: string | undefined, evaluation: string | undefined, rootCause: string | undefined, treatment: string | undefined) => {
-    const txt = (defectDetail || '').toLowerCase();
-    let defaultImpact = evaluation || 'Suy giảm chất lượng ngoại quan hoặc hiệu suất vận hành lắp ráp.';
-    let defaultRoot = rootCause || 'Công nhân thao tác chưa đúng dải lực thiết lập tiêu chuẩn.';
-    let defaultTreatment = treatment || 'Yêu cầu hiệu chuẩn gá định vị định kỳ và đào tạo kỹ năng SOP.';
-    
-    if (txt.includes('bms') || txt.includes('sụt áp') || txt.includes('nguồn')) {
-      defaultImpact = evaluation || 'Nguy cơ sụt áp đột ngột gây tắt máy giữa hành trình lên dốc, đe dọa an toàn tính mạng nghiêm trọng.';
-      defaultRoot = rootCause || 'Cơ cấu chân giắc lỏng lẻo phát sinh hồ quang điện, hoặc bong mối hàn bảo vệ rơ-le BMS do buồng sấy nhiệt vượt quá 65°C.';
-      defaultTreatment = treatment || 'Gia tăng lực kẹp chốt bảo vệ đầu giắc, khống chế nhiệt độ lò sấy dán tem tối đa 60°C và áp dụng keo bảo vệ chuyên dụng.';
-    } else if (txt.includes('tem') || txt.includes('lệch')) {
-      defaultImpact = evaluation || 'Mất mỹ quan bề mặt thành phẩm cao cấp, ảnh hưởng trực tiếp đến hình ảnh dán tem chính hãng dán của DKBike.';
-      defaultRoot = rootCause || 'Cữ gá dán tem định vị thủ công bị rơ lỏng mài mòn dải chặn căn mép.';
-      defaultTreatment = treatment || 'Chấn chỉnh và thay thế cữ định vị chặn dán cơ khí mới, bổ sung thước laser định hướng dán tem chuẩn chỉ.';
-    } else if (txt.includes('phanh') || txt.includes('bó cứng') || txt.includes('bó')) {
-      defaultImpact = evaluation || 'Kẹt phanh bó đĩa tăng sinh nhiệt ma sát cao, làm mòn má đĩa phanh nhanh và tiêu hao năng lượng pin lớn.';
-      defaultRoot = rootCause || 'Hành trình tay bóp phanh xiết quá mức dải tự do hành trình tay, pittông xilanh kẹt bẩn dầu thủy lực hồi trễ.';
-      defaultTreatment = treatment || 'Căn chỉnh khe hở má phanh và dải bóp phanh tự do đạt 10-15mm tiêu chuẩn, xả gió bọt khí đường ống phanh dầu.';
-    }
-    return {
-      evaluation: defaultImpact,
-      rootCause: defaultRoot,
-      treatment: defaultTreatment
-    };
-  }, []);
 
-  // Master Part Codes (Bảng mã xe / Mã quy cách) states
-  const [oqcPartCodes, setOqcPartCodes] = useState<OqcPartCodeItem[]>(() => {
-    try {
-      const saved = safeStorage.getItem('dk_oqc_part_codes');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return INITIAL_OQC_PART_CODES;
-  });
-
-  const saveOqcPartCodes = (list: OqcPartCodeItem[]) => {
-    setOqcPartCodes(list);
-    safeStorage.setItem('dk_oqc_part_codes', JSON.stringify(list));
-  };
-
-  const lookupPartCode = useCallback((code: string): OqcPartCodeItem | null => {
-    if (!code) return null;
-    const clean = code.trim().toUpperCase();
-    return oqcPartCodes.find(p => p.partCode.trim().toUpperCase() === clean) || null;
-  }, [oqcPartCodes]);
-
-  const getCleanModelName = useCallback((r: { model?: string; color?: string; partCode?: string }): string => {
-    // 1. Authoritative lookup from partCode dictionary if available
-    if (r.partCode) {
-      const matched = lookupPartCode(r.partCode);
-      if (matched && matched.model) return matched.model.trim();
-    }
-
-    let m = (r.model || '').trim();
-    const mLow = m.toLowerCase();
-
-    // Check if model string is empty, status text, or a vehicle color name
-    const isInvalidModel = !m || 
-      mLow === 'đạt' || mLow === 'lỗi' || mLow === 'chưa kiểm tra' || 
-      mLow === 'pass' || mLow === 'fail' || mLow === '0' || mLow === '1' || 
-      mLow === 'tiêu chuẩn' || mLow === 'dòng khác' || mLow === 'khác' ||
-      isColorOnlyString(m);
-
-    if (isInvalidModel) {
-      m = '';
-      // Try to extract model from color if color string format is "DK Roma SX - Đỏ"
-      if (r.color && (r.color.includes(' - ') || (r.color.includes('-') && !/^\d/.test(r.color)))) {
-        const delim = r.color.includes(' - ') ? ' - ' : '-';
-        const parts = r.color.split(delim).map(s => s.trim());
-        if (parts[0] && isKnownModelString(parts[0]) && !isColorOnlyString(parts[0])) {
-          m = parts[0];
-        }
-      }
-    }
-
-    // 2. Fallback lookup by partCode prefix
-    if (!m && r.partCode) {
-      const pUp = r.partCode.toUpperCase();
-      if (pUp.includes('TEMDD') || pUp.includes('D2')) m = 'DK D2';
-      else if (pUp.includes('TEMDV') || pUp.includes('V2')) m = 'DK V2';
-      else if (pUp.includes('ROM') || pUp.includes('ROMA')) m = 'DK Roma SX V2';
-      else if (pUp.includes('GOGO') || pUp.includes('GG')) m = 'DK Gogo';
-      else if (pUp.includes('SAM')) m = 'DK Samurai';
-      else if (pUp.includes('XMEN') || pUp.includes('XMAN')) m = 'DK Xmen';
-      else if (pUp.includes('CREA')) m = 'DK Crea Mono';
-      else if (pUp.includes('EZ')) m = 'DK EZ3';
-      else if (pUp.includes('S1')) m = 'DK S1';
-      else if (pUp.includes('S2')) m = 'DK S2';
-      else if (pUp.includes('S3')) m = 'DK S3';
-      else if (pUp.includes('NOVA')) m = 'DK Nova';
-      else if (pUp.includes('ZMTP') || pUp.includes('ZMT')) m = 'DK Z-MTP';
-    }
-
-    if (!m || isColorOnlyString(m)) {
-      m = 'DK D2';
-    }
-
-    return m;
-  }, [lookupPartCode]);
 
   // Auto-clean any legacy records with 'Lỗi', 'Đạt' or color names as model name
   React.useEffect(() => {
