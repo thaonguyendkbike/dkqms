@@ -2140,33 +2140,48 @@ export default function QualityInspectionRecords({
   }, [pqcRecords, pqcSearch, pqcFilterStatus, pqcFilterModel, pqcFilterWeek, pqcFilterMonth]);
 
   const filteredOqc = useMemo(() => {
-    const sLower = oqcSearch.toLowerCase();
+    const sLower = oqcSearch.trim().toLowerCase();
+    const isWeekAll = oqcFilterWeek === 'All';
+    const isMonthAll = oqcFilterMonth === 'All';
+    const isYearAll = oqcFilterYear === 'All';
+    const isDateAll = oqcFilterDate === 'All';
+    const isModelAll = oqcFilterModel === 'All';
+    const isColorAll = oqcFilterColor === 'All';
+
     return oqcRecords.filter(r => {
-      const matchesSearch = oqcSearch === '' || 
+      const matchesSearch = sLower === '' || 
         (r.serialNo && r.serialNo.toLowerCase().includes(sLower)) ||
         (r.partCode && r.partCode.toLowerCase().includes(sLower)) ||
         (r.model && r.model.toLowerCase().includes(sLower)) ||
         (r.color && r.color.toLowerCase().includes(sLower)) ||
         (r.defectDetail && r.defectDetail.toLowerCase().includes(sLower));
+      if (!matchesSearch) return false;
         
-      const matchesModel = oqcFilterModel === 'All' || r.model === oqcFilterModel || getCleanModelName(r) === oqcFilterModel;
-      const matchesColor = oqcFilterColor === 'All' || r.color === oqcFilterColor;
-      const matchesDate = oqcFilterDate === 'All' || r.date === oqcFilterDate;
-      const matchesMonth = oqcFilterMonth === 'All' || String(r.month) === oqcFilterMonth;
-      const matchesYear = oqcFilterYear === 'All' || String(r.year) === oqcFilterYear;
+      const matchesModel = isModelAll || r.model === oqcFilterModel || getCleanModelName(r) === oqcFilterModel;
+      if (!matchesModel) return false;
+
+      const matchesColor = isColorAll || r.color === oqcFilterColor;
+      if (!matchesColor) return false;
+
+      const matchesDate = isDateAll || r.date === oqcFilterDate;
+      if (!matchesDate) return false;
+
+      const matchesMonth = isMonthAll || String(r.month) === oqcFilterMonth;
+      if (!matchesMonth) return false;
+
+      const matchesYear = isYearAll || String(r.year) === oqcFilterYear;
+      if (!matchesYear) return false;
       
-      // Week filter
-      const recordWeek = r.date ? getWeekAndMonthFromDate(r.date).week : 'T1';
-      const matchesWeek = oqcFilterWeek === 'All' || recordWeek === oqcFilterWeek;
-      
-      return matchesSearch && matchesModel && matchesColor && matchesDate && matchesMonth && matchesYear && matchesWeek;
+      const recordWeek = isWeekAll ? 'T1' : (r.date ? getWeekAndMonthFromDate(r.date).week : 'T1');
+      const matchesWeek = isWeekAll || recordWeek === oqcFilterWeek;
+      return matchesWeek;
     }).sort((a, b) => {
       const sA = (a.serialNo || a.id || '').trim();
       const sB = (b.serialNo || b.id || '').trim();
       if (sA === sB) return 0;
       return sA < sB ? -1 : 1;
     });
-  }, [oqcRecords, oqcSearch, oqcFilterModel, oqcFilterColor, oqcFilterDate, oqcFilterMonth, oqcFilterYear, oqcFilterWeek]);
+  }, [oqcRecords, oqcSearch, oqcFilterModel, oqcFilterColor, oqcFilterDate, oqcFilterMonth, oqcFilterYear, oqcFilterWeek, getCleanModelName]);
 
   const isOqcRecordPassed = useCallback((r: OQCRecord) => {
     if (r.status === 'Đạt') return true;
@@ -2179,6 +2194,102 @@ export default function QualityInspectionRecords({
     }
     return false;
   }, []);
+
+  const oqcDashboardStats = useMemo(() => {
+    const liveLapRapTotal = filteredOqc.length;
+    let datVal = 0;
+
+    const liveModelsMap: Record<string, number> = {};
+    const liveModelDefects: Record<string, { name: string; count: number }[]> = {};
+    const modelStatsMap: Record<string, { total: number; passed: number; failed: number }> = {};
+
+    for (let i = 0; i < filteredOqc.length; i++) {
+      const r = filteredOqc[i];
+      const isPassed = isOqcRecordPassed(r);
+      if (isPassed) datVal++;
+
+      const modelName = getCleanModelName(r);
+      if (modelName && modelName.toLowerCase() !== 'đạt' && modelName.toLowerCase() !== 'lỗi' && modelName.toLowerCase() !== 'chưa kiểm tra' && modelName.toLowerCase() !== 'pass' && modelName.toLowerCase() !== 'fail') {
+        liveModelsMap[modelName] = (liveModelsMap[modelName] || 0) + 1;
+
+        if (!modelStatsMap[modelName]) {
+          modelStatsMap[modelName] = { total: 0, passed: 0, failed: 0 };
+        }
+        modelStatsMap[modelName].total++;
+        if (isPassed) {
+          modelStatsMap[modelName].passed++;
+        } else {
+          modelStatsMap[modelName].failed++;
+        }
+
+        if (r.status === 'Lỗi' && r.defectDetail) {
+          if (!liveModelDefects[modelName]) {
+            liveModelDefects[modelName] = [];
+          }
+          const items = r.defectDetail.split(/[,;+\n]/).map(s => s.trim()).filter(Boolean);
+          for (let j = 0; j < items.length; j++) {
+            const defect = items[j];
+            const existing = liveModelDefects[modelName].find(d => d.name === defect);
+            if (existing) {
+              existing.count += (r.failedCount || 1);
+            } else {
+              liveModelDefects[modelName].push({ name: defect, count: (r.failedCount || 1) });
+            }
+          }
+        }
+      }
+    }
+
+    const loiVal = liveLapRapTotal - datVal;
+    const pieDatPercent = liveLapRapTotal > 0 ? Math.round((datVal / liveLapRapTotal) * 100) : 0;
+    const pieLoiPercent = liveLapRapTotal > 0 ? (100 - pieDatPercent) : 0;
+
+    let activeBarData = Object.entries(liveModelsMap).map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+    if (activeBarData.length === 0) {
+      activeBarData = [
+        { name: 'DK Roma SX V2', count: 0 },
+        { name: 'DK Nova', count: 0 },
+        { name: 'DK Gogo', count: 0 },
+        { name: 'DK EZ3', count: 0 },
+        { name: 'DK D2', count: 0 }
+      ];
+    }
+
+    const assembledModels = Object.keys(modelStatsMap).sort();
+
+    const modelStats = assembledModels.map(model => {
+      const st = modelStatsMap[model];
+      const total = st.total;
+      const passed = st.passed;
+      const failed = st.failed;
+      const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+      const failRate = total > 0 ? (100 - passRate) : 0;
+      return {
+        model,
+        total,
+        passed,
+        failed,
+        passRate,
+        failRate,
+      };
+    }).sort((a, b) => b.total - a.total);
+
+    const maxTotal = Math.max(1, ...modelStats.map(s => s.total));
+
+    return {
+      liveLapRapTotal,
+      datVal,
+      loiVal,
+      pieDatPercent,
+      pieLoiPercent,
+      activeBarData,
+      liveModelDefects,
+      assembledModels,
+      modelStats,
+      maxTotal,
+    };
+  }, [filteredOqc, isOqcRecordPassed, getCleanModelName]);
 
   const getRowCapaData = useCallback((defectDetail: string | undefined, evaluation: string | undefined, rootCause: string | undefined, treatment: string | undefined) => {
     const txt = (defectDetail || '').toLowerCase();
@@ -8381,20 +8492,26 @@ export default function QualityInspectionRecords({
 
           {/* ================================== 4. VISUAL KCS/OQC DASHBOARD ================================== */}
           {oqcSubView === 'dashboard' && (() => {
-              // Real-world dynamic live coordinates
-              const liveLapRapTotal = filteredOqc.length;
-              const datVal = filteredOqc.filter(isOqcRecordPassed).length;
-              const loiVal = liveLapRapTotal - datVal;
+              const {
+                liveLapRapTotal,
+                datVal,
+                loiVal,
+                pieDatPercent,
+                pieLoiPercent,
+                activeBarData,
+                liveModelDefects,
+                assembledModels,
+                modelStats,
+                maxTotal
+              } = oqcDashboardStats;
 
               const today = new Date();
-              // Try to find month from filter first, then from the most common month in filteredOqc, then current month
               let targetMonth = today.getMonth() + 1;
               let targetYear = today.getFullYear();
               
               if (oqcFilterMonth !== 'All') {
                 targetMonth = parseInt(oqcFilterMonth, 10);
               } else if (filteredOqc.length > 0) {
-                // Find most common month in filteredOqc
                 const monthCounts: Record<number, number> = {};
                 filteredOqc.forEach(r => {
                   if (r.month) monthCounts[r.month] = (monthCounts[r.month] || 0) + 1;
@@ -8408,7 +8525,6 @@ export default function QualityInspectionRecords({
               if (oqcFilterYear !== 'All') {
                 targetYear = parseInt(oqcFilterYear, 10);
               } else if (filteredOqc.length > 0) {
-                // Find most common year in filteredOqc
                 const yearCounts: Record<number, number> = {};
                 filteredOqc.forEach(r => {
                   if (r.year) yearCounts[r.year] = (yearCounts[r.year] || 0) + 1;
@@ -8419,16 +8535,14 @@ export default function QualityInspectionRecords({
                 }
               }
 
-              // Determine if a week filter is active (specific Week or specific Date)
               const isWeekFilterActive = oqcFilterWeek !== 'All' || oqcFilterDate !== 'All';
               const selectedWeek = oqcFilterWeek !== 'All' ? oqcFilterWeek : (oqcFilterDate !== 'All' ? getWeekAndMonthFromDate(oqcFilterDate).week : 'T1');
               
               const currentMonthStr = isWeekFilterActive ? `Tuần ${selectedWeek} - Tháng ${targetMonth}` : `Tháng ${targetMonth}`;
 
-              let targetAssembled = 7200; // default month fallback
+              let targetAssembled = 7200;
 
               if (isWeekFilterActive) {
-                // WEEK MODE
                 let activeWeeklyPlans = weeklyPlans;
                 if (!activeWeeklyPlans || activeWeeklyPlans.length === 0) {
                   try {
@@ -8464,9 +8578,8 @@ export default function QualityInspectionRecords({
                     }
                   }
                 }
-                targetAssembled = foundValue !== null ? foundValue : 1800; // default week target if not set
+                targetAssembled = foundValue !== null ? foundValue : 1800;
               } else {
-                // MONTH MODE
                 let activeMonthlyPlans = monthlyPlans;
                 if (!activeMonthlyPlans || activeMonthlyPlans.length === 0) {
                   try {
@@ -8501,12 +8614,11 @@ export default function QualityInspectionRecords({
                     }
                   }
                 }
-                targetAssembled = foundValue !== null ? foundValue : 7200; // default month target if not set
+                targetAssembled = foundValue !== null ? foundValue : 7200;
               }
 
               const targetProgress = targetAssembled > 0 ? Math.min(100, Math.round((liveLapRapTotal / targetAssembled) * 100)) : 0;
 
-              // Remaining days of the current month (last day of month minus current day)
               const lastDayDate = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
               const daysRemaining = lastDayDate - today.getDate();
 
@@ -8515,56 +8627,6 @@ export default function QualityInspectionRecords({
 
               const pieDatCount = datVal;
               const pieLoiCount = loiVal;
-              const pieDatPercent = liveLapRapTotal > 0 ? Math.round((pieDatCount / liveLapRapTotal) * 100) : 0;
-              const pieLoiPercent = liveLapRapTotal > 0 ? (100 - pieDatPercent) : 0;
-
-              // Process models mapping dynamically
-              const liveModelsMap: Record<string, number> = {};
-              filteredOqc.forEach(r => {
-                const m = getCleanModelName(r);
-                if (m && m.toLowerCase() !== 'đạt' && m.toLowerCase() !== 'lỗi' && m.toLowerCase() !== 'chưa kiểm tra') {
-                  liveModelsMap[m] = (liveModelsMap[m] || 0) + 1;
-                }
-              });
-              let activeBarData = Object.entries(liveModelsMap).map(([name, count]) => ({ name, count }))
-                .sort((a, b) => b.count - a.count);
-              if (activeBarData.length === 0) {
-                activeBarData = [
-                  { name: 'DK Roma SX V2', count: 0 },
-                  { name: 'DK Nova', count: 0 },
-                  { name: 'DK Gogo', count: 0 },
-                  { name: 'DK EZ3', count: 0 },
-                  { name: 'DK D2', count: 0 }
-                ];
-              }
-
-              // Build live model defects list
-              const liveModelDefects: Record<string, { name: string; count: number }[]> = {};
-              filteredOqc.forEach(r => {
-                const modelName = getCleanModelName(r);
-                if (modelName && modelName.toLowerCase() !== 'đạt' && modelName.toLowerCase() !== 'lỗi' && modelName.toLowerCase() !== 'chưa kiểm tra') {
-                  if (!liveModelDefects[modelName]) {
-                    liveModelDefects[modelName] = [];
-                  }
-                  if (r.status === 'Lỗi' && r.defectDetail) {
-                    const items = r.defectDetail.split(/[,;+\n]/).map(s => s.trim()).filter(Boolean);
-                    items.forEach(defect => {
-                      const existing = liveModelDefects[modelName].find(d => d.name === defect);
-                      if (existing) {
-                        existing.count += (r.failedCount || 1);
-                      } else {
-                        liveModelDefects[modelName].push({ name: defect, count: (r.failedCount || 1) });
-                      }
-                    });
-                  }
-                }
-              });
-
-              // Get unique models dynamically from filtered OQC records (case-insensitive filter)
-              const assembledModels: string[] = Array.from(new Set<string>(filteredOqc.map(r => getCleanModelName(r))))
-                .filter((m: string) => Boolean(m) && m.toLowerCase() !== 'đạt' && m.toLowerCase() !== 'lỗi' && m.toLowerCase() !== 'chưa kiểm tra' && m.toLowerCase() !== 'pass' && m.toLowerCase() !== 'fail')
-                .sort();
-
               const currentAssembled = liveLapRapTotal;
 
               return (
@@ -8900,28 +8962,7 @@ export default function QualityInspectionRecords({
                         Không có dữ liệu OQC để vẽ biểu đồ xếp chồng.
                       </div>
                     ) : (
-                      (() => {
-                        const modelStats = assembledModels.map(model => {
-                          const modelRecords = filteredOqc.filter(r => getCleanModelName(r) === model);
-                          const total = modelRecords.length;
-                          const passed = modelRecords.filter(isOqcRecordPassed).length;
-                          const failed = total - passed;
-                          const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
-                          const failRate = total > 0 ? (100 - passRate) : 0;
-                          return {
-                            model,
-                            total,
-                            passed,
-                            failed,
-                            passRate,
-                            failRate,
-                          };
-                        }).sort((a, b) => b.total - a.total);
-
-                        const maxTotal = Math.max(...modelStats.map(s => s.total), 1);
-
-                        return (
-                          <div className="space-y-4">
+                      <div className="space-y-4">
                             {/* Chart Grid representing each model as a vertical bar */}
                             <div className="flex items-end justify-around gap-2 h-[260px] pt-4 px-2 sm:px-4 relative font-sans select-none border-b border-slate-100/80">
                               
@@ -9062,8 +9103,6 @@ export default function QualityInspectionRecords({
                               </div>
                             </div>
                           </div>
-                        );
-                      })()
                     )}
                   </div>
 
