@@ -473,53 +473,89 @@ export function standardizeDate(dateStr: string): string {
   return `${dd}/${mm}/${year}`;
 }
 
+export function getMondayOfWeek(year: number, month: number, weekNum: number): Date {
+  const firstDayOfMonth = new Date(year, month - 1, 1);
+  const dow = firstDayOfMonth.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+  
+  let mon1Day: number;
+  if (dow === 1) mon1Day = 1;
+  else if (dow === 2) mon1Day = 0;
+  else if (dow === 3) mon1Day = -1;
+  else if (dow === 4) mon1Day = -2;
+  else if (dow === 5) mon1Day = 4;
+  else if (dow === 6) mon1Day = 3;
+  else if (dow === 0) mon1Day = 2;
+  else mon1Day = 1;
+
+  return new Date(year, month - 1, mon1Day + (weekNum - 1) * 7);
+}
+
 export function getWeekAndMonthFromDate(dateStr: string): { week: string; month: number; year: number } {
   const today = new Date();
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth() + 1;
   const currentDay = today.getDate();
 
-  const getCalendarWeekForDay = (d: number, m: number, y: number): number => {
-    const firstDayOfMonth = new Date(y, m - 1, 1);
-    const firstDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    const firstSundayDay = firstDayOfWeek === 0 ? 1 : 8 - firstDayOfWeek;
-
-    if (d < firstSundayDay) {
-      return 1;
-    } else {
-      const diff = d - firstSundayDay;
-      return 2 + Math.floor(diff / 7);
-    }
-  };
-
-  const getDefaultWeek = () => {
-    const weekNum = getCalendarWeekForDay(currentDay, currentMonth, currentYear);
-    return `T${Math.min(5, weekNum)}`;
-  };
-
-  if (!dateStr) return { week: getDefaultWeek(), month: currentMonth, year: currentYear };
+  if (!dateStr || typeof dateStr !== 'string') {
+    const curInfo = getWeekAndMonthFromDate(`${currentDay}/${currentMonth}/${currentYear}`);
+    return curInfo;
+  }
 
   let day = 1;
   let month = currentMonth;
   let year = currentYear;
 
-  if (dateStr.includes('-')) {
-    const parts = dateStr.split('-');
-    year = Number(parts[0]) || currentYear;
-    month = Number(parts[1]) || currentMonth;
-    day = Number(parts[2]) || 1;
-  } else if (dateStr.includes('/')) {
-    const parts = dateStr.split('/');
-    day = Number(parts[0]) || 1;
-    month = Number(parts[1]) || currentMonth;
-    const yrPart = parts[2] ? parts[2].trim() : '';
+  const clean = dateStr.trim();
+  const matchesYMD = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  const matchesDMY = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
+
+  if (matchesYMD) {
+    year = Number(matchesYMD[1]) || currentYear;
+    month = Number(matchesYMD[2]) || currentMonth;
+    day = Number(matchesYMD[3]) || 1;
+  } else if (matchesDMY) {
+    day = Number(matchesDMY[1]) || 1;
+    month = Number(matchesDMY[2]) || currentMonth;
+    const yrPart = matchesDMY[3];
     year = yrPart ? (yrPart.length === 2 ? 2000 + Number(yrPart) : Number(yrPart)) : currentYear;
   } else {
-    return { week: 'T1', month, year };
+    const parts = clean.split(/[-/. ]+/);
+    if (parts.length >= 3) {
+      if (parts[0].length === 4) {
+        year = Number(parts[0]) || currentYear;
+        month = Number(parts[1]) || currentMonth;
+        day = Number(parts[2]) || 1;
+      } else {
+        day = Number(parts[0]) || 1;
+        month = Number(parts[1]) || currentMonth;
+        const yrPart = parts[2];
+        year = yrPart ? (yrPart.length === 2 ? 2000 + Number(yrPart) : Number(yrPart)) : currentYear;
+      }
+    }
   }
 
-  const weekNum = getCalendarWeekForDay(day, month, year);
-  const weekStr = `T${Math.min(5, weekNum)}`;
+  const targetDate = new Date(year, month - 1, day);
+
+  let weekStr = 'T1';
+  for (let w = 1; w <= 5; w++) {
+    const mon = getMondayOfWeek(year, month, w);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+
+    if (w === 1 && targetDate < mon) {
+      weekStr = 'T1';
+      break;
+    }
+    if (w === 5 && targetDate > sun) {
+      weekStr = 'T5';
+      break;
+    }
+    if (targetDate >= mon && targetDate <= sun) {
+      weekStr = `T${w}`;
+      break;
+    }
+  }
+
   return { week: weekStr, month, year };
 }
 
@@ -2635,7 +2671,7 @@ export function App() {
                   serverTimestamps.current[key] = d.updatedAt;
                 }
               }
-            } catch (singleErr) {}
+            } catch (singleErr) { }
           });
           await Promise.allSettled(docPromises);
         }
@@ -2972,7 +3008,7 @@ export function App() {
                   if (Array.isArray(parsedFallback) && parsedFallback.length > 0) {
                     finalDisplayData = parsedFallback;
                   }
-                } catch (e) {}
+                } catch (e) { }
               }
             }
           }
@@ -3045,7 +3081,7 @@ export function App() {
                 return !deletedSet.has(itemId);
               });
             }
-          } catch (e) {}
+          } catch (e) { }
 
           // Safe clearing of the dirty flag once the server has received all our local writes (completely caught up)
           const sanitizedServerList = key === 'dk_daily_logs'
@@ -3132,7 +3168,7 @@ export function App() {
           // Fallback to serverData / local storage if permissions or connection fails
           const rootFallback = serverData[key] || legacyRootData[key];
           let fallbackData = Array.isArray(rootFallback) && rootFallback.length > 0 ? rootFallback : null;
-          
+
           if (!fallbackData) {
             const localSaved = localStorage.getItem(key);
             if (localSaved) {
@@ -3557,8 +3593,8 @@ export function App() {
         </td>
         <td className="p-2.5">
           <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${type === 'PQC' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' :
-              type === 'OQC' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
-                'bg-rose-50 text-rose-700 border border-rose-100'
+            type === 'OQC' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+              'bg-rose-50 text-rose-700 border border-rose-100'
             }`}>
             {type === 'MarketDefect' ? 'Thị trường' : type}
           </span>
@@ -3571,8 +3607,8 @@ export function App() {
         </td>
         <td className="p-2.5">
           <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${currentStatus === 'Đã xử lý' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' :
-              currentStatus === 'Cần theo dõi' ? 'bg-amber-50 text-amber-700 border border-amber-150' :
-                'bg-slate-150 text-slate-600 border border-slate-200'
+            currentStatus === 'Cần theo dõi' ? 'bg-amber-50 text-amber-700 border border-amber-150' :
+              'bg-slate-150 text-slate-600 border border-slate-200'
             }`}>
             {currentStatus}
           </span>
@@ -3646,8 +3682,8 @@ export function App() {
         </td>
         <td className="p-2.5">
           <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${initialStatus === 'Đã xử lý' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' :
-              initialStatus === 'Cần theo dõi' ? 'bg-amber-50 text-amber-700 border border-amber-150' :
-                'bg-slate-150 text-slate-600 border border-slate-200'
+            initialStatus === 'Cần theo dõi' ? 'bg-amber-50 text-amber-700 border border-amber-150' :
+              'bg-slate-150 text-slate-600 border border-slate-200'
             }`}>
             {initialStatus}
           </span>
@@ -12239,16 +12275,16 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
       {/* Premium custom Toast notifications */}
       {toastMessage && (
         <div className={`fixed bottom-5 right-5 z-[9999] p-4 rounded-xl shadow-2xl border flex items-center gap-3 animate-slide-in max-w-sm md:max-w-md ${toastType === 'error'
-            ? 'bg-rose-50 border-rose-200 text-rose-900'
-            : toastType === 'info'
-              ? 'bg-blue-50 border-blue-200 text-blue-900'
-              : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+          ? 'bg-rose-50 border-rose-200 text-rose-900'
+          : toastType === 'info'
+            ? 'bg-blue-50 border-blue-200 text-blue-900'
+            : 'bg-emerald-50 border-emerald-200 text-emerald-900'
           }`} id="app_custom_toast">
           <div className={`p-2 rounded-lg shrink-0 ${toastType === 'error'
-              ? 'bg-rose-100 text-rose-700'
-              : toastType === 'info'
-                ? 'bg-blue-100 text-blue-700'
-                : 'bg-emerald-100 text-emerald-700'
+            ? 'bg-rose-100 text-rose-700'
+            : toastType === 'info'
+              ? 'bg-blue-100 text-blue-700'
+              : 'bg-emerald-100 text-emerald-700'
             }`}>
             {toastType === 'error' ? (
               <AlertOctagon className="w-5 h-5" />
@@ -12430,8 +12466,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 setShowIdentityModal(true);
               }}
               className={`flex items-center gap-2 md:gap-3 px-2 py-1 md:px-3 md:py-1.5 rounded-lg md:rounded-xl border text-left transition select-none cursor-pointer hover:shadow-xs shrink-0 ${isUserAuthorized()
-                  ? 'bg-emerald-50/70 border-emerald-250 hover:bg-emerald-100 hover:border-emerald-300'
-                  : 'bg-amber-50/70 border-amber-200 hover:bg-amber-100 hover:border-amber-300'
+                ? 'bg-emerald-50/70 border-emerald-250 hover:bg-emerald-100 hover:border-emerald-300'
+                : 'bg-amber-50/70 border-amber-200 hover:bg-amber-100 hover:border-amber-300'
                 }`}
               title="Nhấn để Thay đổi Tài Khoản & Phân Quyền Biên Tập"
               id="user_profile_btn"
@@ -13252,10 +13288,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                     >
                                       <div
                                         className={`w-10 sm:w-14 rounded-t-lg transition-all duration-300 ${isHovered
-                                            ? 'scale-x-105 filter brightness-110 shadow-lg'
-                                            : anyHovered
-                                              ? 'opacity-40 scale-95'
-                                              : 'opacity-100'
+                                          ? 'scale-x-105 filter brightness-110 shadow-lg'
+                                          : anyHovered
+                                            ? 'opacity-40 scale-95'
+                                            : 'opacity-100'
                                           } ${isCritical
                                             ? 'bg-gradient-to-t from-rose-600 to-rose-400 shadow-md shadow-rose-500/20'
                                             : 'bg-gradient-to-t from-indigo-600 to-indigo-400 shadow-md shadow-indigo-500/15'
@@ -13292,17 +13328,17 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                     onMouseLeave={() => setActiveParetoIndex(null)}
                                   >
                                     <div className={`text-[10px] font-black line-clamp-2 px-1 tracking-tight ${isHovered
-                                        ? 'text-indigo-600'
-                                        : isCritical
-                                          ? 'text-slate-800'
-                                          : 'text-slate-600'
+                                      ? 'text-indigo-600'
+                                      : isCritical
+                                        ? 'text-slate-800'
+                                        : 'text-slate-600'
                                       }`} title={item.name}>
                                       {item.name}
                                     </div>
                                     <div className="mt-1">
                                       <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full ${isCritical
-                                          ? 'bg-rose-50 text-rose-600 border border-rose-200'
-                                          : 'bg-indigo-50 text-indigo-600 border border-indigo-150'
+                                        ? 'bg-rose-50 text-rose-600 border border-rose-200'
+                                        : 'bg-indigo-50 text-indigo-600 border border-indigo-150'
                                         }`}>
                                         {item.count} vụ
                                       </span>
@@ -13345,10 +13381,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                   <div
                                     key={index}
                                     className={`flex items-center justify-between p-2.5 rounded-lg border transition-all duration-200 cursor-pointer ${isHovered
-                                        ? 'bg-indigo-50 border-indigo-300 shadow-xs translate-x-1'
-                                        : isCritical
-                                          ? 'bg-rose-50/50 border-rose-100 hover:bg-rose-50'
-                                          : 'bg-white border-slate-150 hover:bg-slate-100'
+                                      ? 'bg-indigo-50 border-indigo-300 shadow-xs translate-x-1'
+                                      : isCritical
+                                        ? 'bg-rose-50/50 border-rose-100 hover:bg-rose-50'
+                                        : 'bg-white border-slate-150 hover:bg-slate-100'
                                       }`}
                                     onMouseEnter={() => setActiveParetoIndex(index)}
                                     onMouseLeave={() => setActiveParetoIndex(null)}
@@ -14213,9 +14249,9 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             <td className="py-3 text-center font-mono font-black text-indigo-700 bg-slate-50">{emp.score} / 100</td>
                             <td className="py-3 text-right">
                               <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${emp.rating === 'Xuất sắc' ? 'bg-green-150 text-green-850' :
-                                  emp.rating === 'Tốt' ? 'bg-indigo-150 text-indigo-750' :
-                                    emp.rating === 'Khá' ? 'bg-sky-100 text-sky-750' :
-                                      emp.rating === 'Trung bình' ? 'bg-yellow-105 text-amber-700' : 'bg-red-100 text-red-750'
+                                emp.rating === 'Tốt' ? 'bg-indigo-150 text-indigo-750' :
+                                  emp.rating === 'Khá' ? 'bg-sky-100 text-sky-750' :
+                                    emp.rating === 'Trung bình' ? 'bg-yellow-105 text-amber-700' : 'bg-red-100 text-red-750'
                                 }`}>
                                 {emp.rating}
                               </span>
@@ -14530,8 +14566,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                     <label
                                       key={m.id}
                                       className={`flex items-center gap-1.5 px-2 py-1 rounded border text-[11px] font-bold cursor-pointer transition-all ${isChecked
-                                          ? 'bg-sky-50 border-sky-300 text-sky-800'
-                                          : 'bg-slate-50 border-slate-250 text-slate-600 hover:bg-slate-100'
+                                        ? 'bg-sky-50 border-sky-300 text-sky-800'
+                                        : 'bg-slate-50 border-slate-250 text-slate-600 hover:bg-slate-100'
                                         }`}
                                     >
                                       <input
@@ -15095,8 +15131,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 </td>
                                 <td className="p-3 text-center">
                                   <span className={`inline-block px-2 py-1 text-[9px] font-black rounded uppercase text-center min-w-[70px] ${(cap.status || cap.Status) === 'Mở' ? 'bg-red-600 text-white animate-pulse' :
-                                      (cap.status || cap.Status) === 'Quá hạn' ? 'bg-amber-500 text-white' :
-                                        'bg-emerald-600 text-white'
+                                    (cap.status || cap.Status) === 'Quá hạn' ? 'bg-amber-500 text-white' :
+                                      'bg-emerald-600 text-white'
                                     }`}>
                                     {cap.status || cap.Status}
                                   </span>
@@ -15152,8 +15188,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {filteredList.map((cap) => (
                         <div key={cap.id} className={`p-4 rounded-xl border transition-all hover:shadow bg-white ${(cap.status || cap.Status) === 'Mở' ? 'border-red-200 bg-red-50/5' :
-                            (cap.status || cap.Status) === 'Quá hạn' ? 'border-amber-200 bg-amber-50/5' :
-                              'border-slate-200'
+                          (cap.status || cap.Status) === 'Quá hạn' ? 'border-amber-200 bg-amber-50/5' :
+                            'border-slate-200'
                           }`}>
                           <div className="flex justify-between items-start">
                             <div>
@@ -15164,8 +15200,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                               <h4 className="text-xs font-black text-slate-800 mt-2 line-clamp-2">{cap.title || cap.Issue}</h4>
                             </div>
                             <span className={`px-2 py-0.5 text-[9px] font-black rounded uppercase ${(cap.status || cap.Status) === 'Mở' ? 'bg-red-600 text-white' :
-                                (cap.status || cap.Status) === 'Quá hạn' ? 'bg-amber-500 text-white' :
-                                  'bg-emerald-600 text-white'
+                              (cap.status || cap.Status) === 'Quá hạn' ? 'bg-amber-500 text-white' :
+                                'bg-emerald-600 text-white'
                               }`}>
                               {cap.status || cap.Status}
                             </span>
@@ -15286,8 +15322,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     type="button"
                     onClick={() => setShowLogFilter(!showLogFilter)}
                     className={`px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-xs transition flex items-center gap-1.5 border ${showLogFilter || (logSearch !== '' || logWeek !== 'All' || logCategory !== 'All' || logAssignee !== 'All' || logStatus !== 'All' || logDateFilter !== 'All' || logMonthFilter !== 'All' || logYearFilter !== 'All')
-                        ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-500'
-                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                      ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-500'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
                       }`}
                     id="btn_toggle_log_filter"
                     title={showLogFilter ? 'Thu gọn bộ lọc' : 'Mở rộng bộ lọc tìm kiếm'}
@@ -15509,8 +15545,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                   setNewLogAssignee(newList.join(', '));
                                 }}
                                 className={`px-2 py-1 rounded text-xs font-bold transition border flex items-center gap-1.5 ${isChecked
-                                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
-                                    : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
+                                  : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                                   }`}
                               >
                                 <span className={`w-1.5 h-1.5 rounded-full ${isChecked ? 'bg-white' : 'bg-slate-400'}`}></span>
@@ -15528,8 +15564,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                               }
                             }}
                             className={`px-3 py-1 rounded text-xs font-extrabold transition border ${newLogAssignee === 'Phối hợp toàn đội (All)'
-                                ? 'bg-amber-600 border-amber-600 text-white shadow-xs'
-                                : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                              ? 'bg-amber-600 border-amber-600 text-white shadow-xs'
+                              : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                               }`}
                           >
                             ✨ Toàn đội (All)
@@ -16390,8 +16426,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             Phân Hệ Báo Cáo Chất Lượng & Điều Hành DKBike
                           </h2>
                           <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${selectedReportWeekInsideMonth === 'all'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-indigo-50 text-indigo-700 border-indigo-200'
                             }`}>
                             {selectedReportWeekInsideMonth === 'all'
                               ? `Báo cáo Tổng hợp Tháng ${selectedMonthlyReportMonth}/2026`
@@ -16599,7 +16635,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                       cy="72"
                                       r="60"
                                       className={`${compositeScore >= 95 ? 'stroke-indigo-650' :
-                                          compositeScore >= 85 ? 'stroke-emerald-500' : 'stroke-amber-500'
+                                        compositeScore >= 85 ? 'stroke-emerald-500' : 'stroke-amber-500'
                                         } transition-all duration-500`}
                                       strokeWidth="11"
                                       fill="transparent"
@@ -17005,8 +17041,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                                                         setPlanningTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus } : t));
                                                                       }}
                                                                       className={`w-full font-bold text-[11px] p-1.5 rounded-lg border outline-none cursor-pointer tracking-tight font-sans ${task.status === 'Completed' ? 'bg-green-50 text-green-800 border-green-200' :
-                                                                          task.status === 'In_Progress' ? 'bg-purple-50 text-purple-800 border-purple-200' :
-                                                                            'bg-slate-100 text-slate-600 border-slate-250'
+                                                                        task.status === 'In_Progress' ? 'bg-purple-50 text-purple-800 border-purple-200' :
+                                                                          'bg-slate-100 text-slate-600 border-slate-250'
                                                                         }`}
                                                                     >
                                                                       <option value="Pending">⏳ Chưa thực hiện</option>
@@ -17299,7 +17335,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                                     </td>
                                                     <td className="p-2.5 text-center">
                                                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${log.statusPercent === '100%' ? 'bg-green-55 text-green-700' :
-                                                          log.statusPercent === '50%' ? 'bg-amber-55 text-amber-700' : 'bg-red-55 text-red-700'
+                                                        log.statusPercent === '50%' ? 'bg-amber-55 text-amber-700' : 'bg-red-55 text-red-700'
                                                         }`}>
                                                         {log.statusPercent}
                                                       </span>
@@ -17494,7 +17530,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                                   <span className="text-[10px] text-slate-400 font-mono font-semibold">{item.date}</span>
                                                 </div>
                                                 <span className={`text-[9px] font-black px-1.5 py-0.5 rounded whitespace-nowrap ${item.statusPercent === '100%' ? 'bg-green-100 text-green-800' :
-                                                    item.statusPercent === '50%' ? 'bg-amber-100 text-amber-805' : 'bg-red-100 text-red-800'
+                                                  item.statusPercent === '50%' ? 'bg-amber-100 text-amber-805' : 'bg-red-100 text-red-800'
                                                   }`}>{item.statusPercent}</span>
                                               </div>
                                               <p className="font-bold text-slate-800 leading-normal whitespace-pre-line bg-white/50 p-1.5 rounded border border-rose-50">{item.content}</p>
@@ -17531,7 +17567,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                               </div>
                                               <div className="flex items-center gap-1.5">
                                                 <span className={`text-[8px] font-black px-1 py-0.5 rounded uppercase ${item.severity === 'A' ? 'bg-red-650 text-white' :
-                                                    item.severity === 'B' ? 'bg-amber-100 text-amber-800' : 'bg-blue-105 text-blue-800'
+                                                  item.severity === 'B' ? 'bg-amber-100 text-amber-800' : 'bg-blue-105 text-blue-800'
                                                   }`}>Cấp {item.severity}</span>
                                                 <span className="text-[10px] text-indigo-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">🔍 Xem</span>
                                               </div>
@@ -17903,8 +17939,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                                 );
                                               }}
                                               className={`mx-auto p-1 font-black text-[10px] rounded border transition outline-none ${t.achieved === true ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
-                                                  t.achieved === false ? 'bg-rose-50 text-rose-700 border-rose-300' :
-                                                    'bg-slate-100 text-slate-600 border-slate-200'
+                                                t.achieved === false ? 'bg-rose-50 text-rose-700 border-rose-300' :
+                                                  'bg-slate-100 text-slate-600 border-slate-200'
                                                 }`}
                                             >
                                               <option value="Yes">✓ HOÀN THÀNH</option>
@@ -18221,9 +18257,9 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                     <td className="p-3 font-bold text-slate-400 text-center">{task.stt || index + 1}</td>
                                     <td className="p-3 font-semibold text-slate-700">
                                       <span className={`px-2 py-0.5 rounded text-[10px] ${task.category === 'Phát triển sản phẩm' ? 'bg-blue-50 text-blue-600' :
-                                          task.category === 'Hoạt động 5S, Cải tiến' ? 'bg-amber-50 text-amber-600' :
-                                            task.category === 'Quản lý chất lượng' ? 'bg-indigo-50 text-indigo-600' :
-                                              task.category === 'SQC/QA' ? 'bg-rose-50 text-rose-600 font-extrabold border border-rose-200' : 'bg-slate-100 text-slate-600'
+                                        task.category === 'Hoạt động 5S, Cải tiến' ? 'bg-amber-50 text-amber-600' :
+                                          task.category === 'Quản lý chất lượng' ? 'bg-indigo-50 text-indigo-600' :
+                                            task.category === 'SQC/QA' ? 'bg-rose-50 text-rose-600 font-extrabold border border-rose-200' : 'bg-slate-100 text-slate-600'
                                         }`}>
                                         {task.category}
                                       </span>
@@ -19411,7 +19447,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                   cy="72"
                                   r="60"
                                   className={`${compositeScore >= 92 ? 'stroke-indigo-600' :
-                                      compositeScore >= 85 ? 'stroke-emerald-500' : 'stroke-amber-500'
+                                    compositeScore >= 85 ? 'stroke-emerald-500' : 'stroke-amber-500'
                                     } transition-all duration-500`}
                                   strokeWidth="11"
                                   fill="transparent"
@@ -19808,8 +19844,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                                                     setPlanningTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus } : t));
                                                                   }}
                                                                   className={`w-full font-bold text-[11px] p-1.5 rounded-lg border outline-none cursor-pointer tracking-tight font-sans ${task.status === 'Completed' ? 'bg-green-50 text-green-800 border-green-200' :
-                                                                      task.status === 'In_Progress' ? 'bg-purple-50 text-purple-800 border-purple-200' :
-                                                                        'bg-slate-100 text-slate-600 border-slate-250'
+                                                                    task.status === 'In_Progress' ? 'bg-purple-50 text-purple-800 border-purple-200' :
+                                                                      'bg-slate-100 text-slate-600 border-slate-250'
                                                                     }`}
                                                                 >
                                                                   <option value="Pending">⏳ Chưa thực hiện</option>
@@ -20274,7 +20310,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                           </div>
                                           <div className="flex items-center gap-1.5">
                                             <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded uppercase font-mono tracking-wide ${item.severity === 'A' ? 'bg-red-600 text-white animate-pulse' :
-                                                item.severity === 'B' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                                              item.severity === 'B' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
                                               }`}>Cấp {item.severity}</span>
                                             <span className="text-[10px] text-indigo-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">🔍 Xem</span>
                                           </div>
@@ -20323,7 +20359,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                               <span className="text-[10px] text-slate-400 font-mono font-semibold">{item.date}</span>
                                             </div>
                                             <span className={`text-[9px] font-black px-1.5 py-0.5 rounded whitespace-nowrap ${item.statusPercent === '100%' ? 'bg-green-100 text-green-800' :
-                                                item.statusPercent === '50%' ? 'bg-amber-100 text-amber-805' : 'bg-red-100 text-red-800'
+                                              item.statusPercent === '50%' ? 'bg-amber-100 text-amber-805' : 'bg-red-100 text-red-800'
                                               }`}>{item.statusPercent}</span>
                                           </div>
                                           <p className="font-bold text-slate-800 leading-normal whitespace-pre-line bg-white/50 p-1.5 rounded border border-rose-50">{item.content}</p>
@@ -20398,8 +20434,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm animate-fade-in">
                           <div className="flex items-center gap-3">
                             <span className={`px-2.5 py-1 text-[10px] font-black rounded uppercase tracking-wider ${currentMPlan.status === 'Approved' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                                currentMPlan.status === 'Pending' ? 'bg-amber-100 text-amber-800 border border-amber-200 animate-pulse' :
-                                  'bg-slate-100 text-slate-700 border border-slate-200'
+                              currentMPlan.status === 'Pending' ? 'bg-amber-100 text-amber-800 border border-amber-200 animate-pulse' :
+                                'bg-slate-100 text-slate-700 border border-slate-200'
                               }`}>
                               Trạng thái: {currentMPlan.status === 'Approved' ? 'Đã duyệt ✓' : currentMPlan.status === 'Pending' ? 'Chờ duyệt ⏳' : 'Bản nháp ✏'}
                             </span>
@@ -20757,8 +20793,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                             );
                                           }}
                                           className={`mx-auto p-1 font-black text-[10px] rounded border transition outline-none cursor-pointer ${t.achieved === true ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
-                                              t.achieved === false ? 'bg-rose-50 text-rose-700 border-rose-300' :
-                                                'bg-slate-100 text-slate-600 border-slate-200'
+                                            t.achieved === false ? 'bg-rose-50 text-rose-700 border-rose-300' :
+                                              'bg-slate-100 text-slate-600 border-slate-200'
                                             }`}
                                         >
                                           <option value="Yes">✓ HOÀN THÀNH</option>
@@ -21341,8 +21377,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                               <td className="p-3 text-slate-600 font-medium leading-relaxed">{r.findings}</td>
                               <td className="p-3 text-center">
                                 <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${r.status === 'Đạt hoàn toàn' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                                    r.status === 'Đá cải tiến' || r.status === 'Đã cải tiến' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                                      'bg-amber-50 text-amber-600 border border-amber-200 animate-pulse'
+                                  r.status === 'Đá cải tiến' || r.status === 'Đã cải tiến' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                    'bg-amber-50 text-amber-600 border border-amber-200 animate-pulse'
                                   }`}>
                                   {r.status}
                                 </span>
@@ -21464,7 +21500,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                               </td>
                               <td className="p-3 text-center">
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${r.status === 'Đạt' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                                    r.status === 'Lỗi' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-slate-100 text-slate-500'
+                                  r.status === 'Lỗi' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-slate-100 text-slate-500'
                                   }`}>
                                   {r.status}
                                 </span>
@@ -22670,8 +22706,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                               </td>
                               <td className="p-2.5 text-center">
                                 <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border tracking-wider ${isCompleted
-                                    ? 'bg-green-50 text-green-700 border-green-200'
-                                    : 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
+                                  ? 'bg-green-50 text-green-700 border-green-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse'
                                   }`}>
                                   {isCompleted ? 'Đã hoàn thành' : 'Đang xử lý'}
                                 </span>
@@ -22858,8 +22894,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         key={p.id}
                         onClick={() => setSelectedPtspProject(p.id)}
                         className={`group rounded-2xl border transition-all cursor-pointer relative flex flex-col justify-between text-left overflow-hidden ${isSelected
-                            ? 'bg-[#0213b0]/5 border-[#0213b0] shadow-md ring-1 ring-[#0213b0]/25'
-                            : 'bg-white border-slate-200 hover:border-slate-350 hover:shadow-md'
+                          ? 'bg-[#0213b0]/5 border-[#0213b0] shadow-md ring-1 ring-[#0213b0]/25'
+                          : 'bg-white border-slate-200 hover:border-slate-350 hover:shadow-md'
                           }`}
                       >
                         {/* Image Header with Badge Overlay */}
@@ -23164,10 +23200,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                         <div
                                           onClick={() => setSelectedPtspStage(stg.num)}
                                           className={`absolute rounded-lg border flex flex-col justify-center h-6 text-center shadow-xs font-semibold select-none cursor-pointer hover:brightness-95 hover:scale-[1.01] transition-all ${isFinished
-                                              ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-emerald-600'
-                                              : isUnstarted
-                                                ? 'bg-slate-100 border-slate-200 text-slate-400 border-dashed'
-                                                : 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-900 border-amber-500'
+                                            ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-emerald-600'
+                                            : isUnstarted
+                                              ? 'bg-slate-100 border-slate-200 text-slate-400 border-dashed'
+                                              : 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-900 border-amber-500'
                                             }`}
                                           style={{
                                             left: `${leftPercent}%`,
@@ -23547,8 +23583,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   <button
                     onClick={() => setShowDefectsDashboard(!showDefectsDashboard)}
                     className={`font-bold text-xs p-2.5 rounded-lg transition shadow flex items-center justify-center cursor-pointer ${showDefectsDashboard
-                        ? 'bg-indigo-900 text-white ring-2 ring-indigo-400'
-                        : 'bg-indigo-700 hover:bg-indigo-800 text-white'
+                      ? 'bg-indigo-900 text-white ring-2 ring-indigo-400'
+                      : 'bg-indigo-700 hover:bg-indigo-800 text-white'
                       }`}
                     title={showDefectsDashboard ? "Thu gọn Dashboard Thống kê" : "Xem Dashboard Thống kê Lỗi & Cải tiến"}
                   >
@@ -23557,15 +23593,15 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   <button
                     onClick={() => setIsMarketDefectsFilterExpanded(!isMarketDefectsFilterExpanded)}
                     className={`relative font-bold text-xs p-2.5 rounded-lg transition shadow flex items-center justify-center cursor-pointer ${isMarketDefectsFilterExpanded
-                        ? 'bg-slate-800 text-white ring-2 ring-slate-400'
-                        : (marketDefectsSearch ||
-                          marketDefectsFilterModel !== 'All' ||
-                          marketDefectsFilterStatus !== 'All' ||
-                          marketDefectsFilterMonth !== 'All' ||
-                          marketDefectsFilterYear !== 'All' ||
-                          marketDefectsFilterQuickTime !== 'All')
-                          ? 'bg-indigo-700 text-white ring-2 ring-indigo-400'
-                          : 'bg-slate-700 hover:bg-slate-800 text-white'
+                      ? 'bg-slate-800 text-white ring-2 ring-slate-400'
+                      : (marketDefectsSearch ||
+                        marketDefectsFilterModel !== 'All' ||
+                        marketDefectsFilterStatus !== 'All' ||
+                        marketDefectsFilterMonth !== 'All' ||
+                        marketDefectsFilterYear !== 'All' ||
+                        marketDefectsFilterQuickTime !== 'All')
+                        ? 'bg-indigo-700 text-white ring-2 ring-indigo-400'
+                        : 'bg-slate-700 hover:bg-slate-800 text-white'
                       }`}
                     title={isMarketDefectsFilterExpanded ? "Thu gọn bộ lọc" : "Mở rộng bộ lọc tìm kiếm"}
                   >
@@ -24076,10 +24112,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                     Cấp {d.severity || 'C'}
                                   </span>
                                   <span className={`px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-bold whitespace-nowrap ${d.status === 'Đã xử lý'
-                                      ? 'bg-green-100 text-green-700 border border-green-300'
-                                      : d.status === 'Đề xuất cải tiến'
-                                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                                        : 'bg-yellow-100 text-amber-700 border border-amber-300'
+                                    ? 'bg-green-100 text-green-700 border border-green-300'
+                                    : d.status === 'Đề xuất cải tiến'
+                                      ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                      : 'bg-yellow-100 text-amber-700 border border-amber-300'
                                     }`}>
                                     {d.status || 'Chưa xử lý'}
                                   </span>
@@ -24301,10 +24337,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                     Cấp {d.severity || 'C'}
                                   </span>
                                   <span className={`px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-bold whitespace-nowrap ${d.status === 'Đã xử lý'
-                                      ? 'bg-green-100 text-green-700 border border-green-300'
-                                      : d.status === 'Đề xuất cải tiến'
-                                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                                        : 'bg-yellow-100 text-amber-700 border border-amber-300'
+                                    ? 'bg-green-100 text-green-700 border border-green-300'
+                                    : d.status === 'Đề xuất cải tiến'
+                                      ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                      : 'bg-yellow-100 text-amber-700 border border-amber-300'
                                     }`}>
                                     {d.status || 'Chưa xử lý'}
                                   </span>
@@ -24440,7 +24476,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           <td className="p-3 text-center font-mono font-extrabold text-sm text-indigo-700">{f.rpn}</td>
                           <td className="p-3">
                             <span className={`px-2 py-0.5 text-[10px] font-black rounded uppercase ${f.riskLevel === 'Cao' ? 'bg-red-600 text-white animate-pulse' :
-                                f.riskLevel === 'Trung bình' ? 'bg-amber-100 text-amber-700 font-bold' : 'bg-slate-150 text-slate-500 font-normal'
+                              f.riskLevel === 'Trung bình' ? 'bg-amber-100 text-amber-700 font-bold' : 'bg-slate-150 text-slate-500 font-normal'
                               }`}>
                               {f.riskLevel}
                             </span>
@@ -24887,11 +24923,11 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 </td>
                                 <td className="p-3">
                                   <span className={`px-2 py-0.5 rounded text-[10px] border ${item.category === 'Tái chế' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                      item.category === 'Sửa chữa' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                        item.category === 'Bảo hành' ? 'bg-red-50 text-red-700 border-red-200' :
-                                          item.category === 'Đổi trả' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                                            item.category === 'Dừng chuyền' ? 'bg-rose-100 text-rose-800 border-rose-200 animate-pulse' :
-                                              'bg-slate-50 text-slate-600 border-slate-200'
+                                    item.category === 'Sửa chữa' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                      item.category === 'Bảo hành' ? 'bg-red-50 text-red-700 border-red-200' :
+                                        item.category === 'Đổi trả' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                          item.category === 'Dừng chuyền' ? 'bg-rose-100 text-rose-800 border-rose-200 animate-pulse' :
+                                            'bg-slate-50 text-slate-600 border-slate-200'
                                     }`}>
                                     {item.category}
                                   </span>
@@ -25136,8 +25172,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 <span className="font-extrabold text-slate-850 block">{eco.id}</span>
                                 <span className="text-[10px] text-slate-400 font-mono block">Dựa trên {eco.ecrId}</span>
                                 <span className={`inline-block px-1.5 py-0.5 rounded-[4px] text-[8.5px] font-bold uppercase mt-1 ${['Cải tiến dây chuyền', 'Cải tiến máy móc thiết bị', 'Cải tiến quy trình', 'Cải tiến khác'].includes(eco.category)
-                                    ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                    : 'bg-indigo-50 text-indigo-800 border border-indigo-150'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  : 'bg-indigo-50 text-indigo-800 border border-indigo-150'
                                   }`}>
                                   {eco.category || 'Thiết kế'}
                                 </span>
@@ -25155,8 +25191,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                               <td className="p-3 text-center font-mono text-[11px]">{eco.applyDate}</td>
                               <td className="p-3 text-center">
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${eco.status === 'Đã áp dụng' ? 'bg-green-150 text-green-700' :
-                                    eco.status === 'Chưa xử lý' ? 'bg-yellow-105 text-amber-700' :
-                                      eco.status === 'Đang thử nghiệm' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-slate-100 text-slate-500'
+                                  eco.status === 'Chưa xử lý' ? 'bg-yellow-105 text-amber-700' :
+                                    eco.status === 'Đang thử nghiệm' ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-slate-100 text-slate-500'
                                   }`}>
                                   {eco.status}
                                 </span>
@@ -25295,8 +25331,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             </td>
                             <td className="p-3 text-center">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${act.status === 'Đã hoàn thành' ? 'bg-green-100 text-green-700' :
-                                  act.status === 'Đang thực hiện' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
-                                    'bg-slate-100 text-slate-500'
+                                act.status === 'Đang thực hiện' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                                  'bg-slate-100 text-slate-500'
                                 }`}>
                                 {act.status}
                               </span>
@@ -25495,8 +25531,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
 
                       <div className="space-y-1.5">
                         <div className={`p-4 rounded-2xl text-[11px] leading-relaxed whitespace-pre-wrap font-sans text-left shadow-xs ${msg.role === 'user'
-                            ? 'bg-emerald-750 text-white rounded-tr-none'
-                            : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none'
+                          ? 'bg-emerald-750 text-white rounded-tr-none'
+                          : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none'
                           }`}>
                           {msg.text}
 
@@ -26027,8 +26063,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             <div className="text-right">
                               <span className="text-[10px] text-slate-400 block font-bold">XẾP HẠNG</span>
                               <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase inline-block mt-0.5 ${(s.status || s.QualityRating) === 'A' ? 'bg-green-100 text-green-700' :
-                                  (s.status || s.QualityRating) === 'B' ? 'bg-blue-100 text-blue-700' :
-                                    (s.status || s.QualityRating) === 'C' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700 animate-pulse'
+                                (s.status || s.QualityRating) === 'B' ? 'bg-blue-100 text-blue-700' :
+                                  (s.status || s.QualityRating) === 'C' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700 animate-pulse'
                                 }`}>Hạng {s.status || s.QualityRating || 'B'}</span>
                             </div>
                             <div className="flex gap-1">
@@ -26956,8 +26992,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             <label
                               key={m.id}
                               className={`flex items-center gap-1.5 px-2 py-1 rounded border text-[11px] font-bold cursor-pointer transition-all ${isChecked
-                                  ? 'bg-sky-50 border-sky-300 text-sky-800'
-                                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                                ? 'bg-sky-50 border-sky-300 text-sky-800'
+                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
                                 }`}
                             >
                               <input
@@ -27516,8 +27552,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             type="button"
                             onClick={() => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, imageUrl: img.url } })}
                             className={`h-11 rounded-lg border overflow-hidden relative transition-all ${globalEditModal.data.imageUrl === img.url
-                                ? 'border-[#0213b0] ring-2 ring-[#0213b0]/20 scale-95 shadow-sm'
-                                : 'border-slate-200 hover:border-slate-350 hover:scale-102'
+                              ? 'border-[#0213b0] ring-2 ring-[#0213b0]/20 scale-95 shadow-sm'
+                              : 'border-slate-200 hover:border-slate-350 hover:scale-102'
                               }`}
                             title={img.title}
                           >
@@ -27634,8 +27670,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                       });
                                     }}
                                     className={`w-full text-left px-3 py-2 text-xs font-bold transition-colors flex items-center justify-between hover:bg-indigo-50 hover:text-indigo-700 ${(globalEditModal.data.model) === m.name
-                                        ? 'bg-indigo-50 text-indigo-700 font-extrabold'
-                                        : 'text-slate-700'
+                                      ? 'bg-indigo-50 text-indigo-700 font-extrabold'
+                                      : 'text-slate-700'
                                       }`}
                                   >
                                     <span>{m.name}</span>
@@ -27732,8 +27768,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                       });
                                     }}
                                     className={`w-full text-left px-3 py-2 text-xs font-bold transition-colors flex items-center justify-between hover:bg-indigo-50 hover:text-indigo-700 ${(globalEditModal.data.dealer || globalEditModal.data.Dealer) === d.name
-                                        ? 'bg-indigo-50 text-indigo-700 font-extrabold'
-                                        : 'text-slate-700'
+                                      ? 'bg-indigo-50 text-indigo-700 font-extrabold'
+                                      : 'text-slate-700'
                                       }`}
                                   >
                                     <span>{d.name}</span>
@@ -28804,8 +28840,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 });
                               }}
                               className={`px-2 py-1 rounded text-xs font-bold transition border flex items-center gap-1.5 ${isChecked
-                                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
-                                  : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                                ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
+                                : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                                 }`}
                             >
                               <span className={`w-1.5 h-1.5 rounded-full ${isChecked ? 'bg-white' : 'bg-slate-400'}`}></span>
@@ -28826,8 +28862,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             });
                           }}
                           className={`px-3 py-1 rounded text-xs font-extrabold transition border ${globalEditModal.data.assignee === 'Phối hợp toàn đội (All)'
-                              ? 'bg-amber-600 border-amber-600 text-white shadow-xs'
-                              : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                            ? 'bg-amber-600 border-amber-600 text-white shadow-xs'
+                            : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                             }`}
                         >
                           ✨ Toàn đội (All)
@@ -29084,8 +29120,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
               <div>
                 <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Phân hệ / Nguồn lỗi</label>
                 <span className={`inline-block px-2 py-1 rounded text-[10px] font-extrabold uppercase ${editingModelIssue.type === 'PQC' ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' :
-                    editingModelIssue.type === 'OQC' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
-                      'bg-rose-100 text-rose-800 border border-rose-200'
+                  editingModelIssue.type === 'OQC' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                    'bg-rose-100 text-rose-800 border border-rose-200'
                   }`}>
                   {editingModelIssue.type === 'MarketDefect' ? 'Thị trường' : editingModelIssue.type}
                 </span>
@@ -29279,8 +29315,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       <div
                         key={idx}
                         className={`aspect-square flex flex-col items-center justify-center rounded-xl transition-all relative ${item.isCurrentMonth
-                            ? 'text-slate-800 font-bold'
-                            : 'text-slate-350 font-normal bg-slate-50/50'
+                          ? 'text-slate-800 font-bold'
+                          : 'text-slate-350 font-normal bg-slate-50/50'
                           } ${activeToday
                             ? 'bg-indigo-600 text-white font-black shadow-md ring-2 ring-indigo-300 ring-offset-1 scale-105 z-10'
                             : 'hover:bg-slate-50 cursor-pointer'
@@ -29376,8 +29412,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Trạng thái kết nối Cloud:</span>
                     <div className="mt-1 font-bold text-xs flex items-center gap-2">
                       <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${syncStatus === 'syncing' ? 'bg-blue-500 animate-ping' :
-                          syncStatus === 'error' ? 'bg-rose-500' :
-                            'bg-emerald-500'
+                        syncStatus === 'error' ? 'bg-rose-500' :
+                          'bg-emerald-500'
                         }`}></span>
                       <span className={
                         syncStatus === 'syncing' ? 'text-blue-700 font-extrabold' :
@@ -29709,8 +29745,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             </td>
                             <td className="p-3 text-center">
                               <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold inline-block ${def.status === 'Đã xử lý' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                                  def.status === 'Đang xử lý' ? 'bg-amber-50 text-amber-600 border border-amber-200' :
-                                    'bg-red-50 text-red-700 border border-red-200'
+                                def.status === 'Đang xử lý' ? 'bg-amber-50 text-amber-600 border border-amber-200' :
+                                  'bg-red-50 text-red-700 border border-red-200'
                                 }`}>
                                 {def.status}
                               </span>
@@ -29884,8 +29920,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             setSqcLogAssignee(newList.join(', '));
                           }}
                           className={`px-2 py-1 rounded text-xs font-bold transition border flex items-center gap-1.5 ${isChecked
-                              ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
-                              : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100/85'
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
+                            : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100/85'
                             }`}
                         >
                           <span className={`w-1.5 h-1.5 rounded-full ${isChecked ? 'bg-white' : 'bg-slate-400'}`}></span>
@@ -30179,8 +30215,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         type="button"
                         onClick={() => setAddPtspImageUrl(img.url)}
                         className={`h-11 rounded-lg border overflow-hidden relative transition-all ${addPtspImageUrl === img.url
-                            ? 'border-[#0213b0] ring-2 ring-[#0213b0]/20 scale-95 shadow-sm'
-                            : 'border-slate-200 hover:border-slate-350 hover:scale-102'
+                          ? 'border-[#0213b0] ring-2 ring-[#0213b0]/20 scale-95 shadow-sm'
+                          : 'border-slate-200 hover:border-slate-350 hover:scale-102'
                           }`}
                         title={img.title}
                       >
@@ -30478,8 +30514,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   type="button"
                   onClick={() => setBulkImportType('supplier')}
                   className={`flex-1 py-2 text-center rounded-lg font-bold border transition ${bulkImportType === 'supplier'
-                      ? 'bg-emerald-50 border-emerald-500 text-emerald-700 font-extrabold shadow-2xs'
-                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                    ? 'bg-emerald-50 border-emerald-500 text-emerald-700 font-extrabold shadow-2xs'
+                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
                     }`}
                 >
                   📦 Nhà Cung Cấp (Suppliers)
@@ -30488,8 +30524,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   type="button"
                   onClick={() => setBulkImportType('dealer')}
                   className={`flex-1 py-2 text-center rounded-lg font-bold border transition ${bulkImportType === 'dealer'
-                      ? 'bg-emerald-50 border-emerald-500 text-emerald-700 font-extrabold shadow-2xs'
-                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
+                    ? 'bg-emerald-50 border-emerald-500 text-emerald-700 font-extrabold shadow-2xs'
+                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
                     }`}
                 >
                   🤝 Khách Hàng / Đại Lý (Dealers)
@@ -31550,8 +31586,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                             <td className="p-2.5 font-semibold text-slate-700">{item.assignee || 'Trưởng nhóm QA'}</td>
                             <td className="p-2.5">
                               <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase ${item.status === 'Đã xử lý' ? 'bg-emerald-100 text-emerald-800' :
-                                  item.status === 'Đang xử lý' ? 'bg-amber-100 text-amber-800' :
-                                    'bg-rose-100 text-rose-800'
+                                item.status === 'Đang xử lý' ? 'bg-amber-100 text-amber-800' :
+                                  'bg-rose-100 text-rose-800'
                                 }`}>
                                 {item.status || 'Chưa xử lý'}
                               </span>
@@ -31603,8 +31639,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                   disabled={bulkImportParsedPreview.length === 0}
                   onClick={handleConfirmBulkDefectsImport}
                   className={`px-5 py-2 text-white font-extrabold rounded-xl shadow-md transition flex items-center gap-1.5 ${bulkImportParsedPreview.length > 0
-                      ? 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer'
-                      : 'bg-slate-300 cursor-not-allowed opacity-60'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 cursor-pointer'
+                    : 'bg-slate-300 cursor-not-allowed opacity-60'
                     }`}
                 >
                   <CheckCircle className="w-4 h-4" /> Xác Nhận Nhập ({bulkImportParsedPreview.length}) Bản Ghi
@@ -31748,8 +31784,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                                   setIsDefectModelDropdownOpen(false);
                                 }}
                                 className={`w-full text-left px-3 py-2 text-xs font-bold transition-colors flex items-center justify-between hover:bg-indigo-50 hover:text-indigo-700 ${selectedDefectModel === m.name
-                                    ? 'bg-indigo-50 text-indigo-700 font-extrabold'
-                                    : 'text-slate-700'
+                                  ? 'bg-indigo-50 text-indigo-700 font-extrabold'
+                                  : 'text-slate-700'
                                   }`}
                               >
                                 <span>{m.name}</span>
@@ -31826,8 +31862,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                                   setIsDefectDealerDropdownOpen(false);
                                 }}
                                 className={`w-full text-left px-3 py-2 text-xs font-bold transition-colors flex items-center justify-between hover:bg-indigo-50 hover:text-indigo-700 ${selectedDefectDealer === d.name
-                                    ? 'bg-indigo-50 text-indigo-700 font-extrabold'
-                                    : 'text-slate-700'
+                                  ? 'bg-indigo-50 text-indigo-700 font-extrabold'
+                                  : 'text-slate-700'
                                   }`}
                               >
                                 <span>{d.name}</span>
@@ -32155,8 +32191,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                                 setIsImprovementModelDropdownOpen(false);
                               }}
                               className={`w-full text-left px-3 py-2 text-xs font-bold transition-colors flex items-center justify-between hover:bg-emerald-50 hover:text-emerald-700 ${selectedImprovementModel === m.name
-                                  ? 'bg-emerald-50 text-emerald-700 font-extrabold'
-                                  : 'text-slate-700'
+                                ? 'bg-emerald-50 text-emerald-700 font-extrabold'
+                                : 'text-slate-700'
                                 }`}
                             >
                               <span>{m.name}</span>
@@ -32232,8 +32268,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                                   setIsImprovementDealerDropdownOpen(false);
                                 }}
                                 className={`w-full text-left px-3 py-2 text-xs font-bold transition-colors flex items-center justify-between hover:bg-emerald-50 hover:text-emerald-700 ${selectedImprovementDealer === d.name
-                                    ? 'bg-emerald-50 text-emerald-700 font-extrabold'
-                                    : 'text-slate-700'
+                                  ? 'bg-emerald-50 text-emerald-700 font-extrabold'
+                                  : 'text-slate-700'
                                   }`}
                               >
                                 <span>{d.name}</span>
@@ -32515,8 +32551,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                   <div>
                     <span className="text-[10px] text-slate-400 block uppercase font-bold text-right">Xếp hạng đề xuất</span>
                     <span className={`px-2 py-0.5 rounded text-xs font-black uppercase inline-block mt-0.5 ${((supplierAuditScore.qms + supplierAuditScore.process + supplierAuditScore.equipment + supplierAuditScore.material) / 4) >= 85 ? 'bg-green-150 text-green-700' :
-                        ((supplierAuditScore.qms + supplierAuditScore.process + supplierAuditScore.equipment + supplierAuditScore.material) / 4) >= 70 ? 'bg-blue-100 text-blue-700' :
-                          ((supplierAuditScore.qms + supplierAuditScore.process + supplierAuditScore.equipment + supplierAuditScore.material) / 4) >= 50 ? 'bg-orange-100 text-orange-700' : 'bg-red-500 text-white animate-pulse'
+                      ((supplierAuditScore.qms + supplierAuditScore.process + supplierAuditScore.equipment + supplierAuditScore.material) / 4) >= 70 ? 'bg-blue-100 text-blue-700' :
+                        ((supplierAuditScore.qms + supplierAuditScore.process + supplierAuditScore.equipment + supplierAuditScore.material) / 4) >= 50 ? 'bg-orange-100 text-orange-700' : 'bg-red-500 text-white animate-pulse'
                       }`}>
                       Hạng {
                         ((supplierAuditScore.qms + supplierAuditScore.process + supplierAuditScore.equipment + supplierAuditScore.material) / 4) >= 85 ? 'A' :
@@ -33057,8 +33093,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                         <div className="w-1/3 shrink-0 text-slate-400 font-bold uppercase text-[10px] tracking-wide self-center">Trạng thái:</div>
                         <div className="w-2/3">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${(viewDetailModal.data.status === 'Đóng' || viewDetailModal.data.status === 'Đã đóng' || viewDetailModal.data.Status === 'Đã đóng')
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : 'bg-rose-100 text-rose-850 border border-rose-200'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-rose-100 text-rose-850 border border-rose-200'
                             }`}>
                             {viewDetailModal.data.status || viewDetailModal.data.Status || 'Mở'}
                           </span>
@@ -33140,8 +33176,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                     <div className="bg-slate-50 p-2.5 rounded-lg border">
                       <span className="text-[10px] text-slate-400 block font-bold">Xếp hạng NCC (Rating)</span>
                       <span className={`inline-block mt-1 px-2 py-0.5 text-[9.5px] font-black rounded uppercase ${viewDetailModal.data.rating === 'A' ? 'bg-emerald-600 text-white' :
-                          viewDetailModal.data.rating === 'B' ? 'bg-blue-600 text-white' :
-                            viewDetailModal.data.rating === 'C' ? 'bg-amber-500 text-white' : 'bg-red-650 text-white'
+                        viewDetailModal.data.rating === 'B' ? 'bg-blue-600 text-white' :
+                          viewDetailModal.data.rating === 'C' ? 'bg-amber-500 text-white' : 'bg-red-650 text-white'
                         }`}>
                         Hạng {viewDetailModal.data.rating || 'B'}
                       </span>
@@ -33295,8 +33331,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                       type="button"
                       onClick={() => setEcoNoticeViewMode('card')}
                       className={`flex-1 py-1.5 text-center text-[11px] sm:text-xs font-bold rounded-lg transition-all duration-150 cursor-pointer ${ecoNoticeViewMode === 'card'
-                          ? 'bg-white text-indigo-700 shadow-sm font-extrabold border border-slate-200'
-                          : 'text-slate-600 hover:bg-white/40 hover:text-indigo-600'
+                        ? 'bg-white text-indigo-700 shadow-sm font-extrabold border border-slate-200'
+                        : 'text-slate-600 hover:bg-white/40 hover:text-indigo-600'
                         }`}
                     >
                       🗂️ Thẻ Kỹ Thuật ECO
@@ -33305,8 +33341,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                       type="button"
                       onClick={() => setEcoNoticeViewMode('document')}
                       className={`flex-1 py-1.5 text-center text-[11px] sm:text-xs font-bold rounded-lg transition-all duration-150 cursor-pointer ${ecoNoticeViewMode === 'document'
-                          ? 'bg-white text-indigo-700 shadow-sm font-extrabold border border-slate-200'
-                          : 'text-slate-600 hover:bg-white/40 hover:text-indigo-600'
+                        ? 'bg-white text-indigo-700 shadow-sm font-extrabold border border-slate-200'
+                        : 'text-slate-600 hover:bg-white/40 hover:text-indigo-600'
                         }`}
                     >
                       📄 Văn Bản Thông Báo Cải Tiến (DK QMS)
@@ -33345,8 +33381,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                             <div className="bg-slate-50 p-2.5 rounded-lg border">
                               <span className="text-[10px] text-slate-400 block font-bold">Trạng thái triển khai</span>
                               <span className={`inline-block mt-1 px-2 py-0.5 text-[9px] font-black rounded uppercase ${viewDetailModal.data.status === 'Đã áp dụng' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                                  viewDetailModal.data.status === 'Đang thử nghiệm' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
-                                    'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                viewDetailModal.data.status === 'Đang thử nghiệm' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                                  'bg-indigo-50 text-indigo-700 border border-indigo-200'
                                 }`}>
                                 {viewDetailModal.data.status || 'Đang chuẩn bị'}
                               </span>
@@ -34755,8 +34791,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                   <div>
                     <span className="block text-[10px] text-slate-400 font-bold uppercase">Mức độ nguy hại</span>
                     <span className={`inline-block px-2 py-0.5 rounded font-black text-[11px] ${selectedDefectForReport.severity === 'A' || selectedDefectForReport.severity === 'Cao' ? 'bg-red-100 text-red-800 border border-red-300' :
-                        selectedDefectForReport.severity === 'B' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
-                          'bg-slate-100 text-slate-800 border border-slate-300'
+                      selectedDefectForReport.severity === 'B' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                        'bg-slate-100 text-slate-800 border border-slate-300'
                       }`}>
                       Mức {selectedDefectForReport.severity || 'C'}
                     </span>

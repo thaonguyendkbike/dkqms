@@ -60,6 +60,44 @@ import { doc, setDoc, getDocFromServer } from 'firebase/firestore';
 import { sanitizeFirestorePayload } from '../safeStorage';
 import { calculateAQLSample, AQLLevel, InspectionLevel, getAQLCodeLetter, CODE_LETTER_SAMPLE_SIZE, AQL_AC_RE_TABLE } from '../utils/aqlUtils';
 
+const COLOR_KEYWORDS = [
+  'trắng', 'đỏ', 'đen', 'xanh', 'ghi', 'xám', 'cam', 'vàng', 'tím', 'bạc', 'hồng', 'nâu',
+  'đồng', 'rêu', 'ngọc', 'xi măng', 'cửu long', 'bộ đội', 'pha lê', 'rubi', 'sần', 'bóng',
+  'nhám', 'mờ', 'tiêu chuẩn', 'khác', 'dòng khác', 'cherry', 'ánh tím', 'ngọc trinh', 'nfc',
+  '2 màu', 'phối màu', 'chuyển màu', 'đổi màu', 'đổi', 'màu', 'matte', 'gloss', 'white',
+  'black', 'red', 'blue', 'gray', 'grey', 'silver', 'gold', 'yellow', 'green', 'pink',
+  'purple', 'brown', 'cyan', 'orange'
+];
+
+const KNOWN_MODEL_KEYWORDS = [
+  'roma', 'gogo', 'd2', 'nova', 'ez3', 'samurai', 'xmen', 'xman', 'crea', 's1', 's2', 's3',
+  'z-mtp', 'zmtp', 'zmt', 'v2', 'miku', 'priti', 'temdd', 'temdv'
+];
+
+export const isColorOnlyString = (str: string): boolean => {
+  if (!str) return false;
+  const sLow = str.trim().toLowerCase();
+  
+  if (sLow.startsWith('dk ') || KNOWN_MODEL_KEYWORDS.some(k => sLow.includes(k))) {
+    return false;
+  }
+  
+  const parts = sLow.split(/[\-\/]/).map(p => p.trim()).filter(Boolean);
+  if (parts.length === 0) return false;
+  
+  const allPartsAreColors = parts.every(p => 
+    COLOR_KEYWORDS.some(c => p === c || p.startsWith(c) || p.endsWith(c) || p.includes(c))
+  );
+  
+  return allPartsAreColors;
+};
+
+export const isKnownModelString = (str: string): boolean => {
+  if (!str) return false;
+  const sLow = str.trim().toLowerCase();
+  return sLow.startsWith('dk ') || KNOWN_MODEL_KEYWORDS.some(k => sLow.includes(k));
+};
+
 export interface EcountRow {
   date: string;
   supplierCode: string;
@@ -576,6 +614,7 @@ function ModelDefectCard({ modelName, defects, onDefectClick }: ModelDefectCardP
 }
 
 interface AutocompleteInputProps {
+  id?: string;
   value: string;
   onChange: (val: string) => void;
   options: string[];
@@ -587,6 +626,7 @@ interface AutocompleteInputProps {
 }
 
 function AutocompleteInput({
+  id,
   value,
   onChange,
   options,
@@ -683,6 +723,7 @@ function AutocompleteInput({
   return (
     <div ref={containerRef} className="relative w-full">
       <input
+        id={id}
         ref={inputRef}
         type="text"
         value={localValue}
@@ -928,53 +969,89 @@ function standardizeDate(dateStr: string): string {
   return `${dd}/${mm}/${year}`;
 }
 
+function getMondayOfWeek(year: number, month: number, weekNum: number): Date {
+  const firstDayOfMonth = new Date(year, month - 1, 1);
+  const dow = firstDayOfMonth.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+  
+  let mon1Day: number;
+  if (dow === 1) mon1Day = 1;
+  else if (dow === 2) mon1Day = 0;
+  else if (dow === 3) mon1Day = -1;
+  else if (dow === 4) mon1Day = -2;
+  else if (dow === 5) mon1Day = 4;
+  else if (dow === 6) mon1Day = 3;
+  else if (dow === 0) mon1Day = 2;
+  else mon1Day = 1;
+
+  return new Date(year, month - 1, mon1Day + (weekNum - 1) * 7);
+}
+
 function getWeekAndMonthFromDate(dateStr: string): { week: string; month: number; year: number } {
   const today = new Date();
-  const currentMonth = today.getMonth() + 1;
   const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth() + 1;
   const currentDay = today.getDate();
 
-  const getCalendarWeekForDay = (d: number, m: number, y: number): number => {
-    const firstDayOfMonth = new Date(y, m - 1, 1);
-    const firstDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    const firstSundayDay = firstDayOfWeek === 0 ? 1 : 8 - firstDayOfWeek;
+  if (!dateStr || typeof dateStr !== 'string') {
+    const curInfo = getWeekAndMonthFromDate(`${currentDay}/${currentMonth}/${currentYear}`);
+    return curInfo;
+  }
 
-    if (d < firstSundayDay) {
-      return 1;
-    } else {
-      const diff = d - firstSundayDay;
-      return 2 + Math.floor(diff / 7);
-    }
-  };
-
-  const getDefaultWeek = () => {
-    const weekNum = getCalendarWeekForDay(currentDay, currentMonth, currentYear);
-    return `T${Math.min(5, weekNum)}`;
-  };
-
-  if (!dateStr) return { week: getDefaultWeek(), month: currentMonth, year: currentYear };
-  
   let day = 1;
   let month = currentMonth;
   let year = currentYear;
-  
-  if (dateStr.includes('-')) {
-    const parts = dateStr.split('-');
-    year = Number(parts[0]) || currentYear;
-    month = Number(parts[1]) || currentMonth;
-    day = Number(parts[2]) || 1;
-  } else if (dateStr.includes('/')) {
-    const parts = dateStr.split('/');
-    day = Number(parts[0]) || 1;
-    month = Number(parts[1]) || currentMonth;
-    const yrPart = parts[2] ? parts[2].trim() : '';
+
+  const clean = dateStr.trim();
+  const matchesYMD = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  const matchesDMY = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
+
+  if (matchesYMD) {
+    year = Number(matchesYMD[1]) || currentYear;
+    month = Number(matchesYMD[2]) || currentMonth;
+    day = Number(matchesYMD[3]) || 1;
+  } else if (matchesDMY) {
+    day = Number(matchesDMY[1]) || 1;
+    month = Number(matchesDMY[2]) || currentMonth;
+    const yrPart = matchesDMY[3];
     year = yrPart ? (yrPart.length === 2 ? 2000 + Number(yrPart) : Number(yrPart)) : currentYear;
   } else {
-    return { week: 'T1', month, year };
+    const parts = clean.split(/[-/. ]+/);
+    if (parts.length >= 3) {
+      if (parts[0].length === 4) {
+        year = Number(parts[0]) || currentYear;
+        month = Number(parts[1]) || currentMonth;
+        day = Number(parts[2]) || 1;
+      } else {
+        day = Number(parts[0]) || 1;
+        month = Number(parts[1]) || currentMonth;
+        const yrPart = parts[2];
+        year = yrPart ? (yrPart.length === 2 ? 2000 + Number(yrPart) : Number(yrPart)) : currentYear;
+      }
+    }
   }
-  
-  const weekNum = getCalendarWeekForDay(day, month, year);
-  const weekStr = `T${Math.min(5, weekNum)}`;
+
+  const targetDate = new Date(year, month - 1, day);
+
+  let weekStr = 'T1';
+  for (let w = 1; w <= 5; w++) {
+    const mon = getMondayOfWeek(year, month, w);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+
+    if (w === 1 && targetDate < mon) {
+      weekStr = 'T1';
+      break;
+    }
+    if (w === 5 && targetDate > sun) {
+      weekStr = 'T5';
+      break;
+    }
+    if (targetDate >= mon && targetDate <= sun) {
+      weekStr = `T${w}`;
+      break;
+    }
+  }
+
   return { week: weekStr, month, year };
 }
 
@@ -1812,7 +1889,6 @@ export default function QualityInspectionRecords({
   // Compute unique dynamic values for selects with useMemo
   const uniqueIqcSuppliers = useMemo(() => Array.from(new Set(iqcRecords.map(r => r.supplierName ? r.supplierName.trim() : ''))).filter(Boolean), [iqcRecords]);
   const uniquePqcModels = useMemo(() => Array.from(new Set(pqcRecords.map(r => r.model ? r.model.trim() : ''))).filter(Boolean), [pqcRecords]);
-  const uniqueOqcModels = useMemo(() => Array.from(new Set(oqcRecords.map(r => r.model ? r.model.trim() : ''))).filter(Boolean), [oqcRecords]);
   const uniqueOqcColors = useMemo(() => Array.from(new Set(oqcRecords.map(r => r.color ? r.color.trim() : ''))).filter(Boolean), [oqcRecords]);
   const uniqueOqcDates = useMemo(() => Array.from(
     new Set(
@@ -2047,7 +2123,7 @@ export default function QualityInspectionRecords({
         (r.color && r.color.toLowerCase().includes(sLower)) ||
         (r.defectDetail && r.defectDetail.toLowerCase().includes(sLower));
         
-      const matchesModel = oqcFilterModel === 'All' || r.model === oqcFilterModel;
+      const matchesModel = oqcFilterModel === 'All' || r.model === oqcFilterModel || getCleanModelName(r) === oqcFilterModel;
       const matchesColor = oqcFilterColor === 'All' || r.color === oqcFilterColor;
       const matchesDate = oqcFilterDate === 'All' || r.date === oqcFilterDate;
       const matchesMonth = oqcFilterMonth === 'All' || String(r.month) === oqcFilterMonth;
@@ -2128,54 +2204,70 @@ export default function QualityInspectionRecords({
   }, [oqcPartCodes]);
 
   const getCleanModelName = useCallback((r: { model?: string; color?: string; partCode?: string }): string => {
+    // 1. Authoritative lookup from partCode dictionary if available
+    if (r.partCode) {
+      const matched = lookupPartCode(r.partCode);
+      if (matched && matched.model) return matched.model.trim();
+    }
+
     let m = (r.model || '').trim();
     const mLow = m.toLowerCase();
-    if (mLow === 'đạt' || mLow === 'lỗi' || mLow === 'chưa kiểm tra' || mLow === 'pass' || mLow === 'fail' || mLow === '0' || mLow === '1' || !m) {
-      if (r.color && r.color.includes(' - ')) {
-        m = r.color.split(' - ')[0].trim();
-      } else if (r.color && r.color.includes('-') && !/^\d/.test(r.color)) {
-        m = r.color.split('-')[0].trim();
-      } else if (r.partCode) {
-        const matched = lookupPartCode(r.partCode);
-        if (matched) m = matched.model;
+
+    // Check if model string is empty, status text, or a vehicle color name
+    const isInvalidModel = !m || 
+      mLow === 'đạt' || mLow === 'lỗi' || mLow === 'chưa kiểm tra' || 
+      mLow === 'pass' || mLow === 'fail' || mLow === '0' || mLow === '1' || 
+      mLow === 'tiêu chuẩn' || mLow === 'dòng khác' || mLow === 'khác' ||
+      isColorOnlyString(m);
+
+    if (isInvalidModel) {
+      m = '';
+      // Try to extract model from color if color string format is "DK Roma SX - Đỏ"
+      if (r.color && (r.color.includes(' - ') || (r.color.includes('-') && !/^\d/.test(r.color)))) {
+        const delim = r.color.includes(' - ') ? ' - ' : '-';
+        const parts = r.color.split(delim).map(s => s.trim());
+        if (parts[0] && isKnownModelString(parts[0]) && !isColorOnlyString(parts[0])) {
+          m = parts[0];
+        }
       }
     }
-    const cleanLow = m.toLowerCase();
-    if (!m || cleanLow === 'đạt' || cleanLow === 'lỗi' || cleanLow === 'chưa kiểm tra' || cleanLow === 'tiêu chuẩn' || cleanLow === 'dòng khác' || cleanLow === 'khác') {
-      if (r.partCode) {
-        const pUp = r.partCode.toUpperCase();
-        if (pUp.includes('TEMDD') || pUp.includes('D2')) m = 'DK D2';
-        else if (pUp.includes('TEMDV') || pUp.includes('V2')) m = 'DK V2';
-        else if (pUp.includes('ROM') || pUp.includes('ROMA')) m = 'DK Roma SX V2';
-        else if (pUp.includes('GOGO') || pUp.includes('GG')) m = 'DK Gogo';
-        else if (pUp.includes('SAM')) m = 'DK Samurai';
-        else if (pUp.includes('XMEN') || pUp.includes('XMAN')) m = 'DK Xmen';
-        else if (pUp.includes('CREA')) m = 'DK Crea Mono';
-        else if (pUp.includes('EZ')) m = 'DK EZ3';
-        else if (pUp.includes('S1')) m = 'DK S1';
-        else if (pUp.includes('S2')) m = 'DK S2';
-        else if (pUp.includes('S3')) m = 'DK S3';
-        else if (pUp.includes('NOVA')) m = 'DK Nova';
-        else if (pUp.includes('ZMTP') || pUp.includes('ZMT')) m = 'DK Z-MTP';
-        else m = 'DK D2';
-      } else {
-        m = 'DK D2';
-      }
+
+    // 2. Fallback lookup by partCode prefix
+    if (!m && r.partCode) {
+      const pUp = r.partCode.toUpperCase();
+      if (pUp.includes('TEMDD') || pUp.includes('D2')) m = 'DK D2';
+      else if (pUp.includes('TEMDV') || pUp.includes('V2')) m = 'DK V2';
+      else if (pUp.includes('ROM') || pUp.includes('ROMA')) m = 'DK Roma SX V2';
+      else if (pUp.includes('GOGO') || pUp.includes('GG')) m = 'DK Gogo';
+      else if (pUp.includes('SAM')) m = 'DK Samurai';
+      else if (pUp.includes('XMEN') || pUp.includes('XMAN')) m = 'DK Xmen';
+      else if (pUp.includes('CREA')) m = 'DK Crea Mono';
+      else if (pUp.includes('EZ')) m = 'DK EZ3';
+      else if (pUp.includes('S1')) m = 'DK S1';
+      else if (pUp.includes('S2')) m = 'DK S2';
+      else if (pUp.includes('S3')) m = 'DK S3';
+      else if (pUp.includes('NOVA')) m = 'DK Nova';
+      else if (pUp.includes('ZMTP') || pUp.includes('ZMT')) m = 'DK Z-MTP';
     }
+
+    if (!m || isColorOnlyString(m)) {
+      m = 'DK D2';
+    }
+
     return m;
   }, [lookupPartCode]);
 
-  // Auto-clean any legacy records with 'Lỗi' or 'Đạt' as model name
+  // Auto-clean any legacy records with 'Lỗi', 'Đạt' or color names as model name
   React.useEffect(() => {
     if (!oqcRecords || oqcRecords.length === 0) return;
     let hasDirtyModel = false;
     const cleaned = oqcRecords.map(r => {
-      const mLow = (r.model || '').toLowerCase().trim();
-      if (mLow === 'lỗi' || mLow === 'đạt' || mLow === 'chưa kiểm tra' || mLow === 'pass' || mLow === 'fail' || !r.model) {
+      const cleanM = getCleanModelName(r);
+      if (r.model !== cleanM) {
         hasDirtyModel = true;
         return {
           ...r,
-          model: getCleanModelName(r)
+          model: cleanM
         };
       }
       return r;
@@ -2192,6 +2284,8 @@ export default function QualityInspectionRecords({
       }
     }
   }, [oqcRecords, getCleanModelName, setOqcRecords]);
+
+  const uniqueOqcModels = useMemo(() => Array.from(new Set(oqcRecords.map(r => getCleanModelName(r)).filter(Boolean))).sort(), [oqcRecords, getCleanModelName]);
 
   const defectModelTokenCounts = useMemo(() => {
     const counts: { [model: string]: { [token: string]: number } } = {};
@@ -4261,15 +4355,14 @@ export default function QualityInspectionRecords({
         let modelVal = rawModelCol;
         let colorVal = rawColorCol;
 
-        // If color contains "DK D2 - Ghi đen", split into Model and Color
-        if (colorVal.includes(' - ')) {
-          const parts = colorVal.split(' - ');
-          if (!modelVal) modelVal = parts[0].trim();
-          colorVal = parts.slice(1).join(' - ').trim();
-        } else if (colorVal.includes('-') && !modelVal) {
-          const parts = colorVal.split('-');
-          modelVal = parts[0].trim();
-          colorVal = parts.slice(1).join('-').trim();
+        // If color contains "DK D2 - Ghi đen", split into Model and Color ONLY IF prefix is a known model name
+        if (colorVal.includes(' - ') || (colorVal.includes('-') && !modelVal)) {
+          const delim = colorVal.includes(' - ') ? ' - ' : '-';
+          const parts = colorVal.split(delim);
+          if (!modelVal && isKnownModelString(parts[0]) && !isColorOnlyString(parts[0])) {
+            modelVal = parts[0].trim();
+            colorVal = parts.slice(1).join(delim).trim();
+          }
         }
 
         // If model still empty, lookup from OQC Part Codes dictionary
@@ -4612,13 +4705,15 @@ export default function QualityInspectionRecords({
     const splitModelAndColor = (combined: string): { model: string; color: string } => {
       if (!combined) return { model: '', color: '' };
       const raw = combined.trim();
-      if (raw.includes(' - ')) {
-        const parts = raw.split(' - ');
-        return { model: parts[0].trim(), color: parts.slice(1).join(' - ').trim() };
+      if (raw.includes(' - ') || (raw.includes('-') && !/^\d{1,2}[\/\-]/.test(raw))) {
+        const delim = raw.includes(' - ') ? ' - ' : '-';
+        const parts = raw.split(delim);
+        if (isKnownModelString(parts[0]) && !isColorOnlyString(parts[0])) {
+          return { model: parts[0].trim(), color: parts.slice(1).join(delim).trim() };
+        }
       }
-      if (raw.includes('-') && !/^\d{1,2}[\/\-]/.test(raw)) {
-        const parts = raw.split('-');
-        return { model: parts[0].trim(), color: parts.slice(1).join('-').trim() };
+      if (isColorOnlyString(raw)) {
+        return { model: '', color: raw };
       }
       return { model: raw, color: '' };
     };
@@ -14953,7 +15048,7 @@ export default function QualityInspectionRecords({
 
       {/* MODAL: DANH SÁCH CHI TIẾT BẢN GHI THEO MODEL BIỂU ĐỒ SẢN LƯỢNG */}
       {oqcDetailModalModel && (() => {
-        const detailRecords = filteredOqc.filter(r => (r.model || 'Dòng khác') === oqcDetailModalModel);
+        const detailRecords = filteredOqc.filter(r => getCleanModelName(r) === oqcDetailModalModel || (r.model || 'Dòng khác') === oqcDetailModalModel);
         return (
           <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
             <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-5xl w-full overflow-hidden text-xs flex flex-col font-sans max-h-[85vh] animate-in zoom-in-95 duration-150">
