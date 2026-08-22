@@ -5764,20 +5764,27 @@ export default function QualityInspectionRecords({
               <Plus className="w-3.5 h-3.5" /> Kích hoạt Giám sát NCC
             </button>
           )}
-          {qcMainSubTab !== 'reports' && (
-            <button 
-              onClick={
-                qcMainSubTab === 'iqc' ? handleExportIqcCSV :
-                qcMainSubTab === 'pqc' ? handleExportPqcCSV : 
-                qcMainSubTab === 'oqc' ? handleExportOqcCSV :
-                qcMainSubTab === 'color_change' ? handleExportColorChangeCSV :
-                () => alert('Hồ sơ xuất Excel giám sát nhà cung cấp đang đồng bộ trực tiếp lên server.')
+          <button 
+            onClick={() => {
+              if (qcMainSubTab === 'reports') {
+                setShowExportKcsReportModal(true);
+              } else if (qcMainSubTab === 'iqc') {
+                handleExportIqcCSV();
+              } else if (qcMainSubTab === 'pqc') {
+                handleExportPqcCSV();
+              } else if (qcMainSubTab === 'oqc') {
+                handleExportOqcCSV();
+              } else if (qcMainSubTab === 'color_change') {
+                handleExportColorChangeCSV();
+              } else {
+                alert('Hồ sơ xuất Excel giám sát nhà cung cấp đang đồng bộ trực tiếp lên server.');
               }
-              className="bg-white hover:bg-slate-50 shadow-sm border border-slate-200 text-slate-700 font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" /> Xuất Excel dữ liệu
-            </button>
-          )}
+            }}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] sm:text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-xs border border-emerald-500"
+            title="Xuất dữ liệu hoặc mở popup kết xuất báo cáo"
+          >
+            <Download className="w-3.5 h-3.5 text-white" /> {qcMainSubTab === 'reports' ? 'Xuất & In Báo Cáo' : 'Xuất Excel dữ liệu'}
+          </button>
         </div>
       </div>
 
@@ -10294,9 +10301,18 @@ export default function QualityInspectionRecords({
                     <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-full font-black uppercase tracking-widest border border-indigo-500/30">
                       Báo Cáo Tổng Hợp Chất Lượng & Công Việc
                     </span>
-                    <span className="text-xs text-slate-400 font-mono">
-                      Thời kỳ lọc: <strong className="text-slate-202 font-bold">{reportPeriod === 'All' ? 'Toàn bộ chu kỳ' : reportPeriod}</strong>
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-slate-400 font-mono">
+                        Thời kỳ lọc: <strong className="text-slate-200 font-bold">{reportPeriod === 'All' ? 'Toàn bộ chu kỳ' : reportPeriod}</strong>
+                      </span>
+                      <button
+                        onClick={() => setShowExportKcsReportModal(true)}
+                        className="bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 cursor-pointer border border-amber-500"
+                        title="Mở Trung tâm Kết Xuất Báo Cáo KCS / OQC (Tải Excel 6-Sheet hoặc In PDF)"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 text-white" /> Xuất &amp; In Báo Cáo KCS (Excel / PDF)
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <h3 className="text-xl font-black tracking-tight text-white">Consolidated Quality Report Dashboard</h3>

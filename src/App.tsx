@@ -777,11 +777,8 @@ export function isLogBeforeTargetWeek(logDate: string, logWeek: string, logYearV
   const wNum = parseInt(String(logWeek || '').replace('T', ''), 10) || 1;
   const targetWNum = parseInt(String(targetW || '').replace('T', ''), 10) || 1;
 
-  if (y < targetY) return true;
-  if (y > targetY) return false;
-
-  if (m < targetM) return true;
-  if (m > targetM) return false;
+  // Bỏ các công việc tồn đọng từ tháng/năm khác; chỉ giữ lại công việc tồn đọng của các tuần trước trong cùng tháng
+  if (y !== targetY || m !== targetM) return false;
 
   return wNum < targetWNum;
 }
@@ -10102,14 +10099,22 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     } else {
       exportIqc.forEach((item, idx) => {
         const isPass = item.result === 'Đạt' || item.status === 'Thông quan' || item.status === 'Pass' || item.result === 'Pass';
+        const partNameStr = item.itemSummary || item.content || item.partName || item.component || item.partCode || "Linh kiện";
+        const totalQtyVal = (item.totalQty !== undefined && item.totalQty !== null && Number(item.totalQty) > 0)
+          ? Number(item.totalQty)
+          : (item.totalQuantity || item.sampleSize || item.quantity || 1);
+        const failedQtyVal = (item.failedQty !== undefined && item.failedQty !== null)
+          ? Number(item.failedQty)
+          : (item.failedCount || item.defectCount || 0);
+
         aoaDataIqc.push([
           idx + 1,
           item.date || "-",
           item.code || item.id || `IQC-${idx + 1}`,
           item.supplierName || item.supplierCode || "N/A",
-          item.partName || item.component || item.partCode || "Linh kiện",
-          item.totalQuantity || item.sampleSize || item.quantity || 1,
-          item.failedCount || item.defectCount || 0,
+          partNameStr,
+          totalQtyVal,
+          failedQtyVal,
           isPass ? "ĐẠT (PASS)" : "LỖI (FAIL)",
           item.defectDetail || item.notes || (isPass ? "Đạt tiêu chuẩn kỹ thuật nhập kho" : "Cần trả lại nhà cung cấp"),
           item.inspector || item.checkedBy || "KCS Kiểm kho"
@@ -10321,13 +10326,18 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       addMerge3(aoaData3.length - 1, 1, aoaData3.length - 1, 6);
     } else {
       sheet3Iqc.forEach((item, idx) => {
+        const partNameStr = item.itemSummary || item.content || item.partName || item.component || item.partCode || "Linh kiện";
+        const failedQtyVal = (item.failedQty !== undefined && item.failedQty !== null && Number(item.failedQty) > 0)
+          ? Number(item.failedQty)
+          : (item.failedCount || 1);
+
         aoaData3.push([
           idx + 1,
           item.date,
-          item.partName || item.component || item.partCode || "Linh kiện",
+          partNameStr,
           item.supplierName || "N/A",
           item.defectDetail || "Không mô tả thêm",
-          item.failedCount || 1,
+          failedQtyVal,
           item.status || item.result || "Bác bỏ / Lỗi"
         ]);
         rowTracker3.push({ type: 'table-data-log', pctVal: 0 });
@@ -16500,44 +16510,33 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     </div>
                   </div>
 
-                  {/* Context-aware Action Buttons - Unified Single Export & Print Button */}
+                  {/* Action Buttons - Always available Export & Add Task */}
                   <div className="flex flex-wrap items-center gap-2">
-                    {selectedReportWeekInsideMonth === 'all' ? (
-                      <button
-                        onClick={() => {
+                    <button
+                      onClick={() => setShowAddWeekTaskModal(true)}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs px-3.5 py-2 rounded-lg transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" /> Bổ sung việc tuần
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (selectedReportWeekInsideMonth === 'all') {
                           setExportHubType('monthly');
                           setExportHubMonth(selectedMonthlyReportMonth);
                           setExportHubYear(selectedMonthlyReportYear);
-                          setShowExportHubModal(true);
-                        }}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-4 py-2 rounded-lg transition shadow-xs flex items-center gap-2 cursor-pointer"
-                        title="Mở Trung tâm Xuất & In Báo Cáo Tháng (Tải Excel 6-Sheet hoặc In PDF)"
-                      >
-                        <FileSpreadsheet className="w-4 h-4 text-white" /> Xuất & In Báo Cáo Tháng (Excel / PDF)
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => setShowAddWeekTaskModal(true)}
-                          className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs px-3.5 py-2 rounded-lg transition shadow-xs flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Plus className="w-4 h-4" /> Bổ sung việc tuần
-                        </button>
-                        <button
-                          onClick={() => {
-                            setExportHubType('weekly');
-                            setExportHubMonth(selectedReportMonth);
-                            setExportHubWeek(selectedReportWeek);
-                            setExportHubYear(selectedReportYear);
-                            setShowExportHubModal(true);
-                          }}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-4 py-2 rounded-lg transition-all flex items-center gap-2 cursor-pointer shadow-xs"
-                          title="Mở Trung tâm Xuất & In Báo Cáo Tuần (Tải Excel 6-Sheet hoặc In PDF)"
-                        >
-                          <FileSpreadsheet className="w-4 h-4 text-white" /> Xuất & In Báo Cáo Tuần (Excel / PDF)
-                        </button>
-                      </>
-                    )}
+                        } else {
+                          setExportHubType('weekly');
+                          setExportHubMonth(selectedReportMonth);
+                          setExportHubWeek(selectedReportWeek);
+                          setExportHubYear(selectedReportYear);
+                        }
+                        setShowExportHubModal(true);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-4 py-2 rounded-lg transition-all flex items-center gap-2 cursor-pointer shadow-xs"
+                      title="Mở Trung tâm Xuất & In Báo Cáo (Tải Excel 6-Sheet hoặc In PDF)"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-white" /> {selectedReportWeekInsideMonth === 'all' ? 'Xuất & In Báo Cáo Tháng (Excel / PDF)' : 'Xuất & In Báo Cáo Tuần (Excel / PDF)'}
+                    </button>
                   </div>
                 </div>
               </div>
