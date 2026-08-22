@@ -1649,6 +1649,13 @@ export default function QualityInspectionRecords({
   const [pqcFilterWeek, setPqcFilterWeek] = useState<string>('All');
   const [oqcFilterWeek, setOqcFilterWeek] = useState<string>('All');
 
+  const [iqcCurrentPage, setIqcCurrentPage] = useState<number>(1);
+  const [selectedIqcIds, setSelectedIqcIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setIqcCurrentPage(1);
+  }, [iqcSearch, iqcFilterSupplier, iqcFilterResult, iqcFilterWeek, iqcFilterMonth]);
+
   // Supplier Production Audits state
   const [supplierAuditSearch, setSupplierAuditSearch] = useState('');
   const [supplierAuditFilterStatus, setSupplierAuditFilterStatus] = useState<string>('All');
@@ -2770,11 +2777,6 @@ export default function QualityInspectionRecords({
   const [colorChangeFilterYear, setColorChangeFilterYear] = useState('Tất cả');
   const [isColorChangeFilterExpanded, setIsColorChangeFilterExpanded] = useState(false);
   const [colorChangeCurrentPage, setColorChangeCurrentPage] = useState<number>(1);
-  const [iqcCurrentPage, setIqcCurrentPage] = useState<number>(1);
-
-  useEffect(() => {
-    setIqcCurrentPage(1);
-  }, [iqcSearch, iqcFilterSupplier, iqcFilterResult, iqcFilterWeek, iqcFilterMonth]);
 
   const [localColorChanges, setLocalColorChanges] = useState<OqcColorChangeRecord[]>(() => {
     if (oqcColorChanges && oqcColorChanges.length > 0) return oqcColorChanges;
@@ -2854,7 +2856,6 @@ export default function QualityInspectionRecords({
   });
   const [isSyncingEngine, setIsSyncingEngine] = useState(false);
   const [syncHistory, setSyncHistory] = useState<{time: string, count: number, source: string}[]>([]);
-  const [selectedIqcIds, setSelectedIqcIds] = useState<string[]>([]);
   const [selectedOqcIds, setSelectedOqcIds] = useState<string[]>([]);
 
   // Export KCS Report states
