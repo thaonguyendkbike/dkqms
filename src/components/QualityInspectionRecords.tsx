@@ -403,6 +403,21 @@ interface QualityInspectionRecordsProps {
   setOqcHandoverList?: (list: any[]) => void;
 }
 
+export const isOqcRecordPassed = (r: any): boolean => {
+  if (!r) return false;
+  const statusStr = String(r.status || r.result || '').trim().toLowerCase();
+  if (statusStr === 'đạt' || statusStr === 'pass' || statusStr === 'thông quan' || statusStr === 'ok' || statusStr === 'đã đạt') {
+    return true;
+  }
+  if (statusStr === 'lỗi' || statusStr === 'fail' || statusStr === 'bác bỏ' || statusStr === 'hỏng') {
+    return false;
+  }
+  if (r.failedCount !== undefined && r.failedCount !== null) {
+    return Number(r.failedCount) === 0;
+  }
+  return false;
+};
+
 /* ==================== SUB-COMPONENTS FOR KCS/OQC SCREENSHOT-PERFECT DASHBOARD ==================== */
 
 interface PieChartProps {
@@ -10236,8 +10251,8 @@ export default function QualityInspectionRecords({
             const pqcRate = pqcTotalIssues > 0 ? Math.round((pqcResolved / pqcTotalIssues) * 100) : 0;
 
             const oqcTotalChecked = currentOqc.length;
-            const oqcTotalPassed = currentOqc.filter(r => r.status === 'Đạt').length;
-            const oqcYieldRate = oqcTotalChecked > 0 ? Number(((oqcTotalPassed / oqcTotalChecked) * 100).toFixed(2)) : 0;
+            const oqcTotalPassed = currentOqc.filter(isOqcRecordPassed).length;
+            const oqcYieldRate = oqcTotalChecked > 0 ? Number(((oqcTotalPassed / oqcTotalChecked) * 100).toFixed(1)) : 100.0;
 
             // Pareto Pareto Count
             const errorsCountMap: Record<string, number> = {};

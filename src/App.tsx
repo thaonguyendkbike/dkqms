@@ -487,7 +487,22 @@ export function getMondayOfWeek(year: number, month: number, weekNum: number): D
   else if (dow === 0) mon1Day = 2;
   else mon1Day = 1;
 
-  return new Date(year, month - 1, mon1Day + (weekNum - 1) * 7);
+return new Date(year, month - 1, mon1Day + (weekNum - 1) * 7);
+}
+
+export function isOqcRecordPassed(r: any): boolean {
+  if (!r) return false;
+  const statusStr = String(r.status || r.result || '').trim().toLowerCase();
+  if (statusStr === 'đạt' || statusStr === 'pass' || statusStr === 'thông quan' || statusStr === 'ok' || statusStr === 'đã đạt') {
+    return true;
+  }
+  if (statusStr === 'lỗi' || statusStr === 'fail' || statusStr === 'bác bỏ' || statusStr === 'hỏng') {
+    return false;
+  }
+  if (r.failedCount !== undefined && r.failedCount !== null) {
+    return Number(r.failedCount) === 0;
+  }
+  return false;
 }
 
 const appDateWeekMonthCache = new Map<string, { week: string; month: number; year: number }>();
@@ -9576,22 +9591,35 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       }
     };
 
+    const filterRecordByPeriod = (r: any) => {
+      if (!r) return false;
+      let dStr = r.date || r.checkDate || '';
+      if (dStr) return filterByExportHubPeriod(dStr, r.week);
+      const m = Number(r.month);
+      const y = Number(r.year);
+      if (!isNaN(m) && !isNaN(y)) {
+        if (type === 'weekly') return r.week === week && m === month && y === year;
+        return m === month && y === year;
+      }
+      return false;
+    };
+
     // Calculate quality rates
-    const exportIqc = iqcRecords.filter(r => r.date ? filterByExportHubPeriod(r.date) : false);
+    const exportIqc = iqcRecords.filter(filterRecordByPeriod);
     const exportIqcTotal = exportIqc.length;
     const exportIqcPassed = exportIqc.filter(r => r.result === 'Đạt' || r.status === 'Thông quan' || r.status === 'Pass' || r.result === 'Pass').length;
-    const exportIqcPassRate = exportIqcTotal > 0 ? Number((exportIqcPassed / exportIqcTotal * 100).toFixed(1)) : 98.2;
+    const exportIqcPassRate = exportIqcTotal > 0 ? Number((exportIqcPassed / exportIqcTotal * 100).toFixed(1)) : 100.0;
 
-    const exportPqc = pqcRecords.filter(r => r.date ? filterByExportHubPeriod(r.date) : false);
+    const exportPqc = pqcRecords.filter(filterRecordByPeriod);
     const exportPqcTotal = exportPqc.length;
-    const exportPqcResolved = exportPqc.filter(r => r.status === 'Đạt hoàn toàn' || r.status === 'Đã cải tiến').length;
-    const exportPqcRate = exportPqcTotal > 0 ? Math.round((exportPqcResolved / exportPqcTotal) * 100) : 96.0;
+    const exportPqcResolved = exportPqc.filter(r => r.status === 'Đạt hoàn toàn' || r.status === 'Đã cải tiến' || r.status === 'Đạt').length;
+    const exportPqcRate = exportPqcTotal > 0 ? Math.round((exportPqcResolved / exportPqcTotal) * 100) : 100;
     const finalExportPqcRate = exportPqcRate > 100 ? 100 : exportPqcRate;
 
-    const exportOqc = oqcRecords.filter(r => r.date ? filterByExportHubPeriod(r.date) : false);
+    const exportOqc = oqcRecords.filter(filterRecordByPeriod);
     const exportOqcTotal = exportOqc.length;
-    const exportOqcPassed = exportOqc.filter(r => r.status === 'Đạt' || r.result === 'Đạt' || r.result === 'Pass' || r.status === 'Pass').length;
-    const exportOqcYield = exportOqcTotal > 0 ? Number((exportOqcPassed / exportOqcTotal * 100).toFixed(1)) : 97.4;
+    const exportOqcPassed = exportOqc.filter(isOqcRecordPassed).length;
+    const exportOqcYield = exportOqcTotal > 0 ? Number((exportOqcPassed / exportOqcTotal * 100).toFixed(1)) : 100.0;
 
     // Compile defects, capas & ECOs
     const matchedDefectList = defects.filter(def => {
@@ -10305,7 +10333,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     const sheet3Pqc = exportPqc;
     const sheet3Oqc = exportOqc;
     const sheet3OqcTotal = sheet3Oqc.length;
-    const sheet3OqcPassed = sheet3Oqc.filter(r => r.status === 'Đạt' || r.result === 'Đạt' || r.result === 'Pass' || r.status === 'Pass').length;
+    const sheet3OqcPassed = sheet3Oqc.filter(isOqcRecordPassed).length;
     const sheet3OqcYield = sheet3OqcTotal > 0 ? Number((sheet3OqcPassed / sheet3OqcTotal * 100).toFixed(1)) : 100.0;
     const parsedOqcYieldVal = sheet3OqcYield > 100 ? 100 : sheet3OqcYield;
 
@@ -21404,19 +21432,9 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 <div className="space-y-4">
                   {/* Summary widgets */}
                   {(() => {
-                    const isOqcRecordPassed = (r: any) => {
-                      if (r.status === 'Đạt') return true;
-                      const text = ((r.defectDetail || '') + ' ' + (r.rootCause || '')).toLowerCase();
-                      return (
-                        text.includes('xước') ||
-                        text.includes('xuoc') ||
-                        text.includes('thiếu') ||
-                        text.includes('thieu')
-                      );
-                    };
                     const passedCount = oqcRecords.filter(isOqcRecordPassed).length;
                     const failedCount = oqcRecords.filter(r => !isOqcRecordPassed(r)).length;
-                    const passRate = oqcRecords.length > 0 ? Math.round((passedCount / oqcRecords.length) * 100) : 0;
+                    const passRate = oqcRecords.length > 0 ? Number(((passedCount / oqcRecords.length) * 100).toFixed(1)) : 100.0;
                     return (
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                         <div className="bg-white p-4.5 rounded-xl border border-slate-205 shadow-sm space-y-1">
