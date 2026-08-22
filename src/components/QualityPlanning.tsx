@@ -2638,19 +2638,19 @@ export default function QualityPlanning({
           } else if (type === 'table-data-supplier-plan') {
             cell.s = {
               font: { name: "Arial", sz: 9.5 },
-              alignment: (c === 0 || c === columnsCount - 1) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
+              alignment: (c === 0 || c === columnsCount - 1) ? { horizontal: "center", vertical: "top" } : { horizontal: "left", vertical: "top", wrapText: true },
               border: cellBordersNormal
             };
           } else if (type === 'table-data-plan-target') {
             cell.s = {
               font: { name: "Arial", sz: 9.5 },
-              alignment: (c === 0 || c === 1 || c === 3 || c === 5) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
+              alignment: (c === 0 || c === 1 || c === 3 || c === 5) ? { horizontal: "center", vertical: "top" } : { horizontal: "left", vertical: "top", wrapText: true },
               border: cellBordersNormal
             };
           } else if (type === 'table-data-log') {
             cell.s = {
               font: { name: "Arial", sz: 9.5 },
-              alignment: (c === 0 || c === 1 || c === 3 || c === 4 || c === 5 || c === 6 || c === 7) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center", wrapText: true },
+              alignment: (c === 0 || c === 1 || c === 3 || c === 4 || c === 5 || c === 6 || c === 7) ? { horizontal: "center", vertical: "top" } : { horizontal: "left", vertical: "top", wrapText: true },
               border: cellBordersNormal
             };
             if (c === 6) {
@@ -2684,7 +2684,7 @@ export default function QualityPlanning({
       }
     };
 
-    const setRowHeights = (ws: any, rowTracker: any[]) => {
+    const setRowHeights = (ws: any, rowTracker: any[], aoaData: any[][], colWidths: { wch: number }[]) => {
       const heights: any[] = [];
       for (let r = 0; r < rowTracker.length; r++) {
         const rType = rowTracker[r]?.type;
@@ -2693,11 +2693,27 @@ export default function QualityPlanning({
         else if (rType === 'main-title') heights.push({ hpt: 30 });
         else if (rType === 'main-subtitle') heights.push({ hpt: 18 });
         else if (rType === 'section-heading') heights.push({ hpt: 24 });
-        else if (rType === 'table-header') heights.push({ hpt: 24 });
+        else if (rType === 'table-header') heights.push({ hpt: 26 });
         else if (rType === 'table-header-group') heights.push({ hpt: 22 });
         else if (rType === 'spacer-sig') heights.push({ hpt: 45 });
         else if (rType === 'signature-label' || rType === 'signature-name') heights.push({ hpt: 20 });
-        else heights.push({ hpt: 20 });
+        else {
+          let maxLines = 1;
+          const rowData = aoaData[r] || [];
+          rowData.forEach((val, cIdx) => {
+            if (val !== undefined && val !== null) {
+              const str = String(val);
+              const cWidth = colWidths[cIdx]?.wch || 20;
+              const explicitLines = str.split('\n');
+              let lineCount = 0;
+              explicitLines.forEach(l => {
+                lineCount += Math.max(1, Math.ceil(l.length / Math.max(8, cWidth - 2)));
+              });
+              if (lineCount > maxLines) maxLines = lineCount;
+            }
+          });
+          heights.push({ hpt: Math.min(160, Math.max(22, maxLines * 16)) });
+        }
       }
       ws['!rows'] = heights;
     };
@@ -2884,18 +2900,17 @@ export default function QualityPlanning({
     addMerge1(aoaData1.length - 1, Math.floor(totalCols1/2), aoaData1.length - 1, totalCols1 - 3);
     addMerge1(aoaData1.length - 1, totalCols1 - 2, aoaData1.length - 1, totalCols1 - 1);
 
+    const colWidths1 = [
+      { wch: 6 },
+      { wch: 28 },
+      ...new Array(timelineKeys.length).fill({ wch: 14 }),
+      { wch: 25 }
+    ];
     const ws1 = XLSXStyle.utils.aoa_to_sheet(aoaData1);
     styleSheet(ws1, rowTracker1, totalCols1);
     ws1['!merges'] = merges1;
-    setRowHeights(ws1, rowTracker1);
-
-    const colWidths1 = [
-      { wch: 6 },
-      { wch: 22 },
-      ...new Array(timelineKeys.length).fill({ wch: 12 }),
-      { wch: 18 }
-    ];
     ws1['!cols'] = colWidths1;
+    setRowHeights(ws1, rowTracker1, aoaData1, colWidths1);
 
 
     // =========================================================================
@@ -3110,21 +3125,20 @@ export default function QualityPlanning({
     addMerge2(aoaData2.length - 1, 2, aoaData2.length - 1, 3);
     addMerge2(aoaData2.length - 1, 4, aoaData2.length - 1, 6);
 
+    const colWidths2 = [
+      { wch: 15 },
+      { wch: 28 },
+      { wch: 35 },
+      { wch: 25 },
+      { wch: 55 },
+      { wch: 18 },
+      { wch: 35 }
+    ];
     const ws2 = XLSXStyle.utils.aoa_to_sheet(aoaData2);
     styleSheet(ws2, rowTracker2, 7);
     ws2['!merges'] = merges2;
-    setRowHeights(ws2, rowTracker2);
-
-    const colWidths2 = [
-      { wch: 15 },
-      { wch: 12 },
-      { wch: 22 },
-      { wch: 20 },
-      { wch: 45 },
-      { wch: 14 },
-      { wch: 25 }
-    ];
     ws2['!cols'] = colWidths2;
+    setRowHeights(ws2, rowTracker2, aoaData2, colWidths2);
 
 
     // =========================================================================
@@ -3175,7 +3189,7 @@ export default function QualityPlanning({
     // Section Header
     aoaData3.push(["DANH SÁCH CHI TIẾT CÁC TÁC VỤ CHẤT LƯỢNG KHẮC PHỤC (QMS ACTIONS LIST)", "", "", "", "", "", "", ""]);
     rowTracker3.push({ type: 'section-heading' });
-    addMerge3(8, 0, 8, 7);
+    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
     aoaData3.push(["STT", "Mã tác vụ", "Chi tiết nhiệm vụ hành động / Tác vụ khắc phục", "Người chịu trách nhiệm", "Thời hạn hoàn thành", "Mức độ ưu tiên", "Trạng thái thực thi", "Phân nhóm QMS"]);
     rowTracker3.push({ type: 'table-header' });
@@ -3243,22 +3257,21 @@ export default function QualityPlanning({
     addMerge3(aoaData3.length - 1, 2, aoaData3.length - 1, 3);
     addMerge3(aoaData3.length - 1, 4, aoaData3.length - 1, 7);
 
+    const colWidths3 = [
+      { wch: 6 },
+      { wch: 15 },
+      { wch: 55 },
+      { wch: 22 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 20 },
+      { wch: 25 }
+    ];
     const ws3 = XLSXStyle.utils.aoa_to_sheet(aoaData3);
     styleSheet(ws3, rowTracker3, 8);
     ws3['!merges'] = merges3;
-    setRowHeights(ws3, rowTracker3);
-
-    const colWidths3 = [
-      { wch: 6 },
-      { wch: 12 },
-      { wch: 48 },
-      { wch: 18 },
-      { wch: 14 },
-      { wch: 10 },
-      { wch: 16 },
-      { wch: 22 }
-    ];
     ws3['!cols'] = colWidths3;
+    setRowHeights(ws3, rowTracker3, aoaData3, colWidths3);
 
     // ==========================================
     // SHEET 4: CÔNG VIỆC TỒN ĐỌNG QMS (Công việc chưa đạt 100%)
@@ -3297,7 +3310,7 @@ export default function QualityPlanning({
 
     aoaData4.push(["DANH SÁCH CÁC TÁC VỤ QMS CHƯA HOÀN THÀNH - ĐANG TRONG TIẾN TRÌNH", "", "", "", "", "", ""]);
     rowTracker4.push({ type: 'section-heading' });
-    addMerge4(8, 0, 8, 6);
+    addMerge4(aoaData4.length - 1, 0, aoaData4.length - 1, 6);
 
     aoaData4.push(["STT", "Mã tác vụ", "Chi tiết công việc tồn đọng / Chỉ đạo hành động dở dang", "Người phụ trách", "Thời hạn hoàn thành", "Mức ưu tiên", "Phân nhóm QMS"]);
     rowTracker4.push({ type: 'table-header' });
@@ -3330,11 +3343,12 @@ export default function QualityPlanning({
       });
     }
 
+    const colWidths4 = [{ wch: 6 }, { wch: 15 }, { wch: 55 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 25 }];
     const ws4 = XLSXStyle.utils.aoa_to_sheet(aoaData4);
     styleSheet(ws4, rowTracker4, 7);
     ws4['!merges'] = merges4;
-    setRowHeights(ws4, rowTracker4);
-    ws4['!cols'] = [{ wch: 6 }, { wch: 15 }, { wch: 50 }, { wch: 18 }, { wch: 14 }, { wch: 11 }, { wch: 24 }];
+    ws4['!cols'] = colWidths4;
+    setRowHeights(ws4, rowTracker4, aoaData4, colWidths4);
 
     // ==========================================
     // SHEET 5: BIÊN BẢN CAPA MỞ
@@ -3373,7 +3387,7 @@ export default function QualityPlanning({
 
     aoaData5.push(["HỒ SƠ SỰ CỐ ĐANG IN-PROCESS BIỆN PHÁP KHẮC PHỤC CAPA CHƯA ĐÓNG HỒ SƠ", "", "", "", "", "", "", ""]);
     rowTracker5.push({ type: 'section-heading' });
-    addMerge5(8, 0, 8, 7);
+    addMerge5(aoaData5.length - 1, 0, aoaData5.length - 1, 7);
 
     aoaData5.push(["STT", "Mã biên bản", "Mô tả sự cố / Vấn đề phát hiện", "Cán bộ chịu trách nhiệm", "Thời hạn hoàn thành", "Phân tích nguyên nhân cốt lõi", "Biện pháp khắc phục chi tiết", "Trạng thái thực thi"]);
     rowTracker5.push({ type: 'table-header' });
@@ -3429,11 +3443,12 @@ export default function QualityPlanning({
       });
     }
 
+    const colWidths5 = [{ wch: 6 }, { wch: 16 }, { wch: 42 }, { wch: 22 }, { wch: 16 }, { wch: 38 }, { wch: 48 }, { wch: 16 }];
     const ws5 = XLSXStyle.utils.aoa_to_sheet(aoaData5);
     styleSheet(ws5, rowTracker5, 8);
     ws5['!merges'] = merges5;
-    setRowHeights(ws5, rowTracker5);
-    ws5['!cols'] = [{ wch: 6 }, { wch: 14 }, { wch: 35 }, { wch: 18 }, { wch: 14 }, { wch: 25 }, { wch: 35 }, { wch: 12 }];
+    ws5['!cols'] = colWidths5;
+    setRowHeights(ws5, rowTracker5, aoaData5, colWidths5);
 
     // ==========================================
     // SHEET 6: PHÁT TRIỂN XE MỚI (PTSP)
@@ -3472,7 +3487,7 @@ export default function QualityPlanning({
 
     aoaData6.push(["DANH SÁCH DỰ ÁN PHÁT TRIỂN XE MỚI (PTSP) VÀ TIẾN ĐỘ CHẠY MẪU HÀNG LOẠT", "", "", "", "", "", ""]);
     rowTracker6.push({ type: 'section-heading' });
-    addMerge6(8, 0, 8, 6);
+    addMerge6(aoaData6.length - 1, 0, aoaData6.length - 1, 6);
 
     aoaData6.push(["STT", "Mã nhiệm vụ", "Nội dung công việc phát triển / Chạy mẫu thử nghiệm xe mới", "Kỹ sư phụ trách", "Thời hạn hoàn thành", "Mức độ ưu tiên", "Trạng thái thực thi"]);
     rowTracker6.push({ type: 'table-header' });
@@ -3484,7 +3499,6 @@ export default function QualityPlanning({
       rowTracker6.push({ type: 'table-data-empty' });
       addMerge6(aoaData6.length - 1, 1, aoaData6.length - 1, 6);
     } else {
-      // Gom nhóm theo model giống hệt như trong app (zoomedColumn === 'ptsp')
       const groups: Record<string, QualityTask[]> = {};
       ptspTasks.forEach(task => {
         let model = (task.modelOrSupplier || '').trim();
@@ -3549,11 +3563,12 @@ export default function QualityPlanning({
       });
     }
 
+    const colWidths6 = [{ wch: 6 }, { wch: 15 }, { wch: 55 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 20 }];
     const ws6 = XLSXStyle.utils.aoa_to_sheet(aoaData6);
     styleSheet(ws6, rowTracker6, 7);
     ws6['!merges'] = merges6;
-    setRowHeights(ws6, rowTracker6);
-    ws6['!cols'] = [{ wch: 6 }, { wch: 15 }, { wch: 48 }, { wch: 18 }, { wch: 14 }, { wch: 11 }, { wch: 18 }];
+    ws6['!cols'] = colWidths6;
+    setRowHeights(ws6, rowTracker6, aoaData6, colWidths6);
 
     // ==========================================
     // SHEET 7: PHỐI HỢP LIÊN BAN
@@ -3592,7 +3607,7 @@ export default function QualityPlanning({
 
     aoaData7.push(["DANH SÁCH HOẠT ĐỘNG PHỐI HỢP LIÊN BAN VÀ BIỆN PHÁP CHẤT LƯỢNG SONG HÀNH", "", "", "", "", "", ""]);
     rowTracker7.push({ type: 'section-heading' });
-    addMerge7(8, 0, 8, 6);
+    addMerge7(aoaData7.length - 1, 0, aoaData7.length - 1, 6);
 
     aoaData7.push(["STT", "Mã nhiệm vụ", "Nội dung chỉ định phối hợp liên phòng ban", "Cán bộ chịu trách nhiệm chính", "Thời hạn thực thi", "Mức độ ưu tiên", "Trạng thái phối hợp"]);
     rowTracker7.push({ type: 'table-header' });
@@ -3618,11 +3633,12 @@ export default function QualityPlanning({
       });
     }
 
+    const colWidths7 = [{ wch: 6 }, { wch: 15 }, { wch: 55 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 20 }];
     const ws7 = XLSXStyle.utils.aoa_to_sheet(aoaData7);
     styleSheet(ws7, rowTracker7, 7);
     ws7['!merges'] = merges7;
-    setRowHeights(ws7, rowTracker7);
-    ws7['!cols'] = [{ wch: 6 }, { wch: 15 }, { wch: 48 }, { wch: 18 }, { wch: 14 }, { wch: 11 }, { wch: 18 }];
+    ws7['!cols'] = colWidths7;
+    setRowHeights(ws7, rowTracker7, aoaData7, colWidths7);
 
     // ==========================================
     // SHEET 8: CẢI TIẾN KỸ THUẬT (ECO)
@@ -3791,11 +3807,12 @@ export default function QualityPlanning({
       });
     }
 
+    const colWidths8 = [{ wch: 6 }, { wch: 16 }, { wch: 48 }, { wch: 22 }, { wch: 18 }, { wch: 22 }, { wch: 16 }, { wch: 18 }];
     const ws8 = XLSXStyle.utils.aoa_to_sheet(aoaData8);
     styleSheet(ws8, rowTracker8, 8);
     ws8['!merges'] = merges8;
-    setRowHeights(ws8, rowTracker8);
-    ws8['!cols'] = [{ wch: 6 }, { wch: 15 }, { wch: 38 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 14 }];
+    ws8['!cols'] = colWidths8;
+    setRowHeights(ws8, rowTracker8, aoaData8, colWidths8);
 
     // ==========================================
     // SAVE WORKBOOK (Đầy đủ 8 tabs đúng như anh Thao thiết kế)
