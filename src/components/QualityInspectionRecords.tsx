@@ -986,22 +986,27 @@ function getMondayOfWeek(year: number, month: number, weekNum: number): Date {
   return new Date(year, month - 1, mon1Day + (weekNum - 1) * 7);
 }
 
+const dateWeekMonthCache = new Map<string, { week: string; month: number; year: number }>();
+
 function getWeekAndMonthFromDate(dateStr: string): { week: string; month: number; year: number } {
+  if (!dateStr || typeof dateStr !== 'string') {
+    const today = new Date();
+    return { week: 'T1', month: today.getMonth() + 1, year: today.getFullYear() };
+  }
+
+  const clean = dateStr.trim();
+  const cached = dateWeekMonthCache.get(clean);
+  if (cached) return cached;
+
   const today = new Date();
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth() + 1;
   const currentDay = today.getDate();
 
-  if (!dateStr || typeof dateStr !== 'string') {
-    const curInfo = getWeekAndMonthFromDate(`${currentDay}/${currentMonth}/${currentYear}`);
-    return curInfo;
-  }
-
   let day = 1;
   let month = currentMonth;
   let year = currentYear;
 
-  const clean = dateStr.trim();
   const matchesYMD = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
   const matchesDMY = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
 
@@ -1052,7 +1057,10 @@ function getWeekAndMonthFromDate(dateStr: string): { week: string; month: number
     }
   }
 
-  return { week: weekStr, month, year };
+  const result = { week: weekStr, month, year };
+  if (dateWeekMonthCache.size > 3000) dateWeekMonthCache.clear();
+  dateWeekMonthCache.set(clean, result);
+  return result;
 }
 
 function getWeekDatesForReporting(year: number, month: number, weekNum: number): string {
@@ -2061,25 +2069,35 @@ export default function QualityInspectionRecords({
 
   // Filtered lists (automatically sorted from newest to oldest)
   const filteredIqc = useMemo(() => {
-    return iqcRecords.filter(r => {
-      const matchesSearch = iqcSearch === '' || 
-        (r.supplierName || '').toLowerCase().includes(iqcSearch.toLowerCase()) ||
-        (r.content || '').toLowerCase().includes(iqcSearch.toLowerCase()) ||
-        (r.checkedBy || '').toLowerCase().includes(iqcSearch.toLowerCase()) ||
-        (r.id || '').toLowerCase().includes(iqcSearch.toLowerCase());
-        
-      const matchesSupplier = iqcFilterSupplier === 'All' || r.supplierName === iqcFilterSupplier;
-      const matchesResult = iqcFilterResult === 'All' || r.result === iqcFilterResult;
-      
-      // Week filter
-      const recordWeek = r.date ? getWeekAndMonthFromDate(r.date).week : 'T1';
-      const matchesWeek = iqcFilterWeek === 'All' || recordWeek === iqcFilterWeek;
+    const sLower = iqcSearch.trim().toLowerCase();
+    const isWeekAll = iqcFilterWeek === 'All';
+    const isMonthAll = iqcFilterMonth === 'All';
 
-      // Month filter
-      const recordMonth = r.date ? getWeekAndMonthFromDate(r.date).month : 1;
-      const matchesMonth = iqcFilterMonth === 'All' || String(recordMonth) === iqcFilterMonth;
-      
-      return matchesSearch && matchesSupplier && matchesResult && matchesWeek && matchesMonth;
+    return iqcRecords.filter(r => {
+      const matchesSearch = sLower === '' || 
+        (r.supplierName || '').toLowerCase().includes(sLower) ||
+        (r.content || '').toLowerCase().includes(sLower) ||
+        (r.checkedBy || '').toLowerCase().includes(sLower) ||
+        (r.id || '').toLowerCase().includes(sLower);
+      if (!matchesSearch) return false;
+
+      const matchesSupplier = iqcFilterSupplier === 'All' || r.supplierName === iqcFilterSupplier;
+      if (!matchesSupplier) return false;
+
+      const matchesResult = iqcFilterResult === 'All' || r.result === iqcFilterResult;
+      if (!matchesResult) return false;
+
+      if (isWeekAll && isMonthAll) return true;
+
+      const dateInfo = r.date ? getWeekAndMonthFromDate(r.date) : null;
+      const recordWeek = dateInfo ? dateInfo.week : 'T1';
+      const recordMonth = dateInfo ? dateInfo.month : 1;
+
+      const matchesWeek = isWeekAll || recordWeek === iqcFilterWeek;
+      if (!matchesWeek) return false;
+
+      const matchesMonth = isMonthAll || String(recordMonth) === iqcFilterMonth;
+      return matchesMonth;
     }).sort((a, b) => {
       const dateA = parseDateToNumber(a.date);
       const dateB = parseDateToNumber(b.date);
@@ -2089,6 +2107,14 @@ export default function QualityInspectionRecords({
       return (b.id || '').localeCompare(a.id || '');
     });
   }, [iqcRecords, iqcSearch, iqcFilterSupplier, iqcFilterResult, iqcFilterWeek, iqcFilterMonth]);
+
+  const iqcPageSize = 50;
+  const iqcTotalPages = useMemo(() => Math.max(1, Math.ceil(filteredIqc.length / iqcPageSize)), [filteredIqc.length]);
+  const safeIqcPage = Math.min(iqcCurrentPage, iqcTotalPages);
+  const paginatedIqc = useMemo(() => {
+    return filteredIqc.slice((safeIqcPage - 1) * iqcPageSize, safeIqcPage * iqcPageSize);
+  }, [filteredIqc, safeIqcPage]);
+  const selectedIqcSet = useMemo(() => new Set(selectedIqcIds), [selectedIqcIds]);
 
   const filteredPqc = useMemo(() => {
     return pqcRecords.filter(r => {
@@ -2628,6 +2654,11 @@ export default function QualityInspectionRecords({
   const [colorChangeFilterYear, setColorChangeFilterYear] = useState('Tất cả');
   const [isColorChangeFilterExpanded, setIsColorChangeFilterExpanded] = useState(false);
   const [colorChangeCurrentPage, setColorChangeCurrentPage] = useState<number>(1);
+  const [iqcCurrentPage, setIqcCurrentPage] = useState<number>(1);
+
+  useEffect(() => {
+    setIqcCurrentPage(1);
+  }, [iqcSearch, iqcFilterSupplier, iqcFilterResult, iqcFilterWeek, iqcFilterMonth]);
 
   const [localColorChanges, setLocalColorChanges] = useState<OqcColorChangeRecord[]>(() => {
     if (oqcColorChanges && oqcColorChanges.length > 0) return oqcColorChanges;
@@ -6130,12 +6161,12 @@ export default function QualityInspectionRecords({
                       </td>
                     </tr>
                   ) : (
-                    filteredIqc.map((r, i) => (
-                      <tr key={i} className="hover:bg-slate-50/60 transition">
+                    paginatedIqc.map((r, i) => (
+                      <tr key={r.id || i} className="hover:bg-slate-50/60 transition">
                         <td className="py-2 px-1.5 md:p-2.5 text-center">
                           <input
                             type="checkbox"
-                            checked={selectedIqcIds.includes(r.id)}
+                            checked={selectedIqcSet.has(r.id)}
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setSelectedIqcIds(prev => [...prev, r.id]);
@@ -6214,6 +6245,36 @@ export default function QualityInspectionRecords({
                 </tbody>
               </table>
             </div>
+
+            {/* IQC Pagination Toolbar */}
+            {filteredIqc.length > iqcPageSize && (
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100 font-sans">
+                <span>
+                  Hiển thị {(safeIqcPage - 1) * iqcPageSize + 1} - {Math.min(safeIqcPage * iqcPageSize, filteredIqc.length)} / {filteredIqc.length} phiếu IQC
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={safeIqcPage === 1}
+                    onClick={() => setIqcCurrentPage(p => Math.max(1, p - 1))}
+                    className="px-2.5 py-1 bg-white border border-slate-200 rounded text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 font-bold cursor-pointer"
+                  >
+                    Trước
+                  </button>
+                  <span className="px-2 font-mono font-bold text-slate-800">
+                    {safeIqcPage} / {iqcTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={safeIqcPage === iqcTotalPages}
+                    onClick={() => setIqcCurrentPage(p => Math.min(iqcTotalPages, p + 1))}
+                    className="px-2.5 py-1 bg-white border border-slate-200 rounded text-slate-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 font-bold cursor-pointer"
+                  >
+                    Sau
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

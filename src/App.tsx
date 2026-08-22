@@ -490,22 +490,27 @@ export function getMondayOfWeek(year: number, month: number, weekNum: number): D
   return new Date(year, month - 1, mon1Day + (weekNum - 1) * 7);
 }
 
+const appDateWeekMonthCache = new Map<string, { week: string; month: number; year: number }>();
+
 export function getWeekAndMonthFromDate(dateStr: string): { week: string; month: number; year: number } {
+  if (!dateStr || typeof dateStr !== 'string') {
+    const today = new Date();
+    return { week: 'T1', month: today.getMonth() + 1, year: today.getFullYear() };
+  }
+
+  const clean = dateStr.trim();
+  const cached = appDateWeekMonthCache.get(clean);
+  if (cached) return cached;
+
   const today = new Date();
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth() + 1;
   const currentDay = today.getDate();
 
-  if (!dateStr || typeof dateStr !== 'string') {
-    const curInfo = getWeekAndMonthFromDate(`${currentDay}/${currentMonth}/${currentYear}`);
-    return curInfo;
-  }
-
   let day = 1;
   let month = currentMonth;
   let year = currentYear;
 
-  const clean = dateStr.trim();
   const matchesYMD = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
   const matchesDMY = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
 
@@ -556,7 +561,10 @@ export function getWeekAndMonthFromDate(dateStr: string): { week: string; month:
     }
   }
 
-  return { week: weekStr, month, year };
+  const result = { week: weekStr, month, year };
+  if (appDateWeekMonthCache.size > 3000) appDateWeekMonthCache.clear();
+  appDateWeekMonthCache.set(clean, result);
+  return result;
 }
 
 export function getWeekDatesForMonthYear(year: number, month: number, weekKey: string): string {
