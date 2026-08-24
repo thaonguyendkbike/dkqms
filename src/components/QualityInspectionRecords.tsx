@@ -2246,7 +2246,7 @@ export default function QualityInspectionRecords({
     });
   }, [iqcRecords, iqcSearch, iqcFilterSupplier, iqcFilterResult, iqcFilterWeek, iqcFilterMonth]);
 
-  const iqcPageSize = 50;
+  const iqcPageSize = 20;
   const iqcTotalPages = useMemo(() => Math.max(1, Math.ceil(filteredIqc.length / iqcPageSize)), [filteredIqc.length]);
   const safeIqcPage = Math.min(iqcCurrentPage, iqcTotalPages);
   const paginatedIqc = useMemo(() => {
