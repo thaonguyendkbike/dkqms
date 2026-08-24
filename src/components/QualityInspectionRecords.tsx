@@ -1200,13 +1200,13 @@ export default function QualityInspectionRecords({
     safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
     try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
 
-    // 3. Gom đẩy Cloud ngầm sau 30 giây (Debounced 30s Batch Push)
+    // 3. Gom đẩy Cloud ngầm sau 3 giây (Debounced 3s Batch Push)
     if (asyncOqcSaveTimer.current) clearTimeout(asyncOqcSaveTimer.current);
     asyncOqcSaveTimer.current = setTimeout(() => {
       if (typeof (window as any).syncToServer === 'function') {
         (window as any).syncToServer('dk_oqc_records', updated);
       }
-    }, 30000);
+    }, 3000);
   }, [setOqcRecords]);
 
   // Check if there is an active IQC plan in Lập kế hoạch (weeklyPlans)
@@ -6863,6 +6863,7 @@ export default function QualityInspectionRecords({
                   date: nowDate,
                   month: nowMonth,
                   year: nowYear,
+                  updatedAt: new Date().toISOString(),
                   checkedBy: 'Liễu Tùng Lâm'
                 };
               }
@@ -6889,7 +6890,8 @@ export default function QualityInspectionRecords({
                   checkTime: nowTime,
                   date: nowDate,
                   month: nowMonth,
-                  year: nowYear
+                  year: nowYear,
+                  updatedAt: new Date().toISOString()
                 };
               }
               saveOqcRecordsOptimized(updated);
@@ -6918,6 +6920,7 @@ export default function QualityInspectionRecords({
                     date: nowDate,
                     month: nowMonth,
                     year: nowYear,
+                    updatedAt: new Date().toISOString(),
                     checkedBy: 'Liễu Tùng Lâm'
                   };
                 } else {
@@ -6931,6 +6934,7 @@ export default function QualityInspectionRecords({
                     date: nowDate,
                     month: nowMonth,
                     year: nowYear,
+                    updatedAt: new Date().toISOString(),
                     checkedBy: 'Liễu Tùng Lâm'
                   };
                 }

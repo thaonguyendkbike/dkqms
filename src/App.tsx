@@ -194,19 +194,53 @@ export function deduplicateOqcRecords(records: any[]): any[] {
     if (!existing) {
       seen.set(cleanSerial, standardizedRec);
     } else {
-      // Smart conflict resolution: keep the one with richer information (defect details, evaluations, treatment, root cause, etc.)
-      const score = (r: any) => {
-        let sc = 0;
-        if (r.defectDetail && String(r.defectDetail).trim()) sc += 2;
-        if (r.evaluation && String(r.evaluation).trim()) sc += 2;
-        if (r.treatment && String(r.treatment).trim()) sc += 2;
-        if (r.rootCause && String(r.rootCause).trim()) sc += 1;
-        if (r.status && String(r.status).trim() && r.status !== 'Đạt') sc += 1;
-        if (r.failedCount && Number(r.failedCount) > 0) sc += 1;
-        return sc;
-      };
-      if (score(standardizedRec) > score(existing)) {
+      // Ưu tiên bản ghi có trạng thái đã kiểm tra ('Đạt' hoặc 'Lỗi') hơn 'Chưa kiểm tra'
+      const isChecked = (r: any) => r.status === 'Đạt' || r.status === 'Lỗi';
+      const existingChecked = isChecked(existing);
+      const newChecked = isChecked(standardizedRec);
+
+      if (newChecked && !existingChecked) {
         seen.set(cleanSerial, standardizedRec);
+      } else if (!newChecked && existingChecked) {
+        // Giữ nguyên bản ghi đã kiểm tra trước đó
+      } else {
+        // Cả hai cùng đã kiểm hoặc cùng chưa kiểm -> So sánh thời gian cập nhật/kiểm tra
+        const getTime = (r: any) => {
+          if (r.updatedAt) {
+            const t = new Date(r.updatedAt).getTime();
+            if (!isNaN(t)) return t;
+          }
+          if (r.checkTime && r.date) {
+            const parts = String(r.date).split('/');
+            if (parts.length === 3) {
+              const iso = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}T${r.checkTime}:00`;
+              const t = new Date(iso).getTime();
+              if (!isNaN(t)) return t;
+            }
+          }
+          return 0;
+        };
+
+        const timeNew = getTime(standardizedRec);
+        const timeExisting = getTime(existing);
+
+        if (timeNew > timeExisting) {
+          seen.set(cleanSerial, standardizedRec);
+        } else if (timeNew < timeExisting) {
+          // Giữ nguyên bản ghi có mốc thời gian mới hơn
+        } else {
+          // Nếu trùng mốc thời gian, ưu tiên bản ghi có chi tiết lỗi/nguyên nhân hoặc nằm sau trong mảng
+          const score = (r: any) => {
+            let sc = 0;
+            if (r.status === 'Đạt' || r.status === 'Lỗi') sc += 5;
+            if (r.defectDetail && String(r.defectDetail).trim()) sc += 2;
+            if (r.rootCause && String(r.rootCause).trim()) sc += 1;
+            return sc;
+          };
+          if (score(standardizedRec) >= score(existing)) {
+            seen.set(cleanSerial, standardizedRec);
+          }
+        }
       }
     }
   });
