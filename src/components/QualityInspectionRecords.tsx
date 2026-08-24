@@ -2149,7 +2149,7 @@ export default function QualityInspectionRecords({
 
   const isOqcRecordPassed = useCallback((r: OQCRecord) => {
     if (r.status === 'Đạt') return true;
-    if (r.status === 'Lỗi') return false;
+    if (r.status === 'Lỗi' || r.status === 'Chưa kiểm tra') return false;
     if (r.passFlag === 1) return true;
     if (r.failedCount && r.failedCount > 0) return false;
     const text = ((r.defectDetail || '') + ' ' + (r.rootCause || '')).trim().toLowerCase();
@@ -2288,31 +2288,58 @@ export default function QualityInspectionRecords({
     const isModelAll = oqcFilterModel === 'All';
     const isColorAll = oqcFilterColor === 'All';
 
+    const stdFilterDate = isDateAll ? '' : standardizeDate(oqcFilterDate);
+
     return oqcRecords.filter(r => {
+      // 1. Search text matching
       const matchesSearch = sLower === '' || 
         (r.serialNo && r.serialNo.toLowerCase().includes(sLower)) ||
+        (r.chassisNo && r.chassisNo.toLowerCase().includes(sLower)) ||
+        (r.engineNo && r.engineNo.toLowerCase().includes(sLower)) ||
         (r.partCode && r.partCode.toLowerCase().includes(sLower)) ||
         (r.model && r.model.toLowerCase().includes(sLower)) ||
         (r.color && r.color.toLowerCase().includes(sLower)) ||
+        (r.lsx && r.lsx.toLowerCase().includes(sLower)) ||
         (r.defectDetail && r.defectDetail.toLowerCase().includes(sLower));
       if (!matchesSearch) return false;
         
-      const matchesModel = isModelAll || r.model === oqcFilterModel || getCleanModelName(r) === oqcFilterModel;
+      // 2. Model matching
+      const cleanModel = getCleanModelName(r);
+      const matchesModel = isModelAll || 
+        r.model === oqcFilterModel || 
+        cleanModel === oqcFilterModel ||
+        (r.model && r.model.toLowerCase().includes(oqcFilterModel.toLowerCase())) ||
+        (cleanModel && cleanModel.toLowerCase().includes(oqcFilterModel.toLowerCase()));
       if (!matchesModel) return false;
 
+      // 3. Color matching
       const matchesColor = isColorAll || r.color === oqcFilterColor;
       if (!matchesColor) return false;
 
-      const matchesDate = isDateAll || r.date === oqcFilterDate;
+      // 4. Date extraction
+      const stdRecordDate = r.date ? standardizeDate(r.date) : '';
+      const dateInfo = stdRecordDate ? getWeekAndMonthFromDate(stdRecordDate) : null;
+
+      // Date filter matching with standardization
+      const matchesDate = isDateAll || (stdRecordDate && stdRecordDate === stdFilterDate);
       if (!matchesDate) return false;
 
-      const matchesMonth = isMonthAll || String(r.month) === oqcFilterMonth;
+      // Month filter (check r.month or fallback to parsed dateInfo.month)
+      const recMonth = (r.month !== undefined && r.month !== null && String(r.month) !== 'NaN') 
+        ? String(r.month) 
+        : (dateInfo ? String(dateInfo.month) : '');
+      const matchesMonth = isMonthAll || recMonth === oqcFilterMonth;
       if (!matchesMonth) return false;
 
-      const matchesYear = isYearAll || String(r.year) === oqcFilterYear;
+      // Year filter (check r.year or fallback to parsed dateInfo.year)
+      const recYear = (r.year !== undefined && r.year !== null && String(r.year) !== 'NaN') 
+        ? String(r.year) 
+        : (dateInfo ? String(dateInfo.year) : '');
+      const matchesYear = isYearAll || recYear === oqcFilterYear;
       if (!matchesYear) return false;
       
-      const recordWeek = isWeekAll ? 'T1' : (r.date ? getWeekAndMonthFromDate(r.date).week : 'T1');
+      // Week filter matching
+      const recordWeek = dateInfo ? dateInfo.week : 'T1';
       const matchesWeek = isWeekAll || recordWeek === oqcFilterWeek;
       return matchesWeek;
     }).sort((a, b) => {
@@ -6817,9 +6844,10 @@ export default function QualityInspectionRecords({
 
               const now = new Date();
               const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-              const nowDate = now.toLocaleDateString('vi-VN');
-              const nowMonth = now.getMonth() + 1;
-              const nowYear = now.getFullYear();
+              const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
+              const dateParts = nowDate.split('/');
+              const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
+              const nowYear = Number(dateParts[2]) || now.getFullYear();
 
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = [...oqcRecords];
@@ -6845,9 +6873,10 @@ export default function QualityInspectionRecords({
             const handleUpdateDefectNote = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
               const now = new Date();
               const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-              const nowDate = now.toLocaleDateString('vi-VN');
-              const nowMonth = now.getMonth() + 1;
-              const nowYear = now.getFullYear();
+              const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
+              const dateParts = nowDate.split('/');
+              const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
+              const nowYear = Number(dateParts[2]) || now.getFullYear();
 
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = [...oqcRecords];
@@ -6869,9 +6898,10 @@ export default function QualityInspectionRecords({
             const handleQuickFail = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
               const now = new Date();
               const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-              const nowDate = now.toLocaleDateString('vi-VN');
-              const nowMonth = now.getMonth() + 1;
-              const nowYear = now.getFullYear();
+              const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
+              const dateParts = nowDate.split('/');
+              const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
+              const nowYear = Number(dateParts[2]) || now.getFullYear();
 
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = [...oqcRecords];
