@@ -6167,6 +6167,10 @@ export function App() {
     // 2. Lắng nghe real-time liên tục
     const unsub = onSnapshot(docRef, (snap) => {
       if (!isMounted || !snap.exists()) return;
+      if (localStorage.getItem('dk_oqc_handover_list_is_dirty') === 'true') {
+        console.log("[Handover onSnapshot Protection]: Local handover list is dirty. Preserving local state until sync completes.");
+        return;
+      }
       const d = snap.data();
       if (d && Array.isArray(d.data)) {
         setOqcHandoverList(d.data);
@@ -6205,6 +6209,10 @@ export function App() {
     // 2. Lắng nghe real-time liên tục
     const unsub = onSnapshot(docRef, (snap) => {
       if (!isMounted || !snap.exists()) return;
+      if (localStorage.getItem('dk_oqc_color_changes_is_dirty') === 'true') {
+        console.log("[Color Change onSnapshot Protection]: Local color changes list is dirty. Preserving local state until sync completes.");
+        return;
+      }
       const d = snap.data();
       if (d && Array.isArray(d.data)) {
         setOqcColorChanges(d.data);
