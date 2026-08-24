@@ -1666,6 +1666,7 @@ export default function QualityInspectionRecords({
 
   const [iqcCurrentPage, setIqcCurrentPage] = useState<number>(1);
   const [selectedIqcIds, setSelectedIqcIds] = useState<string[]>([]);
+  const [selectedOqcIds, setSelectedOqcIds] = useState<string[]>([]);
 
   useEffect(() => {
     setIqcCurrentPage(1);
@@ -2872,7 +2873,6 @@ export default function QualityInspectionRecords({
   });
   const [isSyncingEngine, setIsSyncingEngine] = useState(false);
   const [syncHistory, setSyncHistory] = useState<{time: string, count: number, source: string}[]>([]);
-  const [selectedOqcIds, setSelectedOqcIds] = useState<string[]>([]);
 
   // Export KCS Report states
   const [showExportKcsReportModal, setShowExportKcsReportModal] = useState(false);
