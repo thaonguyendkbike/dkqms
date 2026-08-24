@@ -1931,11 +1931,51 @@ export default function QualityInspectionRecords({
   const uniqueOqcDates = useMemo(() => {
     const set = new Set<string>();
     for (let i = 0; i < oqcRecords.length; i++) {
-      const d = oqcRecords[i].date;
-      if (d) set.add(d);
+      const r = oqcRecords[i];
+      if (!r.date) continue;
+
+      const stdDate = standardizeDate(r.date.trim());
+      if (!stdDate) continue;
+
+      const parts = stdDate.split('/');
+      if (parts.length < 3) continue;
+
+      const mNum = parseInt(parts[1], 10) || (r.month ? Number(r.month) : 0);
+      const yNum = parseInt(parts[2], 10) || (r.year ? Number(r.year) : 0);
+
+      // Lọc theo Tháng nếu được chọn
+      if (oqcFilterMonth !== 'All' && String(mNum) !== String(oqcFilterMonth)) {
+        continue;
+      }
+      // Lọc theo Năm nếu được chọn
+      if (oqcFilterYear !== 'All' && String(yNum) !== String(oqcFilterYear)) {
+        continue;
+      }
+
+      set.add(stdDate);
     }
-    return Array.from(set);
-  }, [oqcRecords]);
+
+    return Array.from(set).sort((a, b) => {
+      const pA = a.split('/');
+      const pB = b.split('/');
+      const da = parseInt(pA[0], 10) || 1;
+      const ma = parseInt(pA[1], 10) || 1;
+      const ya = parseInt(pA[2], 10) || 2026;
+      const db = parseInt(pB[0], 10) || 1;
+      const mb = parseInt(pB[1], 10) || 1;
+      const yb = parseInt(pB[2], 10) || 2026;
+      if (ya !== yb) return yb - ya;
+      if (ma !== mb) return mb - ma;
+      return db - da;
+    });
+  }, [oqcRecords, oqcFilterMonth, oqcFilterYear]);
+
+  // Tự động đặt lại bộ lọc Ngày về Tất cả nếu Ngày đã chọn không thuộc Tháng/Năm mới chọn
+  React.useEffect(() => {
+    if (oqcFilterDate !== 'All' && uniqueOqcDates.length > 0 && !uniqueOqcDates.includes(oqcFilterDate)) {
+      setOqcFilterDate('All');
+    }
+  }, [uniqueOqcDates, oqcFilterDate]);
 
   const uniqueOqcMonths = useMemo(() => {
     const set = new Set<number>();
