@@ -7802,7 +7802,9 @@ Lưu ý: Nếu không có yêu cầu thêm dữ liệu, đừng đính kèm kh�
                   year: dateInfo.year
                 };
 
-                setDailyLogs(current => [newLog, ...current]);
+                const updatedDailyLogs = [newLog, ...dailyLogs];
+                setDailyLogs(updatedDailyLogs);
+                syncToServer('dk_daily_logs', updatedDailyLogs);
                 systemConfirmation = `✓ Trợ lý đã lập công việc báo cáo ngày: "${newLog.content}" và giao cho PIC: ${newLog.assignee}.`;
               }
               else if (actionData.action === 'ADD_TASK') {
@@ -8500,8 +8502,8 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       alert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).\n\nChỉ các thành viên được phân quyền Biên tập mới có quyền sửa đổi dữ liệu. Hãy liên hệ anh Thao để nâng cấp phân quyền của bạn.");
       return;
     }
-    setDailyLogs(prev => prev.map(dl => {
-      if (dl.stt === stt) {
+    const updatedDailyLogs = dailyLogs.map(dl => {
+      if (Number(dl.stt) === Number(stt)) {
         if (field === 'date') {
           const info = getWeekAndMonthFromDate(value);
           return { ...dl, date: value, week: info.week };
@@ -8509,7 +8511,9 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
         return { ...dl, [field]: value };
       }
       return dl;
-    }));
+    });
+    setDailyLogs(updatedDailyLogs);
+    syncToServer('dk_daily_logs', updatedDailyLogs);
   };
 
   // ==========================================
@@ -16073,7 +16077,11 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                                 return;
                                               }
                                               if (window.confirm('⚠️ Bạn có chắc chắn muốn xóa đầu việc báo cáo ngày này?')) {
-                                                setDailyLogs(prev => prev.filter(dl => dl.stt !== log.stt));
+                                                const updated = dailyLogs.filter(dl => Number(dl.stt) !== Number(log.stt));
+                                                if (log.id) trackDeletedId('dk_daily_logs', log.id);
+                                                trackDeletedId('dk_daily_logs', String(log.stt));
+                                                setDailyLogs(updated);
+                                                syncToServer('dk_daily_logs', updated);
                                               }
                                             }}
                                             className="p-1 px-1.5 text-rose-600 hover:text-rose-955 bg-rose-50 hover:bg-rose-100 rounded border border-rose-200 cursor-pointer transition-all flex items-center justify-center"
@@ -16374,7 +16382,11 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                           return;
                                         }
                                         if (window.confirm('⚠️ Bạn có chắc chắn muốn xóa đầu việc báo cáo ngày này?')) {
-                                          setDailyLogs(prev => prev.filter(dl => dl.stt !== log.stt));
+                                          const updated = dailyLogs.filter(dl => Number(dl.stt) !== Number(log.stt));
+                                          if (log.id) trackDeletedId('dk_daily_logs', log.id);
+                                          trackDeletedId('dk_daily_logs', String(log.stt));
+                                          setDailyLogs(updated);
+                                          syncToServer('dk_daily_logs', updated);
                                         }
                                       }}
                                       className="p-1 px-1.5 text-rose-600 hover:text-rose-955 bg-rose-50 hover:bg-rose-100 rounded border border-rose-200 cursor-pointer transition-all flex items-center justify-center"
@@ -26605,7 +26617,13 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         date: standardizeDate(data.date),
                         deadline: data.deadline ? standardizeDate(data.deadline) : standardizeDate(data.date)
                       };
-                      setDailyLogs(prev => prev.map(dl => ((data.id && dl.id === data.id) || (data.stt && dl.stt === data.stt)) ? sanitizedData : dl));
+                      const updatedDailyLogs = dailyLogs.map(dl => {
+                        const isMatch = (data.id && dl.id && dl.id === data.id) ||
+                                        (data.stt !== undefined && dl.stt !== undefined && Number(dl.stt) === Number(data.stt));
+                        return isMatch ? sanitizedData : dl;
+                      });
+                      setDailyLogs(updatedDailyLogs);
+                      syncToServer('dk_daily_logs', updatedDailyLogs);
                       break;
                     }
                   }
