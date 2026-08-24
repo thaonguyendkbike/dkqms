@@ -2253,6 +2253,7 @@ export default function QualityInspectionRecords({
     return filteredIqc.slice((safeIqcPage - 1) * iqcPageSize, safeIqcPage * iqcPageSize);
   }, [filteredIqc, safeIqcPage]);
   const selectedIqcSet = useMemo(() => new Set(selectedIqcIds), [selectedIqcIds]);
+  const selectedOqcSet = useMemo(() => new Set(selectedOqcIds), [selectedOqcIds]);
 
   const filteredPqc = useMemo(() => {
     return pqcRecords.filter(r => {
@@ -7214,6 +7215,43 @@ export default function QualityInspectionRecords({
                 </div>
 
 
+                {/* Batch Action Bar for Selected OQC Station Items */}
+                {selectedOqcIds.length > 0 && (
+                  <div className="bg-rose-50 border border-rose-200 rounded-xl p-2.5 px-4 flex items-center justify-between shadow-xs mb-3 animate-fade-in font-sans select-none">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span className="text-xs font-bold text-rose-950">
+                        Đang chọn <strong className="font-mono text-rose-700 text-sm font-black">{selectedOqcIds.length}</strong> xe trong Trạm KCS
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOqcIds([])}
+                        className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        Bỏ chọn
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`⚠️ ANH THAO XÁC NHẬN: Bạn có chắc chắn muốn XÓA HÀNG LOẠT ${selectedOqcIds.length} xe KCS đã chọn khỏi CSDL không?\nHành động này sẽ cập nhật tức thì lên Cloud.`)) {
+                            selectedOqcIds.forEach(id => trackDeletedId('dk_oqc_records', id));
+                            const updated = oqcRecords.filter(r => !selectedOqcIds.includes(r.id));
+                            saveOqcRecordsOptimized(updated);
+                            setSelectedOqcIds([]);
+                            alert(`✓ Đã xóa thành công ${selectedOqcIds.length} xe KCS đã chọn!`);
+                          }
+                        }}
+                        className="px-3.5 py-1.5 text-xs font-extrabold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Xóa hàng loạt ({selectedOqcIds.length})
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Table */}
                 <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
                   {paginatedRecords.length === 0 ? (
@@ -7225,6 +7263,22 @@ export default function QualityInspectionRecords({
                       <table className="min-w-full divide-y divide-slate-200 text-xs">
                         <thead className="bg-slate-800 text-white font-bold text-[10.5px] uppercase tracking-wider select-none">
                           <tr>
+                            <th scope="col" className="px-2 py-2.5 text-center w-8 select-none">
+                              <input
+                                type="checkbox"
+                                checked={displayLsxRecords.length > 0 && displayLsxRecords.every(r => selectedOqcSet.has(r.id))}
+                                onChange={e => {
+                                  const allFilteredIds = displayLsxRecords.map(r => r.id).filter(Boolean);
+                                  if (e.target.checked) {
+                                    setSelectedOqcIds(prev => Array.from(new Set([...prev, ...allFilteredIds])));
+                                  } else {
+                                    setSelectedOqcIds(prev => prev.filter(id => !allFilteredIds.includes(id)));
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                title="Chọn tất cả xe trong danh sách hiển thị"
+                              />
+                            </th>
                             <th scope="col" className="px-3 py-2.5 text-center w-10">STT</th>
                             <th scope="col" className="px-3 py-2.5 text-left">Mã quy cách</th>
                             <th scope="col" className="px-3 py-2.5 text-left">Số Sêri</th>
@@ -7249,9 +7303,23 @@ export default function QualityInspectionRecords({
                               <tr
                                 key={r.id || r.serialNo || rowIdx}
                                 className={`hover:bg-slate-50 transition-colors ${
-                                  isPassed ? 'bg-emerald-50/20' : isFailed ? 'bg-rose-50/25' : ''
+                                  selectedOqcSet.has(r.id) ? 'bg-indigo-50/50' : isPassed ? 'bg-emerald-50/20' : isFailed ? 'bg-rose-50/25' : ''
                                 }`}
                               >
+                                <td className="px-2 py-2 text-center select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedOqcSet.has(r.id)}
+                                    onChange={e => {
+                                      if (e.target.checked) {
+                                        setSelectedOqcIds(prev => [...prev, r.id]);
+                                      } else {
+                                        setSelectedOqcIds(prev => prev.filter(id => id !== r.id));
+                                      }
+                                    }}
+                                    className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                                  />
+                                </td>
                                 <td className="px-3 py-2 text-center font-mono text-slate-400">{globalIdx}</td>
                                 <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{r.partCode || '--'}</td>
                                 <td className="px-3 py-2">
