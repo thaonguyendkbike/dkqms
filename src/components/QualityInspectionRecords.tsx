@@ -1186,19 +1186,18 @@ export default function QualityInspectionRecords({
     };
   }, [flushOqcSaveToCloud]);
 
-  const saveOqcRecordsOptimized = useCallback((updated: OQCRecord[]) => {
-    // 1. Phản hồi giao diện tức thì (< 1ms UI update)
-    if (typeof (React as any).startTransition === 'function') {
-      (React as any).startTransition(() => {
-        setOqcRecords(updated);
-      });
-    } else {
-      setOqcRecords(updated);
-    }
+  const asyncLocalStorageTimer = useRef<NodeJS.Timeout | null>(null);
 
-    // 2. Ghi đĩa cục bộ an toàn lập tức (< 5ms Local Storage Save)
-    safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+  const saveOqcRecordsOptimized = useCallback((updated: OQCRecord[]) => {
+    // 1. Phản hồi giao diện tức thì (< 1ms UI update - Đồng bộ trực tiếp)
+    setOqcRecords(updated);
     try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+
+    // 2. Ghi đĩa cục bộ an toàn ngầm (Debounced 150ms - Không gây giật lag khi gõ phím)
+    if (asyncLocalStorageTimer.current) clearTimeout(asyncLocalStorageTimer.current);
+    asyncLocalStorageTimer.current = setTimeout(() => {
+      safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+    }, 150);
 
     // 3. Gom đẩy Cloud ngầm sau 3 giây (Debounced 3s Batch Push)
     if (asyncOqcSaveTimer.current) clearTimeout(asyncOqcSaveTimer.current);
@@ -1920,43 +1919,49 @@ export default function QualityInspectionRecords({
   // Compute unique dynamic values for selects with useMemo
   const uniqueIqcSuppliers = useMemo(() => Array.from(new Set(iqcRecords.map(r => r.supplierName ? r.supplierName.trim() : ''))).filter(Boolean), [iqcRecords]);
   const uniquePqcModels = useMemo(() => Array.from(new Set(pqcRecords.map(r => r.model ? r.model.trim() : ''))).filter(Boolean), [pqcRecords]);
-  const uniqueOqcColors = useMemo(() => Array.from(new Set(oqcRecords.map(r => r.color ? r.color.trim() : ''))).filter(Boolean), [oqcRecords]);
-  const uniqueOqcDates = useMemo(() => Array.from(
-    new Set(
-      oqcRecords
-        .filter(r => {
-          if (!r.date) return false;
-          const info = getWeekAndMonthFromDate(r.date);
-          const matchesMonth = oqcFilterMonth === 'All' || String(info.month) === oqcFilterMonth;
-          const matchesYear = oqcFilterYear === 'All' || String(info.year) === oqcFilterYear;
-          return matchesMonth && matchesYear;
-        })
-        .map(r => r.date ? standardizeDate(r.date) : '')
-    )
-  ).filter(Boolean).sort((a, b) => {
-    const partsA = a.split('/');
-    const partsB = b.split('/');
-    const da = parseInt(partsA[0], 10) || 1;
-    const ma = parseInt(partsA[1], 10) || 7;
-    const ya = parseInt(partsA[2], 10) || 2026;
-    const db = parseInt(partsB[0], 10) || 1;
-    const mb = parseInt(partsB[1], 10) || 7;
-    const yb = parseInt(partsB[2], 10) || 2026;
-    if (ya !== yb) return ya - yb;
-    if (ma !== mb) return ma - mb;
-    return da - db;
-  }), [oqcRecords, oqcFilterMonth, oqcFilterYear]);
-  const uniqueOqcMonths = useMemo(() => Array.from(new Set(oqcRecords.map(r => r.month))).filter(Boolean).sort((a, b) => Number(a) - Number(b)), [oqcRecords]);
-  const uniqueOqcYears = useMemo(() => Array.from(new Set(oqcRecords.map(r => r.year))).filter(Boolean).sort((a, b) => Number(a) - Number(b)), [oqcRecords]);
+  const uniqueOqcColors = useMemo(() => {
+    const set = new Set<string>();
+    for (let i = 0; i < oqcRecords.length; i++) {
+      const c = oqcRecords[i].color;
+      if (c && c.trim()) set.add(c.trim());
+    }
+    return Array.from(set);
+  }, [oqcRecords]);
+
+  const uniqueOqcDates = useMemo(() => {
+    const set = new Set<string>();
+    for (let i = 0; i < oqcRecords.length; i++) {
+      const d = oqcRecords[i].date;
+      if (d) set.add(d);
+    }
+    return Array.from(set);
+  }, [oqcRecords]);
+
+  const uniqueOqcMonths = useMemo(() => {
+    const set = new Set<number>();
+    for (let i = 0; i < oqcRecords.length; i++) {
+      const m = oqcRecords[i].month;
+      if (m && !isNaN(Number(m))) set.add(Number(m));
+    }
+    return Array.from(set).sort((a, b) => a - b);
+  }, [oqcRecords]);
+
+  const uniqueOqcYears = useMemo(() => {
+    const set = new Set<number>();
+    for (let i = 0; i < oqcRecords.length; i++) {
+      const y = oqcRecords[i].year;
+      if (y && !isNaN(Number(y))) set.add(Number(y));
+    }
+    return Array.from(set).sort((a, b) => a - b);
+  }, [oqcRecords]);
   
-  // Unique inspection dates for KCS Line Station (sorted newest to oldest)
+  // Unique inspection dates for KCS Line Station (sorted)
   const uniqueKcsDates = useMemo(() => {
     const set = new Set<string>();
-    oqcRecords.forEach(r => {
-      if (r.date && r.date.trim()) {
-        set.add(standardizeDate(r.date.trim()));
-      }
-    });
+    for (let i = 0; i < oqcRecords.length; i++) {
+      const d = oqcRecords[i].date;
+      if (d && d.trim()) set.add(d.trim());
+    }
     return Array.from(set).sort((a, b) => {
       const partsA = a.split('/');
       const partsB = b.split('/');
@@ -2292,56 +2297,60 @@ export default function QualityInspectionRecords({
 
     return oqcRecords.filter(r => {
       // 1. Search text matching
-      const matchesSearch = sLower === '' || 
-        (r.serialNo && r.serialNo.toLowerCase().includes(sLower)) ||
-        (r.chassisNo && r.chassisNo.toLowerCase().includes(sLower)) ||
-        (r.engineNo && r.engineNo.toLowerCase().includes(sLower)) ||
-        (r.partCode && r.partCode.toLowerCase().includes(sLower)) ||
-        (r.model && r.model.toLowerCase().includes(sLower)) ||
-        (r.color && r.color.toLowerCase().includes(sLower)) ||
-        (r.lsx && r.lsx.toLowerCase().includes(sLower)) ||
-        (r.defectDetail && r.defectDetail.toLowerCase().includes(sLower));
-      if (!matchesSearch) return false;
+      if (sLower !== '') {
+        const matchesSearch = 
+          (r.serialNo && r.serialNo.toLowerCase().includes(sLower)) ||
+          (r.chassisNo && r.chassisNo.toLowerCase().includes(sLower)) ||
+          (r.engineNo && r.engineNo.toLowerCase().includes(sLower)) ||
+          (r.partCode && r.partCode.toLowerCase().includes(sLower)) ||
+          (r.model && r.model.toLowerCase().includes(sLower)) ||
+          (r.color && r.color.toLowerCase().includes(sLower)) ||
+          (r.lsx && r.lsx.toLowerCase().includes(sLower)) ||
+          (r.defectDetail && r.defectDetail.toLowerCase().includes(sLower));
+        if (!matchesSearch) return false;
+      }
         
       // 2. Model matching
-      const cleanModel = getCleanModelName(r);
-      const matchesModel = isModelAll || 
-        r.model === oqcFilterModel || 
-        cleanModel === oqcFilterModel ||
-        (r.model && r.model.toLowerCase().includes(oqcFilterModel.toLowerCase())) ||
-        (cleanModel && cleanModel.toLowerCase().includes(oqcFilterModel.toLowerCase()));
-      if (!matchesModel) return false;
+      if (!isModelAll) {
+        const cleanModel = getCleanModelName(r);
+        const matchesModel = 
+          r.model === oqcFilterModel || 
+          cleanModel === oqcFilterModel ||
+          (r.model && r.model.toLowerCase().includes(oqcFilterModel.toLowerCase())) ||
+          (cleanModel && cleanModel.toLowerCase().includes(oqcFilterModel.toLowerCase()));
+        if (!matchesModel) return false;
+      }
 
       // 3. Color matching
-      const matchesColor = isColorAll || r.color === oqcFilterColor;
-      if (!matchesColor) return false;
+      if (!isColorAll && r.color !== oqcFilterColor) return false;
 
-      // 4. Date extraction
-      const stdRecordDate = r.date ? standardizeDate(r.date) : '';
-      const dateInfo = stdRecordDate ? getWeekAndMonthFromDate(stdRecordDate) : null;
+      // 4. Date filter matching
+      if (!isDateAll) {
+        const stdRecordDate = r.date ? standardizeDate(r.date) : '';
+        if (stdRecordDate !== stdFilterDate) return false;
+      }
 
-      // Date filter matching with standardization
-      const matchesDate = isDateAll || (stdRecordDate && stdRecordDate === stdFilterDate);
-      if (!matchesDate) return false;
+      // 5. Month filter
+      if (!isMonthAll) {
+        const recMonth = String(r.month || '');
+        if (recMonth && recMonth !== oqcFilterMonth && recMonth !== 'NaN') return false;
+      }
 
-      // Month filter (check r.month or fallback to parsed dateInfo.month)
-      const recMonth = (r.month !== undefined && r.month !== null && String(r.month) !== 'NaN') 
-        ? String(r.month) 
-        : (dateInfo ? String(dateInfo.month) : '');
-      const matchesMonth = isMonthAll || recMonth === oqcFilterMonth;
-      if (!matchesMonth) return false;
+      // 6. Year filter
+      if (!isYearAll) {
+        const recYear = String(r.year || '');
+        if (recYear && recYear !== oqcFilterYear && recYear !== 'NaN') return false;
+      }
 
-      // Year filter (check r.year or fallback to parsed dateInfo.year)
-      const recYear = (r.year !== undefined && r.year !== null && String(r.year) !== 'NaN') 
-        ? String(r.year) 
-        : (dateInfo ? String(dateInfo.year) : '');
-      const matchesYear = isYearAll || recYear === oqcFilterYear;
-      if (!matchesYear) return false;
-      
-      // Week filter matching
-      const recordWeek = dateInfo ? dateInfo.week : 'T1';
-      const matchesWeek = isWeekAll || recordWeek === oqcFilterWeek;
-      return matchesWeek;
+      // 7. Week filter (Chỉ gọi dateInfo khi thực sự cần lọc theo tuần)
+      if (!isWeekAll) {
+        const stdRecordDate = r.date ? standardizeDate(r.date) : '';
+        const dateInfo = stdRecordDate ? getWeekAndMonthFromDate(stdRecordDate) : null;
+        const recordWeek = dateInfo ? dateInfo.week : 'T1';
+        if (recordWeek !== oqcFilterWeek) return false;
+      }
+
+      return true;
     }).sort((a, b) => {
       const sA = (a.serialNo || a.id || '').trim();
       const sB = (b.serialNo || b.id || '').trim();
