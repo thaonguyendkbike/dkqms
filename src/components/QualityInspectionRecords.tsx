@@ -2364,31 +2364,46 @@ export default function QualityInspectionRecords({
   const oqcDashboardStats = useMemo(() => {
     const liveLapRapTotal = filteredOqc.length;
     let datVal = 0;
+    let loiVal = 0;
+    let chuaKiemVal = 0;
 
     const liveModelsMap: Record<string, number> = {};
     const liveModelDefects: Record<string, { name: string; count: number }[]> = {};
-    const modelStatsMap: Record<string, { total: number; passed: number; failed: number }> = {};
+    const modelStatsMap: Record<string, { total: number; passed: number; failed: number; pending: number }> = {};
 
     for (let i = 0; i < filteredOqc.length; i++) {
       const r = filteredOqc[i];
-      const isPassed = isOqcRecordPassed(r);
-      if (isPassed) datVal++;
+      
+      const hasDefect = (r.status === 'Lỗi') || (r.failedCount && r.failedCount > 0) || Boolean(r.defectDetail && r.defectDetail.trim() && !['không', 'ok', 'pass', 'đạt', 'sạch không lỗi'].includes(r.defectDetail.trim().toLowerCase()));
+      const isPassed = r.status === 'Đạt' || (r.passFlag === 1 && !hasDefect);
+      const isFailed = !isPassed && hasDefect;
+      const isPending = !isPassed && !isFailed;
+
+      if (isPassed) {
+        datVal++;
+      } else if (isFailed) {
+        loiVal++;
+      } else {
+        chuaKiemVal++;
+      }
 
       const modelName = getCleanModelName(r);
       if (modelName && modelName.toLowerCase() !== 'đạt' && modelName.toLowerCase() !== 'lỗi' && modelName.toLowerCase() !== 'chưa kiểm tra' && modelName.toLowerCase() !== 'pass' && modelName.toLowerCase() !== 'fail') {
         liveModelsMap[modelName] = (liveModelsMap[modelName] || 0) + 1;
 
         if (!modelStatsMap[modelName]) {
-          modelStatsMap[modelName] = { total: 0, passed: 0, failed: 0 };
+          modelStatsMap[modelName] = { total: 0, passed: 0, failed: 0, pending: 0 };
         }
         modelStatsMap[modelName].total++;
         if (isPassed) {
           modelStatsMap[modelName].passed++;
-        } else {
+        } else if (isFailed) {
           modelStatsMap[modelName].failed++;
+        } else {
+          modelStatsMap[modelName].pending++;
         }
 
-        if (r.status === 'Lỗi' && r.defectDetail) {
+        if (isFailed && r.defectDetail) {
           if (!liveModelDefects[modelName]) {
             liveModelDefects[modelName] = [];
           }
@@ -2406,9 +2421,9 @@ export default function QualityInspectionRecords({
       }
     }
 
-    const loiVal = liveLapRapTotal - datVal;
-    const pieDatPercent = liveLapRapTotal > 0 ? Math.round((datVal / liveLapRapTotal) * 100) : 0;
-    const pieLoiPercent = liveLapRapTotal > 0 ? (100 - pieDatPercent) : 0;
+    const checkedTotal = datVal + loiVal;
+    const pieDatPercent = checkedTotal > 0 ? Math.round((datVal / checkedTotal) * 100) : (liveLapRapTotal > 0 ? Math.round((datVal / liveLapRapTotal) * 100) : 0);
+    const pieLoiPercent = checkedTotal > 0 ? Math.round((loiVal / checkedTotal) * 100) : 0;
 
     let activeBarData = Object.entries(liveModelsMap).map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
@@ -2429,13 +2444,18 @@ export default function QualityInspectionRecords({
       const total = st.total;
       const passed = st.passed;
       const failed = st.failed;
-      const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
-      const failRate = total > 0 ? (100 - passRate) : 0;
+      const pending = st.pending;
+      const checked = passed + failed;
+
+      const passRate = checked > 0 ? Math.round((passed / checked) * 100) : (passed > 0 ? Math.round((passed / total) * 100) : 0);
+      const failRate = checked > 0 ? Math.round((failed / checked) * 100) : 0;
       return {
         model,
         total,
         passed,
         failed,
+        pending,
+        checked,
         passRate,
         failRate,
       };
@@ -2447,6 +2467,8 @@ export default function QualityInspectionRecords({
       liveLapRapTotal,
       datVal,
       loiVal,
+      chuaKiemVal,
+      checkedTotal,
       pieDatPercent,
       pieLoiPercent,
       activeBarData,
@@ -2455,7 +2477,7 @@ export default function QualityInspectionRecords({
       modelStats,
       maxTotal,
     };
-  }, [filteredOqc, isOqcRecordPassed, getCleanModelName]);
+  }, [filteredOqc, getCleanModelName]);
 
 
 
