@@ -1150,8 +1150,35 @@ export default function QualityInspectionRecords({
   const [activeMultiDefectModalRecord, setActiveMultiDefectModalRecord] = useState<OQCRecord | null>(null);
   const [selectedModalDefects, setSelectedModalDefects] = useState<string[]>([]);
 
+  // High-Performance Zero-Latency Optimistic State Overrides for KCS Station
+  const [localOqcOverrides, setLocalOqcOverrides] = useState<Record<string, Partial<OQCRecord>>>({});
+
+  // Auto reconcile local overrides when global oqcRecords updates
+  useEffect(() => {
+    if (Object.keys(localOqcOverrides).length === 0) return;
+    setLocalOqcOverrides(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const id in next) {
+        const globalRec = oqcRecords.find(r => r.id === id);
+        if (globalRec) {
+          const override = next[id];
+          if (
+            (!override.status || override.status === globalRec.status) &&
+            (override.defectDetail === undefined || override.defectDetail === globalRec.defectDetail) &&
+            (override.rootCause === undefined || override.rootCause === globalRec.rootCause)
+          ) {
+            delete next[id];
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [oqcRecords]);
+
   // High-Performance Zero-Latency Save Helper for OQC Quick Pass / Defect Entry
-  // Immediate UI (<1ms) & LocalStorage (<5ms) save; Debounced 30s Batch Cloud Push
+  // Immediate UI (<1ms) & LocalStorage (<5ms) save; Debounced 3s Batch Cloud Push
   const asyncOqcSaveTimer = useRef<any>(null);
   const latestOqcRecordsRef = useRef<OQCRecord[]>(oqcRecords);
 
@@ -1189,23 +1216,26 @@ export default function QualityInspectionRecords({
   const asyncLocalStorageTimer = useRef<NodeJS.Timeout | null>(null);
 
   const saveOqcRecordsOptimized = useCallback((updated: OQCRecord[]) => {
-    // 1. Phản hồi giao diện tức thì (< 1ms UI update - Đồng bộ trực tiếp)
-    setOqcRecords(updated);
     try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
 
-    // 2. Ghi đĩa cục bộ an toàn ngầm (Debounced 150ms - Không gây giật lag khi gõ phím)
+    // 1. Ghi đĩa cục bộ an toàn ngầm (Debounced 150ms - Không gây giật lag)
     if (asyncLocalStorageTimer.current) clearTimeout(asyncLocalStorageTimer.current);
     asyncLocalStorageTimer.current = setTimeout(() => {
       safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
     }, 150);
 
-    // 3. Gom đẩy Cloud ngầm sau 3 giây (Debounced 3s Batch Push)
+    // 2. Gom đẩy Cloud ngầm sau 3 giây (Debounced 3s Batch Push)
     if (asyncOqcSaveTimer.current) clearTimeout(asyncOqcSaveTimer.current);
     asyncOqcSaveTimer.current = setTimeout(() => {
       if (typeof (window as any).syncToServer === 'function') {
         (window as any).syncToServer('dk_oqc_records', updated);
       }
     }, 3000);
+
+    // 3. Hoãn cập nhật State toàn cục (App.tsx) và các thuật toán nặng ngầm để UI paint tức thì 0ms
+    setTimeout(() => {
+      setOqcRecords(updated);
+    }, 0);
   }, [setOqcRecords]);
 
   // Check if there is an active IQC plan in Lập kế hoạch (weeklyPlans)
@@ -3036,7 +3066,9 @@ export default function QualityInspectionRecords({
     const filtered: OQCRecord[] = [];
 
     for (let i = 0; i < oqcRecords.length; i++) {
-      const r = oqcRecords[i];
+      const rawR = oqcRecords[i];
+      const override = localOqcOverrides[rawR.id];
+      const r = override ? { ...rawR, ...override } : rawR;
       // 1. LSX filter
       if (!isAllLsx && (r.lsx || '26-10').trim() !== cleanLsx) {
         continue;
@@ -3102,7 +3134,7 @@ export default function QualityInspectionRecords({
       pendingCars: pendingCount,
       yieldRate
     };
-  }, [oqcRecords, kcsSelectedLsx, kcsFilterDate, kcsFilterMonth, kcsFilterYear, kcsStatusFilter, kcsSearch]);
+  }, [oqcRecords, localOqcOverrides, kcsSelectedLsx, kcsFilterDate, kcsFilterMonth, kcsFilterYear, kcsStatusFilter, kcsSearch]);
 
   // Finished Goods Handover (Báo phẩm bàn giao kho) states
   const [handoverScanInput, setHandoverScanInput] = useState('');
@@ -6907,12 +6939,7 @@ export default function QualityInspectionRecords({
               handleQuickPass(record);
             };
 
-            const handleQuickPass = (record: OQCRecord, nextIndex?: number) => {
-              if (typeof nextIndex === 'number' && nextIndex < paginatedRecords.length) {
-                const nextInput = document.getElementById(`kcs-pass-input-${nextIndex}`);
-                if (nextInput) nextInput.focus();
-              }
-
+            const handleQuickPass = (record: OQCRecord) => {
               const now = new Date();
               const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
               const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
@@ -6920,22 +6947,32 @@ export default function QualityInspectionRecords({
               const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
               const nowYear = Number(dateParts[2]) || now.getFullYear();
 
+              const override: Partial<OQCRecord> = {
+                status: 'Đạt' as const,
+                defectDetail: '',
+                rootCause: '',
+                failedCount: 0,
+                checkTime: nowTime,
+                date: nowDate,
+                month: nowMonth,
+                year: nowYear,
+                updatedAt: new Date().toISOString(),
+                checkedBy: 'Liễu Tùng Lâm'
+              };
+
+              // 1. Phản hồi tức thì giao diện (< 1ms UI update)
+              if (record.id) {
+                setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
+              }
+
+              // 2. Cập nhật mảng toàn cục và hoãn thuật toán nặng ngầm đằng sau
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = [...oqcRecords];
               const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
               if (index !== -1) {
                 updated[index] = {
                   ...updated[index],
-                  status: 'Đạt' as const,
-                  defectDetail: '',
-                  rootCause: '',
-                  failedCount: 0,
-                  checkTime: nowTime,
-                  date: nowDate,
-                  month: nowMonth,
-                  year: nowYear,
-                  updatedAt: new Date().toISOString(),
-                  checkedBy: 'Liễu Tùng Lâm'
+                  ...override
                 };
               }
 
@@ -6950,19 +6987,27 @@ export default function QualityInspectionRecords({
               const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
               const nowYear = Number(dateParts[2]) || now.getFullYear();
 
+              const override: Partial<OQCRecord> = {
+                defectDetail: defectDetail,
+                rootCause: typeof rootCause === 'string' ? rootCause : (record.rootCause || ''),
+                checkTime: nowTime,
+                date: nowDate,
+                month: nowMonth,
+                year: nowYear,
+                updatedAt: new Date().toISOString()
+              };
+
+              if (record.id) {
+                setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
+              }
+
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = [...oqcRecords];
               const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
               if (index !== -1) {
                 updated[index] = {
                   ...updated[index],
-                  defectDetail: defectDetail,
-                  rootCause: typeof rootCause === 'string' ? rootCause : (updated[index].rootCause || ''),
-                  checkTime: nowTime,
-                  date: nowDate,
-                  month: nowMonth,
-                  year: nowYear,
-                  updatedAt: new Date().toISOString()
+                  ...override
                 };
               }
               saveOqcRecordsOptimized(updated);
@@ -6976,39 +7021,43 @@ export default function QualityInspectionRecords({
               const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
               const nowYear = Number(dateParts[2]) || now.getFullYear();
 
+              const isClear = !defectDetail || !defectDetail.trim();
+              const override: Partial<OQCRecord> = isClear ? {
+                status: 'Đạt' as const,
+                defectDetail: '',
+                rootCause: '',
+                failedCount: 0,
+                checkTime: nowTime,
+                date: nowDate,
+                month: nowMonth,
+                year: nowYear,
+                updatedAt: new Date().toISOString(),
+                checkedBy: 'Liễu Tùng Lâm'
+              } : {
+                status: 'Lỗi' as const,
+                defectDetail: defectDetail,
+                rootCause: rootCause || '',
+                failedCount: 1,
+                checkTime: nowTime,
+                date: nowDate,
+                month: nowMonth,
+                year: nowYear,
+                updatedAt: new Date().toISOString(),
+                checkedBy: 'Liễu Tùng Lâm'
+              };
+
+              if (record.id) {
+                setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
+              }
+
               const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
               const updated = [...oqcRecords];
               const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
               if (index !== -1) {
-                if (!defectDetail || !defectDetail.trim()) {
-                  updated[index] = {
-                    ...updated[index],
-                    status: 'Đạt' as const,
-                    defectDetail: '',
-                    rootCause: '',
-                    failedCount: 0,
-                    checkTime: nowTime,
-                    date: nowDate,
-                    month: nowMonth,
-                    year: nowYear,
-                    updatedAt: new Date().toISOString(),
-                    checkedBy: 'Liễu Tùng Lâm'
-                  };
-                } else {
-                  updated[index] = {
-                    ...updated[index],
-                    status: 'Lỗi' as const,
-                    defectDetail: defectDetail,
-                    rootCause: rootCause || '',
-                    failedCount: 1,
-                    checkTime: nowTime,
-                    date: nowDate,
-                    month: nowMonth,
-                    year: nowYear,
-                    updatedAt: new Date().toISOString(),
-                    checkedBy: 'Liễu Tùng Lâm'
-                  };
-                }
+                updated[index] = {
+                  ...updated[index],
+                  ...override
+                };
               }
 
               saveOqcRecordsOptimized(updated);
@@ -7302,8 +7351,8 @@ export default function QualityInspectionRecords({
                     <span className="text-blue-700 font-bold">Tỉ lệ đạt: <strong className="font-mono font-bold">{lsxYield}%</strong></span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-[11px] text-slate-400">
-                      Gõ <kbd className="px-1 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono text-[10px]">1</kbd> = Đạt • Tự động nhảy dòng
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      ⚡ Bấm nút <strong className="text-emerald-700 font-bold">✓ Đạt</strong> hoặc <strong className="text-rose-700 font-bold">🔴 Lỗi</strong> để đổi trạng thái tức thì (0ms)
                     </span>
                     <button
                       type="button"
@@ -7390,7 +7439,7 @@ export default function QualityInspectionRecords({
                             <th scope="col" className="px-3 py-2.5 text-left">Số khung</th>
                             <th scope="col" className="px-3 py-2.5 text-left">Model</th>
                             <th scope="col" className="px-3 py-2.5 text-left">Màu sắc</th>
-                            <th scope="col" className="px-3 py-2.5 text-center w-32">KCS (Phím 1)</th>
+                            <th scope="col" className="px-3 py-2.5 text-center w-36">KCS / Trạng thái</th>
                             <th scope="col" className="px-3 py-2.5 text-left min-w-[260px]">Chi tiết lỗi (Thẻ lỗi 1, 2, 3)</th>
                             <th scope="col" className="px-3 py-2.5 text-left min-w-[150px]">Nguyên nhân</th>
                             <th scope="col" className="px-3 py-2.5 text-center w-20">Giờ</th>
@@ -7443,51 +7492,32 @@ export default function QualityInspectionRecords({
                                 </td>
                                 <td className="px-3 py-2 text-slate-600">{r.color}</td>
 
-                                {/* Pass input [1] */}
+                                {/* KCS Action Cell: Instant 0ms Buttons */}
                                 <td className="px-3 py-2 text-center">
-                                  <div className="flex items-center justify-center gap-1">
-                                    <input
-                                      id={`kcs-pass-input-${rowIdx}`}
-                                      type="text"
-                                      maxLength={2}
-                                      defaultValue={isPassed ? '1' : isFailed ? '2' : ''}
-                                      key={`${r.id}-${r.status}`}
-                                      placeholder="1"
-                                      onKeyDown={e => {
-                                        if (e.key === '1' || e.key === 'Enter') {
-                                          e.preventDefault();
-                                          handleQuickPass(r, rowIdx + 1);
-                                        } else if (e.key === '2') {
-                                          e.preventDefault();
-                                          handleQuickFail(r, r.defectDetail || 'Lỗi KCS');
-                                        } else if (e.key === 'ArrowDown') {
-                                          e.preventDefault();
-                                          const next = document.getElementById(`kcs-pass-input-${rowIdx + 1}`);
-                                          if (next) next.focus();
-                                        } else if (e.key === 'ArrowUp') {
-                                          e.preventDefault();
-                                          const prev = document.getElementById(`kcs-pass-input-${rowIdx - 1}`);
-                                          if (prev) prev.focus();
-                                        }
-                                      }}
-                                      className={`w-9 h-7 text-center font-mono font-bold text-xs rounded border transition outline-hidden ${
-                                        isPassed
-                                          ? 'bg-emerald-600 text-white border-emerald-700'
-                                          : isFailed
-                                          ? 'bg-rose-600 text-white border-rose-700'
-                                          : 'bg-slate-50 text-slate-800 border-slate-300 focus:bg-white focus:ring-1 focus:ring-slate-500'
-                                      }`}
-                                    />
+                                  <div className="flex items-center justify-center gap-1.5">
                                     <button
                                       type="button"
-                                      onClick={() => handleQuickPass(r, rowIdx + 1)}
-                                      className={`text-[11px] font-bold px-2 py-1 rounded transition cursor-pointer ${
+                                      onClick={() => handleQuickPass(r)}
+                                      className={`text-xs font-bold px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95 ${
                                         isPassed
-                                          ? 'bg-emerald-100 text-emerald-800'
-                                          : 'bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700'
+                                          ? 'bg-emerald-600 text-white border border-emerald-700 shadow-xs'
+                                          : 'bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200'
                                       }`}
+                                      title="Đánh dấu xe ĐẠT nghiệm thu KCS tức thì"
                                     >
-                                      Đạt
+                                      ✓ Đạt
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleQuickFail(r, r.defectDetail || 'Lỗi KCS')}
+                                      className={`text-xs font-bold px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95 ${
+                                        isFailed
+                                          ? 'bg-rose-600 text-white border border-rose-700 shadow-xs'
+                                          : 'bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200'
+                                      }`}
+                                      title="Đánh dấu xe LỖI nghiệm thu KCS tức thì"
+                                    >
+                                      🔴 Lỗi
                                     </button>
                                   </div>
                                 </td>
@@ -16298,38 +16328,41 @@ export default function QualityInspectionRecords({
                   const unique = Array.from(new Set(selectedModalDefects.filter(Boolean)));
                   const updatedStr = unique.join(', ');
                   const targetSerial = activeMultiDefectModalRecord.serialNo ? activeMultiDefectModalRecord.serialNo.trim().toUpperCase() : '';
+                  const now = new Date();
+                  const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+                  const nowDate = now.toLocaleDateString('vi-VN');
+                  const nowMonth = now.getMonth() + 1;
+                  const nowYear = now.getFullYear();
+
+                  const override: Partial<OQCRecord> = unique.length === 0 ? {
+                    status: 'Đạt' as const,
+                    defectDetail: '',
+                    failedCount: 0,
+                    checkTime: nowTime,
+                    date: nowDate,
+                    month: nowMonth,
+                    year: nowYear
+                  } : {
+                    status: 'Lỗi' as const,
+                    defectDetail: updatedStr,
+                    failedCount: 1,
+                    checkTime: nowTime,
+                    date: nowDate,
+                    month: nowMonth,
+                    year: nowYear
+                  };
+
+                  if (activeMultiDefectModalRecord.id) {
+                    setLocalOqcOverrides(prev => ({ ...prev, [activeMultiDefectModalRecord.id]: { ...activeMultiDefectModalRecord, ...override } }));
+                  }
+
                   const updated = [...oqcRecords];
                   const index = updated.findIndex(r => r.id === activeMultiDefectModalRecord.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
                   if (index !== -1) {
-                    const now = new Date();
-                    const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-                    const nowDate = now.toLocaleDateString('vi-VN');
-                    const nowMonth = now.getMonth() + 1;
-                    const nowYear = now.getFullYear();
-
-                    if (unique.length === 0) {
-                      updated[index] = {
-                        ...updated[index],
-                        status: 'Đạt' as const,
-                        defectDetail: '',
-                        failedCount: 0,
-                        checkTime: nowTime,
-                        date: nowDate,
-                        month: nowMonth,
-                        year: nowYear
-                      };
-                    } else {
-                      updated[index] = {
-                        ...updated[index],
-                        status: 'Lỗi' as const,
-                        defectDetail: updatedStr,
-                        failedCount: 1,
-                        checkTime: nowTime,
-                        date: nowDate,
-                        month: nowMonth,
-                        year: nowYear
-                      };
-                    }
+                    updated[index] = {
+                      ...updated[index],
+                      ...override
+                    };
                   }
                   saveOqcRecordsOptimized(updated);
                   setActiveMultiDefectModalRecord(null);
