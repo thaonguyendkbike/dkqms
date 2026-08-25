@@ -1108,6 +1108,8 @@ export function App() {
   const lastSeenValues = useRef<Record<string, string>>({});
   const initialStateValues = useRef<Record<string, string>>({});
   const serverTimestamps = useRef<Record<string, string>>({});
+  const isRemoteUpdateRef = useRef<Record<string, boolean>>({});
+  const lastSyncedChunkHashes = useRef<Record<string, string>>({});
   const [conflictKeys, setConflictKeys] = useState<string[]>([]);
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [resolvingConflicts, setResolvingConflicts] = useState(false);
@@ -1750,17 +1752,24 @@ export function App() {
 
           for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
             const chunkData = currentList.slice(cIdx * CHUNK_SIZE, (cIdx + 1) * CHUNK_SIZE);
-            const chunkRef = doc(db, 'dk_db_sync', `${key}_chunk_${cIdx}`);
-            ops.push({
-              type: 'set',
-              ref: chunkRef,
-              data: {
-                chunkIndex: cIdx,
-                parentKey: key,
-                data: chunkData,
-                updatedAt: timestamp
-              }
-            });
+            const chunkHash = JSON.stringify(chunkData);
+            const chunkKey = `${key}_chunk_${cIdx}`;
+
+            // Diff protection: Only push chunk document if data inside this chunk actually changed!
+            if (lastSyncedChunkHashes.current[chunkKey] !== chunkHash) {
+              lastSyncedChunkHashes.current[chunkKey] = chunkHash;
+              const chunkRef = doc(db, 'dk_db_sync', chunkKey);
+              ops.push({
+                type: 'set',
+                ref: chunkRef,
+                data: {
+                  chunkIndex: cIdx,
+                  parentKey: key,
+                  data: chunkData,
+                  updatedAt: timestamp
+                }
+              });
+            }
           }
 
           // Meta document tracking chunks
@@ -1962,12 +1971,16 @@ export function App() {
   }, [syncLoaded, firebaseUser, conflictKeys]);
 
   const syncToServer = (key: string, data: any) => {
+    // 1. Remote update protection: If state change was triggered by receiving data from Firestore server, skip sync completely!
+    if (isRemoteUpdateRef.current[key]) {
+      isRemoteUpdateRef.current[key] = false;
+      return;
+    }
+
     const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
     const serialized = JSON.stringify(data);
 
     // If the data is exactly identical to the last seen/saved data, skip completely!
-    // This check MUST be placed at the very top to prevent server-driven snapshot updates during startup 
-    // (which trigger state hooks) from bypassing this check and being falsely flagged as dirty.
     if (lastSeenValues.current[key] === serialized) {
       return;
     }
@@ -3175,6 +3188,9 @@ export function App() {
             window.dispatchEvent(new CustomEvent('dk_planning_reload_state', { detail: { key, value: serialized } }));
           } catch (err) { }
 
+          // Mark state update as remote update from Firestore server to prevent triggerCloudSynchronization echo loop
+          isRemoteUpdateRef.current[key] = true;
+
           // Dispatch to state
           if (key === 'dk_tasks') setTasks(finalDisplayData);
           else if (key === 'dk_weekly_plans') setWeeklyPlans(finalDisplayData);
@@ -3372,6 +3388,7 @@ export function App() {
           }
 
           if (key === 'dk_oqc_records') {
+            isRemoteUpdateRef.current[key] = true;
             setOqcRecords(finalDisplayData);
           }
 
@@ -3410,6 +3427,7 @@ export function App() {
           const list = Array.isArray(metaData?.data) ? metaData.data : [];
           safeStorage.setItem(key, JSON.stringify(list));
           try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) { }
+          isRemoteUpdateRef.current[key] = true;
           if (key === 'dk_staff') {
             const cleaned = list.map((s: any) => {
               if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
@@ -6305,16 +6323,22 @@ export function App() {
   }, [syncLoaded]);
 
   useEffect(() => {
-    syncToServer('dk_supplier_production_audits', supplierProductionAudits);
+    if (localStorage.getItem('dk_supplier_production_audits_is_dirty') === 'true') {
+      syncToServer('dk_supplier_production_audits', supplierProductionAudits);
+    }
   }, [supplierProductionAudits]);
 
   // Persists all QMS lists to central server when state changes
   useEffect(() => {
-    syncToServer('dk_tasks', tasks);
+    if (localStorage.getItem('dk_tasks_is_dirty') === 'true') {
+      syncToServer('dk_tasks', tasks);
+    }
   }, [tasks]);
 
   useEffect(() => {
-    syncToServer('dk_kpis', kpis);
+    if (localStorage.getItem('dk_kpis_is_dirty') === 'true') {
+      syncToServer('dk_kpis', kpis);
+    }
   }, [kpis]);
 
   // Auto-correct any suppliers that accidentally had address in ComponentType on startup or state updates
@@ -6352,83 +6376,121 @@ export function App() {
   }, [syncLoaded, suppliers]);
 
   useEffect(() => {
-    syncToServer('dk_suppliers', suppliers);
+    if (localStorage.getItem('dk_suppliers_is_dirty') === 'true') {
+      syncToServer('dk_suppliers', suppliers);
+    }
   }, [suppliers]);
 
   useEffect(() => {
-    syncToServer('dk_capas', capas);
+    if (localStorage.getItem('dk_capas_is_dirty') === 'true') {
+      syncToServer('dk_capas', capas);
+    }
   }, [capas]);
 
   useEffect(() => {
-    syncToServer('dk_projects', projects);
+    if (localStorage.getItem('dk_projects_is_dirty') === 'true') {
+      syncToServer('dk_projects', projects);
+    }
   }, [projects]);
 
   useEffect(() => {
-    syncToServer('dk_ptsp_tasks', ptspTasks);
+    if (localStorage.getItem('dk_ptsp_tasks_is_dirty') === 'true') {
+      syncToServer('dk_ptsp_tasks', ptspTasks);
+    }
   }, [ptspTasks]);
 
   useEffect(() => {
-    syncToServer('dk_defects', defects);
+    if (localStorage.getItem('dk_defects_is_dirty') === 'true') {
+      syncToServer('dk_defects', defects);
+    }
   }, [defects]);
 
   useEffect(() => {
-    syncToServer('dk_ecos', ecos);
+    if (localStorage.getItem('dk_ecos_is_dirty') === 'true') {
+      syncToServer('dk_ecos', ecos);
+    }
   }, [ecos]);
 
   useEffect(() => {
-    syncToServer('dk_improvement_actions', improvementActions);
+    if (localStorage.getItem('dk_improvement_actions_is_dirty') === 'true') {
+      syncToServer('dk_improvement_actions', improvementActions);
+    }
   }, [improvementActions]);
 
   useEffect(() => {
-    syncToServer('dk_copqs', copqs);
+    if (localStorage.getItem('dk_copqs_is_dirty') === 'true') {
+      syncToServer('dk_copqs', copqs);
+    }
   }, [copqs]);
 
   useEffect(() => {
-    syncToServer('dk_fmea', fmea);
+    if (localStorage.getItem('dk_fmea_is_dirty') === 'true') {
+      syncToServer('dk_fmea', fmea);
+    }
   }, [fmea]);
 
   useEffect(() => {
-    syncToServer('dk_custom_forms', customForms);
+    if (localStorage.getItem('dk_custom_forms_is_dirty') === 'true') {
+      syncToServer('dk_custom_forms', customForms);
+    }
   }, [customForms]);
 
   useEffect(() => {
     localStorage.setItem('dk_staff', JSON.stringify(staff));
-    syncToServer('dk_staff', staff);
+    if (localStorage.getItem('dk_staff_is_dirty') === 'true') {
+      syncToServer('dk_staff', staff);
+    }
   }, [staff]);
 
   useEffect(() => {
     localStorage.setItem('dk_models', JSON.stringify(models));
-    syncToServer('dk_models', models);
+    if (localStorage.getItem('dk_models_is_dirty') === 'true') {
+      syncToServer('dk_models', models);
+    }
   }, [models]);
 
   useEffect(() => {
-    syncToServer('dk_dealers', dealers);
+    if (localStorage.getItem('dk_dealers_is_dirty') === 'true') {
+      syncToServer('dk_dealers', dealers);
+    }
   }, [dealers]);
 
   useEffect(() => {
-    syncToServer('dk_daily_logs', dailyLogs);
+    if (localStorage.getItem('dk_daily_logs_is_dirty') === 'true') {
+      syncToServer('dk_daily_logs', dailyLogs);
+    }
   }, [dailyLogs]);
 
   useEffect(() => {
-    syncToServer('dk_equipments', equipments);
+    if (localStorage.getItem('dk_equipments_is_dirty') === 'true') {
+      syncToServer('dk_equipments', equipments);
+    }
   }, [equipments]);
 
   useEffect(() => {
-    syncToServer('dk_maintenance_logs', maintenanceLogs);
+    if (localStorage.getItem('dk_maintenance_logs_is_dirty') === 'true') {
+      syncToServer('dk_maintenance_logs', maintenanceLogs);
+    }
   }, [maintenanceLogs]);
 
   useEffect(() => {
-    syncToServer('dk_equipment_incidents', equipmentIncidents);
+    if (localStorage.getItem('dk_equipment_incidents_is_dirty') === 'true') {
+      syncToServer('dk_equipment_incidents', equipmentIncidents);
+    }
   }, [equipmentIncidents]);
 
   useEffect(() => {
     safeStorage.setItem('dk_iqc_records', JSON.stringify(iqcRecords));
-    syncToServer('dk_iqc_records', iqcRecords);
+    if (localStorage.getItem('dk_iqc_records_is_dirty') === 'true') {
+      syncToServer('dk_iqc_records', iqcRecords);
+    }
   }, [iqcRecords]);
 
   useEffect(() => {
     safeStorage.setItem('dk_pqc_records', JSON.stringify(pqcRecords));
-    syncToServer('dk_pqc_records', pqcRecords);
+    if (localStorage.getItem('dk_pqc_records_is_dirty') === 'true') {
+      syncToServer('dk_pqc_records', pqcRecords);
+    }
   }, [pqcRecords]);
 
   useEffect(() => {
@@ -6447,7 +6509,9 @@ export function App() {
 
     const timer = setTimeout(() => {
       safeStorage.setItem('dk_oqc_records', JSON.stringify(oqcRecords));
-      syncToServer('dk_oqc_records', oqcRecords);
+      if (localStorage.getItem('dk_oqc_records_is_dirty') === 'true') {
+        syncToServer('dk_oqc_records', oqcRecords);
+      }
     }, 300);
     return () => clearTimeout(timer);
   }, [oqcRecords]);
@@ -6455,13 +6519,17 @@ export function App() {
   useEffect(() => {
     safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(oqcColorChanges));
     try { localStorage.setItem('dk_oqc_color_changes', JSON.stringify(oqcColorChanges)); } catch (e) { }
-    syncToServer('dk_oqc_color_changes', oqcColorChanges);
+    if (localStorage.getItem('dk_oqc_color_changes_is_dirty') === 'true') {
+      syncToServer('dk_oqc_color_changes', oqcColorChanges);
+    }
   }, [oqcColorChanges]);
 
   useEffect(() => {
     safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(oqcHandoverList));
     try { localStorage.setItem('dk_oqc_handover_list', JSON.stringify(oqcHandoverList)); } catch (e) { }
-    syncToServer('dk_oqc_handover_list', oqcHandoverList);
+    if (localStorage.getItem('dk_oqc_handover_list_is_dirty') === 'true') {
+      syncToServer('dk_oqc_handover_list', oqcHandoverList);
+    }
   }, [oqcHandoverList]);
 
   // Tự động giải phóng dung lượng & nén background các ảnh quá nặng của OQC, IQC, PQC cũ khi khởi chạy ứng dụng
@@ -6546,15 +6614,21 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    syncToServer('dk_qc_detailed_tasks', qcDetailedTasks);
+    if (localStorage.getItem('dk_qc_detailed_tasks_is_dirty') === 'true') {
+      syncToServer('dk_qc_detailed_tasks', qcDetailedTasks);
+    }
   }, [qcDetailedTasks]);
 
   useEffect(() => {
-    syncToServer('dk_weekly_plans', weeklyPlans);
+    if (localStorage.getItem('dk_weekly_plans_is_dirty') === 'true') {
+      syncToServer('dk_weekly_plans', weeklyPlans);
+    }
   }, [weeklyPlans]);
 
   useEffect(() => {
-    syncToServer('dk_monthly_plans', monthlyPlans);
+    if (localStorage.getItem('dk_monthly_plans_is_dirty') === 'true') {
+      syncToServer('dk_monthly_plans', monthlyPlans);
+    }
   }, [monthlyPlans]);
 
   // Dynamic linkage of Supplier PPM evaluations and statistics based on live IQC records
