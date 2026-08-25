@@ -1,4 +1,5 @@
 import React, { useState, useEffect, FormEvent, useMemo, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import XLSXStyle from 'xlsx-js-style';
 import { 
   Wrench, 
@@ -6982,23 +6983,26 @@ export default function QualityInspectionRecords({
                 checkedBy: 'Liễu Tùng Lâm'
               };
 
-              // 1. Phản hồi tức thì giao diện (< 1ms UI update)
+              // 1. Cưỡng bức DOM vẽ lại màu nút bấm ngay lập tức trong < 1ms (Instant UI repaint)
               if (record.id) {
-                setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
+                flushSync(() => {
+                  setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
+                });
               }
 
-              // 2. Cập nhật mảng toàn cục và hoãn thuật toán nặng ngầm đằng sau
-              const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
-              const updated = [...oqcRecords];
-              const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
-              if (index !== -1) {
-                updated[index] = {
-                  ...updated[index],
-                  ...override
-                };
-              }
-
-              saveOqcRecordsOptimized(updated);
+              // 2. Hoãn việc sao chép mảng lớn ngầm phía sau màn hình
+              setTimeout(() => {
+                const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
+                const updated = [...oqcRecords];
+                const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
+                if (index !== -1) {
+                  updated[index] = {
+                    ...updated[index],
+                    ...override
+                  };
+                }
+                saveOqcRecordsOptimized(updated);
+              }, 30);
             };
 
             const handleUpdateDefectNote = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
@@ -7020,19 +7024,23 @@ export default function QualityInspectionRecords({
               };
 
               if (record.id) {
-                setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
+                flushSync(() => {
+                  setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
+                });
               }
 
-              const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
-              const updated = [...oqcRecords];
-              const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
-              if (index !== -1) {
-                updated[index] = {
-                  ...updated[index],
-                  ...override
-                };
-              }
-              saveOqcRecordsOptimized(updated);
+              setTimeout(() => {
+                const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
+                const updated = [...oqcRecords];
+                const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
+                if (index !== -1) {
+                  updated[index] = {
+                    ...updated[index],
+                    ...override
+                  };
+                }
+                saveOqcRecordsOptimized(updated);
+              }, 30);
             };
 
             const handleQuickFail = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
@@ -7069,20 +7077,23 @@ export default function QualityInspectionRecords({
               };
 
               if (record.id) {
-                setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
+                flushSync(() => {
+                  setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
+                });
               }
 
-              const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
-              const updated = [...oqcRecords];
-              const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
-              if (index !== -1) {
-                updated[index] = {
-                  ...updated[index],
-                  ...override
-                };
-              }
-
-              saveOqcRecordsOptimized(updated);
+              setTimeout(() => {
+                const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
+                const updated = [...oqcRecords];
+                const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
+                if (index !== -1) {
+                  updated[index] = {
+                    ...updated[index],
+                    ...override
+                  };
+                }
+                saveOqcRecordsOptimized(updated);
+              }, 30);
             };
 
             const handleDeleteCar = (record: OQCRecord) => {
@@ -16375,19 +16386,25 @@ export default function QualityInspectionRecords({
                   };
 
                   if (activeMultiDefectModalRecord.id) {
-                    setLocalOqcOverrides(prev => ({ ...prev, [activeMultiDefectModalRecord.id]: { ...activeMultiDefectModalRecord, ...override } }));
+                    flushSync(() => {
+                      setLocalOqcOverrides(prev => ({ ...prev, [activeMultiDefectModalRecord.id]: { ...activeMultiDefectModalRecord, ...override } }));
+                      setActiveMultiDefectModalRecord(null);
+                    });
+                  } else {
+                    setActiveMultiDefectModalRecord(null);
                   }
 
-                  const updated = [...oqcRecords];
-                  const index = updated.findIndex(r => r.id === activeMultiDefectModalRecord.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
-                  if (index !== -1) {
-                    updated[index] = {
-                      ...updated[index],
-                      ...override
-                    };
-                  }
-                  saveOqcRecordsOptimized(updated);
-                  setActiveMultiDefectModalRecord(null);
+                  setTimeout(() => {
+                    const updated = [...oqcRecords];
+                    const index = updated.findIndex(r => r.id === activeMultiDefectModalRecord.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
+                    if (index !== -1) {
+                      updated[index] = {
+                        ...updated[index],
+                        ...override
+                      };
+                    }
+                    saveOqcRecordsOptimized(updated);
+                  }, 30);
                 }}
                 className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-rose-600/30 transition cursor-pointer active:scale-95 text-center"
               >
