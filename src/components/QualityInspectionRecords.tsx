@@ -929,10 +929,18 @@ const getDefectAnalysisAndCorrection = (name: string, model: string) => {
   };
 };
 
+const standardizeDateCache = new Map<string, string>();
+
 function standardizeDate(dateStr: string): string {
   if (!dateStr) return '';
+  const cached = standardizeDateCache.get(dateStr);
+  if (cached !== undefined) return cached;
+
   const trimmed = dateStr.trim();
-  if (!trimmed) return '';
+  if (!trimmed) {
+    standardizeDateCache.set(dateStr, '');
+    return '';
+  }
 
   let day = 1;
   let month = 7;
@@ -975,13 +983,17 @@ function standardizeDate(dateStr: string): string {
       month = currentMonth;
       year = currentYear;
     } else {
+      standardizeDateCache.set(dateStr, trimmed);
       return trimmed;
     }
   }
 
   const dd = String(day).padStart(2, '0');
   const mm = String(month).padStart(2, '0');
-  return `${dd}/${mm}/${year}`;
+  const result = `${dd}/${mm}/${year}`;
+  if (standardizeDateCache.size > 5000) standardizeDateCache.clear();
+  standardizeDateCache.set(dateStr, result);
+  return result;
 }
 
 function getMondayOfWeek(year: number, month: number, weekNum: number): Date {
@@ -2365,8 +2377,48 @@ export default function QualityInspectionRecords({
 
     const stdFilterDate = isDateAll ? '' : standardizeDate(oqcFilterDate);
 
-    return oqcRecords.filter(r => {
-      // 1. Search text matching
+    const res = oqcRecords.filter(r => {
+      // 1. Color matching (Fastest string equality)
+      if (!isColorAll && r.color !== oqcFilterColor) return false;
+
+      // 2. Month filter (Fast primitive check)
+      if (!isMonthAll) {
+        const recMonth = String(r.month || '');
+        if (recMonth && recMonth !== oqcFilterMonth && recMonth !== 'NaN') return false;
+      }
+
+      // 3. Year filter (Fast primitive check)
+      if (!isYearAll) {
+        const recYear = String(r.year || '');
+        if (recYear && recYear !== oqcFilterYear && recYear !== 'NaN') return false;
+      }
+
+      // 4. Model matching
+      if (!isModelAll) {
+        const cleanModel = getCleanModelName(r);
+        const matchesModel = 
+          r.model === oqcFilterModel || 
+          cleanModel === oqcFilterModel ||
+          (r.model && r.model.toLowerCase().includes(oqcFilterModel.toLowerCase())) ||
+          (cleanModel && cleanModel.toLowerCase().includes(oqcFilterModel.toLowerCase()));
+        if (!matchesModel) return false;
+      }
+
+      // 5. Date filter matching
+      if (!isDateAll) {
+        const stdRecordDate = r.date ? standardizeDate(r.date) : '';
+        if (stdRecordDate !== stdFilterDate) return false;
+      }
+
+      // 6. Week filter
+      if (!isWeekAll) {
+        const stdRecordDate = r.date ? standardizeDate(r.date) : '';
+        const dateInfo = stdRecordDate ? getWeekAndMonthFromDate(stdRecordDate) : null;
+        const recordWeek = dateInfo ? dateInfo.week : 'T1';
+        if (recordWeek !== oqcFilterWeek) return false;
+      }
+
+      // 7. Search text matching
       if (sLower !== '') {
         const matchesSearch = 
           (r.serialNo && r.serialNo.toLowerCase().includes(sLower)) ||
@@ -2379,54 +2431,20 @@ export default function QualityInspectionRecords({
           (r.defectDetail && r.defectDetail.toLowerCase().includes(sLower));
         if (!matchesSearch) return false;
       }
-        
-      // 2. Model matching
-      if (!isModelAll) {
-        const cleanModel = getCleanModelName(r);
-        const matchesModel = 
-          r.model === oqcFilterModel || 
-          cleanModel === oqcFilterModel ||
-          (r.model && r.model.toLowerCase().includes(oqcFilterModel.toLowerCase())) ||
-          (cleanModel && cleanModel.toLowerCase().includes(oqcFilterModel.toLowerCase()));
-        if (!matchesModel) return false;
-      }
-
-      // 3. Color matching
-      if (!isColorAll && r.color !== oqcFilterColor) return false;
-
-      // 4. Date filter matching
-      if (!isDateAll) {
-        const stdRecordDate = r.date ? standardizeDate(r.date) : '';
-        if (stdRecordDate !== stdFilterDate) return false;
-      }
-
-      // 5. Month filter
-      if (!isMonthAll) {
-        const recMonth = String(r.month || '');
-        if (recMonth && recMonth !== oqcFilterMonth && recMonth !== 'NaN') return false;
-      }
-
-      // 6. Year filter
-      if (!isYearAll) {
-        const recYear = String(r.year || '');
-        if (recYear && recYear !== oqcFilterYear && recYear !== 'NaN') return false;
-      }
-
-      // 7. Week filter (Chỉ gọi dateInfo khi thực sự cần lọc theo tuần)
-      if (!isWeekAll) {
-        const stdRecordDate = r.date ? standardizeDate(r.date) : '';
-        const dateInfo = stdRecordDate ? getWeekAndMonthFromDate(stdRecordDate) : null;
-        const recordWeek = dateInfo ? dateInfo.week : 'T1';
-        if (recordWeek !== oqcFilterWeek) return false;
-      }
 
       return true;
-    }).sort((a, b) => {
-      const sA = (a.serialNo || a.id || '').trim();
-      const sB = (b.serialNo || b.id || '').trim();
-      if (sA === sB) return 0;
-      return sA < sB ? -1 : 1;
     });
+
+    if (res.length < 5000) {
+      res.sort((a, b) => {
+        const sA = (a.serialNo || a.id || '').trim();
+        const sB = (b.serialNo || b.id || '').trim();
+        if (sA === sB) return 0;
+        return sA < sB ? -1 : 1;
+      });
+    }
+
+    return res;
   }, [oqcRecords, oqcSearch, oqcFilterModel, oqcFilterColor, oqcFilterDate, oqcFilterMonth, oqcFilterYear, oqcFilterWeek, getCleanModelName]);
 
 
@@ -3069,27 +3087,29 @@ export default function QualityInspectionRecords({
       const rawR = oqcRecords[i];
       const override = localOqcOverrides[rawR.id];
       const r = override ? { ...rawR, ...override } : rawR;
-      // 1. LSX filter
+
+      // 1. Status filter (Fastest check)
+      if (kcsStatusFilter !== 'All') {
+        if (kcsStatusFilter === 'Chưa kiểm tra' && (r.status === 'Đạt' || r.status === 'Lỗi')) continue;
+        if (kcsStatusFilter === 'Đạt' && r.status !== 'Đạt') continue;
+        if (kcsStatusFilter === 'Lỗi' && r.status !== 'Lỗi') continue;
+      }
+      // 2. LSX filter (Fast string equality)
       if (!isAllLsx && (r.lsx || '26-10').trim() !== cleanLsx) {
         continue;
       }
-      // 2. Date/Month/Year filters
-      if (kcsFilterDate !== 'All' && (r.date ? standardizeDate(r.date) : '') !== kcsFilterDate) {
-        continue;
-      }
+      // 3. Month & Year filters (Fast primitive check)
       if (kcsFilterMonth !== 'All' && String(r.month) !== kcsFilterMonth) {
         continue;
       }
       if (kcsFilterYear !== 'All' && String(r.year) !== kcsFilterYear) {
         continue;
       }
-      // 3. Status filter
-      if (kcsStatusFilter !== 'All') {
-        if (kcsStatusFilter === 'Chưa kiểm tra' && (r.status === 'Đạt' || r.status === 'Lỗi')) continue;
-        if (kcsStatusFilter === 'Đạt' && r.status !== 'Đạt') continue;
-        if (kcsStatusFilter === 'Lỗi' && r.status !== 'Lỗi') continue;
+      // 4. Date filter (Cached standardizeDate)
+      if (kcsFilterDate !== 'All' && (r.date ? standardizeDate(r.date) : '') !== kcsFilterDate) {
+        continue;
       }
-      // 4. Search text
+      // 5. Search text
       if (hasSearch) {
         const matchSerial = (r.serialNo || '').toLowerCase().includes(cleanSearch);
         const matchChassis = (r.chassisNo || '').toLowerCase().includes(cleanSearch);
@@ -3115,13 +3135,15 @@ export default function QualityInspectionRecords({
       filtered.push(r);
     }
 
-    // Fast natural sort for serial numbers
-    filtered.sort((a, b) => {
-      const sA = (a.serialNo || a.id || '').trim();
-      const sB = (b.serialNo || b.id || '').trim();
-      if (sA === sB) return 0;
-      return sA < sB ? -1 : 1;
-    });
+    // Fast natural sort for serial numbers (only sort if small dataset or unsorted)
+    if (filtered.length < 5000) {
+      filtered.sort((a, b) => {
+        const sA = (a.serialNo || a.id || '').trim();
+        const sB = (b.serialNo || b.id || '').trim();
+        if (sA === sB) return 0;
+        return sA < sB ? -1 : 1;
+      });
+    }
 
     const totalCars = filtered.length;
     const yieldRate = totalCars > 0 ? Math.round((passedCount / totalCars) * 100) : 100;
