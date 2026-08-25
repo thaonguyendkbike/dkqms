@@ -7,6 +7,7 @@ import {
   Download, 
   Building2, 
   Clock, 
+  Cloud,
   ShieldCheck, 
   Sparkles, 
   Search, 
@@ -1237,13 +1238,15 @@ export default function QualityInspectionRecords({
       safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
     }, 150);
 
-    // 2. Gom đẩy Cloud ngầm sau 3 giây (Debounced 3s Batch Push)
+    // 2. Gom đẩy Cloud ngầm sau 20 PHÚT không thao tác (Debounced 20-min Batch Push = 1.200.000ms)
+    const OQC_CLOUD_SYNC_DELAY_MS = 20 * 60 * 1000;
     if (asyncOqcSaveTimer.current) clearTimeout(asyncOqcSaveTimer.current);
     asyncOqcSaveTimer.current = setTimeout(() => {
       if (typeof (window as any).syncToServer === 'function') {
+        console.log("⏰ [20-Min Cloud Sync Engine] Đã đủ 20 phút kể từ thao tác cuối cùng, tiến hành đẩy dữ liệu KCS lên Cloud Firestore.");
         (window as any).syncToServer('dk_oqc_records', updated);
       }
-    }, 3000);
+    }, OQC_CLOUD_SYNC_DELAY_MS);
 
     // 3. Hoãn cập nhật State toàn cục (App.tsx) và các thuật toán nặng ngầm để UI paint tức thì 0ms
     setTimeout(() => {
@@ -7244,6 +7247,24 @@ export default function QualityInspectionRecords({
                   </div>
 
                   <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        flushOqcSaveToCloud();
+                        alert("✓ Đã kích hoạt đẩy toàn bộ dữ liệu KCS mới nhất lên Cloud Firestore thành công!");
+                      }}
+                      className={`font-extrabold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
+                        localStorage.getItem('dk_oqc_records_is_dirty') === 'true'
+                          ? 'bg-amber-600 hover:bg-amber-500 text-white animate-pulse'
+                          : 'bg-emerald-700 hover:bg-emerald-600 text-white'
+                      }`}
+                      title="Bấm để đồng bộ dữ liệu ngay lên Cloud (Hoặc tự động đẩy sau 20 phút không thao tác)"
+                    >
+                      <Cloud className="w-3.5 h-3.5" />
+                      {localStorage.getItem('dk_oqc_records_is_dirty') === 'true'
+                        ? '☁️ Đồng bộ Cloud ngay'
+                        : '✓ Cloud đã đồng bộ'}
+                    </button>
                     <button
                       type="button"
                       onClick={() => {

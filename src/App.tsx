@@ -6509,9 +6509,6 @@ export function App() {
 
     const timer = setTimeout(() => {
       safeStorage.setItem('dk_oqc_records', JSON.stringify(oqcRecords));
-      if (localStorage.getItem('dk_oqc_records_is_dirty') === 'true') {
-        syncToServer('dk_oqc_records', oqcRecords);
-      }
     }, 300);
     return () => clearTimeout(timer);
   }, [oqcRecords]);
