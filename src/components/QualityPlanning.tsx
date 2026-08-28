@@ -3953,7 +3953,7 @@ export default function QualityPlanning({
               }
               return c;
             });
-            localStorage.setItem('dk_capas', JSON.stringify(updated));
+            saveAndSync('dk_capas', updated);
             window.dispatchEvent(new Event('storage'));
           }
         }
@@ -3978,7 +3978,7 @@ export default function QualityPlanning({
               }
               return p;
             });
-            localStorage.setItem('dk_projects', JSON.stringify(updated));
+            saveAndSync('dk_projects', updated);
             window.dispatchEvent(new Event('storage'));
           }
         }
@@ -4010,7 +4010,7 @@ export default function QualityPlanning({
               }
               return t;
             });
-            localStorage.setItem('dk_tasks', JSON.stringify(updated));
+            saveAndSync('dk_tasks', updated);
             window.dispatchEvent(new Event('storage'));
           }
         }
@@ -4039,7 +4039,7 @@ export default function QualityPlanning({
             }
             return item;
           });
-          localStorage.setItem('dk_daily_logs', JSON.stringify(updated));
+          saveAndSync('dk_daily_logs', updated);
           window.dispatchEvent(new Event('storage'));
         }
       } catch (err) {
@@ -4065,7 +4065,7 @@ export default function QualityPlanning({
               }
               return e;
             });
-            localStorage.setItem('dk_ecos', JSON.stringify(updated));
+            saveAndSync('dk_ecos', updated);
             window.dispatchEvent(new Event('storage'));
           }
         }

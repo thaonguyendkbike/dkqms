@@ -7212,10 +7212,11 @@ export function App() {
       const matchAssignee = logAssignee === 'All' || logAssigneeStr.toLowerCase().includes(logAssignee.toLowerCase());
 
       // Exact Date Filter
-      const matchDate = logDateFilter === 'All' || log.date === logDateFilter;
+      const stdLogDate = standardizeDate(log.date || '');
+      const matchDate = logDateFilter === 'All' || stdLogDate === standardizeDate(logDateFilter);
 
       // Month Filter
-      const logMonth = log.date ? (parseInt(log.date.split('/')[1]) || 5) : 5;
+      const logMonth = stdLogDate ? (parseInt(stdLogDate.split('/')[1]) || 5) : 5;
       const matchMonth = logMonthFilter === 'All' || logMonth === logMonthFilter;
 
       // Year Filter
@@ -8525,11 +8526,14 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     }
     setLogFormError('');
 
+    const sanitizedDate = standardizeDate(newLogDate || new Date().toLocaleDateString('vi-VN'));
+    const dateInfo = getWeekAndMonthFromDate(sanitizedDate);
+
     const newLog: DailyLogRecord = {
       id: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
-      stt: dailyLogs.length + 1,
-      date: newLogDate,
-      week: newLogWeek,
+      stt: dailyLogs.length > 0 ? Math.max(...dailyLogs.map(l => l.stt || 0)) + 1 : 1,
+      date: sanitizedDate,
+      week: dateInfo.week || newLogWeek,
       category: newLogCategory,
       content: newLogContent,
       target: newLogTarget,
@@ -8537,12 +8541,16 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       assignee: newLogAssignee,
       timeWork: ['', '', '', '', '', '', '', ''],
       result: newLogResult,
-      deadline: newLogDate,
+      deadline: sanitizedDate,
       statusPercent: newLogStatusPercent,
-      note: newLogNote
+      note: newLogNote,
+      year: dateInfo.year || 2026
     };
 
-    setDailyLogs([newLog, ...dailyLogs]);
+    const updatedDailyLogs = [newLog, ...dailyLogs];
+    setDailyLogs(updatedDailyLogs);
+    safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
+    syncToServer('dk_daily_logs', updatedDailyLogs);
     setNewLogContent('');
     setNewLogNote('');
     setShowAddLogModal(false);
@@ -8573,12 +8581,13 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     setSqcLogFormError('');
 
     const maxStt = dailyLogs.length > 0 ? Math.max(...dailyLogs.map(l => l.stt || 0)) : 0;
-    const dateInfo = getWeekAndMonthFromDate(sDate || '11/06/2026');
+    const sanitizedSqcDate = standardizeDate(sDate || new Date().toLocaleDateString('vi-VN'));
+    const dateInfo = getWeekAndMonthFromDate(sanitizedSqcDate);
 
     const newLog: DailyLogRecord = {
       id: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
       stt: maxStt + 1,
-      date: sDate || new Date().toLocaleDateString('vi-VN'),
+      date: sanitizedSqcDate,
       week: dateInfo.week || 'T1',
       category: 'SQC/QA',
       content: `[SQC - ${sName}] ${sContent}`,
@@ -8587,13 +8596,16 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       assignee: sAssignee,
       timeWork: ['Ok', 'Ok', '', 'Ok', '', 'Ok', 'Ok', ''],
       result: sResult || sTarget || '1',
-      deadline: sDate || new Date().toISOString().split('T')[0],
+      deadline: sanitizedSqcDate,
       statusPercent: '100%',
       note: sNote || 'Nghiệm thu đạt tiêu chuẩn chất lượng.',
-      year: 2026
+      year: dateInfo.year || 2026
     };
 
-    setDailyLogs([newLog, ...dailyLogs]);
+    const updatedDailyLogs = [newLog, ...dailyLogs];
+    setDailyLogs(updatedDailyLogs);
+    safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
+    syncToServer('dk_daily_logs', updatedDailyLogs);
     setSqcLogAssignee('');
     setShowAddSqcLogModal(false);
 
@@ -9457,7 +9469,11 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
 
     // Do not link/replicate to Daily Logs if category is "Phát triển sản phẩm"
     if (newWeekTaskCategory !== 'Phát triển sản phẩm') {
-      setDailyLogs([newDailyLog, ...dailyLogs]);
+      const sanitizedFinalDate = standardizeDate(finalDate);
+      const updatedDailyLogs = [{ ...newDailyLog, date: sanitizedFinalDate, deadline: sanitizedFinalDate }, ...dailyLogs];
+      setDailyLogs(updatedDailyLogs);
+      safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
+      syncToServer('dk_daily_logs', updatedDailyLogs);
       setNewWeekTaskContent('');
       setNewWeekTaskNotes('');
       setShowAddWeekTaskModal(false);
@@ -26619,29 +26635,34 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     case 'task':
                       setTasks(prev => prev.map(t => t.id === data.id ? data : t));
                       // Đồng bộ hóa tự động sang Nhật trình báo cáo hằng ngày (Daily Work-log)
-                      setDailyLogs(currentLogs => currentLogs.map(log => {
-                        const isMatched = (log.content?.includes(data.id) || log.note?.includes(data.id));
-                        if (isMatched) {
-                          let mappedCategory = 'IQC';
-                          if (data.category.includes('SQC')) mappedCategory = 'SQC/QA';
-                          else if (data.category.includes('IQC')) mappedCategory = 'IQC';
-                          else if (data.category.includes('PQC')) mappedCategory = 'PQC';
-                          else if (data.category.includes('OQC')) mappedCategory = 'OQC';
-                          else mappedCategory = data.category;
+                      setDailyLogs(currentLogs => {
+                        const updated = currentLogs.map(log => {
+                          const isMatched = (log.content?.includes(data.id) || log.note?.includes(data.id));
+                          if (isMatched) {
+                            let mappedCategory = 'IQC';
+                            if (data.category.includes('SQC')) mappedCategory = 'SQC/QA';
+                            else if (data.category.includes('IQC')) mappedCategory = 'IQC';
+                            else if (data.category.includes('PQC')) mappedCategory = 'PQC';
+                            else if (data.category.includes('OQC')) mappedCategory = 'OQC';
+                            else mappedCategory = data.category;
 
-                          return {
-                            ...log,
-                            assignee: data.assignee,
-                            category: mappedCategory,
-                            content: `[Liên kết CAPA - ${data.id}] ${data.content}`,
-                            target: String(data.target),
-                            result: String(data.result),
-                            statusPercent: data.target > 0 ? `${Math.min(100, Math.round((data.result / data.target) * 100))}%` : '0%',
-                            note: `Đồng bộ hóa tự động từ Hồ sơ CAPA #${data.id}. Độ ưu tiên: ${data.priority}. Phương án: ${data.nextPlan || ''}`
-                          };
-                        }
-                        return log;
-                      }));
+                            return {
+                              ...log,
+                              assignee: data.assignee,
+                              category: mappedCategory,
+                              content: `[Liên kết CAPA - ${data.id}] ${data.content}`,
+                              target: String(data.target),
+                              result: String(data.result),
+                              statusPercent: data.target > 0 ? `${Math.min(100, Math.round((data.result / data.target) * 100))}%` : '0%',
+                              note: `Đồng bộ hóa tự động từ Hồ sơ CAPA #${data.id}. Độ ưu tiên: ${data.priority}. Phương án: ${data.nextPlan || ''}`
+                            };
+                          }
+                          return log;
+                        });
+                        safeStorage.setItem('dk_daily_logs', JSON.stringify(updated));
+                        syncToServer('dk_daily_logs', updated);
+                        return updated;
+                      });
                       break;
                     case 'supplier':
                       setSuppliers(prev => prev.map(s => s.id === data.id ? data : s));
