@@ -7253,17 +7253,17 @@ export default function QualityInspectionRecords({
                         flushOqcSaveToCloud();
                         alert("✓ Đã kích hoạt đẩy toàn bộ dữ liệu KCS mới nhất lên Cloud Firestore thành công!");
                       }}
-                      className={`font-extrabold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
+                      className={`font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
                         localStorage.getItem('dk_oqc_records_is_dirty') === 'true'
                           ? 'bg-amber-600 hover:bg-amber-500 text-white animate-pulse'
-                          : 'bg-emerald-700 hover:bg-emerald-600 text-white'
+                          : 'bg-blue-600 hover:bg-blue-700 text-white'
                       }`}
                       title="Bấm để đồng bộ dữ liệu ngay lên Cloud (Hoặc tự động đẩy sau 20 phút không thao tác)"
                     >
                       <Cloud className="w-3.5 h-3.5" />
                       {localStorage.getItem('dk_oqc_records_is_dirty') === 'true'
-                        ? '☁️ Đồng bộ Cloud ngay'
-                        : '✓ Cloud đã đồng bộ'}
+                        ? 'Đồng bộ Cloud'
+                        : 'Đã đồng bộ'}
                     </button>
                     <button
                       type="button"
@@ -7272,10 +7272,10 @@ export default function QualityInspectionRecords({
                         setLsxImportError('');
                         setShowImportLsxModal(true);
                       }}
-                      className="bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                       title="Nạp danh sách xe từ file Lệnh Sản Xuất vào QMS để KCS kiểm tra"
                     >
-                      <Upload className="w-3.5 h-3.5" /> Nạp từ LSX
+                      <Upload className="w-3.5 h-3.5" /> Nạp LSX
                     </button>
                     <button
                       type="button"
@@ -7284,7 +7284,7 @@ export default function QualityInspectionRecords({
                         setNewCarSerialNo('');
                         setShowAddCarToLsxModal(true);
                       }}
-                      className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                       title="Thêm 1 xe lẻ vào Lệnh Sản Xuất"
                     >
                       <Plus className="w-3.5 h-3.5" /> Thêm xe
@@ -7295,18 +7295,18 @@ export default function QualityInspectionRecords({
                         setOqcImportError('');
                         setShowImportOqcModal(true);
                       }}
-                      className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer shadow-2xs"
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                       title="Nhập dữ liệu KCS hàng loạt từ bảng tính Excel"
                     >
-                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Nhập KCS từ Excel
+                      <FileSpreadsheet className="w-3.5 h-3.5" /> Nhập Excel
                     </button>
                     <button
                       type="button"
                       onClick={handleBatchPassAllPending}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3 py-1.5 rounded-lg border border-slate-200 transition flex items-center gap-1 cursor-pointer"
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                       title="Đánh dấu tất cả xe chưa kiểm tra thành ĐẠT"
                     >
-                      <CheckSquare className="w-3.5 h-3.5 text-slate-600" /> ✓ Đạt toàn bộ
+                      <CheckSquare className="w-3.5 h-3.5" /> Đạt toàn bộ
                     </button>
                   </div>
                 </div>
@@ -7396,30 +7396,12 @@ export default function QualityInspectionRecords({
                 )}
 
                 {/* Minimalist Summary Strip */}
-                <div className="bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-4">
-                    <span className="text-slate-600">Tổng: <strong className="text-slate-900 font-mono font-bold">{totalLsxCars}</strong> xe</span>
-                    <span className="text-emerald-700">Đạt: <strong className="font-mono font-bold">{passedLsxCars}</strong></span>
-                    <span className="text-rose-700">Lỗi: <strong className="font-mono font-bold">{failedLsxCars}</strong></span>
-                    <span className="text-slate-500">Chờ: <strong className="font-mono font-bold">{pendingLsxCars}</strong></span>
-                    <span className="text-blue-700 font-bold">Tỉ lệ đạt: <strong className="font-mono font-bold">{lsxYield}%</strong></span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[11px] text-slate-500 font-medium">
-                      ⚡ Bấm nút <strong className="text-emerald-700 font-bold">✓ Đạt</strong> hoặc <strong className="text-rose-700 font-bold">🔴 Lỗi</strong> để đổi trạng thái tức thì (0ms)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        flushOqcSaveToCloud();
-                        alert('Đã đẩy ép đồng bộ toàn bộ dữ liệu OQC lên Cloud thành công!');
-                      }}
-                      className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 text-[11px] font-bold transition cursor-pointer flex items-center gap-1 active:scale-95"
-                      title="Gom đẩy toàn bộ dữ liệu OQC chưa đồng bộ lên Cloud lập tức"
-                    >
-                      ☁️ Đồng bộ Cloud ngay
-                    </button>
-                  </div>
+                <div className="bg-white px-4 py-2.5 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center gap-4 text-xs">
+                  <span className="text-slate-600">Tổng: <strong className="text-slate-900 font-mono font-bold">{totalLsxCars}</strong> xe</span>
+                  <span className="text-emerald-700">Đạt: <strong className="font-mono font-bold">{passedLsxCars}</strong></span>
+                  <span className="text-rose-700">Lỗi: <strong className="font-mono font-bold">{failedLsxCars}</strong></span>
+                  <span className="text-slate-500">Chờ: <strong className="font-mono font-bold">{pendingLsxCars}</strong></span>
+                  <span className="text-blue-700 font-bold">Tỉ lệ đạt: <strong className="font-mono font-bold">{lsxYield}%</strong></span>
                 </div>
 
 
