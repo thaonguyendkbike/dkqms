@@ -683,6 +683,7 @@ function AutocompleteInput({
   }, [localValue, options]);
 
   const handleSelect = (opt: string) => {
+    if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
     setLocalValue(opt);
     onChange(opt);
     if (onCommit) onCommit(opt);
@@ -690,11 +691,17 @@ function AutocompleteInput({
     setHighlightIndex(-1);
   };
 
+  const blurTimerRef = React.useRef<any>(null);
+
   const handleBlur = () => {
-    if (localValue !== value) {
-      onChange(localValue);
-      if (onCommit) onCommit(localValue);
-    }
+    // Delay closing to allow onMouseDown on dropdown options to fire first
+    blurTimerRef.current = setTimeout(() => {
+      setIsOpen(false);
+      if (localValue !== value) {
+        onChange(localValue);
+        if (onCommit) onCommit(localValue);
+      }
+    }, 150);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -726,16 +733,6 @@ function AutocompleteInput({
       if (onCommit) onCommit(localValue);
     }
   };
-
-  React.useEffect(() => {
-    const handleClickOutside = (ev: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(ev.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   return (
     <div ref={containerRef} className="relative w-full">
@@ -2105,6 +2102,18 @@ export default function QualityInspectionRecords({
     };
   }, [oqcRecords]);
 
+  // Cached global OQC counts — single pass, avoids inline .filter() on 31K records every render
+  const oqcGlobalCounts = useMemo(() => {
+    let passed = 0;
+    let failed = 0;
+    for (let i = 0; i < oqcRecords.length; i++) {
+      const s = oqcRecords[i].status;
+      if (s === 'Đạt') passed++;
+      else if (s === 'Lỗi') failed++;
+    }
+    return { passed, failed };
+  }, [oqcRecords]);
+
   // Defect autocomplete dictionary (aggregated from OQC, PQC, CAPA, and standard industry defects)
   const defectDictionary = useMemo(() => {
     const set = new Set<string>();
@@ -2137,7 +2146,8 @@ export default function QualityInspectionRecords({
     ];
     standardDefects.forEach(d => set.add(d));
     return Array.from(set);
-  }, [oqcRecords, pqcRecords]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oqcRecords.length, pqcRecords.length]);
 
   // Root cause autocomplete dictionary
   const causeDictionary = useMemo(() => {
@@ -2159,7 +2169,8 @@ export default function QualityInspectionRecords({
     ];
     standardCauses.forEach(c => set.add(c));
     return Array.from(set);
-  }, [oqcRecords]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oqcRecords.length]);
 
   // Master Part Codes (Bảng mã xe / Mã quy cách) states
   const [oqcPartCodes, setOqcPartCodes] = useState<OqcPartCodeItem[]>(() => {
@@ -6993,17 +7004,15 @@ export default function QualityInspectionRecords({
                 });
               }
 
-              // 2. Hoãn việc sao chép mảng lớn ngầm phía sau màn hình
+              // 2. Hoãn việc cập nhật mảng lớn ngầm phía sau màn hình
               setTimeout(() => {
                 const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
-                const updated = [...oqcRecords];
-                const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
-                if (index !== -1) {
-                  updated[index] = {
-                    ...updated[index],
-                    ...override
-                  };
-                }
+                const updated = oqcRecords.map(r => {
+                  if (r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial)) {
+                    return { ...r, ...override };
+                  }
+                  return r;
+                });
                 saveOqcRecordsOptimized(updated);
               }, 30);
             };
@@ -7741,7 +7750,7 @@ export default function QualityInspectionRecords({
                         📊 Tổng cơ sở dữ liệu KCS: <strong className="text-white text-sm">{oqcRecords.length.toLocaleString('vi-VN')}</strong> xe
                       </span>
                       <span className="text-[11px] text-slate-400 hidden md:inline">
-                        (Đạt: <strong className="text-emerald-400 font-mono">{oqcRecords.filter(r => r.status === 'Đạt').length}</strong> | Lỗi: <strong className="text-rose-400 font-mono">{oqcRecords.filter(r => r.status === 'Lỗi').length}</strong>)
+                        (Đạt: <strong className="text-emerald-400 font-mono">{oqcGlobalCounts.passed}</strong> | Lỗi: <strong className="text-rose-400 font-mono">{oqcGlobalCounts.failed}</strong>)
                       </span>
                     </div>
 
