@@ -5876,25 +5876,32 @@ export default function QualityInspectionRecords({
           {qcMainSubTab === 'iqc' && (
             <div className="flex flex-wrap gap-1.5">
               <button 
+                type="button"
                 onClick={() => setShowAddIqcModal(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] sm:text-xs px-3 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-emerald-200 cursor-pointer border border-emerald-600"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                title="Thêm phiếu kiểm nghiệm IQC mới"
               >
-                <Plus className="w-3.5 h-3.5 text-white" /> Thêm Phiếu IQC Mới
+                <Plus className="w-3.5 h-3.5" /> Thêm phiếu
               </button>
               <button 
+                type="button"
                 onClick={() => setShowAqlCalculator(!showAqlCalculator)}
-                className={`font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 cursor-pointer border ${
-                  showAqlCalculator ? 'bg-indigo-800 text-amber-300 border-amber-400' : 'bg-slate-800 hover:bg-slate-700 text-white border-slate-600'
+                className={`font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
+                  showAqlCalculator
+                    ? 'bg-blue-800 text-white ring-2 ring-blue-300'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
                 }`}
+                title="Tra cứu lấy mẫu kiểm tra AQL ISO 2859-1"
               >
-                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" /> 📊 Tra Cứu AQL ISO 2859-1
+                <ShieldCheck className="w-3.5 h-3.5" /> Tra cứu AQL
               </button>
               <button 
+                type="button"
                 onClick={() => setShowEcountSyncModal(true)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-indigo-200 animate-pulse cursor-pointer border border-indigo-500"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                title="Đồng bộ nạp dữ liệu kiểm nhập từ Ecount"
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-ping"></span>
-                🔗 Nhập từ Ecount.com
+                <RefreshCw className="w-3.5 h-3.5" /> Nhập Ecount
               </button>
             </div>
           )}
@@ -5948,6 +5955,7 @@ export default function QualityInspectionRecords({
             </button>
           )}
           <button 
+            type="button"
             onClick={() => {
               if (qcMainSubTab === 'reports') {
                 setShowExportKcsReportModal(true);
@@ -5963,10 +5971,14 @@ export default function QualityInspectionRecords({
                 alert('Hồ sơ xuất Excel giám sát nhà cung cấp đang đồng bộ trực tiếp lên server.');
               }
             }}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] sm:text-xs px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer shadow-xs border border-emerald-500"
+            className={`font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
+              qcMainSubTab === 'iqc'
+                ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500'
+            }`}
             title="Xuất dữ liệu hoặc mở popup kết xuất báo cáo"
           >
-            <Download className="w-3.5 h-3.5 text-white" /> {qcMainSubTab === 'reports' ? 'Xuất & In Báo Cáo' : 'Xuất Excel dữ liệu'}
+            <Download className="w-3.5 h-3.5" /> {qcMainSubTab === 'reports' ? 'Xuất & In Báo Cáo' : qcMainSubTab === 'iqc' ? 'Xuất Excel' : 'Xuất Excel dữ liệu'}
           </button>
         </div>
       </div>
@@ -6282,7 +6294,7 @@ export default function QualityInspectionRecords({
             {/* Elegant QC Filter Controls Header */}
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
               <div className="flex items-center gap-1.5">
-                <Filter className="w-3.5 h-3.5 text-emerald-600" />
+                <Filter className="w-3.5 h-3.5 text-blue-600" />
                 <h4 className="text-[11px] font-black uppercase text-slate-700 tracking-wider">Bộ lọc tìm kiếm IQC</h4>
               </div>
               <div className="flex items-center gap-2">
@@ -6296,20 +6308,21 @@ export default function QualityInspectionRecords({
                        setIqcFilterWeek('All');
                        setIqcSearch('');
                      }}
-                     className="text-[9px] sm:text-[10px] bg-red-50 text-red-655 hover:bg-red-100 border border-red-200 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer active:scale-95 mr-2"
+                     className="text-[11px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer mr-2"
+                     title="Đặt lại toàn bộ bộ lọc về mặc định"
                   >
-                    ✕ Nhập lại bộ lọc (Reset)
+                    ✕ Đặt lại
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => setIsIqcFilterExpanded(!isIqcFilterExpanded)}
-                  className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 cursor-pointer transition-colors"
+                  className="text-[11px] font-bold text-slate-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer transition-colors"
                 >
                   {isIqcFilterExpanded ? (
-                    <>Thu nhỏ bộ lọc <ChevronUp className="w-3.5 h-3.5" /></>
+                    <>Thu gọn <ChevronUp className="w-3.5 h-3.5" /></>
                   ) : (
-                    <>Mở rộng bộ lọc <ChevronDown className="w-3.5 h-3.5" /></>
+                    <>Mở rộng <ChevronDown className="w-3.5 h-3.5" /></>
                   )}
                 </button>
               </div>
