@@ -1251,6 +1251,30 @@ export default function QualityInspectionRecords({
     }, 0);
   }, [setOqcRecords]);
 
+  // Safe IQC persistence helper
+  const saveIqcRecords = useCallback((updated: IQCRecord[]) => {
+    setIqcRecords(updated);
+    safeStorage.setItem('dk_iqc_records', JSON.stringify(updated));
+    try {
+      localStorage.setItem('dk_iqc_records_is_dirty', 'true');
+    } catch (e) {}
+    if (typeof (window as any).syncToServer === 'function') {
+      (window as any).syncToServer('dk_iqc_records', updated);
+    }
+  }, [setIqcRecords]);
+
+  // Safe PQC persistence helper
+  const savePqcRecords = useCallback((updated: PQCRecord[]) => {
+    setPqcRecords(updated);
+    safeStorage.setItem('dk_pqc_records', JSON.stringify(updated));
+    try {
+      localStorage.setItem('dk_pqc_records_is_dirty', 'true');
+    } catch (e) {}
+    if (typeof (window as any).syncToServer === 'function') {
+      (window as any).syncToServer('dk_pqc_records', updated);
+    }
+  }, [setPqcRecords]);
+
   // Check if there is an active IQC plan in Lập kế hoạch (weeklyPlans)
   const hasIqcPlanInSystem = useMemo(() => {
     return (weeklyPlans || []).some(plan => 
@@ -3901,7 +3925,7 @@ export default function QualityInspectionRecords({
       imageUrl: newIqcImageUrls[0] || '',
       imageUrls: newIqcImageUrls
     };
-    setIqcRecords([newRecord, ...iqcRecords]);
+    saveIqcRecords([newRecord, ...iqcRecords]);
     setShowAddIqcModal(false);
     setNewIqcContent('');
     setNewIqcSupplierId('');
@@ -4056,14 +4080,12 @@ export default function QualityInspectionRecords({
       };
     });
 
-    setIqcRecords([...newRecords, ...iqcRecords]);
+    saveIqcRecords([...newRecords, ...iqcRecords]);
     setShowEcountSyncModal(false);
     
     // Reset paste state
     setEcountPasteText('');
     setEcountPasteRows([]);
-    // Reset checked preloaded state
-    setEcountDataList(ECOUNT_PRELOADED_DATA.map(item => ({ ...item })));
 
     alert(`🎉 Đã đồng bộ thành công ${newRecords.length} phiếu kiểm nhập IQC từ Ecount.com vào kho dữ liệu quy trình!`);
   };
@@ -4150,7 +4172,7 @@ export default function QualityInspectionRecords({
         return;
       }
 
-      setIqcRecords([...parsedRecords, ...iqcRecords]);
+      saveIqcRecords([...parsedRecords, ...iqcRecords]);
       setIqcImportText('');
       setShowImportIqcModal(false);
       alert(`Nhập thành công ${parsedRecords.length} phiếu IQC nhập kiểm đầu vào! (Bỏ qua: ${skippedCount} dòng)`);
@@ -4183,7 +4205,7 @@ export default function QualityInspectionRecords({
       result
     };
 
-    setIqcRecords(iqcRecords.map(r => r.id === updated.id ? updated : r));
+    saveIqcRecords(iqcRecords.map(r => r.id === updated.id ? updated : r));
     setShowEditIqcModal(false);
     setEditingIqcRecord(null);
     alert('Cập nhật phiếu nhập kiểm IQC thành công!');
@@ -4193,12 +4215,7 @@ export default function QualityInspectionRecords({
     if (window.confirm('Bạn có chắc chắn muốn xóa phiếu kiểm nhập IQC này không? Hành động này không thể khôi phục.')) {
       trackDeletedId('dk_iqc_records', id);
       const updated = iqcRecords.filter(r => r.id !== id);
-      setIqcRecords(updated);
-      safeStorage.setItem('dk_iqc_records', JSON.stringify(updated));
-      try { localStorage.setItem('dk_iqc_records_is_dirty', 'true'); } catch (e) {}
-      if (typeof (window as any).syncToServer === 'function') {
-        (window as any).syncToServer('dk_iqc_records', updated);
-      }
+      saveIqcRecords(updated);
       alert('Đã xóa phiếu kiểm nhập IQC thành công! Hệ thống đang đồng bộ tự động lên Cloud...');
     }
   };
@@ -4216,7 +4233,7 @@ export default function QualityInspectionRecords({
       return;
     }
 
-    setPqcRecords(pqcRecords.map(r => r.id === editingPqcRecord.id ? editingPqcRecord : r));
+    savePqcRecords(pqcRecords.map(r => r.id === editingPqcRecord.id ? editingPqcRecord : r));
     setShowEditPqcModal(false);
     setEditingPqcRecord(null);
     alert('Cập nhật bản ghi kiểm soát công đoạn PQC thành công!');
@@ -4226,12 +4243,7 @@ export default function QualityInspectionRecords({
     if (window.confirm('Bạn có chắc chắn muốn xóa bản ghi kiểm soát công đoạn PQC này không? Hành động này không thể khôi phục.')) {
       trackDeletedId('dk_pqc_records', id);
       const updated = pqcRecords.filter(r => r.id !== id);
-      setPqcRecords(updated);
-      safeStorage.setItem('dk_pqc_records', JSON.stringify(updated));
-      try { localStorage.setItem('dk_pqc_records_is_dirty', 'true'); } catch (e) {}
-      if (typeof (window as any).syncToServer === 'function') {
-        (window as any).syncToServer('dk_pqc_records', updated);
-      }
+      savePqcRecords(updated);
       alert('Đã xóa bản ghi PQC thành công! Hệ thống đang đồng bộ tự động lên Cloud...');
     }
   };
@@ -4253,12 +4265,7 @@ export default function QualityInspectionRecords({
     if (window.confirm(`Bạn có chắc chắn muốn xóa hàng loạt ${selectedIqcIds.length} phiếu IQC đã chọn không?`)) {
       selectedIqcIds.forEach(id => trackDeletedId('dk_iqc_records', id));
       const updated = iqcRecords.filter(r => !selectedIqcIds.includes(r.id));
-      setIqcRecords(updated);
-      safeStorage.setItem('dk_iqc_records', JSON.stringify(updated));
-      try { localStorage.setItem('dk_iqc_records_is_dirty', 'true'); } catch (e) {}
-      if (typeof (window as any).syncToServer === 'function') {
-        (window as any).syncToServer('dk_iqc_records', updated);
-      }
+      saveIqcRecords(updated);
       setSelectedIqcIds([]);
       alert(`Đã xóa thành công ${selectedIqcIds.length} phiếu IQC! Hệ thống đang đồng bộ tự động lên Cloud...`);
     }
@@ -4321,7 +4328,7 @@ export default function QualityInspectionRecords({
       imageUrl: newPqcImageUrls[0] || '',
       imageUrls: newPqcImageUrls
     };
-    setPqcRecords([newRecord, ...pqcRecords]);
+    savePqcRecords([newRecord, ...pqcRecords]);
     setShowAddPqcModal(false);
     setNewPqcFindings('');
     setNewPqcQty(100);
@@ -14007,332 +14014,206 @@ export default function QualityInspectionRecords({
               </button>
             </div>
 
-            {/* Inner Tabs and Sub-header */}
+            {/* Sub-header & Guidance */}
             <div className="bg-slate-50 border-b px-6 py-3 flex flex-wrap gap-4 items-center justify-between shrink-0">
-              <div className="flex bg-slate-200 p-1 rounded-lg gap-1 text-xs font-bold text-slate-600">
-                <button 
-                  onClick={() => setEcountSyncTab('snapshot')}
-                  className={`px-4 py-1.5 rounded-md transition cursor-pointer ${ecountSyncTab === 'snapshot' ? 'bg-white text-slate-850 shadow' : 'hover:text-slate-900 hover:bg-white/40'}`}
-                >
-                  📸 1. Trích xuất ảnh chụp Ecount
-                </button>
-                <button 
-                  onClick={() => setEcountSyncTab('paste')}
-                  className={`px-4 py-1.5 rounded-md transition cursor-pointer ${ecountSyncTab === 'paste' ? 'bg-white text-slate-850 shadow' : 'hover:text-slate-900 hover:bg-white/40'}`}
-                >
-                  📋 2. Dán bảng dữ liệu (Ctrl+V)
-                </button>
+              <div className="flex items-center gap-2">
+                <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5">
+                  <Upload className="w-3.5 h-3.5 text-blue-600" />
+                  Dán dữ liệu bảng từ Ecount.com (Ctrl + V)
+                </span>
+                <span className="text-xs text-slate-500 hidden sm:inline font-medium">
+                  Copy các cột trên màn hình Danh sách Mua hàng của Ecount và dán trực tiếp vào ô bên dưới
+                </span>
               </div>
 
-              {ecountSyncTab === 'snapshot' && (
-                <div className="relative w-72">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
-                  <input 
-                    type="text" 
-                    value={ecountSearchQuery}
-                    onChange={e => setEcountSearchQuery(e.target.value)}
-                    placeholder="Tìm nhanh nhà cung cấp, nội dung..."
-                    className="w-full bg-white border border-slate-200 hover:border-slate-350 focus:border-indigo-500 rounded-lg pl-8 pr-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                  />
-                </div>
-              )}
+              <div className="flex items-center gap-2 text-xs">
+                {ecountPasteRows.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allChecked = ecountPasteRows.every(r => r.checked);
+                      setEcountPasteRows(ecountPasteRows.map(r => ({ ...r, checked: !allChecked })));
+                    }}
+                    className="text-blue-600 hover:text-blue-800 font-bold px-2.5 py-1 bg-white border border-slate-200 rounded-md shadow-2xs hover:bg-blue-50 transition cursor-pointer"
+                  >
+                    {ecountPasteRows.every(r => r.checked) ? 'Bỏ chọn tất cả' : 'Chọn tất cả lô'}
+                  </button>
+                )}
+                {ecountPasteText && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEcountPasteText('');
+                      setEcountPasteRows([]);
+                    }}
+                    className="text-rose-600 hover:text-rose-800 font-bold px-2.5 py-1 bg-white border border-slate-200 rounded-md shadow-2xs hover:bg-rose-50 transition cursor-pointer"
+                  >
+                    Xóa nội dung dán
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Content Body */}
-            <div className="flex-1 overflow-y-auto p-6 min-h-0 bg-slate-50/50">
-              {ecountSyncTab === 'snapshot' && (
-                <div className="space-y-4">
-                  <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-sm space-y-2">
-                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-ping"></span>
-                      Dữ liệu mua hàng từ màn hình Ecount ERP của DKBike
-                    </h4>
-                    <p className="text-xs text-slate-550 leading-relaxed font-semibold">
-                      Hệ thống tự động đồng bộ 16 lô hàng ghi nhận trên Ecount trong ảnh screenshot của bạn. Linh kiện có thể cài đặt số lượng thử nghiệm IQC đầu vào và số lượng hàng lỗi phát hiện trực tiếp tại bảng này để lập tức sinh hồ sơ kiểm định thông minh:
-                    </p>
+            <div className="flex-1 overflow-y-auto p-5 min-h-0 bg-slate-50/50">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-full min-h-[460px]">
+                {/* Vùng dán dữ liệu (Cột trái - 4/12) */}
+                <div className="lg:col-span-4 flex flex-col space-y-2 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+                  <div className="flex justify-between items-center">
+                    <label className="font-extrabold text-slate-700 text-xs flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                      1. Dán dữ liệu thô (Ctrl + V):
+                    </label>
+                    <span className="text-[10px] text-slate-400 font-mono">TSV / Excel / Table</span>
                   </div>
-
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-slate-900 text-slate-200 text-[11px] uppercase tracking-wider font-extrabold">
-                          <th className="p-3 text-center w-12">Chọn</th>
-                          <th className="p-3 pl-4">Ngày mua</th>
-                          <th className="p-3">Mã NCC</th>
-                          <th className="p-3">Tên Nhà Cung Cấp</th>
-                          <th className="p-3">Nội dung phiếu nhập</th>
-                          <th className="p-3 text-right">SL Nhập</th>
-                          <th className="p-3 text-emerald-800 bg-emerald-50/50 text-center w-24">SL Kiểm Mẫu</th>
-                          <th className="p-3 text-red-800 bg-red-50/50 text-center w-24">SL Lỗi QMS</th>
-                          <th className="p-3 text-red-800 bg-red-50/50">Mô tả sự cố của lô hàng</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-705">
-                        {ecountDataList
-                          .filter(item => {
-                            if (!ecountSearchQuery) return true;
-                            const query = ecountSearchQuery.toLowerCase();
-                            return (
-                              item.supplierName.toLowerCase().includes(query) ||
-                              item.supplierCode.toLowerCase().includes(query) ||
-                              item.content.toLowerCase().includes(query)
-                            );
-                          })
-                          .map((row, idx) => {
-                            const isMatched = suppliers.some(s => s.id === row.supplierCode);
-                            return (
-                              <tr key={idx} className={`hover:bg-slate-50 transition-colors ${row.checked ? 'bg-indigo-50/20' : ''}`}>
-                                <td className="p-3 text-center">
-                                  <input 
-                                    type="checkbox"
-                                    checked={!!row.checked}
-                                    onChange={e => {
-                                      const updated = [...ecountDataList];
-                                      const indexInFullList = ecountDataList.findIndex(item => item.content === row.content);
-                                      if (indexInFullList !== -1) {
-                                        updated[indexInFullList].checked = e.target.checked;
-                                        setEcountDataList(updated);
-                                      }
-                                    }}
-                                    className="w-4 h-4 text-blue-600 rounded cursor-pointer focus:ring-0"
-                                  />
-                                </td>
-                                <td className="p-3 pl-4 text-slate-500 font-mono text-[11px] whitespace-nowrap">{row.date}</td>
-                                <td className="p-3 font-mono font-bold text-indigo-750 text-[11px]">{row.supplierCode}</td>
-                                <td className="p-3">
-                                  <div>
-                                    <span className="block text-slate-900 font-bold leading-normal">{row.supplierName}</span>
-                                    {isMatched ? (
-                                      <span className="inline-flex items-center gap-0.5 text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.2 rounded font-black border border-emerald-100 mt-1">
-                                        <Check className="w-2.5 h-2.5 stroke-[4]" /> Đã kết nối Danh bạ QMS
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex items-center gap-0.5 text-[9px] bg-orange-50 text-orange-700 px-1.5 py-0.2 rounded font-black border border-orange-100 mt-1">
-                                        ⚠ Tự động Link Mã mới
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="p-3 text-slate-600 text-xs italic leading-tight font-normal">{row.content}</td>
-                                <td className="p-3 text-right font-mono font-bold text-slate-900">
-                                  {row.quantity.toLocaleString('vi-VN')}
-                                </td>
-                                <td className="p-3 bg-emerald-50/10 text-center">
-                                  <input 
-                                    type="number"
-                                    value={row.sampleQty ?? 0}
-                                    onChange={e => {
-                                      const updated = [...ecountDataList];
-                                      const indexInFullList = ecountDataList.findIndex(item => item.content === row.content);
-                                      if (indexInFullList !== -1) {
-                                        updated[indexInFullList].sampleQty = Number(e.target.value);
-                                        setEcountDataList(updated);
-                                      }
-                                    }}
-                                    disabled={!row.checked}
-                                    className="w-20 bg-white border border-slate-200 hover:border-emerald-300 text-center rounded p-1 font-mono font-bold text-slate-800 focus:outline-emerald-500 disabled:opacity-50 text-xs"
-                                  />
-                                </td>
-                                <td className="p-3 bg-red-50/10 text-center">
-                                  <input 
-                                    type="number"
-                                    value={row.failedQty ?? 0}
-                                    onChange={e => {
-                                      const updated = [...ecountDataList];
-                                      const indexInFullList = ecountDataList.findIndex(item => item.content === row.content);
-                                      if (indexInFullList !== -1) {
-                                        updated[indexInFullList].failedQty = Number(e.target.value);
-                                        if (updated[indexInFullList].failedQty > (updated[indexInFullList].sampleQty || 1)) {
-                                          updated[indexInFullList].failedQty = updated[indexInFullList].sampleQty || 1;
-                                        }
-                                        setEcountDataList(updated);
-                                      }
-                                    }}
-                                    disabled={!row.checked}
-                                    className={`w-20 text-center rounded p-1 font-mono font-bold focus:outline-red-500 disabled:opacity-50 text-xs ${Number(row.failedQty) > 0 ? 'bg-red-50 border-red-350 text-red-750 animate-pulse font-extrabold' : 'bg-white border-slate-200 text-slate-850'}`}
-                                  />
-                                </td>
-                                <td className="p-3 bg-red-50/10">
-                                  <input 
-                                    type="text"
-                                    value={row.defectDetail || ''}
-                                    onChange={e => {
-                                      const updated = [...ecountDataList];
-                                      const indexInFullList = ecountDataList.findIndex(item => item.content === row.content);
-                                      if (indexInFullList !== -1) {
-                                        updated[indexInFullList].defectDetail = e.target.value;
-                                        setEcountDataList(updated);
-                                      }
-                                    }}
-                                    disabled={!row.checked || !row.failedQty}
-                                    placeholder="Ví dụ: Xước sơn sườn xe, lỗi phanh..."
-                                    className="w-full bg-white border border-slate-200 rounded p-1 text-xs focus:outline-none focus:border-red-500 font-normal disabled:opacity-50"
-                                  />
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </tbody>
-                    </table>
+                  <textarea
+                    value={ecountPasteText}
+                    onChange={e => handleEcountPasteChange(e.target.value)}
+                    placeholder={"Dán các dòng từ bảng Ecount vào đây...\n\nĐịnh dạng cột hỗ trợ:\nNgày \t Mã NCC \t Tên NCC \t Nội dung / Tên linh kiện \t Số lượng nhập \t ...\n\nHệ thống sẽ tự động nhận diện và trích xuất sang bảng kiểm định bên phải."}
+                    className="flex-1 w-full bg-slate-50 hover:bg-white focus:bg-white border focus:border-blue-500 rounded-lg focus:ring-2 focus:ring-blue-100 focus:outline-none p-3 font-mono text-[11px] border-slate-200 resize-none overflow-y-auto leading-relaxed transition"
+                  />
+                  <div className="text-[11px] text-slate-500 bg-blue-50/60 p-2.5 rounded-lg border border-blue-150/60 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <span className="leading-snug">Mẹo: Trên trang Ecount, bạn bôi đen bảng mua hàng hoặc bấm Ctrl+A &rarr; Ctrl+C rồi bấm vào đây Ctrl+V.</span>
                   </div>
                 </div>
-              )}
 
-              {ecountSyncTab === 'paste' && (
-                <div className="space-y-4">
-                  <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-sm space-y-2">
-                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5 animate-pulse">
-                      <Upload className="w-4 h-4 text-indigo-650" />
-                      Dán Bản tính Mua hàng Mới copy từ Ecount.com
-                    </h4>
-                    <p className="text-xs text-slate-550 leading-relaxed font-semibold">
-                      Hãy chọn các cột trên trang Ecount của bạn (Danh sách mua), copy rồi paste thẳng vào vùng dán chữ nhật dưới. Cổng tích hợp QMS thông dịch tự động chuỗi dữ liệu TSV/Excel, giúp tiết kiệm thời gian nhập tay cho cả nhóm quản lý chất lượng DKBike!
-                    </p>
+                {/* Bảng trích xuất dữ liệu thời gian thực (Cột phải - 8/12) */}
+                <div className="lg:col-span-8 flex flex-col bg-white p-4 rounded-xl border border-slate-200 shadow-xs min-h-0">
+                  <div className="flex justify-between items-center pb-2">
+                    <label className="font-extrabold text-slate-700 text-xs flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                      2. Kết quả nhận diện & gán kiểm IQC ({ecountPasteRows.length} lô phát hiện):
+                    </label>
+                    {ecountPasteRows.length > 0 && (
+                      <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                        Đã chọn: {ecountPasteRows.filter(r => r.checked).length} / {ecountPasteRows.length}
+                      </span>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[42vh]">
-                    <div className="flex flex-col space-y-1">
-                      <label className="font-extrabold text-slate-700 text-xs">Phần dán dữ liệu thô (Ctrl + V):</label>
-                      <textarea
-                        value={ecountPasteText}
-                        onChange={e => handleEcountPasteChange(e.target.value)}
-                        placeholder="Dán các cột dạng: Ngày&#9;Mã NCC&#9;Tên Nhà Cung Cấp&#9;Nội dung&#9;Số lượng&#9;..."
-                        className="flex-1 w-full bg-slate-100 hover:bg-slate-50 border focus:bg-white rounded-xl focus:ring-1 focus:ring-indigo-500 focus:outline-none p-4 font-mono text-[11px] border-slate-300 resize-none overflow-y-auto leading-relaxed"
-                      />
-                    </div>
-
-                    <div className="flex flex-col min-h-0">
-                      <label className="font-extrabold text-slate-700 text-xs">Bảng trích duyệt kiểm trong thời gian thực ({ecountPasteRows.length} dòng dữ liệu):</label>
-                      <div className="flex-1 bg-white border rounded-xl overflow-y-auto shadow-inner border-slate-200 p-2">
-                        {ecountPasteRows.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center h-full text-slate-400 italic font-mono space-y-2 py-8">
-                            <span>Chưa phát hiện bản dán dữ liệu Ecount từ clipboard...</span>
-                            <span className="text-[10px] font-normal leading-relaxed text-center max-w-sm">Hệ thống của chúng tôi sẽ tự lọc để trích xuất sạch các cột từ Ecount để gán kiểm IQC đầu vào.</span>
-                          </div>
-                        ) : (
-                          <table className="w-full text-left text-[11px] border-collapse font-sans font-semibold">
-                            <thead>
-                              <tr className="bg-slate-100 text-slate-650 border-b uppercase font-bold text-[9px]">
-                                <th className="p-1.5">Chọn</th>
-                                <th className="p-1.5">Ngày</th>
-                                <th className="p-1.5">Mã NCC</th>
-                                <th className="p-1.5">Nhà cung cấp</th>
-                                <th className="p-1.5">Quy cách hàng</th>
-                                <th className="p-1.5 text-right">SL nhập</th>
-                                <th className="p-1.5 text-center">SL Mẫu kiểm</th>
-                                <th className="p-1.5 text-center">SL lỗi</th>
-                                <th className="p-1.5 whitespace-nowrap">Tên mặt hàng (Tóm tắt)</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {ecountPasteRows.map((row, idx) => (
-                                <tr key={idx} className="border-b hover:bg-slate-50 text-slate-700">
-                                  <td className="p-1.5 text-center">
-                                    <input 
-                                      type="checkbox"
-                                      checked={!!row.checked}
-                                      onChange={e => {
-                                        const updated = [...ecountPasteRows];
-                                        updated[idx].checked = e.target.checked;
-                                        setEcountPasteRows(updated);
-                                      }}
-                                      className="w-3.5 h-3.5 focus:ring-0"
-                                    />
-                                  </td>
-                                  <td className="p-1.5 font-mono text-[10px]">{row.date}</td>
-                                  <td className="p-1.5 font-mono font-bold text-slate-800">{row.supplierCode}</td>
-                                  <td className="p-1.5 truncate max-w-[100px] text-slate-900" title={row.supplierName}>{row.supplierName}</td>
-                                  <td className="p-1.5 truncate max-w-[120px] text-slate-505 italic" title={row.content}>{row.content}</td>
-                                  <td className="p-1.5 text-right font-mono font-bold text-slate-950">{row.quantity}</td>
-                                  <td className="p-1.5 text-center">
-                                    <input 
-                                      type="number"
-                                      disabled={!row.checked}
-                                      value={row.sampleQty ?? 1}
-                                      onChange={e => {
-                                        const updated = [...ecountPasteRows];
-                                        updated[idx].sampleQty = Number(e.target.value);
-                                        setEcountPasteRows(updated);
-                                      }}
-                                      className="w-12 bg-slate-50 border text-center font-mono rounded text-xs disabled:opacity-50"
-                                    />
-                                  </td>
-                                  <td className="p-1.5 text-center">
-                                    <input 
-                                      type="number"
-                                      disabled={!row.checked}
-                                      value={row.failedQty ?? 0}
-                                      onChange={e => {
-                                        const updated = [...ecountPasteRows];
-                                        updated[idx].failedQty = Number(e.target.value);
-                                        setEcountPasteRows(updated);
-                                      }}
-                                      className={`w-12 border text-center font-mono rounded text-xs disabled:opacity-50 ${Number(row.failedQty) > 0 ? 'bg-red-50 text-red-600 font-extrabold border-red-300' : 'bg-slate-50 border-slate-200'}`}
-                                    />
-                                  </td>
-                                  <td className="p-1.5">
-                                    <input 
-                                      type="text"
-                                      disabled={!row.checked}
-                                      value={row.itemSummary || ''}
-                                      onChange={e => {
-                                        const updated = [...ecountPasteRows];
-                                        updated[idx].itemSummary = e.target.value;
-                                        setEcountPasteRows(updated);
-                                      }}
-                                      className="w-full bg-slate-50 border px-1.5 py-0.5 rounded text-[11px] border-slate-200 disabled:opacity-50 font-medium text-slate-800"
-                                      placeholder="Mặt hàng..."
-                                    />
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        )}
+                  <div className="flex-1 border rounded-lg overflow-y-auto overflow-x-auto border-slate-200">
+                    {ecountPasteRows.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-slate-400 italic font-mono space-y-2 py-12 px-4">
+                        <Upload className="w-8 h-8 text-slate-300" />
+                        <span className="font-semibold text-slate-500">Chưa có dữ liệu dán từ Ecount ERP</span>
+                        <span className="text-[11px] font-normal leading-relaxed text-center max-w-md text-slate-400">
+                          Hãy sao chép bảng Mua hàng từ Ecount và dán (Ctrl+V) vào ô bên trái. Hệ thống sẽ tự động bóc tách các trường: Ngày, Nhà cung cấp, Tên linh kiện, Số lượng và tự tính mẫu kiểm AQL.
+                        </span>
                       </div>
-                    </div>
+                    ) : (
+                      <table className="w-full text-left text-[11px] border-collapse font-sans">
+                        <thead className="sticky top-0 z-10 bg-slate-100 shadow-2xs">
+                          <tr className="text-slate-700 uppercase font-extrabold text-[10px] border-b border-slate-200">
+                            <th className="p-2 text-center w-10">Chọn</th>
+                            <th className="p-2 whitespace-nowrap">Ngày</th>
+                            <th className="p-2 whitespace-nowrap">Mã NCC</th>
+                            <th className="p-2">Nhà cung cấp</th>
+                            <th className="p-2">Quy cách / Tên hàng</th>
+                            <th className="p-2 text-right whitespace-nowrap">SL nhập</th>
+                            <th className="p-2 text-center whitespace-nowrap w-20">SL kiểm mẫu</th>
+                            <th className="p-2 text-center whitespace-nowrap w-16">SL lỗi</th>
+                            <th className="p-2 min-w-[140px]">Tên mặt hàng (IQC)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                          {ecountPasteRows.map((row, idx) => (
+                            <tr key={idx} className={`hover:bg-slate-50 transition-colors ${row.checked ? 'bg-blue-50/20' : 'opacity-60'}`}>
+                              <td className="p-2 text-center">
+                                <input 
+                                  type="checkbox"
+                                  checked={!!row.checked}
+                                  onChange={e => {
+                                    const updated = [...ecountPasteRows];
+                                    updated[idx].checked = e.target.checked;
+                                    setEcountPasteRows(updated);
+                                  }}
+                                  className="w-4 h-4 text-blue-600 rounded cursor-pointer focus:ring-0"
+                                />
+                              </td>
+                              <td className="p-2 font-mono text-[10px] text-slate-500 whitespace-nowrap">{row.date}</td>
+                              <td className="p-2 font-mono font-bold text-blue-700 text-[10px] whitespace-nowrap">{row.supplierCode}</td>
+                              <td className="p-2 max-w-[130px] truncate text-slate-900 font-bold" title={row.supplierName}>{row.supplierName}</td>
+                              <td className="p-2 max-w-[150px] truncate text-slate-600 italic" title={row.content}>{row.content}</td>
+                              <td className="p-2 text-right font-mono font-bold text-slate-900 whitespace-nowrap">{row.quantity.toLocaleString('vi-VN')}</td>
+                              <td className="p-2 text-center">
+                                <input 
+                                  type="number"
+                                  disabled={!row.checked}
+                                  value={row.sampleQty ?? 1}
+                                  onChange={e => {
+                                    const updated = [...ecountPasteRows];
+                                    updated[idx].sampleQty = Number(e.target.value);
+                                    setEcountPasteRows(updated);
+                                  }}
+                                  className="w-14 bg-white border border-slate-200 text-center font-mono rounded-md py-0.5 text-xs disabled:bg-slate-100 disabled:opacity-50 focus:border-blue-500 focus:outline-none"
+                                />
+                              </td>
+                              <td className="p-2 text-center">
+                                <input 
+                                  type="number"
+                                  disabled={!row.checked}
+                                  value={row.failedQty ?? 0}
+                                  onChange={e => {
+                                    const updated = [...ecountPasteRows];
+                                    updated[idx].failedQty = Number(e.target.value);
+                                    setEcountPasteRows(updated);
+                                  }}
+                                  className={`w-12 border text-center font-mono rounded-md py-0.5 text-xs disabled:bg-slate-100 disabled:opacity-50 focus:outline-none ${Number(row.failedQty) > 0 ? 'bg-red-50 text-red-600 font-extrabold border-red-300' : 'bg-white border-slate-200 focus:border-blue-500'}`}
+                                />
+                              </td>
+                              <td className="p-2">
+                                <input 
+                                  type="text"
+                                  disabled={!row.checked}
+                                  value={row.itemSummary || ''}
+                                  onChange={e => {
+                                    const updated = [...ecountPasteRows];
+                                    updated[idx].itemSummary = e.target.value;
+                                    setEcountPasteRows(updated);
+                                  }}
+                                  className="w-full bg-white border border-slate-200 px-2 py-0.5 rounded-md text-[11px] disabled:bg-slate-100 disabled:opacity-50 font-medium text-slate-800 focus:border-blue-500 focus:outline-none"
+                                  placeholder="Mặt hàng..."
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 </div>
-              )}
-
-
+              </div>
             </div>
 
             {/* Footer buttons */}
-            <div className="bg-slate-100 p-4 border-t flex justify-between items-center shrink-0">
-              <button 
-                type="button" 
-                onClick={() => {
-                  if (window.confirm("Bác có chắc chắn muốn khôi phục về trạng thái ban đầu không?")) {
-                    setEcountDataList(ECOUNT_PRELOADED_DATA.map(item => ({ ...item })));
-                  }
-                }}
-                className="text-xs bg-white hover:bg-slate-200 font-bold border rounded-lg px-4 py-2 text-slate-700 cursor-pointer"
-              >
-                🔄 Khử thay đổi & khôi phục mẫu ERP
-              </button>
+            <div className="bg-slate-100 px-6 py-3 border-t flex justify-between items-center shrink-0">
+              <div className="text-xs text-slate-600 font-medium">
+                {ecountPasteRows.length > 0 ? (
+                  <span>
+                    Đã chọn <strong className="text-blue-700">{ecountPasteRows.filter(r => r.checked).length}</strong> / {ecountPasteRows.length} lô hàng để nạp vào IQC
+                  </span>
+                ) : (
+                  <span className="text-slate-400">Vui lòng dán dữ liệu để đồng bộ</span>
+                )}
+              </div>
 
               <div className="flex gap-2">
                 <button 
                   type="button" 
                   onClick={() => setShowEcountSyncModal(false)}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold rounded-lg text-xs cursor-pointer"
+                  className="px-4 py-2 bg-white hover:bg-slate-200 text-slate-700 font-bold border border-slate-300 rounded-lg text-xs cursor-pointer transition"
                 >
                   Đóng lại
                 </button>
                 <button 
-                  type="button"
-                  onClick={() => {
-                    if (ecountSyncTab === 'snapshot') {
-                      handleSyncEcountToIqc(ecountDataList);
-                    } else {
-                      handleSyncEcountToIqc(ecountPasteRows);
-                    }
-                  }}
-                  className="px-6 py-2 bg-[#0213b0] hover:bg-blue-800 text-white font-extrabold rounded-lg text-xs shadow-md shadow-blue-150 cursor-pointer flex items-center gap-1.5"
+                  type="button" 
+                  disabled={ecountPasteRows.filter(r => r.checked).length === 0}
+                  onClick={() => handleSyncEcountToIqc(ecountPasteRows)}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-lg text-xs shadow-xs cursor-pointer flex items-center gap-1.5 transition active:scale-95"
                 >
                   <CheckSquare className="w-4 h-4" /> 
-                  Xác nhận & Đồng bộ vào IQC ({ecountSyncTab === 'snapshot' ? ecountDataList.filter(r => r.checked).length : ecountPasteRows.filter(r => r.checked).length} dòng tuyển)
+                  Xác nhận & Đồng bộ vào IQC ({ecountPasteRows.filter(r => r.checked).length} lô)
                 </button>
               </div>
             </div>
