@@ -4196,13 +4196,14 @@ export default function QualityInspectionRecords({
     const defectRate = totalQty > 0 ? Number(((failedQty / totalQty) * 100).toFixed(2)) : 0;
     const result = failedQty > 0 ? 'Lỗi' : 'Đạt';
 
-    const updated = {
+    const updated: IQCRecord = {
       ...editingIqcRecord,
       totalQty,
       checkedQty: Number(editingIqcRecord.checkedQty),
       failedQty,
       defectRate,
-      result
+      result,
+      updatedAt: new Date().toISOString()
     };
 
     saveIqcRecords(iqcRecords.map(r => r.id === updated.id ? updated : r));
@@ -4233,7 +4234,12 @@ export default function QualityInspectionRecords({
       return;
     }
 
-    savePqcRecords(pqcRecords.map(r => r.id === editingPqcRecord.id ? editingPqcRecord : r));
+    const updated: PQCRecord = {
+      ...editingPqcRecord,
+      updatedAt: new Date().toISOString()
+    };
+
+    savePqcRecords(pqcRecords.map(r => r.id === editingPqcRecord.id ? updated : r));
     setShowEditPqcModal(false);
     setEditingPqcRecord(null);
     alert('Cập nhật bản ghi kiểm soát công đoạn PQC thành công!');

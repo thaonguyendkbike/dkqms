@@ -1217,10 +1217,35 @@ export function App() {
     if (!localItem) return serverItem;
     if (typeof serverItem !== 'object' || typeof localItem !== 'object') return localItem;
 
+    const parseSafeTimestamp = (timeStr: any): number => {
+      if (!timeStr) return 0;
+      if (typeof timeStr === 'number' && !isNaN(timeStr)) return timeStr;
+      const str = String(timeStr).trim();
+      if (!str) return 0;
+      // 1. Try standard / ISO date
+      const direct = new Date(str).getTime();
+      if (!isNaN(direct)) return direct;
+      // 2. Parse DD/MM/YYYY or DD-MM-YYYY format
+      if (str.includes('/') || str.includes('-')) {
+        const sep = str.includes('/') ? '/' : '-';
+        const parts = str.split(sep);
+        if (parts.length >= 3) {
+          const day = Number(parts[0]);
+          const month = Number(parts[1]);
+          const year = Number(parts[2].slice(0, 4));
+          if (!isNaN(day) && !isNaN(month) && !isNaN(year) && day > 0 && month > 0 && year > 0) {
+            const parsed = new Date(year, month - 1, day).getTime();
+            if (!isNaN(parsed)) return parsed;
+          }
+        }
+      }
+      return 0;
+    };
+
     const serverTimeStr = serverItem.updatedAt || serverItem.lastModified || serverItem.checkedDate || serverItem.date || '';
     const localTimeStr = localItem.updatedAt || localItem.lastModified || localItem.checkedDate || localItem.date || '';
-    const serverTime = serverTimeStr ? new Date(serverTimeStr).getTime() : 0;
-    const localTime = localTimeStr ? new Date(localTimeStr).getTime() : 0;
+    const serverTime = parseSafeTimestamp(serverTimeStr);
+    const localTime = parseSafeTimestamp(localTimeStr);
 
     // Field-level merge: Khởi tạo với tất cả trường của serverItem
     const mergedItem: any = { ...serverItem };

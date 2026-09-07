@@ -16,6 +16,7 @@ export interface IQCRecord {
   defectDetail?: string;
   imageUrl?: string;
   imageUrls?: string[];
+  updatedAt?: string;
 }
 
 export interface PQCRecord {
@@ -30,6 +31,7 @@ export interface PQCRecord {
   imageUrl?: string;
   imageUrls?: string[];
   treatment?: string;
+  updatedAt?: string;
 }
 
 export interface OQCRecord {
