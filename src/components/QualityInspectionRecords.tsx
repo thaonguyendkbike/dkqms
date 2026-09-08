@@ -3012,6 +3012,9 @@ export default function QualityInspectionRecords({
     if (typeof (window as any).syncToServer === 'function') {
       (window as any).syncToServer('dk_oqc_color_changes', newChanges);
     }
+    if (typeof (window as any).triggerCloudSynchronization === 'function') {
+      (window as any).triggerCloudSynchronization();
+    }
     try {
       window.dispatchEvent(new CustomEvent('dk_color_changes_updated', { detail: newChanges }));
     } catch (e) {}
@@ -3251,6 +3254,9 @@ export default function QualityInspectionRecords({
     }
     if (typeof (window as any).syncToServer === 'function') {
       (window as any).syncToServer('dk_oqc_handover_list', list);
+    }
+    if (list.length === 0 && typeof (window as any).triggerCloudSynchronization === 'function') {
+      (window as any).triggerCloudSynchronization();
     }
     try {
       window.dispatchEvent(new CustomEvent('dk_handover_updated', { detail: list }));
@@ -5405,6 +5411,9 @@ export default function QualityInspectionRecords({
       if (typeof (window as any).syncToServer === 'function') {
         (window as any).syncToServer('dk_oqc_records', finalOqc);
       }
+      if (typeof (window as any).triggerCloudSynchronization === 'function') {
+        (window as any).triggerCloudSynchronization();
+      }
 
       const count = stagedScans.length;
       setStagedScans([]);
@@ -5691,6 +5700,9 @@ export default function QualityInspectionRecords({
 
       if (typeof (window as any).syncToServer === 'function') {
         (window as any).syncToServer('dk_oqc_records', finalOqc);
+      }
+      if (typeof (window as any).triggerCloudSynchronization === 'function') {
+        (window as any).triggerCloudSynchronization();
       }
 
       const statusChangesCount = validItems.filter(v => v.changeType === 'status' || v.changeType === 'both').length;

@@ -1294,7 +1294,19 @@ export function App() {
     const rawLocal = Array.isArray(localList) ? localList : [];
 
     if (rawServer.length === 0) return rawLocal;
-    if (rawLocal.length === 0) return rawServer;
+    if (rawLocal.length === 0) {
+      // Bảo vệ thao tác xóa sạch dữ liệu: Nếu người dùng chủ động xóa hết (đang dirty hoặc có deleted_ids), trả về []
+      const isDirty = localStorage.getItem(`${key}_is_dirty`) === 'true';
+      let hasDeletedIds = false;
+      try {
+        const delArr = JSON.parse(localStorage.getItem(`${key}_deleted_ids`) || '[]');
+        if (Array.isArray(delArr) && delArr.length > 0) hasDeletedIds = true;
+      } catch (e) { }
+      if (isDirty || hasDeletedIds || key === 'dk_oqc_handover_list') {
+        return [];
+      }
+      return rawServer;
+    }
 
     const serverMap = new Map<string, any>();
     const serverOrderedIds: string[] = [];
@@ -2035,21 +2047,6 @@ export function App() {
       return;
     }
 
-    lastSeenValues.current[key] = serialized;
-
-    // Check if functionally identical to what is already on the Firestore server
-    const serverSerialized = lastSyncedValues.current[key];
-    if (isFunctionallyIdentical(serialized, serverSerialized, key)) {
-      // Clean up dirty flags if they were set, since we are now in perfect sync with the server
-      if (localStorage.getItem(`${key}_is_dirty`) === 'true') {
-        localStorage.setItem(`${key}_is_dirty`, 'false');
-      }
-      if (localDirtyKeys.current) {
-        localDirtyKeys.current.delete(key);
-      }
-      return;
-    }
-
     // AUTO-DETECT DELETED RECORD IDs
     if (Array.isArray(data)) {
       try {
@@ -2069,6 +2066,21 @@ export function App() {
       } catch (err) {
         console.error("[syncToServer Auto-Track Deleted IDs Error]:", err);
       }
+    }
+
+    lastSeenValues.current[key] = serialized;
+
+    // Check if functionally identical to what is already on the Firestore server
+    const serverSerialized = lastSyncedValues.current[key];
+    if (isFunctionallyIdentical(serialized, serverSerialized, key)) {
+      // Clean up dirty flags if they were set, since we are now in perfect sync with the server
+      if (localStorage.getItem(`${key}_is_dirty`) === 'true') {
+        localStorage.setItem(`${key}_is_dirty`, 'false');
+      }
+      if (localDirtyKeys.current) {
+        localDirtyKeys.current.delete(key);
+      }
+      return;
     }
 
     // SAVE TO LOCAL STORAGE IMMEDIATELY FOR ROBUST OFFLINE RESILIENCE & INTERPRETATION SAFETY
@@ -2554,11 +2566,13 @@ export function App() {
   // Expose to window so any component (like QualityPlanning.tsx) can call this directly without monkey patching!
   useEffect(() => {
     (window as any).syncToServer = syncToServer;
+    (window as any).triggerCloudSynchronization = triggerCloudSynchronization;
     (window as any).handleManualSyncRetry = handleManualSyncRetry;
     (window as any).handleForceCloudSync = handleForceCloudSync;
     (window as any).handleForcePullCloudData = handleForcePullCloudData;
     return () => {
       delete (window as any).syncToServer;
+      delete (window as any).triggerCloudSynchronization;
       delete (window as any).handleManualSyncRetry;
       delete (window as any).handleForceCloudSync;
       delete (window as any).handleForcePullCloudData;
@@ -2610,7 +2624,8 @@ export function App() {
         'dk_tasks', 'dk_weekly_plans', 'dk_monthly_plans', 'dk_ptsp_tasks',
         'dk_capas', 'dk_ecos', 'dk_daily_logs', 'dk_iqc_records',
         'dk_pqc_records', 'dk_oqc_records', 'dk_staff', 'dk_dealers',
-        'dk_defects', 'dk_fmea', 'dk_improvement_actions', 'dk_oqc_handover_list'
+        'dk_defects', 'dk_fmea', 'dk_improvement_actions', 'dk_oqc_handover_list',
+        'dk_oqc_color_changes'
       ];
       localKeys.forEach(k => {
         const val = localStorage.getItem(k);
@@ -2633,6 +2648,7 @@ export function App() {
             else if (k === 'dk_pqc_records') setPqcRecords(sanitizedParsed);
             else if (k === 'dk_oqc_records') setOqcRecords(sanitizedParsed);
             else if (k === 'dk_oqc_handover_list') setOqcHandoverList(sanitizedParsed);
+            else if (k === 'dk_oqc_color_changes') setOqcColorChanges(sanitizedParsed);
             else if (k === 'dk_staff') setStaff(sanitizedParsed);
             else if (k === 'dk_dealers') setDealers(sanitizedParsed);
             else if (k === 'dk_defects') setDefects(sanitizedParsed);
@@ -3448,8 +3464,21 @@ export function App() {
         const docRef = doc(db, 'dk_db_sync', key);
         const unsub = onSnapshot(docRef, (docSnap) => {
           if (!docSnap.exists()) return;
+          if (localStorage.getItem(`${key}_is_dirty`) === 'true') {
+            console.log(`[Standard Doc onSnapshot Protection]: Local ${key} is dirty. Preserving local state.`);
+            return;
+          }
           const metaData = docSnap.data();
           const list = Array.isArray(metaData?.data) ? metaData.data : [];
+          if (key === 'dk_oqc_color_changes' && list.length === 0) {
+            try {
+              const currentLocal = JSON.parse(localStorage.getItem(key) || '[]');
+              if (Array.isArray(currentLocal) && currentLocal.length > 0) {
+                console.log("[Color Changes onSnapshot Protection]: Server returned empty array but local has data. Preserving local data.");
+                return;
+              }
+            } catch (e) { }
+          }
           safeStorage.setItem(key, JSON.stringify(list));
           try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) { }
           isRemoteUpdateRef.current[key] = true;
@@ -6231,6 +6260,10 @@ export function App() {
     // 1. Tải tức thời trực tiếp từ Firestore khi khởi động
     getDoc(docRef).then((snap) => {
       if (!isMounted || !snap.exists()) return;
+      if (localStorage.getItem('dk_oqc_handover_list_is_dirty') === 'true') {
+        console.log("[Handover getDoc Protection]: Local handover list is dirty. Preserving local state.");
+        return;
+      }
       const d = snap.data();
       if (d && Array.isArray(d.data)) {
         setOqcHandoverList(d.data);
@@ -6273,8 +6306,25 @@ export function App() {
     // 1. Tải tức thời trực tiếp từ Firestore khi khởi động
     getDoc(docRef).then((snap) => {
       if (!isMounted || !snap.exists()) return;
+      if (localStorage.getItem('dk_oqc_color_changes_is_dirty') === 'true') {
+        console.log("[Color Change getDoc Protection]: Local color changes list is dirty. Preserving local state.");
+        return;
+      }
       const d = snap.data();
       if (d && Array.isArray(d.data)) {
+        // BẢO VỆ DỮ LIỆU CỤC BỘ: Nếu Firestore trả về mảng rỗng [] nhưng ở máy người dùng đang có dữ liệu đổi màu (> 0 xe),
+        // tuyệt đối KHÔNG đè mảng rỗng vào xóa mất dữ liệu của người dùng!
+        if (d.data.length === 0) {
+          try {
+            const localSaved = JSON.parse(localStorage.getItem('dk_oqc_color_changes') || '[]');
+            if (Array.isArray(localSaved) && localSaved.length > 0) {
+              console.log("[Color Change getDoc Protection]: Firestore is empty but local has data. Preserving local state & marking dirty.");
+              localStorage.setItem('dk_oqc_color_changes_is_dirty', 'true');
+              syncToServer('dk_oqc_color_changes', localSaved);
+              return;
+            }
+          } catch (e) { }
+        }
         setOqcColorChanges(d.data);
         safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(d.data));
         try { localStorage.setItem('dk_oqc_color_changes', JSON.stringify(d.data)); } catch (e) { }
@@ -6292,6 +6342,15 @@ export function App() {
       }
       const d = snap.data();
       if (d && Array.isArray(d.data)) {
+        if (d.data.length === 0) {
+          try {
+            const localSaved = JSON.parse(localStorage.getItem('dk_oqc_color_changes') || '[]');
+            if (Array.isArray(localSaved) && localSaved.length > 0) {
+              console.log("[Color Change onSnapshot Protection]: Server is empty but local has data. Preserving local state.");
+              return;
+            }
+          } catch (e) { }
+        }
         setOqcColorChanges(d.data);
         safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(d.data));
         try { localStorage.setItem('dk_oqc_color_changes', JSON.stringify(d.data)); } catch (e) { }
@@ -6336,6 +6395,49 @@ export function App() {
       window.removeEventListener('dk_safe_storage_ready', handleIdbReady);
     };
   }, []);
+
+  // Auto-recovery: Khôi phục danh sách xe đổi màu từ oqcRecords nếu dk_oqc_color_changes bị rỗng
+  useEffect(() => {
+    if ((!oqcColorChanges || oqcColorChanges.length === 0) && Array.isArray(oqcRecords) && oqcRecords.length > 0) {
+      const candidates = oqcRecords.filter(r => 
+        Boolean(r && (r.isColorChanged || r.isStatusChanged || (r.oldColor && r.color && r.oldColor !== r.color) || (r.oldModel && r.model && r.oldModel !== r.model)))
+      );
+      if (candidates.length > 0) {
+        console.log(`[Auto-Recovery] Phát hiện ${candidates.length} xe đổi màu trong OQC records. Tự động khôi phục vào phân hệ Đổi màu.`);
+        const recovered: OqcColorChangeRecord[] = candidates.map((item, idx) => {
+          const isModelDiff = Boolean(item.oldModel && item.model && item.oldModel.toLowerCase().trim() !== item.model.toLowerCase().trim());
+          const isColorDiff = Boolean(item.oldColor && item.color && item.oldColor.toLowerCase().trim() !== item.color.toLowerCase().trim());
+          let changeType: 'color' | 'status' | 'both' = 'color';
+          if (isModelDiff && isColorDiff) changeType = 'both';
+          else if (isModelDiff) changeType = 'status';
+          else changeType = 'color';
+
+          const sDate = item.colorChangeDate || item.date || item.checkedDate || standardizeDate(new Date().toLocaleDateString('vi-VN'));
+
+          return {
+            id: `CC-RECOVERED-${(item.serialNo || `idx_${idx}`).trim().toUpperCase()}`,
+            serialNo: (item.serialNo || '').trim().toUpperCase(),
+            model: item.model || item.oldModel || '',
+            oldModel: item.oldModel || item.model || '',
+            newModel: item.model || '',
+            oldColor: item.oldColor || item.color || '',
+            newColor: item.color || item.oldColor || '',
+            changeType,
+            date: sDate,
+            flag: true,
+            createdAt: new Date().toISOString()
+          };
+        });
+        setOqcColorChanges(recovered);
+        safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(recovered));
+        try {
+          localStorage.setItem('dk_oqc_color_changes', JSON.stringify(recovered));
+          localStorage.setItem('dk_oqc_color_changes_is_dirty', 'true');
+        } catch (e) { }
+        syncToServer('dk_oqc_color_changes', recovered);
+      }
+    }
+  }, [oqcRecords, oqcColorChanges]);
 
   useEffect(() => {
     if (syncLoaded) {
