@@ -380,6 +380,16 @@ export const safeStorage = {
 
   setItem(key: string, value: string): void {
     const strVal = String(value);
+
+    // Chặn ghi đè mảng rỗng vào dataset khổng lồ dk_oqc_records nếu đang có dữ liệu lớn
+    if (key === 'dk_oqc_records' && (strVal === '[]' || strVal.trim() === '[]')) {
+      const existing = memoryStore[key];
+      if (existing && existing.length > 1000) {
+        console.warn("[safeStorage Protection] Chặn thao tác ghi đè mảng rỗng lên tập dữ liệu OQC lớn hiện tại.");
+        return;
+      }
+    }
+
     memoryStore[key] = strVal;
     
     // Always persist to IndexedDB asynchronously (no 5MB quota limit!)

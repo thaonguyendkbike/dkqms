@@ -1295,16 +1295,19 @@ export function App() {
 
     if (rawServer.length === 0) return rawLocal;
     if (rawLocal.length === 0) {
-      // Bảo vệ thao tác xóa sạch dữ liệu: Nếu người dùng chủ động xóa hết (đang dirty hoặc có deleted_ids), trả về []
-      const isDirty = localStorage.getItem(`${key}_is_dirty`) === 'true';
-      let hasDeletedIds = false;
-      try {
-        const delArr = JSON.parse(localStorage.getItem(`${key}_deleted_ids`) || '[]');
-        if (Array.isArray(delArr) && delArr.length > 0) hasDeletedIds = true;
-      } catch (e) { }
-      if (isDirty || hasDeletedIds || key === 'dk_oqc_handover_list') {
-        return [];
+      // Chỉ duy nhất phân hệ bàn giao tạm thời 'dk_oqc_handover_list' mới được phép xóa sạch về [] khi người dùng chủ ý xóa
+      if (key === 'dk_oqc_handover_list') {
+        const isDirty = localStorage.getItem(`${key}_is_dirty`) === 'true';
+        let hasDeletedIds = false;
+        try {
+          const delArr = JSON.parse(localStorage.getItem(`${key}_deleted_ids`) || '[]');
+          if (Array.isArray(delArr) && delArr.length > 0) hasDeletedIds = true;
+        } catch (e) { }
+        if (isDirty || hasDeletedIds) {
+          return [];
+        }
       }
+      // Tuyệt đối không bao giờ xóa trắng các phân hệ dữ liệu chính (đặc biệt là dk_oqc_records, dk_iqc_records, dk_pqc_records...) khi local rỗng
       return rawServer;
     }
 
@@ -2784,9 +2787,9 @@ export function App() {
           await Promise.allSettled(docPromises);
         }
 
-        Object.keys(rawDocMap).forEach((key) => {
+        for (const key of Object.keys(rawDocMap)) {
           if (key.includes('_chunk_')) {
-            return;
+            continue;
           }
 
           const docData = rawDocMap[key];
@@ -2803,6 +2806,27 @@ export function App() {
                   assembledArray = assembledArray.concat(chunkDoc.data);
                 }
               }
+              // Nếu getDocs không lấy được chunkDoc từ trước, tiến hành fetch các chunks trực tiếp
+              if (assembledArray.length === 0 && chunkCount > 0) {
+                try {
+                  console.log(`[Chunk Assembly Fallback] Đang tải trực tiếp ${chunkCount} chunks cho ${key}...`);
+                  const chunkProms = [];
+                  for (let c = 0; c < chunkCount; c++) {
+                    chunkProms.push(getDoc(doc(db, 'dk_db_sync', `${key}_chunk_${c}`)));
+                  }
+                  const chunkRes = await Promise.allSettled(chunkProms);
+                  chunkRes.forEach((res) => {
+                    if (res.status === 'fulfilled' && (res.value as any).exists()) {
+                      const cd = (res.value as any).data();
+                      if (cd && Array.isArray(cd.data)) {
+                        assembledArray = assembledArray.concat(cd.data);
+                      }
+                    }
+                  });
+                } catch (err) {
+                  console.error(`[Chunk Assembly Fallback Error] for ${key}:`, err);
+                }
+              }
               rawData = assembledArray;
               console.log(`[Chunk Assembly]: Đã lắp ráp thành công mảng ${key} gồm ${assembledArray.length} bản ghi.`);
             } else if (docData.data !== undefined) {
@@ -2816,7 +2840,7 @@ export function App() {
               }
             }
           }
-        });
+        }
       } catch (firestoreErr: any) {
         console.warn("[Firestore Top Level Load Warning]:", firestoreErr?.message || firestoreErr);
         const errMsg = firestoreErr?.message || String(firestoreErr);
@@ -3389,7 +3413,7 @@ export function App() {
 
           let finalDisplayData = assembledList;
 
-          if (isDirty && localSaved) {
+          if (isDirty && localSaved && parsedLocalData.length > 0) {
             try {
               finalDisplayData = smartMergeArrays(assembledList, parsedLocalData, key);
             } catch (e) {
@@ -3406,8 +3430,18 @@ export function App() {
             pendingSyncBuffer.current[key] = finalDisplayData;
           } else if (assembledList.length > 0) {
             finalDisplayData = assembledList;
+            if (localParsedCount === 0 && localStorage.getItem(`${key}_is_dirty`) === 'true') {
+              try { localStorage.setItem(`${key}_is_dirty`, 'false'); } catch (e) { }
+              localDirtyKeys.current.delete(key);
+            }
           } else if (localParsedCount > 0) {
             finalDisplayData = parsedLocalData;
+          }
+
+          // CHỐT CHẶN BẢO VỆ TUYỆT ĐỐI CHO OQC RECORDS:
+          if (key === 'dk_oqc_records' && assembledList.length > 0 && finalDisplayData.length === 0) {
+            console.warn(`[dk_oqc_records Absolute Safety]: finalDisplayData was empty! Forcing restore from assembledList (${assembledList.length} records).`);
+            finalDisplayData = assembledList;
           }
 
           const serialized = JSON.stringify(finalDisplayData);
@@ -6632,6 +6666,11 @@ export function App() {
           return;
         }
       } catch (e) { }
+    }
+
+    if (oqcRecords.length === 0) {
+      // TUYỆT ĐỐI KHÔNG ghi đè mảng rỗng [] vào safeStorage khi state chưa nạp xong
+      return;
     }
 
     const timer = setTimeout(() => {
