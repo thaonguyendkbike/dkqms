@@ -1,5 +1,5 @@
 import React, { useState, useEffect, FormEvent, useMemo, useCallback, useRef } from 'react';
-import { flushSync } from 'react-dom';
+// flushSync removed (Change 1: replaced with regular setState for smoother UX)
 import XLSXStyle from 'xlsx-js-style';
 import { 
   Wrench, 
@@ -642,7 +642,7 @@ interface AutocompleteInputProps {
   disabled?: boolean;
 }
 
-function AutocompleteInput({
+const AutocompleteInput = React.memo(function AutocompleteInput({
   id,
   value,
   onChange,
@@ -783,6 +783,48 @@ function AutocompleteInput({
       )}
     </div>
   );
+});
+
+// ========== MODULE-LEVEL CONSTANTS & UTILITIES FOR KCS STATION (Change 2: avoid recreation every render) ==========
+
+const KCS_TOP_COMMON_DEFECTS = [
+  '🎨 Xước sơn sườn',
+  '⚡ Lỏng rắc cắm nguồn',
+  '🧱 Hở bavia nhựa',
+  '🚲 Phanh đĩa bó',
+  '💡 Đèn pha không sáng',
+  '🔊 Tiếng kêu lạ động cơ',
+  '⚡ Đồng hồ không lên',
+  '🔧 Lệch cổ phốt',
+  '🔋 Pin / Ắc quy ngắt'
+] as const;
+
+const KCS_DEFECT_CATEGORIES = [
+  {
+    category: '🎨 Sơn & Thân Vỏ',
+    items: ['Xước sơn sườn', 'Bong tróc sơn', 'Lệch màu nhựa', 'Hở bavia mộc', 'Bạc màu sơn', 'Móp sườn khung']
+  },
+  {
+    category: '⚡ Hệ Thống Điện & Cảm Biến',
+    items: ['Lỏng rắc cắm nguồn', 'Đèn pha không sáng', 'Đồng hồ không lên', 'Còi không kêu', 'Pin / Ắc quy ngắt', 'Động cơ ngắt chập chờn', 'Xi nhan không nháy']
+  },
+  {
+    category: '🔩 Cơ Khí & Khung Gầm',
+    items: ['Phanh đĩa bó', 'Lệch cổ phốt', 'Tiếng kêu lạ động cơ', 'Giảm xóc kêu', 'Lỏng ốc bánh xe', 'Cần phanh nặng', 'Xích tải chùng']
+  }
+] as const;
+
+function kcsParseDefects(str?: string): string[] {
+  if (!str || !str.trim()) return [];
+  return str
+    .split(/[,;\n]/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function kcsStringifyDefects(list: string[]): string {
+  const unique = Array.from(new Set(list.filter(Boolean)));
+  return unique.join(', ');
 }
 
 const getDefectAnalysisAndCorrection = (name: string, model: string) => {
@@ -1304,9 +1346,16 @@ export default function QualityInspectionRecords({
     return basicMatches;
   }, []);
 
+  // Performance: Debounce timer refs for plan linkage effects (Tối ưu 3)
+  const weeklyPlanLinkageTimerRef = useRef<any>(null);
+  const monthlyPlanLinkageTimerRef = useRef<any>(null);
+
   // Bidirectional automated linkage: Update weekly plans based on real-time IQC/PQC/OQC/SQC records
+  // Performance: Debounced 2s to avoid cascade re-renders (Tối ưu 3)
   React.useEffect(() => {
     if (!weeklyPlans || !setWeeklyPlans || weeklyPlans.length === 0) return;
+    if (weeklyPlanLinkageTimerRef.current) clearTimeout(weeklyPlanLinkageTimerRef.current);
+    weeklyPlanLinkageTimerRef.current = setTimeout(() => {
 
     let planChanged = false;
     const updatedWeeklyPlans = weeklyPlans.map(plan => {
@@ -1448,11 +1497,17 @@ export default function QualityInspectionRecords({
     if (planChanged) {
       setWeeklyPlans(updatedWeeklyPlans);
     }
+
+    }, 2000); // end debounce
+    return () => { if (weeklyPlanLinkageTimerRef.current) clearTimeout(weeklyPlanLinkageTimerRef.current); };
   }, [iqcRecords, pqcRecords, oqcRecords, supplierProductionAudits, weeklyPlans, setWeeklyPlans, suppliers, models]);
 
   // Automated linkage for monthly plans
+  // Performance: Debounced 2s to avoid cascade re-renders (Tối ưu 3)
   React.useEffect(() => {
     if (!monthlyPlans || !setMonthlyPlans || monthlyPlans.length === 0) return;
+    if (monthlyPlanLinkageTimerRef.current) clearTimeout(monthlyPlanLinkageTimerRef.current);
+    monthlyPlanLinkageTimerRef.current = setTimeout(() => {
 
     let planChanged = false;
     const updatedMonthlyPlans = monthlyPlans.map(plan => {
@@ -1594,6 +1649,9 @@ export default function QualityInspectionRecords({
     if (planChanged) {
       setMonthlyPlans(updatedMonthlyPlans);
     }
+
+    }, 2000); // end debounce
+    return () => { if (monthlyPlanLinkageTimerRef.current) clearTimeout(monthlyPlanLinkageTimerRef.current); };
   }, [iqcRecords, pqcRecords, oqcRecords, supplierProductionAudits, monthlyPlans, setMonthlyPlans, suppliers, models]);
 
   // States for defect analyses custom additions & editing
@@ -2405,7 +2463,13 @@ export default function QualityInspectionRecords({
     });
   }, [pqcRecords, pqcSearch, pqcFilterStatus, pqcFilterModel, pqcFilterWeek, pqcFilterMonth]);
 
+  // Performance: Cache ref for guarded useMemo (Tối ưu 1)
+  const filteredOqcCacheRef = useRef<OQCRecord[]>([]);
+
   const filteredOqc = useMemo(() => {
+    // Guard: Only recompute when OQC tab is active (Tối ưu 1)
+    if (qcMainSubTab !== 'oqc') return filteredOqcCacheRef.current;
+
     const sLower = oqcSearch.trim().toLowerCase();
     const isWeekAll = oqcFilterWeek === 'All';
     const isMonthAll = oqcFilterMonth === 'All';
@@ -2483,12 +2547,26 @@ export default function QualityInspectionRecords({
       });
     }
 
+    filteredOqcCacheRef.current = res;
     return res;
-  }, [oqcRecords, oqcSearch, oqcFilterModel, oqcFilterColor, oqcFilterDate, oqcFilterMonth, oqcFilterYear, oqcFilterWeek, getCleanModelName]);
+  }, [qcMainSubTab, oqcRecords, oqcSearch, oqcFilterModel, oqcFilterColor, oqcFilterDate, oqcFilterMonth, oqcFilterYear, oqcFilterWeek, getCleanModelName]);
 
 
+
+  // OQC Sub-view state — hoisted before guarded useMemo hooks that depend on it
+  const [oqcSubView, setOqcSubView] = useState<'station' | 'handover' | 'part_codes' | 'dashboard'>('station');
+
+  // Performance: Cache ref for guarded useMemo (Tối ưu 1)
+  const oqcDashboardStatsCacheRef = useRef<any>({
+    liveLapRapTotal: 0, datVal: 0, loiVal: 0, chuaKiemVal: 0, checkedTotal: 0,
+    pieDatPercent: 0, pieLoiPercent: 0, activeBarData: [], liveModelDefects: {},
+    assembledModels: [], modelStats: [], maxTotal: 1
+  });
 
   const oqcDashboardStats = useMemo(() => {
+    // Guard: Only recompute when OQC Dashboard sub-view is active (Tối ưu 1)
+    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'dashboard') return oqcDashboardStatsCacheRef.current;
+
     const liveLapRapTotal = filteredOqc.length;
     let datVal = 0;
     let loiVal = 0;
@@ -2590,7 +2668,7 @@ export default function QualityInspectionRecords({
 
     const maxTotal = Math.max(1, ...modelStats.map(s => s.total));
 
-    return {
+    const result = {
       liveLapRapTotal,
       datVal,
       loiVal,
@@ -2604,13 +2682,19 @@ export default function QualityInspectionRecords({
       modelStats,
       maxTotal,
     };
-  }, [filteredOqc, getCleanModelName]);
+    oqcDashboardStatsCacheRef.current = result;
+    return result;
+  }, [qcMainSubTab, oqcSubView, filteredOqc, getCleanModelName]);
 
 
 
   // Auto-clean any legacy records with 'Lỗi', 'Đạt' or color names as model name
+  // Performance: Only run once after first load, not on every oqcRecords change (Tối ưu 2)
+  const hasCleanedModelsOnceRef = useRef(false);
   React.useEffect(() => {
+    if (hasCleanedModelsOnceRef.current) return;
     if (!oqcRecords || oqcRecords.length === 0) return;
+    hasCleanedModelsOnceRef.current = true;
     let hasDirtyModel = false;
     const cleaned = oqcRecords.map(r => {
       const cleanM = getCleanModelName(r);
@@ -2638,7 +2722,13 @@ export default function QualityInspectionRecords({
 
   const uniqueOqcModels = useMemo(() => Array.from(new Set(oqcRecords.map(r => getCleanModelName(r)).filter(Boolean))).sort(), [oqcRecords, getCleanModelName]);
 
+  // Performance: Cache ref for guarded useMemo (Tối ưu 1)
+  const defectModelTokenCountsCacheRef = useRef<{ [model: string]: { [token: string]: number } }>({});
+
   const defectModelTokenCounts = useMemo(() => {
+    // Guard: Only recompute when OQC dashboard is active (Tối ưu 1)
+    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'dashboard') return defectModelTokenCountsCacheRef.current;
+
     const counts: { [model: string]: { [token: string]: number } } = {};
     oqcRecords.forEach(r => {
       if (r.status === 'Lỗi' && !isOqcRecordPassed(r) && r.defectDetail) {
@@ -2652,8 +2742,9 @@ export default function QualityInspectionRecords({
         });
       }
     });
+    defectModelTokenCountsCacheRef.current = counts;
     return counts;
-  }, [oqcRecords, isOqcRecordPassed, getCleanModelName]);
+  }, [qcMainSubTab, oqcSubView, oqcRecords, isOqcRecordPassed, getCleanModelName]);
 
   const getRecordMaxDefectCount = useCallback((r: OQCRecord) => {
     if (r.status !== 'Lỗi' || isOqcRecordPassed(r) || !r.defectDetail) return 0;
@@ -2672,7 +2763,13 @@ export default function QualityInspectionRecords({
     return maxCount;
   }, [defectModelTokenCounts, isOqcRecordPassed, getCleanModelName]);
 
+  // Performance: Cache ref for guarded useMemo (Tối ưu 1)
+  const oqcPivotReportCacheRef = useRef<any[]>([]);
+
   const oqcPivotReport = useMemo(() => {
+    // Guard: Only recompute when OQC dashboard is active (Tối ưu 1)
+    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'dashboard') return oqcPivotReportCacheRef.current;
+
     const groups: {
       [model: string]: {
         model: string;
@@ -2713,7 +2810,7 @@ export default function QualityInspectionRecords({
       }
     });
 
-    return Object.values(groups).map(g => {
+    const pivotResult = Object.values(groups).map(g => {
       const sortedErrors = Object.entries(g.errors)
         .filter(([_, count]) => count > 10)
         .sort((a, b) => b[1] - a[1])
@@ -2727,9 +2824,17 @@ export default function QualityInspectionRecords({
         topErrors: sortedErrors.length > 0 ? sortedErrors.join(', ') : '✓ Không có lỗi > 10 lần'
       };
     });
-  }, [filteredOqc, isOqcRecordPassed, getCleanModelName]);
+    oqcPivotReportCacheRef.current = pivotResult;
+    return pivotResult;
+  }, [qcMainSubTab, oqcSubView, filteredOqc, isOqcRecordPassed, getCleanModelName]);
+
+  // Performance: Cache ref for guarded useMemo (Tối ưu 1)
+  const oqcErrorsByModelReportCacheRef = useRef<any[]>([]);
 
   const oqcErrorsByModelReport = useMemo(() => {
+    // Guard: Only recompute when OQC dashboard is active (Tối ưu 1)
+    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'dashboard') return oqcErrorsByModelReportCacheRef.current;
+
     // Group failure details by model
     const groups: {
       [model: string]: {
@@ -2786,10 +2891,18 @@ export default function QualityInspectionRecords({
     });
 
     // Sort models by total error count descending
-    return result.sort((a, b) => b.totalCount - a.totalCount);
-  }, [filteredOqc, isOqcRecordPassed]);
+    const errorResult = result.sort((a, b) => b.totalCount - a.totalCount);
+    oqcErrorsByModelReportCacheRef.current = errorResult;
+    return errorResult;
+  }, [qcMainSubTab, oqcSubView, filteredOqc, isOqcRecordPassed]);
+
+  // Performance: Cache ref for guarded useMemo (Tối ưu 1)
+  const topOqcErrorsOverallCacheRef = useRef<any[]>([]);
 
   const topOqcErrorsOverall = useMemo(() => {
+    // Guard: Only recompute when OQC dashboard is active (Tối ưu 1)
+    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'dashboard') return topOqcErrorsOverallCacheRef.current;
+
     const counts: { [error: string]: number } = {};
     filteredOqc.forEach(r => {
       if (r.status === 'Lỗi' && !isOqcRecordPassed(r) && r.defectDetail) {
@@ -2801,23 +2914,40 @@ export default function QualityInspectionRecords({
       }
     });
 
-    return Object.entries(counts)
+    const topErrors = Object.entries(counts)
       .map(([text, count]) => ({ text, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
-  }, [filteredOqc, isOqcRecordPassed]);
+    topOqcErrorsOverallCacheRef.current = topErrors;
+    return topErrors;
+  }, [qcMainSubTab, oqcSubView, filteredOqc, isOqcRecordPassed]);
+
+  // Performance: Cache refs for guarded useMemo (Tối ưu 1)
+  const displayOqcListCacheRef = useRef<OQCRecord[]>([]);
 
   const displayOqcList = useMemo(() => {
+    // Guard: Only recompute when OQC dashboard is active (Tối ưu 1)
+    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'dashboard') return displayOqcListCacheRef.current;
+
+    let displayResult: OQCRecord[];
     if (oqcListFilter === 'fail') {
-      return filteredOqc.filter(r => r.status === 'Lỗi' && !isOqcRecordPassed(r));
+      displayResult = filteredOqc.filter(r => r.status === 'Lỗi' && !isOqcRecordPassed(r));
+    } else if (oqcListFilter === 'heavy_fail') {
+      displayResult = filteredOqc.filter(r => r.status === 'Lỗi' && !isOqcRecordPassed(r) && getRecordMaxDefectCount(r) > 10);
+    } else {
+      displayResult = filteredOqc;
     }
-    if (oqcListFilter === 'heavy_fail') {
-      return filteredOqc.filter(r => r.status === 'Lỗi' && !isOqcRecordPassed(r) && getRecordMaxDefectCount(r) > 10);
-    }
-    return filteredOqc;
-  }, [filteredOqc, oqcListFilter, getRecordMaxDefectCount, isOqcRecordPassed]);
+    displayOqcListCacheRef.current = displayResult;
+    return displayResult;
+  }, [qcMainSubTab, oqcSubView, filteredOqc, oqcListFilter, getRecordMaxDefectCount, isOqcRecordPassed]);
+
+  // Performance: Cache ref for guarded useMemo (Tối ưu 1)
+  const groupedOqcListCacheRef = useRef<GroupedOqcRow[]>([]);
 
   const groupedOqcList = useMemo(() => {
+    // Guard: Only recompute when OQC dashboard is active (Tối ưu 1)
+    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'dashboard') return groupedOqcListCacheRef.current;
+
     const groups: { [key: string]: GroupedOqcRow } = {};
     
     displayOqcList.forEach(r => {
@@ -2905,8 +3035,10 @@ export default function QualityInspectionRecords({
       }
     });
     
-    return Object.values(groups);
-  }, [displayOqcList, isOqcRecordPassed]);
+    const groupedResult = Object.values(groups);
+    groupedOqcListCacheRef.current = groupedResult;
+    return groupedResult;
+  }, [qcMainSubTab, oqcSubView, displayOqcList, isOqcRecordPassed]);
 
   const uniqueAuditSuppliers = Array.from(new Set(supplierProductionAudits.map(r => r.supplierName))).filter(Boolean);
 
@@ -3070,8 +3202,6 @@ export default function QualityInspectionRecords({
   const [exportKcsYear, setExportKcsYear] = useState<number>(2026);
   const [exportKcsModel, setExportKcsModel] = useState<string>('All');
 
-  // OQC Sub-view state: 'station' (Trạm KCS) | 'handover' (Báo phẩm bàn giao) | 'part_codes' (Bảng mã xe) | 'dashboard' (Đồ thị báo cáo)
-  const [oqcSubView, setOqcSubView] = useState<'station' | 'handover' | 'part_codes' | 'dashboard'>('station');
 
   const [partCodeSearch, setPartCodeSearch] = useState('');
   const [partCodeModelFilter, setPartCodeModelFilter] = useState('All');
@@ -3094,6 +3224,8 @@ export default function QualityInspectionRecords({
   // KCS Realtime Line Station states
   const [kcsSelectedLsx, setKcsSelectedLsx] = useState<string>('All');
   const [kcsSearch, setKcsSearch] = useState('');
+  const [kcsSearchLocal, setKcsSearchLocal] = useState(''); // Change 3: Debounced search local state
+  const kcsSearchDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const [kcsStatusFilter, setKcsStatusFilter] = useState<'All' | 'Chưa kiểm tra' | 'Đạt' | 'Lỗi'>('All');
   const [kcsFilterDate, setKcsFilterDate] = useState<string>('All');
   const [kcsFilterMonth, setKcsFilterMonth] = useState<string>('All');
@@ -3113,7 +3245,15 @@ export default function QualityInspectionRecords({
   const [oqcImportReplaceAll, setOqcImportReplaceAll] = useState(false);
 
   // Fast & optimized KCS Station data pipeline (Single Pass O(N) calculation)
+  // Performance: Cache ref for guarded useMemo (Tối ưu 1)
+  const kcsStationStatsCacheRef = useRef<any>({
+    displayRecords: [], totalCars: 0, passedCars: 0, failedCars: 0, pendingCars: 0, yieldRate: 100
+  });
+
   const kcsStationStats = useMemo(() => {
+    // Guard: Only recompute when KCS Station sub-view is active (Tối ưu 1)
+    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'station') return kcsStationStatsCacheRef.current;
+
     const isAllLsx = kcsSelectedLsx === 'All';
     const cleanLsx = (kcsSelectedLsx || '26-10').trim();
     const cleanSearch = kcsSearch.trim().toLowerCase();
@@ -3177,20 +3317,13 @@ export default function QualityInspectionRecords({
       filtered.push(r);
     }
 
-    // Fast natural sort for serial numbers (only sort if small dataset or unsorted)
-    if (filtered.length < 5000) {
-      filtered.sort((a, b) => {
-        const sA = (a.serialNo || a.id || '').trim();
-        const sB = (b.serialNo || b.id || '').trim();
-        if (sA === sB) return 0;
-        return sA < sB ? -1 : 1;
-      });
-    }
+    // Change 5: Removed runtime sort — data is pre-sorted at import/load time
+    // Sorting 31K records on every filter change was O(N log N) waste
 
     const totalCars = filtered.length;
     const yieldRate = totalCars > 0 ? Math.round((passedCount / totalCars) * 100) : 100;
 
-    return {
+    const kcsResult = {
       displayRecords: filtered,
       totalCars,
       passedCars: passedCount,
@@ -3198,7 +3331,9 @@ export default function QualityInspectionRecords({
       pendingCars: pendingCount,
       yieldRate
     };
-  }, [oqcRecords, localOqcOverrides, kcsSelectedLsx, kcsFilterDate, kcsFilterMonth, kcsFilterYear, kcsStatusFilter, kcsSearch]);
+    kcsStationStatsCacheRef.current = kcsResult;
+    return kcsResult;
+  }, [qcMainSubTab, oqcSubView, oqcRecords, localOqcOverrides, kcsSelectedLsx, kcsFilterDate, kcsFilterMonth, kcsFilterYear, kcsStatusFilter, kcsSearch]);
 
   // Finished Goods Handover (Báo phẩm bàn giao kho) states
   const [handoverScanInput, setHandoverScanInput] = useState('');
@@ -6951,45 +7086,11 @@ export default function QualityInspectionRecords({
             const safeCurrentPage = Math.min(kcsCurrentPage, totalPages);
             const paginatedRecords = displayLsxRecords.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
 
-            const TOP_COMMON_DEFECTS = [
-              '🎨 Xước sơn sườn',
-              '⚡ Lỏng rắc cắm nguồn',
-              '🧱 Hở bavia nhựa',
-              '🚲 Phanh đĩa bó',
-              '💡 Đèn pha không sáng',
-              '🔊 Tiếng kêu lạ động cơ',
-              '⚡ Đồng hồ không lên',
-              '🔧 Lệch cổ phốt',
-              '🔋 Pin / Ắc quy ngắt'
-            ];
-
-            const DEFECT_CATEGORIES = [
-              {
-                category: '🎨 Sơn & Thân Vỏ',
-                items: ['Xước sơn sườn', 'Bong tróc sơn', 'Lệch màu nhựa', 'Hở bavia mộc', 'Bạc màu sơn', 'Móp sườn khung']
-              },
-              {
-                category: '⚡ Hệ Thống Điện & Cảm Biến',
-                items: ['Lỏng rắc cắm nguồn', 'Đèn pha không sáng', 'Đồng hồ không lên', 'Còi không kêu', 'Pin / Ắc quy ngắt', 'Động cơ ngắt chập chờn', 'Xi nhan không nháy']
-              },
-              {
-                category: '🔩 Cơ Khí & Khung Gầm',
-                items: ['Phanh đĩa bó', 'Lệch cổ phốt', 'Tiếng kêu lạ động cơ', 'Giảm xóc kêu', 'Lỏng ốc bánh xe', 'Cần phanh nặng', 'Xích tải chùng']
-              }
-            ];
-
-            const parseDefects = (str?: string): string[] => {
-              if (!str || !str.trim()) return [];
-              return str
-                .split(/[,;\n]/)
-                .map(s => s.trim())
-                .filter(Boolean);
-            };
-
-            const stringifyDefects = (list: string[]): string => {
-              const unique = Array.from(new Set(list.filter(Boolean)));
-              return unique.join(', ');
-            };
+            // Change 2: Use module-level KCS_TOP_COMMON_DEFECTS, KCS_DEFECT_CATEGORIES, kcsParseDefects, kcsStringifyDefects
+            const TOP_COMMON_DEFECTS = KCS_TOP_COMMON_DEFECTS;
+            const DEFECT_CATEGORIES = KCS_DEFECT_CATEGORIES;
+            const parseDefects = kcsParseDefects;
+            const stringifyDefects = kcsStringifyDefects;
 
             const handleAddDefectToCar = (record: OQCRecord, newDefect: string) => {
               if (!newDefect || !newDefect.trim()) return;
@@ -7035,14 +7136,10 @@ export default function QualityInspectionRecords({
                 checkedBy: 'Liễu Tùng Lâm'
               };
 
-              // 1. Cưỡng bức DOM vẽ lại màu nút bấm ngay lập tức trong < 1ms (Instant UI repaint)
               if (record.id) {
-                flushSync(() => {
-                  setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
-                });
+                setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
               }
 
-              // 2. Hoãn việc cập nhật mảng lớn ngầm phía sau màn hình
               setTimeout(() => {
                 const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
                 const updated = oqcRecords.map(r => {
@@ -7052,7 +7149,7 @@ export default function QualityInspectionRecords({
                   return r;
                 });
                 saveOqcRecordsOptimized(updated);
-              }, 30);
+              }, 80);
             };
 
             const handleUpdateDefectNote = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
@@ -7073,10 +7170,9 @@ export default function QualityInspectionRecords({
                 updatedAt: new Date().toISOString()
               };
 
+              // Change 1: removed flushSync blocking
               if (record.id) {
-                flushSync(() => {
-                  setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
-                });
+                setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
               }
 
               setTimeout(() => {
@@ -7090,7 +7186,7 @@ export default function QualityInspectionRecords({
                   };
                 }
                 saveOqcRecordsOptimized(updated);
-              }, 30);
+              }, 80);
             };
 
             const handleQuickFail = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
@@ -7126,10 +7222,9 @@ export default function QualityInspectionRecords({
                 checkedBy: 'Liễu Tùng Lâm'
               };
 
+              // Change 1: removed flushSync blocking
               if (record.id) {
-                flushSync(() => {
-                  setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
-                });
+                setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
               }
 
               setTimeout(() => {
@@ -7143,7 +7238,7 @@ export default function QualityInspectionRecords({
                   };
                 }
                 saveOqcRecordsOptimized(updated);
-              }, 30);
+              }, 80);
             };
 
             const handleDeleteCar = (record: OQCRecord) => {
@@ -7496,7 +7591,7 @@ export default function QualityInspectionRecords({
                       Không có xe nào khớp bộ lọc.
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto" style={{ contain: 'content' }}>
                       <table className="min-w-full divide-y divide-slate-200 text-xs">
                         <thead className="bg-slate-800 text-white font-bold text-[10.5px] uppercase tracking-wider select-none">
                           <tr>
@@ -7724,14 +7819,17 @@ export default function QualityInspectionRecords({
                                           const file = e.target.files?.[0];
                                           if (!file) return;
                                           const compressed = await compressImageFile(file, 500, 500, 0.4);
+                                          // Change 6: Use optimistic override + saveOqcRecordsOptimized instead of direct setState + sync localStorage
+                                          if (r.id) {
+                                            setLocalOqcOverrides(prev => ({ ...prev, [r.id]: { ...r, imageUrl: compressed } }));
+                                          }
                                           const updated = oqcRecords.map(item => {
                                             if (item.id === r.id || item.serialNo.toUpperCase() === r.serialNo.toUpperCase()) {
                                               return { ...item, imageUrl: compressed };
                                             }
                                             return item;
                                           });
-                                          setOqcRecords(updated);
-                                          safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+                                          saveOqcRecordsOptimized(updated);
                                         }}
                                       />
                                     </label>
@@ -16227,20 +16325,8 @@ export default function QualityInspectionRecords({
 
             {/* Categories */}
             <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
-              {[
-                {
-                  category: '🎨 Sơn & Thân Vỏ',
-                  items: ['Xước sơn sườn', 'Bong tróc sơn', 'Lệch màu nhựa', 'Hở bavia mộc', 'Bạc màu sơn', 'Móp sườn khung']
-                },
-                {
-                  category: '⚡ Hệ Thống Điện & Cảm Biến',
-                  items: ['Lỏng rắc cắm nguồn', 'Đèn pha không sáng', 'Đồng hồ không lên', 'Còi không kêu', 'Pin / Ắc quy ngắt', 'Động cơ ngắt chập chờn', 'Xi nhan không nháy']
-                },
-                {
-                  category: '🔩 Cơ Khí & Khung Gầm',
-                  items: ['Phanh đĩa bó', 'Lệch cổ phốt', 'Tiếng kêu lạ động cơ', 'Giảm xóc kêu', 'Lỏng ốc bánh xe', 'Cần phanh nặng', 'Xích tải chùng']
-                }
-              ].map((catGroup, gIdx) => (
+              {/* Change 2: Use module-level KCS_DEFECT_CATEGORIES */}
+              {KCS_DEFECT_CATEGORIES.map((catGroup, gIdx) => (
                 <div key={gIdx} className="space-y-1.5">
                   <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-tight bg-slate-100 px-2.5 py-1 rounded">
                     {catGroup.category}
@@ -16309,11 +16395,10 @@ export default function QualityInspectionRecords({
                     year: nowYear
                   };
 
+                  // Change 1: removed flushSync blocking
                   if (activeMultiDefectModalRecord.id) {
-                    flushSync(() => {
-                      setLocalOqcOverrides(prev => ({ ...prev, [activeMultiDefectModalRecord.id]: { ...activeMultiDefectModalRecord, ...override } }));
-                      setActiveMultiDefectModalRecord(null);
-                    });
+                    setLocalOqcOverrides(prev => ({ ...prev, [activeMultiDefectModalRecord.id]: { ...activeMultiDefectModalRecord, ...override } }));
+                    setActiveMultiDefectModalRecord(null);
                   } else {
                     setActiveMultiDefectModalRecord(null);
                   }
@@ -16328,7 +16413,7 @@ export default function QualityInspectionRecords({
                       };
                     }
                     saveOqcRecordsOptimized(updated);
-                  }, 30);
+                  }, 80);
                 }}
                 className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-rose-600/30 transition cursor-pointer active:scale-95 text-center"
               >
