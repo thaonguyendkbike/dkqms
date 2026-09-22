@@ -2174,12 +2174,13 @@ export default function QualityInspectionRecords({
   const { uniqueOqcLsxs, oqcLsxCountsMap } = useMemo(() => {
     const countsMap = new Map<string, number>();
     for (let i = 0; i < oqcRecords.length; i++) {
-      const lsx = (oqcRecords[i].lsx || '26-10').trim();
+      const rawLsx = oqcRecords[i].lsx;
+      const lsx = (rawLsx && rawLsx.trim()) ? rawLsx.trim() : 'Chưa có LSX';
       countsMap.set(lsx, (countsMap.get(lsx) || 0) + 1);
     }
     const list = Array.from(countsMap.keys()).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
     return {
-      uniqueOqcLsxs: list.length > 0 ? list : ['26-10', '26-15', '26-20'],
+      uniqueOqcLsxs: list,
       oqcLsxCountsMap: countsMap
     };
   }, [oqcRecords]);
@@ -2697,13 +2698,26 @@ export default function QualityInspectionRecords({
     hasCleanedModelsOnceRef.current = true;
     let hasDirtyModel = false;
     const cleaned = oqcRecords.map(r => {
+      let isChanged = false;
+      let newR = r;
       const cleanM = getCleanModelName(r);
       if (r.model !== cleanM) {
+        newR = { ...newR, model: cleanM };
+        isChanged = true;
+      }
+      // Dọn dẹp mã linh kiện giả định TEM-GEN
+      if (newR.partCode === 'TEM-GEN') {
+        newR = { ...newR, partCode: '' };
+        isChanged = true;
+      }
+      // Dọn dẹp LSX gán mặc định nếu bản ghi bị gán cùng TEM-GEN trong quá khứ
+      if (r.partCode === 'TEM-GEN' && r.lsx === '26-10') {
+        newR = { ...newR, lsx: '' };
+        isChanged = true;
+      }
+      if (isChanged) {
         hasDirtyModel = true;
-        return {
-          ...r,
-          model: cleanM
-        };
+        return newR;
       }
       return r;
     });
@@ -3234,12 +3248,12 @@ export default function QualityInspectionRecords({
   const [kcsCurrentPage, setKcsCurrentPage] = useState<number>(1);
   const [showImportLsxModal, setShowImportLsxModal] = useState(false);
   const [lsxImportText, setLsxImportText] = useState('');
-  const [lsxImportDefaultLsx, setLsxImportDefaultLsx] = useState('26-10');
+  const [lsxImportDefaultLsx, setLsxImportDefaultLsx] = useState('');
   const [lsxImportError, setLsxImportError] = useState('');
   const [showAddCarToLsxModal, setShowAddCarToLsxModal] = useState(false);
-  const [newCarLsx, setNewCarLsx] = useState('26-10');
+  const [newCarLsx, setNewCarLsx] = useState('');
   const [newCarSerialNo, setNewCarSerialNo] = useState('');
-  const [newCarPartCode, setNewCarPartCode] = useState('TEM-GEN');
+  const [newCarPartCode, setNewCarPartCode] = useState('');
   const [newCarModel, setNewCarModel] = useState('DK Gogo');
   const [newCarColor, setNewCarColor] = useState('Trắng');
   const [oqcImportReplaceAll, setOqcImportReplaceAll] = useState(false);
@@ -3255,7 +3269,7 @@ export default function QualityInspectionRecords({
     if (qcMainSubTab !== 'oqc' || oqcSubView !== 'station') return kcsStationStatsCacheRef.current;
 
     const isAllLsx = kcsSelectedLsx === 'All';
-    const cleanLsx = (kcsSelectedLsx || '26-10').trim();
+    const cleanLsx = (kcsSelectedLsx || '').trim();
     const cleanSearch = kcsSearch.trim().toLowerCase();
     const hasSearch = cleanSearch.length > 0;
 
@@ -3277,8 +3291,11 @@ export default function QualityInspectionRecords({
         if (kcsStatusFilter === 'Lỗi' && r.status !== 'Lỗi') continue;
       }
       // 2. LSX filter (Fast string equality)
-      if (!isAllLsx && (r.lsx || '26-10').trim() !== cleanLsx) {
-        continue;
+      if (!isAllLsx) {
+        const rLsx = (r.lsx && r.lsx.trim()) ? r.lsx.trim() : 'Chưa có LSX';
+        if (rLsx !== cleanLsx) {
+          continue;
+        }
       }
       // 3. Month & Year filters (Fast primitive check)
       if (kcsFilterMonth !== 'All' && String(r.month) !== kcsFilterMonth) {
@@ -4823,10 +4840,10 @@ export default function QualityInspectionRecords({
           serialNoVal = `XE-${i + 1}-${Date.now().toString(36)}`;
         }
 
-        let partCodeVal = rawPartCode || 'TEM-GEN';
+        let partCodeVal = rawPartCode || '';
         let chassisNoVal = rawChassisCol;
         let engineNoVal = rawEngineCol;
-        let lsxVal = rawLsxCol || '26-10';
+        let lsxVal = rawLsxCol || '';
 
         // 2. MODEL AND COLOR INTELLIGENCE:
         // Never allow status strings in Model or Color
@@ -5062,7 +5079,7 @@ export default function QualityInspectionRecords({
               model: newRec.model || oldRec.model,
               color: newRec.color || oldRec.color,
               lsx: newRec.lsx || oldRec.lsx,
-              partCode: (newRec.partCode && newRec.partCode !== 'TEM-GEN') ? newRec.partCode : (oldRec.partCode || newRec.partCode),
+              partCode: (newRec.partCode && newRec.partCode !== 'TEM-GEN') ? newRec.partCode : (oldRec.partCode === 'TEM-GEN' ? '' : (oldRec.partCode || newRec.partCode || '')),
               chassisNo: newRec.chassisNo || oldRec.chassisNo,
               engineNo: newRec.engineNo || oldRec.engineNo,
               date: newRec.date || oldRec.date,
@@ -5340,8 +5357,8 @@ export default function QualityInspectionRecords({
     const existingOqc = oqcRecords.find(r => r.serialNo && r.serialNo.trim().toUpperCase() === clean);
     let oldModel = existingOqc?.model || '';
     let oldColor = existingOqc?.color || '';
-    let lsx = existingOqc?.lsx || '26-10';
-    let partCode = existingOqc?.partCode || 'TEM-GEN';
+    let lsx = existingOqc?.lsx || '';
+    let partCode = (existingOqc?.partCode && existingOqc.partCode !== 'TEM-GEN') ? existingOqc.partCode : '';
     let isNewInOqc = false;
 
     if (!oldModel || !oldColor) {
@@ -5479,7 +5496,7 @@ export default function QualityInspectionRecords({
           const isColorChanged = Boolean(item.oldColor && item.newColor && item.oldColor.toLowerCase().trim() !== item.newColor.toLowerCase().trim());
           newOqcFromChanges.push({
             id: `OQC-${sUpper.replace(/[\/\s.#$\[\]]/g, '_')}`,
-            partCode: item.partCode || 'TEM-GEN',
+            partCode: (item.partCode && item.partCode !== 'TEM-GEN') ? item.partCode : '',
             serialNo: item.serialNo.trim(),
             model: item.newModel || item.model,
             color: item.newColor || item.oldColor,
@@ -5492,7 +5509,7 @@ export default function QualityInspectionRecords({
             defectDetail: '',
             failedCount: 0,
             rootCause: '',
-            lsx: item.lsx || '26-10',
+            lsx: item.lsx || '',
             checkTime: '08:30',
             date: item.date,
             month: parseInt(item.date.split('/')[1] || '5', 10),
@@ -5640,7 +5657,7 @@ export default function QualityInspectionRecords({
     if (!hasMatchedOqc) {
       finalOqc = [{
         id: `OQC-${cleanSerial.replace(/[\/\s.#$\[\]]/g, '_')}`,
-        partCode: 'TEM-GEN',
+        partCode: '',
         serialNo: cleanSerial,
         model: newM,
         color: newC,
@@ -5653,7 +5670,7 @@ export default function QualityInspectionRecords({
         defectDetail: '',
         failedCount: 0,
         rootCause: '',
-        lsx: '26-10',
+        lsx: '',
         checkTime: '08:30',
         date: dateVal,
         month: parseInt(dateVal.split('/')[1] || '5', 10),
@@ -5778,7 +5795,7 @@ export default function QualityInspectionRecords({
           const isColorChanged = Boolean(item.oldColor && item.newColor && item.oldColor.toLowerCase().trim() !== item.newColor.toLowerCase().trim());
           newOqcFromChanges.push({
             id: `OQC-${sUpper.replace(/[\/\s.#$\[\]]/g, '_')}`,
-            partCode: 'TEM-GEN',
+            partCode: '',
             serialNo: item.serialNo.trim(),
             model: item.newModel || item.model,
             color: item.newColor,
@@ -5791,7 +5808,7 @@ export default function QualityInspectionRecords({
             defectDetail: '',
             failedCount: 0,
             rootCause: '',
-            lsx: '26-10',
+            lsx: '',
             checkTime: '08:30',
             date: item.date,
             month: parseInt(item.date.split('/')[1] || '5', 10),
@@ -7307,7 +7324,7 @@ export default function QualityInspectionRecords({
                         const count = oqcLsxCountsMap.get(lsx) || 0;
                         return (
                           <option key={lsx} value={lsx}>
-                            LSX {lsx} ({count} xe)
+                            {lsx === 'Chưa có LSX' ? 'Chưa có LSX' : `LSX ${lsx}`} ({count} xe)
                           </option>
                         );
                       })}
@@ -7410,7 +7427,7 @@ export default function QualityInspectionRecords({
                     <button
                       type="button"
                       onClick={() => {
-                        setLsxImportDefaultLsx(kcsSelectedLsx === 'All' ? (uniqueOqcLsxs[0] || '26-10') : kcsSelectedLsx);
+                        setLsxImportDefaultLsx(kcsSelectedLsx === 'All' ? (uniqueOqcLsxs[0] || '') : kcsSelectedLsx);
                         setLsxImportError('');
                         setShowImportLsxModal(true);
                       }}
@@ -7422,8 +7439,9 @@ export default function QualityInspectionRecords({
                     <button
                       type="button"
                       onClick={() => {
-                        setNewCarLsx(kcsSelectedLsx === 'All' ? (uniqueOqcLsxs[0] || '26-10') : kcsSelectedLsx);
+                        setNewCarLsx(kcsSelectedLsx === 'All' ? (uniqueOqcLsxs[0] || '') : kcsSelectedLsx);
                         setNewCarSerialNo('');
+                        setNewCarPartCode('');
                         setShowAddCarToLsxModal(true);
                       }}
                       className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
@@ -7529,7 +7547,7 @@ export default function QualityInspectionRecords({
                         {uniqueOqcLsxs.map(lsx => {
                           const count = oqcLsxCountsMap.get(lsx) || 0;
                           return (
-                            <option key={lsx} value={lsx}>LSX {lsx} ({count} xe)</option>
+                            <option key={lsx} value={lsx}>{lsx === 'Chưa có LSX' ? 'Chưa có LSX' : `LSX ${lsx}`} ({count} xe)</option>
                           );
                         })}
                       </select>
@@ -8025,7 +8043,7 @@ export default function QualityInspectionRecords({
                   item.serialNo,
                   item.chassisNo && item.chassisNo !== '--' ? item.chassisNo : '--',
                   item.engineNo && item.engineNo !== '--' ? item.engineNo : '--',
-                  item.partCode || 'TEM-GEN',
+                  (item.partCode && item.partCode !== 'TEM-GEN') ? item.partCode : '--',
                   item.model,
                   item.color,
                   item.lsx,
@@ -8207,7 +8225,7 @@ export default function QualityInspectionRecords({
             const handleCopyHandoverTextLocal = () => {
               if (filteredHandoverList.length === 0) return;
               const headers = "STT\tSố Sêri (Tem ĐT)\tSố Khung\tSố Động Cơ\tMã Quy Cách\tDòng xe (Model)\tMàu Sắc\tLệnh Sản Xuất\tNgày Quét\tGiờ Bàn Giao";
-              const rows = filteredHandoverList.map((item, i) => `${i + 1}\t${item.serialNo}\t${item.chassisNo || '--'}\t${item.engineNo || '--'}\t${item.partCode || 'TEM-GEN'}\t${item.model}\t${item.color}\t${item.lsx}\t${item.date || ''}\t${item.scannedAt}`).join('\n');
+              const rows = filteredHandoverList.map((item, i) => `${i + 1}\t${item.serialNo}\t${item.chassisNo || '--'}\t${item.engineNo || '--'}\t${(item.partCode && item.partCode !== 'TEM-GEN') ? item.partCode : '--'}\t${item.model}\t${item.color}\t${item.lsx}\t${item.date || ''}\t${item.scannedAt}`).join('\n');
               const text = `${headers}\n${rows}`;
               navigator.clipboard.writeText(text).then(() => {
                 alert(`Đã sao chép danh sách ${filteredHandoverList.length} xe bàn giao vào clipboard!`);
@@ -8231,7 +8249,7 @@ export default function QualityInspectionRecords({
                       );
 
                       // Lookup in master part codes if found has partCode
-                      const pCode = found ? (found.partCode || 'TEM-GEN') : 'TEM-GEN';
+                      const pCode = found ? ((found.partCode && found.partCode !== 'TEM-GEN') ? found.partCode : '') : '';
                       const matchedPart = lookupPartCode(pCode);
                       const now = new Date();
                       const currentDateStr = standardizeDate(now.toLocaleDateString('vi-VN'));
@@ -11784,7 +11802,7 @@ export default function QualityInspectionRecords({
                 try {
                   const lines = lsxImportText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
                   const newRecords: OQCRecord[] = [];
-                  const defaultLsx = lsxImportDefaultLsx.trim() || '26-10';
+                  const defaultLsx = lsxImportDefaultLsx.trim();
 
                   let partCodeIdx = -1;
                   let serialNoIdx = -1;
@@ -12055,7 +12073,7 @@ export default function QualityInspectionRecords({
                       if (newRec.lsx && norm(oldRec.lsx) !== norm(newRec.lsx)) hasDiff = true;
                       if (newRec.model && norm(oldRec.model) !== norm(newRec.model)) hasDiff = true;
                       if (newRec.color && norm(oldRec.color) !== norm(newRec.color)) hasDiff = true;
-                      if (newRec.partCode && newRec.partCode !== 'TEM-GEN' && norm(oldRec.partCode) !== norm(newRec.partCode)) hasDiff = true;
+                      if (newRec.partCode && norm(oldRec.partCode) !== norm(newRec.partCode)) hasDiff = true;
                       if (newRec.chassisNo && norm(oldRec.chassisNo) !== norm(newRec.chassisNo)) hasDiff = true;
                       if (newRec.engineNo && norm(oldRec.engineNo) !== norm(newRec.engineNo)) hasDiff = true;
 
@@ -12107,7 +12125,11 @@ export default function QualityInspectionRecords({
                     (window as any).syncToServer('dk_oqc_records', finalRecords);
                   }
 
-                  setKcsSelectedLsx(defaultLsx);
+                  if (defaultLsx) {
+                    setKcsSelectedLsx(defaultLsx);
+                  } else {
+                    setKcsSelectedLsx('All');
+                  }
                   setLsxImportText('');
                   setShowImportLsxModal(false);
                   alert(`🎉 Đối chiếu & Nạp LSX ${defaultLsx} thành công!\n\nChi tiết đối chiếu:\n• Thêm mới: ${addedCount} xe\n• Cập nhật thông tin: ${updatedCount} xe\n• Giữ nguyên (trùng khớp): ${unchangedCount} xe\n\n(Dữ liệu có thay đổi đã được đồng bộ an toàn lên Cloud Firebase)`);
@@ -12206,7 +12228,7 @@ export default function QualityInspectionRecords({
 
                 const newRec: OQCRecord = {
                   id: `OQC-${serial.toUpperCase().replace(/[\/\s.#$\[\]]/g, '_')}`,
-                  partCode: newCarPartCode.trim() || 'TEMDV11202',
+                  partCode: newCarPartCode.trim(),
                   serialNo: serial,
                   model: newCarModel,
                   color: newCarColor.trim() || 'Đỏ',
@@ -12214,7 +12236,7 @@ export default function QualityInspectionRecords({
                   defectDetail: '',
                   failedCount: 0,
                   rootCause: '',
-                  lsx: newCarLsx.trim() || '26-10',
+                  lsx: newCarLsx.trim(),
                   checkTime: '',
                   date: todayStr,
                   month: todayMonth,
@@ -12387,7 +12409,7 @@ export default function QualityInspectionRecords({
                     serialNo: found ? found.serialNo : serial,
                     chassisNo: found ? (found.chassisNo || '--') : '--',
                     engineNo: found ? (found.engineNo || '--') : '--',
-                    partCode: found ? (found.partCode || 'TEM-GEN') : 'TEM-GEN',
+                    partCode: found ? ((found.partCode && found.partCode !== 'TEM-GEN') ? found.partCode : '') : '',
                     model: found ? (found.model || 'Chưa rõ') : 'Chưa có trong OQC',
                     color: found ? (found.color || 'Chưa rõ') : 'Chưa rõ',
                     lsx: found ? (found.lsx || 'Ngoại bảng') : 'Ngoại bảng',
