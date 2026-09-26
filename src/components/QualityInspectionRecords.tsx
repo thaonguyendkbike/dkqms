@@ -1277,12 +1277,12 @@ export default function QualityInspectionRecords({
       safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
     }, 150);
 
-    // 2. Gom đẩy Cloud ngầm sau 20 PHÚT không thao tác (Debounced 20-min Batch Push = 1.200.000ms)
-    const OQC_CLOUD_SYNC_DELAY_MS = 20 * 60 * 1000;
+    // 2. Gom đẩy Cloud ngầm sau 5 GIÂY không thao tác (Debounced Batch Push = 5000ms)
+    const OQC_CLOUD_SYNC_DELAY_MS = 5000;
     if (asyncOqcSaveTimer.current) clearTimeout(asyncOqcSaveTimer.current);
     asyncOqcSaveTimer.current = setTimeout(() => {
       if (typeof (window as any).syncToServer === 'function') {
-        console.log("⏰ [20-Min Cloud Sync Engine] Đã đủ 20 phút kể từ thao tác cuối cùng, tiến hành đẩy dữ liệu KCS lên Cloud Firestore.");
+        console.log("⏰ [5-Sec Cloud Sync Engine] Tiến hành đẩy dữ liệu KCS lên Cloud Firestore.");
         (window as any).syncToServer('dk_oqc_records', updated);
       }
     }, OQC_CLOUD_SYNC_DELAY_MS);
@@ -4588,8 +4588,19 @@ export default function QualityInspectionRecords({
       if (newRecord.color) existing.color = newRecord.color;
       if (newRecord.lsx) existing.lsx = newRecord.lsx;
       setOqcRecords(updatedOqcRecords);
+      safeStorage.setItem('dk_oqc_records', JSON.stringify(updatedOqcRecords));
+      try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+      if (typeof (window as any).syncToServer === 'function') {
+        (window as any).syncToServer('dk_oqc_records', updatedOqcRecords);
+      }
     } else {
-      setOqcRecords([newRecord, ...oqcRecords]);
+      const updatedOqcRecords = [newRecord, ...oqcRecords];
+      setOqcRecords(updatedOqcRecords);
+      safeStorage.setItem('dk_oqc_records', JSON.stringify(updatedOqcRecords));
+      try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+      if (typeof (window as any).syncToServer === 'function') {
+        (window as any).syncToServer('dk_oqc_records', updatedOqcRecords);
+      }
     }
 
     setShowAddOqcModal(false);
@@ -12255,6 +12266,10 @@ export default function QualityInspectionRecords({
 
                 setOqcRecords(updated);
                 safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+                try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
+                if (typeof (window as any).syncToServer === 'function') {
+                  (window as any).syncToServer('dk_oqc_records', updated);
+                }
                 setKcsSelectedLsx(newRec.lsx);
                 setNewCarSerialNo('');
                 setShowAddCarToLsxModal(false);

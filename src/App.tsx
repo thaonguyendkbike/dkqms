@@ -1869,10 +1869,23 @@ export function App() {
             chunkBatch.delete(op.ref);
           }
         });
-        await Promise.race([
-          chunkBatch.commit(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Batch Commit Timeout (30s)")), 30000))
-        ]);
+        const commitBatchWithRetry = async (batchInstance: any, retries = 1) => {
+          try {
+            await Promise.race([
+              batchInstance.commit(),
+              new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Batch Commit Timeout (30s)")), 30000))
+            ]);
+          } catch (batchErr) {
+            if (retries > 0) {
+              console.warn("[Cloud Sync Batch Retry]: Thử lại commit batch sau 1 giây...", batchErr);
+              await new Promise(r => setTimeout(r, 1000));
+              await commitBatchWithRetry(batchInstance, retries - 1);
+            } else {
+              throw batchErr;
+            }
+          }
+        };
+        await commitBatchWithRetry(chunkBatch);
       }
 
       console.log(`[Batch Cloud Sync]: Đã đồng bộ thành công ${dirtyKeys.length} khóa lên Firestore`);
@@ -3382,6 +3395,7 @@ export function App() {
                   const cd = res.value.data();
                   if (cd && Array.isArray(cd.data)) {
                     assembledList = assembledList.concat(cd.data);
+                    lastSyncedChunkHashes.current[`${key}_chunk_${cIdx}`] = JSON.stringify(cd.data);
                   }
                 } else {
                   console.error(`[Chunk Fetch Error] Failed to load chunk ${cIdx}:`, res.reason);
@@ -3400,7 +3414,12 @@ export function App() {
 
           let localParsedCount = 0;
           let parsedLocalData: any[] = [];
-          const currentMemoryVal = safeStorage.getItem(key) || localSaved;
+          let currentMemoryVal = safeStorage.getItem(key) || localSaved;
+          if (!currentMemoryVal && (key === 'dk_oqc_records' || CHUNKED_KEYS.includes(key))) {
+            try {
+              currentMemoryVal = await safeStorage.getItemAsync(key);
+            } catch (e) { }
+          }
           if (currentMemoryVal) {
             try {
               const p = JSON.parse(currentMemoryVal);
@@ -3413,27 +3432,28 @@ export function App() {
 
           let finalDisplayData = assembledList;
 
-          if (isDirty && localSaved && parsedLocalData.length > 0) {
+          if (parsedLocalData.length > 0 && assembledList.length > 0) {
+            // Khi cả local và Cloud đều có dữ liệu: Luôn HỢP NHẤT THÔNG MINH để bảo toàn 100% dữ liệu ngày mới từ máy người dùng
             try {
               finalDisplayData = smartMergeArrays(assembledList, parsedLocalData, key);
             } catch (e) {
               console.error(`[Smart Merge Error] for ${key}:`, e);
+              finalDisplayData = parsedLocalData.length >= assembledList.length ? parsedLocalData : assembledList;
             }
-          } else if (localParsedCount > 0 && assembledList.length < localParsedCount) {
-            // DATASET LOSS-PREVENTION GUARD:
-            // If local storage has more records (e.g. 16,999 records) than what the server snapshot returned,
-            // DO NOT wipe out the local data! Preserve local data and re-sync to Cloud!
-            console.warn(`[${key} Chunk Protection]: Local data has ${localParsedCount} records, while server returned only ${assembledList.length}. Preserving local records.`);
+            if (isDirty || finalDisplayData.length > assembledList.length) {
+              localStorage.setItem(`${key}_is_dirty`, 'true');
+              localDirtyKeys.current.add(key);
+              pendingSyncBuffer.current[key] = finalDisplayData;
+            }
+          } else if (localParsedCount > 0 && assembledList.length === 0) {
+            // Local có dữ liệu nhưng server rỗng: Giữ 100% dữ liệu local và đánh dấu đồng bộ lên Cloud
             finalDisplayData = parsedLocalData;
             localStorage.setItem(`${key}_is_dirty`, 'true');
             localDirtyKeys.current.add(key);
             pendingSyncBuffer.current[key] = finalDisplayData;
           } else if (assembledList.length > 0) {
+            // Server có dữ liệu và local chưa có gì
             finalDisplayData = assembledList;
-            if (localParsedCount === 0 && localStorage.getItem(`${key}_is_dirty`) === 'true') {
-              try { localStorage.setItem(`${key}_is_dirty`, 'false'); } catch (e) { }
-              localDirtyKeys.current.delete(key);
-            }
           } else if (localParsedCount > 0) {
             finalDisplayData = parsedLocalData;
           }
@@ -6675,7 +6695,10 @@ export function App() {
 
     const timer = setTimeout(() => {
       safeStorage.setItem('dk_oqc_records', JSON.stringify(oqcRecords));
-    }, 300);
+      if (localStorage.getItem('dk_oqc_records_is_dirty') === 'true') {
+        syncToServer('dk_oqc_records', oqcRecords);
+      }
+    }, 500);
     return () => clearTimeout(timer);
   }, [oqcRecords]);
 
