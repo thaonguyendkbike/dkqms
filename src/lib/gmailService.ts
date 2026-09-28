@@ -496,6 +496,66 @@ const renderColorChangeHtmlSection = (colorChanges: any[], titleText: string) =>
   `;
 };
 
+// HELPER TO RENDER ULTRA-CONCISE EXECUTIVE KPI SUMMARY FOR EMAILS (MINIMAL SCREEN HEIGHT)
+const renderExecutiveSummary = (config: {
+  dateStr?: string;
+  todayCount?: number;
+  todayDoneCount?: number;
+  tomorrowCount?: number;
+  tomorrowStr?: string;
+  oqcList?: any[];
+  colorChangesCount?: number;
+}) => {
+  let oqcTotal = 0;
+  let oqcPassed = 0;
+  let oqcFailed = 0;
+  let oqcYield = "100.0";
+  if (config.oqcList && config.oqcList.length > 0) {
+    oqcTotal = config.oqcList.length;
+    oqcPassed = config.oqcList.filter(rec => {
+      if (rec.status === 'Đạt') return true;
+      if (rec.status === 'Lỗi') return false;
+      const details = rec.defectDetail ? rec.defectDetail.trim().toLowerCase() : '';
+      return !details || details === 'không' || details === 'sạch không lỗi' || details === 'ok' || details === 'pass';
+    }).length;
+    oqcFailed = oqcTotal - oqcPassed;
+    oqcYield = ((oqcPassed / oqcTotal) * 100).toFixed(1);
+  }
+
+  return `
+    <!-- ULTRA-COMPACT KPI SUMMARY BAR -->
+    <div style="margin: 0 0 10px 0; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px;">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; border-collapse: separate; border-spacing: 6px 0;">
+        <tr>
+          ${config.todayCount !== undefined ? `
+          <td style="background-color: #ffffff; border: 1px solid #bae6fd; border-radius: 6px; padding: 6px 8px; text-align: left; vertical-align: middle;">
+            <div style="font-size: 9.5px; font-weight: 700; color: #0284c7; text-transform: uppercase;">📅 Hôm nay ${config.dateStr ? `(${config.dateStr})` : ''}</div>
+            <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 1px;">
+              ${config.todayCount} việc <span style="font-size: 10.5px; color: #16a34a; font-weight: 700;">(✓ ${config.todayDoneCount !== undefined ? config.todayDoneCount : config.todayCount} Đạt)</span>
+            </div>
+          </td>` : ''}
+
+          ${config.tomorrowCount !== undefined ? `
+          <td style="background-color: #ffffff; border: 1px solid #fecdd3; border-radius: 6px; padding: 6px 8px; text-align: left; vertical-align: middle;">
+            <div style="font-size: 9.5px; font-weight: 700; color: #e11d48; text-transform: uppercase;">🎯 Ngày mai ${config.tomorrowStr ? `(${config.tomorrowStr})` : ''}</div>
+            <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-top: 1px;">
+              ${config.tomorrowCount} kế hoạch
+            </div>
+          </td>` : ''}
+
+          ${oqcTotal > 0 ? `
+          <td style="background-color: #ffffff; border: 1px solid #bbf7d0; border-radius: 6px; padding: 6px 8px; text-align: left; vertical-align: middle;">
+            <div style="font-size: 9.5px; font-weight: 700; color: #15803d; text-transform: uppercase;">🏍️ OQC Xuất xưởng</div>
+            <div style="font-size: 13px; font-weight: 800; color: ${Number(oqcYield) >= 95 ? '#15803d' : '#d97706'}; margin-top: 1px;">
+              ${oqcYield}% <span style="font-size: 10px; color: #64748b; font-weight: 600;">(${oqcPassed}/${oqcTotal} xe)</span>
+            </div>
+          </td>` : ''}
+        </tr>
+      </table>
+    </div>
+  `;
+};
+
 // Generate Template layouts
 export const generateDailyLogEmailTemplate = (logs: any[], dateStr: string, senderName: string, oqcRecords?: any[], colorChanges?: any[]) => {
   const rows = logs.map((log, idx) => `
@@ -634,50 +694,76 @@ export const generateDailyLogEmailTemplate = (logs: any[], dateStr: string, send
       <div class="email-container" style="max-width: 950px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; overflow: hidden;">
         
         <!-- Header -->
-        <div class="email-header" style="background-image: linear-gradient(135deg, #4f46e5 0%, #312e81 100%); padding: 30px; text-align: center; color: #ffffff;">
-          <h2 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.025em; text-transform: uppercase;">
+        <div class="email-header" style="background-image: linear-gradient(135deg, #4f46e5 0%, #312e81 100%); padding: 16px 20px; text-align: center; color: #ffffff;">
+          <h2 style="margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase;">
              Báo Cáo Công Việc QA/QC DKBike
           </h2>
-          <p style="margin: 10px 0 0 0; font-size: 14px; opacity: 0.9; font-weight: 500;">
-            Ngày gửi báo cáo: <strong style="color: #38bdf8;">${dateStr}</strong> | Người lập: <strong>${senderName}</strong>
+          <p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.9; font-weight: 500;">
+            Ngày gửi: <strong style="color: #38bdf8;">${dateStr}</strong> | Người lập: <strong>${senderName}</strong>
           </p>
         </div>
 
         <!-- Body -->
-        <div class="email-body" style="padding: 24px;">
-          <p style="font-size: 14px; color: #475569; margin: 0 0 16px 0; font-weight: 500;">
-            Xin chào Qúy Ban Giám đốc và Quản lý phòng QA/QC,<br/>
-            Dưới đây là chi tiết kết quả ghi nhận công việc kiểm soát chất lượng (QMS Daily Logs) ngày <strong>${dateStr}</strong>:
+        <div class="email-body" style="padding: 16px 20px;">
+          <p style="font-size: 12.5px; color: #475569; margin: 0 0 10px 0;">
+            Kính gửi Ban Giám đốc và Quản lý phòng QA/QC, tóm tắt kết quả kiểm soát chất lượng QMS ngày <strong>${dateStr}</strong>:
           </p>
 
-          <!-- Table -->
-          <div style="width: 100%; min-width: 100%; display: block; clear: both; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; margin: 15px 0;">
-            <table class="responsive-table" width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; min-width: 820px; border-collapse: collapse; font-size: 13px; text-align: left; table-layout: fixed;">
-              <thead>
-                <tr style="background-color: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
-                  <th style="padding: 12px 10px; font-weight: 700; color: #334155; width: 4%; min-width: 40px; white-space: nowrap;">STT</th>
-                  <th style="padding: 12px 10px; font-weight: 700; color: #334155; width: 15%; min-width: 120px;">Mục</th>
-                  <th style="padding: 12px 10px; font-weight: 700; color: #334155; width: 29%; min-width: 210px;">Nội Dung Công Việc</th>
-                  <th style="padding: 12px 10px; font-weight: 700; color: #334155; text-align: center; width: 11%; min-width: 90px; white-space: nowrap;">Mục Tiêu/ĐVT</th>
-                  <th style="padding: 12px 10px; font-weight: 700; color: #334155; text-align: center; width: 9%; min-width: 75px; white-space: nowrap;">Hiệu Suất</th>
-                  <th style="padding: 12px 10px; font-weight: 700; color: #334155; width: 23%; min-width: 185px;">Đánh giá</th>
-                  <th style="padding: 12px 10px; font-weight: 700; color: #334155; width: 9%; min-width: 70px; white-space: nowrap;">Nhân Sự</th>
+          ${renderExecutiveSummary({
+            dateStr: dateStr,
+            todayCount: logs.length,
+            todayDoneCount: logs.filter(l => l.statusPercent === '100%' || l.status === 'Hoàn thành').length,
+            oqcList: oqcRecords
+          })}
+
+          <!-- INTERACTIVE ACCORDION BUTTON FOR EXPAND/COLLAPSE -->
+          <details style="margin: 10px 0 14px 0; border: 1px solid #0284c7; border-radius: 8px; background-color: #ffffff; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <summary style="display: block; cursor: pointer; padding: 10px 14px; background: linear-gradient(135deg, #0284c7 0%, #1e40af 100%); color: #ffffff; font-weight: 800; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.3px; list-style: none; user-select: none; outline: none; border-radius: 6px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="color: #ffffff; font-size: 12px; font-weight: 800;">
+                <tr>
+                  <td style="text-align: left; vertical-align: middle;">
+                    <span>📊 BẤM ĐỂ MỞ RỘNG TOÀN BỘ BÁO CÁO CHI TIẾT</span>
+                  </td>
+                  <td style="text-align: right; vertical-align: middle; width: 110px;">
+                    <span style="display: inline-block; background-color: rgba(255,255,255,0.25); color: #ffffff; padding: 2px 8px; border-radius: 12px; font-size: 10.5px; font-weight: 800; border: 1px solid rgba(255,255,255,0.4);">
+                      ▼ MỞ CHI TIẾT
+                    </span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                ${rows.length > 0 ? rows : `<tr><td colspan="7" style="padding: 30px; text-align: center; color: #94a3b8; font-style: italic;">Không có công việc nào được báo cáo.</td></tr>`}
-              </tbody>
-            </table>
-          </div>
+              </table>
+            </summary>
+            
+            <div style="padding: 14px; background-color: #fafbfc; border-top: 1px solid #bae6fd;">
+              <!-- Table -->
+              <div style="width: 100%; min-width: 100%; display: block; clear: both; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; margin: 5px 0 15px 0;">
+                <table class="responsive-table" width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; min-width: 820px; border-collapse: collapse; font-size: 13px; text-align: left; table-layout: fixed;">
+                  <thead>
+                    <tr style="background-color: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
+                      <th style="padding: 12px 10px; font-weight: 700; color: #334155; width: 4%; min-width: 40px; white-space: nowrap;">STT</th>
+                      <th style="padding: 12px 10px; font-weight: 700; color: #334155; width: 15%; min-width: 120px;">Mục</th>
+                      <th style="padding: 12px 10px; font-weight: 700; color: #334155; width: 29%; min-width: 210px;">Nội Dung Công Việc</th>
+                      <th style="padding: 12px 10px; font-weight: 700; color: #334155; text-align: center; width: 11%; min-width: 90px; white-space: nowrap;">Mục Tiêu/ĐVT</th>
+                      <th style="padding: 12px 10px; font-weight: 700; color: #334155; text-align: center; width: 9%; min-width: 75px; white-space: nowrap;">Hiệu Suất</th>
+                      <th style="padding: 12px 10px; font-weight: 700; color: #334155; width: 23%; min-width: 185px;">Đánh giá</th>
+                      <th style="padding: 12px 10px; font-weight: 700; color: #334155; width: 9%; min-width: 70px; white-space: nowrap;">Nhân Sự</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${rows.length > 0 ? rows : `<tr><td colspan="7" style="padding: 30px; text-align: center; color: #94a3b8; font-style: italic;">Không có công việc nào được báo cáo.</td></tr>`}
+                  </tbody>
+                </table>
+              </div>
 
-          <!-- OQC Dynamic Section -->
-          ${oqcRecords ? renderOqcHtmlSection(oqcRecords, `TỔNG HỢP KẾT QUẢ NGHIỆM THU OQC XUẤT XƯỞNG NGÀY ${dateStr}`) : ''}
+              <!-- OQC Dynamic Section -->
+              ${oqcRecords ? renderOqcHtmlSection(oqcRecords, `TỔNG HỢP KẾT QUẢ NGHIỆM THU OQC XUẤT XƯỞNG NGÀY ${dateStr}`) : ''}
 
-          <!-- Color Change Dynamic Section -->
-          ${colorChanges && colorChanges.length > 0 ? renderColorChangeHtmlSection(colorChanges, `DANH SÁCH XE THÀNH PHẨM KCS ĐỔI MÀU TRONG NGÀY (${dateStr})`) : ''}
+              <!-- Color Change Dynamic Section -->
+              ${colorChanges && colorChanges.length > 0 ? renderColorChangeHtmlSection(colorChanges, `DANH SÁCH XE THÀNH PHẨM KCS ĐỔI MÀU TRONG NGÀY (${dateStr})`) : ''}
+            </div>
+          </details>
 
           <!-- Bottom Summary Status -->
-          <div style="margin-top: 25px; padding: 15px; background-color: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; font-size: 13px;">
+          <div style="margin-top: 15px; padding: 15px; background-color: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; font-size: 13px;">
             <strong style="color: #1e293b; display: block; margin-bottom: 5px;">📍 Ghi chú tổng hợp:</strong>
             <span style="color: #475569;">Báo cáo được lập tự động từ DK QMS Cloud Dashboard. Mọi thông tin phản hồi, xin phản hồi trực tiếp qua hòm thư của người báo cáo.</span>
           </div>
@@ -1037,88 +1123,116 @@ export const generateTodayAndTomorrowEmailTemplate = (
       <div class="email-container" style="max-width: 950px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; overflow: hidden;">
         
         <!-- Header -->
-        <div class="email-header" style="background-image: linear-gradient(135deg, #0284c7 0%, #1e3a8a 100%); padding: 25px; text-align: center; color: #ffffff;">
-          <h2 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.025em; text-transform: uppercase;">
+        <div class="email-header" style="background-image: linear-gradient(135deg, #0284c7 0%, #1e3a8a 100%); padding: 16px 20px; text-align: center; color: #ffffff;">
+          <h2 style="margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; text-transform: uppercase;">
              BÁO CÁO NGÀY ${todayStr} & KẾ HOẠCH NGÀY ${tomorrowStr}
           </h2>
-          <p style="margin: 8px 0 0 0; font-size: 13px; opacity: 0.9; font-weight: 500;">
+          <p style="margin: 4px 0 0 0; font-size: 12px; opacity: 0.9; font-weight: 500;">
             Phòng: <strong>Quản lý Chất lượng DKBike</strong> | Người lập: <strong>${senderName}</strong>
           </p>
         </div>
 
         <!-- Body -->
-        <div class="email-body" style="padding: 24px;">
+        <div class="email-body" style="padding: 16px 20px;">
           
-          <p style="font-size: 13px; color: #475569; margin: 0 0 20px 0;">
-            Kính gửi Ban Giám đốc và Quản lý nhà máy DKBike,<br/>
-            Dưới đây là chi tiết kết quả ghi nhận công việc kiểm soát chất lượng QMS hôm nay (<strong>${todayStr}</strong>) và kế hoạch dự kiến ngày mai (<strong>${tomorrowStr}</strong>):
+          <p style="font-size: 12.5px; color: #475569; margin: 0 0 10px 0;">
+            Kính gửi Ban Giám đốc và Quản lý DKBike, tóm tắt kết quả QMS ngày <strong>${todayStr}</strong> và kế hoạch ngày <strong>${tomorrowStr}</strong>:
           </p>
 
-          <!-- SECTION 1: TODAY LOGS -->
-          <div style="margin-bottom: 25px; border: 1px solid #bae6fd; border-radius: 8px; overflow: hidden;">
-            <div style="background-color: #e0f2fe; padding: 10px 15px; border-bottom: 1px solid #bae6fd;">
-              <strong style="color: #0369a1; font-size: 13.5px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
-                📅 1. BÁO CÁO CÔNG VIỆC THỰC HIỆN HÔM NAY (${todayStr})
-              </strong>
-            </div>
-            <div style="width: 100%; min-width: 100%; display: block; clear: both; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; margin: 10px 0;">
-              <table class="responsive-table" width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; min-width: 820px; border-collapse: collapse; font-size: 12.5px; text-align: left; table-layout: fixed;">
-                <thead>
-                  <tr style="background-color: #f8fafc; border-bottom: 2px solid #e2e8f0;">
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 4%; min-width: 40px; white-space: nowrap;">STT</th>
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 15%; min-width: 120px;">Mục</th>
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 29%; min-width: 210px;">Nội Dung QA/QC</th>
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; text-align: center; width: 11%; min-width: 90px; white-space: nowrap;">Chỉ tiêu</th>
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; text-align: center; width: 9%; min-width: 75px; white-space: nowrap;">H.Suất</th>
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 23%; min-width: 185px;">Đánh giá</th>
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 9%; min-width: 70px; white-space: nowrap;">Nhân Sự</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${todayRows}
-                </tbody>
+          ${renderExecutiveSummary({
+            dateStr: todayStr,
+            todayCount: todayLogs.length,
+            todayDoneCount: todayLogs.filter(l => l.statusPercent === '100%' || l.status === 'Hoàn thành').length,
+            tomorrowCount: tomorrowLogs.length,
+            tomorrowStr: tomorrowStr,
+            oqcList: oqcRecordsToday
+          })}
+
+          <!-- INTERACTIVE ACCORDION BUTTON FOR EXPAND/COLLAPSE -->
+          <details style="margin: 10px 0 14px 0; border: 1px solid #0284c7; border-radius: 8px; background-color: #ffffff; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <summary style="display: block; cursor: pointer; padding: 10px 14px; background: linear-gradient(135deg, #0284c7 0%, #1e40af 100%); color: #ffffff; font-weight: 800; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.3px; list-style: none; user-select: none; outline: none; border-radius: 6px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="color: #ffffff; font-size: 12px; font-weight: 800;">
+                <tr>
+                  <td style="text-align: left; vertical-align: middle;">
+                    <span>📊 BẤM ĐỂ MỞ RỘNG TOÀN BỘ BÁO CÁO CHI TIẾT</span>
+                  </td>
+                  <td style="text-align: right; vertical-align: middle; width: 110px;">
+                    <span style="display: inline-block; background-color: rgba(255,255,255,0.25); color: #ffffff; padding: 2px 8px; border-radius: 12px; font-size: 10.5px; font-weight: 800; border: 1px solid rgba(255,255,255,0.4);">
+                      ▼ MỞ CHI TIẾT
+                    </span>
+                  </td>
+                </tr>
               </table>
+            </summary>
+            
+            <div style="padding: 14px; background-color: #fafbfc; border-top: 1px solid #bae6fd;">
+              <!-- SECTION 1: TODAY LOGS -->
+              <div style="margin-bottom: 25px; border: 1px solid #bae6fd; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
+                <div style="background-color: #e0f2fe; padding: 10px 15px; border-bottom: 1px solid #bae6fd;">
+                  <strong style="color: #0369a1; font-size: 13.5px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+                    📅 1. BÁO CÁO CÔNG VIỆC THỰC HIỆN HÔM NAY (${todayStr})
+                  </strong>
+                </div>
+                <div style="width: 100%; min-width: 100%; display: block; clear: both; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; margin: 10px 0;">
+                  <table class="responsive-table" width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; min-width: 820px; border-collapse: collapse; font-size: 12.5px; text-align: left; table-layout: fixed;">
+                    <thead>
+                      <tr style="background-color: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 4%; min-width: 40px; white-space: nowrap;">STT</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 15%; min-width: 120px;">Mục</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 29%; min-width: 210px;">Nội Dung QA/QC</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; text-align: center; width: 11%; min-width: 90px; white-space: nowrap;">Chỉ tiêu</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; text-align: center; width: 9%; min-width: 75px; white-space: nowrap;">H.Suất</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 23%; min-width: 185px;">Đánh giá</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 9%; min-width: 70px; white-space: nowrap;">Nhân Sự</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${todayRows}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- OQC Dynamic Section Today -->
+              ${oqcRecordsToday ? renderOqcHtmlSection(oqcRecordsToday, `KẾT QUẢ NGHIỆM THU OQC XUẤT XƯỞNG HÔM NAY (${todayStr})`) : ''}
+
+              <!-- Color Change Dynamic Section Today -->
+              ${colorChangesToday && colorChangesToday.length > 0 ? renderColorChangeHtmlSection(colorChangesToday, `DANH SÁCH XE THÀNH PHẨM KCS ĐỔI MÀU HÔM NAY (${todayStr})`) : ''}
+
+              <!-- SECTION 2: TOMORROW PLANS -->
+              <div style="margin-bottom: 25px; border: 1px solid #fecdd3; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
+                <div style="background-color: #ffe4e6; padding: 10px 15px; border-bottom: 1px solid #fecdd3;">
+                  <strong style="color: #be123c; font-size: 13.5px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+                    🎯 2. KẾ HOẠCH CÔNG VIỆC CHI TIẾT NGÀY MAI (${tomorrowStr})
+                  </strong>
+                </div>
+                <div style="width: 100%; min-width: 100%; display: block; clear: both; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; margin: 10px 0;">
+                  <table class="responsive-table" width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; min-width: 820px; border-collapse: collapse; font-size: 12.5px; text-align: left; table-layout: fixed;">
+                    <thead>
+                      <tr style="background-color: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 4%; min-width: 40px; white-space: nowrap;">STT</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 15%; min-width: 120px;">Mục</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 29%; min-width: 210px;">Nội Dung Kế Hoạch</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; text-align: center; width: 11%; min-width: 90px; white-space: nowrap;">Dự kiến</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; text-align: center; width: 9%; min-width: 75px; white-space: nowrap;">H.Suất</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 23%; min-width: 185px;">Đánh giá</th>
+                        <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 9%; min-width: 70px; white-space: nowrap;">Nhân Sự</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${tomorrowRows}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- OQC Dynamic Section Tomorrow -->
+              ${oqcRecordsTomorrow && oqcRecordsTomorrow.length > 0 ? renderOqcHtmlSection(oqcRecordsTomorrow, `KẾT QUẢ NGHIỆM THU OQC XUẤT XƯỞNG DỰ KIẾN NGÀY MAI (${tomorrowStr})`) : ''}
+
+              <!-- Color Change Dynamic Section Tomorrow -->
+              ${colorChangesTomorrow && colorChangesTomorrow.length > 0 ? renderColorChangeHtmlSection(colorChangesTomorrow, `KẾ HOẠCH XE THÀNH PHẨM KCS ĐỔI MÀU DỰ KIẾN NGÀY MAI (${tomorrowStr})`) : ''}
             </div>
-          </div>
-
-          <!-- OQC Dynamic Section Today -->
-          ${oqcRecordsToday ? renderOqcHtmlSection(oqcRecordsToday, `KẾT QUẢ NGHIỆM THU OQC XUẤT XƯỞNG HÔM NAY (${todayStr})`) : ''}
-
-          <!-- Color Change Dynamic Section Today -->
-          ${colorChangesToday && colorChangesToday.length > 0 ? renderColorChangeHtmlSection(colorChangesToday, `DANH SÁCH XE THÀNH PHẨM KCS ĐỔI MÀU HÔM NAY (${todayStr})`) : ''}
-
-          <!-- SECTION 2: TOMORROW PLANS -->
-          <div style="margin-bottom: 25px; border: 1px solid #fecdd3; border-radius: 8px; overflow: hidden;">
-            <div style="background-color: #ffe4e6; padding: 10px 15px; border-bottom: 1px solid #fecdd3;">
-              <strong style="color: #be123c; font-size: 13.5px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
-                🎯 2. KẾ HOẠCH CÔNG VIỆC CHI TIẾT NGÀY MAI (${tomorrowStr})
-              </strong>
-            </div>
-            <div style="width: 100%; min-width: 100%; display: block; clear: both; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; margin: 10px 0;">
-              <table class="responsive-table" width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; min-width: 820px; border-collapse: collapse; font-size: 12.5px; text-align: left; table-layout: fixed;">
-                <thead>
-                  <tr style="background-color: #f8fafc; border-bottom: 2px solid #e2e8f0;">
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 4%; min-width: 40px; white-space: nowrap;">STT</th>
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 15%; min-width: 120px;">Mục</th>
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 29%; min-width: 210px;">Nội Dung Kế Hoạch</th>
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; text-align: center; width: 11%; min-width: 90px; white-space: nowrap;">Dự kiến</th>
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; text-align: center; width: 9%; min-width: 75px; white-space: nowrap;">H.Suất</th>
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 23%; min-width: 185px;">Đánh giá</th>
-                    <th style="padding: 8px 10px; font-weight: 700; color: #334155; width: 9%; min-width: 70px; white-space: nowrap;">Nhân Sự</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${tomorrowRows}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- OQC Dynamic Section Tomorrow -->
-          ${oqcRecordsTomorrow && oqcRecordsTomorrow.length > 0 ? renderOqcHtmlSection(oqcRecordsTomorrow, `KẾT QUẢ NGHIỆM THU OQC XUẤT XƯỞNG DỰ KIẾN NGÀY MAI (${tomorrowStr})`) : ''}
-
-          <!-- Color Change Dynamic Section Tomorrow -->
-          ${colorChangesTomorrow && colorChangesTomorrow.length > 0 ? renderColorChangeHtmlSection(colorChangesTomorrow, `KẾ HOẠCH XE THÀNH PHẨM KCS ĐỔI MÀU DỰ KIẾN NGÀY MAI (${tomorrowStr})`) : ''}
+          </details>
 
           <!-- Note -->
           <div style="padding: 15px; background-color: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; font-size: 12px; color: #475569;">
