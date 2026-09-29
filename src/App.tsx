@@ -397,7 +397,12 @@ export function mergeMasterModels(currentList: any[], baseList: any[] = INITIAL_
 
 function getSavedState<T>(key: string, baseData: T): T {
   try {
-    const saved = localStorage.getItem(key);
+    // ĐỌC TỪ safeStorage TRƯỚC (memoryStore + IndexedDB) cho dk_oqc_records
+    // vì safeStorage.setItem chủ động xóa dk_oqc_records khỏi native localStorage 
+    // để tránh lỗi tràn bộ nhớ 5MB. Nếu chỉ đọc localStorage thì sẽ trả về null → mất dữ liệu!
+    const saved = (key === 'dk_oqc_records')
+      ? (safeStorage.getItem(key) || localStorage.getItem(key))
+      : localStorage.getItem(key);
     if (saved !== null) {
       const parsed = JSON.parse(saved);
       if (parsed === null || parsed === undefined) {
@@ -903,7 +908,10 @@ export function App() {
     // Check if there is any data for the current month in the system
     try {
       const getSaved = (key: string, fallback: any) => {
-        const saved = localStorage.getItem(key);
+        // dk_oqc_records đã bị xóa khỏi native localStorage → phải đọc từ safeStorage
+        const saved = (key === 'dk_oqc_records')
+          ? (safeStorage.getItem(key) || localStorage.getItem(key))
+          : localStorage.getItem(key);
         if (saved) return JSON.parse(saved);
         return fallback;
       };
@@ -2178,7 +2186,9 @@ export function App() {
 
     return dirtyKeysList.map((key) => {
       const label = keyLabels[key] || key;
-      const localStr = localStorage.getItem(key) || '[]';
+      const localStr = (key === 'dk_oqc_records')
+        ? (safeStorage.getItem(key) || localStorage.getItem(key) || '[]')
+        : (localStorage.getItem(key) || '[]');
       const serverStr = lastSyncedValues.current[key] || '[]';
 
       let localItems: any[] = [];
@@ -2644,7 +2654,10 @@ export function App() {
         'dk_oqc_color_changes'
       ];
       localKeys.forEach(k => {
-        const val = localStorage.getItem(k);
+        // dk_oqc_records phải đọc từ safeStorage (memoryStore/IndexedDB) vì đã bị xóa khỏi native localStorage
+        const val = (k === 'dk_oqc_records')
+          ? (safeStorage.getItem(k) || localStorage.getItem(k))
+          : localStorage.getItem(k);
         if (val) {
           try {
             const parsed = JSON.parse(val);

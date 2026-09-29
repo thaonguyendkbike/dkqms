@@ -326,6 +326,21 @@ if (typeof window !== 'undefined' && window.localStorage && rawSetItem) {
         }
       }
     };
+
+    // CRITICAL FIX: Monkey-patch localStorage.getItem to intercept reads for dk_oqc_records
+    // dk_oqc_records đã bị xóa chủ động khỏi native localStorage (để tránh tràn quota 5MB),
+    // nhưng mọi nơi trong app vẫn gọi localStorage.getItem('dk_oqc_records') → trả về null → MẤT DỮ LIỆU!
+    // Patch này đảm bảo trả về đúng dữ liệu từ memoryStore (đã preload từ IndexedDB).
+    const rawGetItem = window.localStorage.getItem.bind(window.localStorage);
+    window.localStorage.getItem = function (key: string): string | null {
+      if (key === 'dk_oqc_records') {
+        // Ưu tiên memoryStore (đã preload từ IndexedDB) → fallback sang native localStorage
+        if (Object.prototype.hasOwnProperty.call(memoryStore, key) && memoryStore[key] !== undefined && memoryStore[key] !== null) {
+          return memoryStore[key];
+        }
+      }
+      return rawGetItem(key);
+    };
   } catch (e) {
     // Safe guard if window.localStorage is read-only
   }
