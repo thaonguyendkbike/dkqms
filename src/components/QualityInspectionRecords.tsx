@@ -49,7 +49,9 @@ import {
   ArrowRight,
   Palette,
   Layers,
-  Save
+  Save,
+  TrendingUp,
+  BarChart3
 } from 'lucide-react';
 import { IQCRecord, PQCRecord, OQCRecord, OqcColorChangeRecord, OqcPartCodeItem, INITIAL_OQC_PART_CODES } from '../qualityTestData';
 import { safeStorage } from '../safeStorage';
@@ -625,6 +627,515 @@ function ModelDefectCard({ modelName, defects, onDefectClick }: ModelDefectCardP
             </div>
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ==================== OQC PARETO 80/20 DEFECT CHART COMPONENT ==================== */
+
+export interface OqcParetoItem {
+  name: string;
+  count: number;
+  topModel: string;
+  models?: Record<string, number>;
+  percentage: number;
+  cumulativePercentage: number;
+  isVitalFew: boolean;
+}
+
+interface OqcParetoChartComponentProps {
+  items: OqcParetoItem[];
+  totalDefects: number;
+  totalInspected: number;
+  filterDescription: string;
+  onDefectClick?: (defectName: string, count: number, modelName?: string) => void;
+}
+
+function OqcParetoChartComponent({
+  items,
+  totalDefects,
+  totalInspected,
+  filterDescription,
+  onDefectClick
+}: OqcParetoChartComponentProps) {
+  const [displayLimit, setDisplayLimit] = useState<number | 'all'>(10);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  const displayItems = useMemo(() => {
+    if (displayLimit === 'all') return items;
+    return items.slice(0, typeof displayLimit === 'number' ? displayLimit : 10);
+  }, [items, displayLimit]);
+
+  const totalBars = displayItems.length;
+  const maxDefectCount = Math.max(...displayItems.map(d => d.count), 1);
+  const maxYVal = Math.ceil(maxDefectCount / 5) * 5 || 10;
+
+  const yCountTicks = [
+    maxYVal,
+    Math.round(maxYVal * 0.75),
+    Math.round(maxYVal * 0.5),
+    Math.round(maxYVal * 0.25),
+    0
+  ];
+
+  const yPercTicks = [100, 80, 60, 40, 20, 0];
+
+  const vitalFewItems = items.filter(i => i.isVitalFew);
+  const vitalFewCount = vitalFewItems.length;
+  const top1 = items.length > 0 ? items[0] : null;
+  const defectRate = totalInspected > 0 ? Number(((totalDefects / totalInspected) * 100).toFixed(1)) : 0;
+  const vitalDefectSum = vitalFewItems.reduce((acc, curr) => acc + curr.count, 0);
+  const vitalPercentage = totalDefects > 0 ? Math.round((vitalDefectSum / totalDefects) * 100) : 0;
+
+  if (totalDefects === 0 || items.length === 0) {
+    return (
+      <div className="bg-gradient-to-r from-emerald-50/80 via-teal-50/60 to-emerald-50/80 rounded-2xl border border-emerald-200/80 p-6 shadow-xs">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+          <div className="p-3 bg-emerald-500 text-white rounded-2xl shadow-md shadow-emerald-500/20 shrink-0">
+            <CheckCircle2 className="w-8 h-8" />
+          </div>
+          <div className="space-y-1.5 text-center sm:text-left flex-1">
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+              <span className="text-[10px] bg-emerald-100/80 text-emerald-800 font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-emerald-200/60">
+                100% Đạt Chuẩn KCS
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono font-bold">
+                {filterDescription}
+              </span>
+            </div>
+            <h4 className="text-base font-black text-slate-800 uppercase tracking-tight">
+              Biểu đồ Pareto (80/20) — Không ghi nhận khuyết phẩm lắp ráp
+            </h4>
+            <p className="text-xs text-slate-600 leading-relaxed max-w-3xl">
+              Trong tập dữ liệu lọc hiện tại, toàn bộ <strong className="font-mono text-emerald-700 font-black">{totalInspected.toLocaleString()}</strong> xe kiểm định đều đạt tiêu chuẩn hoàn hảo ngay lần đầu nghiệm thu (First Time Right). Dây chuyền không phát sinh lỗi để lập biểu đồ Pareto.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate coordinates for SVG polyline and dots
+  const pointCoords = displayItems.map((item, idx) => {
+    const colWidth = 100 / totalBars;
+    const x = idx * colWidth + colWidth / 2;
+    // Map cumulative % (0-100) to height: leaves 14% padding at top and 14% at bottom
+    const y = 100 - (item.cumulativePercentage * 0.72 + 14);
+    return { x, y, item, idx };
+  });
+
+  let pathD = '';
+  pointCoords.forEach((pt, i) => {
+    if (i === 0) pathD += `M ${pt.x} ${pt.y}`;
+    else pathD += ` L ${pt.x} ${pt.y}`;
+  });
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 sm:p-6 hover:shadow-md transition-all duration-300 space-y-6">
+      {/* Top Header */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-4 border-b border-slate-100">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 bg-gradient-to-r from-rose-600 to-rose-500 text-white text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-lg shadow-xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+              Biểu đồ Pareto (80/20)
+            </span>
+            <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-md border border-slate-200/60 font-mono">
+              ISO 9001:2015
+            </span>
+            <span className="text-[10px] bg-rose-50 text-rose-700 font-bold px-2 py-0.5 rounded-md border border-rose-200/60">
+              Động theo bộ lọc: <strong className="font-mono">{filterDescription}</strong>
+            </span>
+          </div>
+          <h3 className="text-sm sm:text-base font-black uppercase text-slate-800 tracking-tight flex items-center gap-2">
+            Phân tích Khuyết phẩm KCS (OQC) — Định vị Nhóm lỗi Trọng điểm (Vital Few)
+          </h3>
+          <p className="text-[11px] text-slate-500 max-w-3xl leading-snug">
+            Phát hiện 80% rủi ro chất lượng đến từ 20% nhóm khuyết tật chính. Nhấp vào cột lỗi để xem phiếu chỉ đạo và biện pháp khắc phục (CAPA).
+          </p>
+        </div>
+
+        {/* Display Limit Toggles */}
+        <div className="flex items-center gap-2 shrink-0 self-end lg:self-center">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hiển thị:</span>
+          <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 text-[10.5px] font-extrabold font-mono">
+            <button
+              type="button"
+              onClick={() => setDisplayLimit(10)}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${displayLimit === 10 ? 'bg-white text-rose-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              Top 10
+            </button>
+            <button
+              type="button"
+              onClick={() => setDisplayLimit(15)}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${displayLimit === 15 ? 'bg-white text-rose-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              Top 15
+            </button>
+            <button
+              type="button"
+              onClick={() => setDisplayLimit('all')}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${displayLimit === 'all' ? 'bg-white text-rose-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              Tất cả ({items.length})
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Grid: Chart Canvas (Left) + Audit Action Panel (Right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        
+        {/* Left Side: Dual-Axis Pareto Chart Canvas */}
+        <div className="lg:col-span-8 flex flex-col justify-between space-y-4">
+          
+          {/* Axis Labels Header */}
+          <div className="flex justify-between items-center text-[10px] font-extrabold uppercase tracking-wider px-2 select-none">
+            <span className="text-slate-600 flex items-center gap-1">
+              <span className="w-2 h-2 rounded-xs bg-rose-500" />
+              Tần suất lỗi (Số xe bị lỗi)
+            </span>
+            <span className="text-rose-600 flex items-center gap-1 font-mono">
+              <TrendingUp className="w-3.5 h-3.5" />
+              Tỷ lệ phần trăm lũy kế (%)
+            </span>
+          </div>
+
+          {/* Chart Core Canvas Area */}
+          <div className="overflow-x-auto pb-2">
+            <div className="relative h-[290px] min-w-[540px] sm:min-w-0 bg-slate-50/70 border-b border-l border-slate-200 rounded-xl p-4 select-none">
+              
+              {/* Background Gridlines & Right % Labels */}
+              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none p-4 pb-2 pr-12">
+                {yPercTicks.map((val) => (
+                  <div key={val} className="relative w-full flex items-center h-0">
+                    <div className={`w-full border-t ${val === 80 ? 'border-rose-400 border-dashed border-t-2' : 'border-slate-200/60'}`} />
+                    <span 
+                      className={`absolute right-[-42px] text-[8.5px] font-mono font-bold select-none ${
+                        val === 80 
+                          ? 'text-rose-600 bg-rose-100/80 px-1 py-0.2 rounded border border-rose-200 font-extrabold' 
+                          : 'text-slate-400'
+                      }`}
+                    >
+                      {val}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Left Y-Axis Absolute Count Ticks */}
+              <div className="absolute left-1 inset-y-4 flex flex-col justify-between pointer-events-none text-[8.5px] font-mono font-bold text-slate-400 text-left select-none">
+                {yCountTicks.map((val, idx) => (
+                  <span key={idx} className="leading-none">{val}</span>
+                ))}
+              </div>
+
+              {/* 80% Vital Few Benchmark Badge */}
+              <div 
+                className="absolute right-14 pointer-events-none select-none z-10"
+                style={{ top: 'calc(14% + (100% - 28%) * 0.2 - 10px)' }}
+              >
+                <span className="bg-rose-500 text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded shadow-xs tracking-wider flex items-center gap-1">
+                  ★ Ngưỡng 80% (Vital Few)
+                </span>
+              </div>
+
+              {/* Columns & SVG Curve Overlay Container */}
+              <div className="absolute inset-x-6 inset-y-0 flex items-end justify-around pr-10 pl-4">
+                
+                {/* SVG Layer for Cumulative Curve */}
+                <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <path
+                    d={pathD}
+                    fill="none"
+                    stroke="#e11d48"
+                    strokeWidth="0.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </svg>
+
+                {/* Absolutely Positioned Interactive Dots for Cumulative Percentages */}
+                <div className="absolute inset-0 pointer-events-none overflow-visible">
+                  {pointCoords.map(({ x, y, item, idx }) => {
+                    const isHovered = hoveredIndex === idx;
+                    return (
+                      <div
+                        key={idx}
+                        className="absolute transition-all duration-200 flex flex-col items-center justify-center pointer-events-none"
+                        style={{
+                          left: `${x}%`,
+                          top: `${y}%`,
+                          transform: 'translate(-50%, -50%)',
+                        }}
+                      >
+                        {/* Dot */}
+                        <div
+                          className={`rounded-full bg-rose-600 border-2 border-white shadow-sm transition-all duration-200 ${
+                            isHovered ? 'w-3 h-3 ring-4 ring-rose-200 scale-125' : 'w-2 h-2'
+                          }`}
+                        />
+                        {/* Cumulative Percentage Label */}
+                        <span
+                          className={`absolute bottom-full mb-1 text-rose-700 font-mono select-none whitespace-nowrap transition-all duration-200 ${
+                            isHovered ? 'text-[10px] font-black scale-110 bg-white/95 px-1 rounded shadow-xs border border-rose-200' : 'text-[8.5px] font-bold'
+                          }`}
+                        >
+                          {item.cumulativePercentage}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Vertical Bars for Defect Counts */}
+                {displayItems.map((item, idx) => {
+                  const barHeightPercent = Math.max(6, Math.round((item.count / maxYVal) * 72));
+                  const isHovered = hoveredIndex === idx;
+                  const anyHovered = hoveredIndex !== null;
+
+                  return (
+                    <div
+                      key={idx}
+                      className="flex flex-col items-center h-full justify-end relative z-10 group/bar cursor-pointer"
+                      style={{ width: `${Math.max(4, Math.min(12, 85 / totalBars))}%` }}
+                      onMouseEnter={() => setHoveredIndex(idx)}
+                      onMouseLeave={() => setHoveredIndex(null)}
+                      onClick={() => onDefectClick?.(item.name, item.count, item.topModel)}
+                      title={`Bấm để xem & chỉ đạo khắc phục khuyết phẩm: ${item.name}`}
+                    >
+                      {/* Bar Column */}
+                      <div
+                        className={`w-full rounded-t-lg transition-all duration-300 flex flex-col justify-start items-center pt-1.5 relative ${
+                          isHovered 
+                            ? 'scale-x-110 filter brightness-110 shadow-lg' 
+                            : anyHovered 
+                              ? 'opacity-40 scale-95' 
+                              : 'opacity-100'
+                        } ${
+                          item.isVitalFew 
+                            ? 'bg-gradient-to-t from-rose-600 via-rose-500 to-rose-400 shadow-md shadow-rose-500/20' 
+                            : 'bg-gradient-to-t from-indigo-600 via-indigo-500 to-indigo-400 shadow-md shadow-indigo-500/15'
+                        }`}
+                        style={{ height: `${barHeightPercent}%` }}
+                      >
+                        {/* Count Badge inside bar top */}
+                        <span className="bg-white/95 text-slate-800 font-mono font-black text-[9px] px-1 py-0.2 rounded shadow-2xs leading-none select-none">
+                          {item.count}
+                        </span>
+                      </div>
+
+                      {/* Floating Interactive Tooltip */}
+                      <div
+                        className={`absolute bottom-full mb-3 bg-slate-900/95 text-white text-[10px] p-3 rounded-xl transition-all duration-200 z-50 pointer-events-none shadow-2xl w-48 text-left leading-normal border border-slate-700/80 backdrop-blur-md ${
+                          isHovered ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-90'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between border-b border-slate-700 pb-1 mb-1.5">
+                          <span className="font-mono text-slate-400 text-[8.5px] uppercase font-bold">#{idx + 1} Khuyết phẩm KCS</span>
+                          <span className={`text-[8px] font-black uppercase px-1 rounded ${item.isVitalFew ? 'bg-rose-500/30 text-rose-300' : 'bg-indigo-500/30 text-indigo-300'}`}>
+                            {item.isVitalFew ? 'Vital Few 80%' : 'Trivial Many'}
+                          </span>
+                        </div>
+                        <div className="font-black text-white text-xs truncate mb-1">{item.name}</div>
+                        <div className="space-y-0.5 font-sans text-[9.5px]">
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Số xe bị lỗi:</span>
+                            <strong className="text-rose-400 font-mono font-black">{item.count} xe</strong>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Tỷ trọng đợt:</span>
+                            <strong className="text-amber-400 font-mono font-bold">{item.percentage}%</strong>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Lũy kế Pareto:</span>
+                            <strong className="text-emerald-400 font-mono font-black">{item.cumulativePercentage}%</strong>
+                          </div>
+                          {item.topModel && (
+                            <div className="flex justify-between border-t border-slate-800 pt-1 mt-1 text-[8.5px] text-slate-400">
+                              <span>Model bị nhiều nhất:</span>
+                              <strong className="text-sky-300">{item.topModel}</strong>
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-[8px] italic text-rose-300 mt-2 block text-center border-t border-slate-800 pt-1 font-sans">
+                          ➔ Bấm vào cột để mở phiếu CAPA
+                        </div>
+                      </div>
+
+                    </div>
+                  );
+                })}
+
+              </div>
+
+            </div>
+          </div>
+
+          {/* X-Axis Labels */}
+          <div className="flex justify-around items-start pl-4 pr-10 text-center select-none overflow-x-auto">
+            {displayItems.map((item, idx) => {
+              const isHovered = hoveredIndex === idx;
+              return (
+                <div
+                  key={idx}
+                  className={`transition-all duration-200 cursor-pointer ${
+                    isHovered ? 'scale-105' : 'opacity-85'
+                  }`}
+                  style={{ width: `${Math.max(4, Math.min(12, 85 / totalBars))}%` }}
+                  onMouseEnter={() => setHoveredIndex(idx)}
+                  onMouseLeave={() => setHoveredIndex(null)}
+                  onClick={() => onDefectClick?.(item.name, item.count, item.topModel)}
+                >
+                  <div
+                    className={`text-[9.5px] font-black line-clamp-2 leading-tight tracking-tight uppercase ${
+                      isHovered
+                        ? 'text-rose-600'
+                        : item.isVitalFew
+                          ? 'text-slate-800'
+                          : 'text-slate-500'
+                    }`}
+                    title={item.name}
+                  >
+                    {item.name}
+                  </div>
+                  <div className="mt-1 flex items-center justify-center">
+                    <span
+                      className={`text-[8.5px] font-mono font-bold px-1.5 py-0.2 rounded-full leading-none ${
+                        item.isVitalFew
+                          ? 'bg-rose-50 text-rose-600 border border-rose-200'
+                          : 'bg-indigo-50 text-indigo-600 border border-indigo-200'
+                      }`}
+                    >
+                      {item.count} xe
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Legends Footer */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 text-[10px] text-slate-500">
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="flex items-center gap-1.5 font-bold">
+                <span className="w-3 h-3 rounded-sm bg-gradient-to-t from-rose-600 to-rose-400" />
+                <span className="text-rose-600 font-black">Vùng trọng điểm Pareto (Vital Few - Ưu tiên xử lý khẩn)</span>
+              </span>
+              <span className="flex items-center gap-1.5 font-bold">
+                <span className="w-3 h-3 rounded-sm bg-gradient-to-t from-indigo-600 to-indigo-400" />
+                <span className="text-indigo-600">Vùng lỗi thứ yếu (Trivial Many)</span>
+              </span>
+              <span className="flex items-center gap-1.5 font-bold">
+                <span className="w-4 h-0.5 border-t-2 border-dashed border-rose-500 inline-block" />
+                <span className="text-slate-600 font-mono">Đường lũy kế (%)</span>
+              </span>
+            </div>
+            <span className="text-slate-400 font-mono text-[9px]">
+              Tập mẫu: <strong>{totalBars}</strong> / {items.length} nhóm lỗi
+            </span>
+          </div>
+
+        </div>
+
+        {/* Right Side: ISO 9001 Audit & Action Panel */}
+        <div className="lg:col-span-4 bg-gradient-to-b from-slate-50 via-white to-slate-50 border border-slate-200/90 rounded-2xl p-4 sm:p-5 flex flex-col justify-between space-y-4 shadow-3xs">
+          
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-rose-600" />
+                <h4 className="text-xs font-black uppercase text-slate-800 tracking-tight">
+                  Nhận Định Pareto &amp; QLCL
+                </h4>
+              </div>
+              <span className="bg-rose-50 text-rose-700 text-[9px] font-mono font-extrabold px-2 py-0.5 rounded-full border border-rose-200">
+                DKBIKE QMS
+              </span>
+            </div>
+
+            {/* Quick Metrics Grid */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-3xs">
+                <span className="text-[9px] text-slate-400 uppercase font-black tracking-wider block">Tổng xe kiểm tra</span>
+                <strong className="text-base font-black text-slate-800 font-mono block mt-0.5">{totalInspected.toLocaleString()}</strong>
+                <span className="text-[8.5px] text-slate-500 font-bold block">Xe trong kỳ lọc</span>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-rose-100 shadow-3xs">
+                <span className="text-[9px] text-rose-500 uppercase font-black tracking-wider block">Tổng vụ khuyết phẩm</span>
+                <strong className="text-base font-black text-rose-600 font-mono block mt-0.5">{totalDefects.toLocaleString()}</strong>
+                <span className="text-[8.5px] text-rose-600 font-bold block">{defectRate}% tỷ lệ lỗi</span>
+              </div>
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-3xs col-span-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-[9px] text-slate-400 uppercase font-black tracking-wider">Nhóm lỗi trọng điểm (Vital Few)</span>
+                  <span className="text-rose-600 font-mono font-black text-xs">{vitalFewCount} / {items.length} nhóm</span>
+                </div>
+                <div className="relative w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1.5">
+                  <div 
+                    className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-rose-500 to-rose-600 transition-all duration-500"
+                    style={{ width: `${items.length > 0 ? (vitalFewCount / items.length) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="text-[8.5px] text-slate-500 font-bold mt-1 block">
+                  Chiếm tới <strong className="text-rose-600 font-mono">{vitalPercentage}%</strong> tổng số xe bị khuyết phẩm KCS
+                </span>
+              </div>
+            </div>
+
+            {/* Top 1 Defect Highlight */}
+            {top1 && (
+              <div className="bg-rose-50/70 border border-rose-200/80 rounded-xl p-3 space-y-1.5">
+                <div className="flex items-center justify-between text-[9px] font-black uppercase text-rose-600">
+                  <span className="flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 text-rose-600 animate-pulse" />
+                    Khuyết phẩm xuất hiện nhiều nhất (Top 1)
+                  </span>
+                  <span className="font-mono bg-rose-200/60 text-rose-800 px-1.5 py-0.2 rounded font-extrabold">
+                    {top1.percentage}%
+                  </span>
+                </div>
+                <h5 className="font-black text-slate-800 text-xs uppercase tracking-tight">
+                  {top1.name}
+                </h5>
+                <div className="flex items-center justify-between text-[10px] text-slate-600 font-mono">
+                  <span>Số xe lỗi: <strong className="text-rose-600 font-black">{top1.count} xe</strong></span>
+                  {top1.topModel && (
+                    <span>Model: <strong className="text-slate-800">{top1.topModel}</strong></span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onDefectClick?.(top1.name, top1.count, top1.topModel)}
+                  className="w-full mt-1 bg-white hover:bg-rose-100/60 text-rose-700 border border-rose-300 text-[10px] font-extrabold py-1.5 px-2.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer shadow-3xs"
+                >
+                  Xem chỉ đạo &amp; biện pháp khắc phục ➔
+                </button>
+              </div>
+            )}
+
+            {/* Strategic Advice for anh Thao */}
+            <div className="bg-slate-100/80 border border-slate-200 rounded-xl p-3 text-[10px] text-slate-600 space-y-1 leading-relaxed">
+              <span className="font-black uppercase text-slate-700 tracking-wider flex items-center gap-1 block">
+                <Sparkles className="w-3 h-3 text-indigo-500" /> Chỉ đạo điều hành QLCL DKBike
+              </span>
+              <p>
+                Áp dụng nguyên lý Pareto 80/20, anh Thao nên chỉ đạo Tổ KCS và Bộ phận Lắp ráp tập trung giải quyết triệt để <strong className="text-rose-600 font-black">{vitalFewCount} nhóm lỗi trọng điểm</strong> nêu trên. Việc này sẽ giúp triệt tiêu ngay <strong className="text-rose-600 font-mono font-black">{vitalPercentage}%</strong> các lỗi xe thành phẩm trước khi xuất xưởng.
+              </p>
+            </div>
+
+          </div>
+
+          <div className="pt-2 border-t border-slate-200/60 text-[9px] text-slate-400 font-mono text-center select-none">
+            Công ty TNHH Xe điện DK Việt Nhật • Phòng QLCL (DK QMS)
+          </div>
+
+        </div>
+
       </div>
     </div>
   );
@@ -2561,7 +3072,8 @@ export default function QualityInspectionRecords({
   const oqcDashboardStatsCacheRef = useRef<any>({
     liveLapRapTotal: 0, datVal: 0, loiVal: 0, chuaKiemVal: 0, checkedTotal: 0,
     pieDatPercent: 0, pieLoiPercent: 0, activeBarData: [], liveModelDefects: {},
-    assembledModels: [], modelStats: [], maxTotal: 1
+    assembledModels: [], modelStats: [], maxTotal: 1,
+    paretoItems: [] as OqcParetoItem[], totalParetoDefects: 0
   });
 
   const oqcDashboardStats = useMemo(() => {
@@ -2576,6 +3088,7 @@ export default function QualityInspectionRecords({
     const liveModelsMap: Record<string, number> = {};
     const liveModelDefects: Record<string, { name: string; count: number }[]> = {};
     const modelStatsMap: Record<string, { total: number; passed: number; failed: number; pending: number }> = {};
+    const paretoDefectMap: Record<string, { count: number; models: Record<string, number> }> = {};
 
     for (let i = 0; i < filteredOqc.length; i++) {
       const r = filteredOqc[i];
@@ -2594,6 +3107,28 @@ export default function QualityInspectionRecords({
       }
 
       const modelName = getCleanModelName(r);
+
+      // Collect defects for Pareto 80/20 analysis (Dynamic with filters)
+      if (hasDefect && r.defectDetail) {
+        const parts = r.defectDetail.split(/[,;+\n]/).map(s => s.trim()).filter(Boolean);
+        const weight = (r.failedCount && r.failedCount > 0) ? r.failedCount : 1;
+        const itemWeight = parts.length > 1 ? Math.max(1, Math.round(weight / parts.length)) : weight;
+
+        for (let j = 0; j < parts.length; j++) {
+          const raw = parts[j];
+          if (!raw) continue;
+          const cleanName = raw.charAt(0).toUpperCase() + raw.slice(1);
+          if (['không', 'ok', 'pass', 'đạt', 'sạch không lỗi'].includes(cleanName.toLowerCase())) continue;
+
+          if (!paretoDefectMap[cleanName]) {
+            paretoDefectMap[cleanName] = { count: 0, models: {} };
+          }
+          paretoDefectMap[cleanName].count += itemWeight;
+          const m = modelName || 'DKBike';
+          paretoDefectMap[cleanName].models[m] = (paretoDefectMap[cleanName].models[m] || 0) + itemWeight;
+        }
+      }
+
       if (modelName && modelName.toLowerCase() !== 'đạt' && modelName.toLowerCase() !== 'lỗi' && modelName.toLowerCase() !== 'chưa kiểm tra' && modelName.toLowerCase() !== 'pass' && modelName.toLowerCase() !== 'fail') {
         liveModelsMap[modelName] = (liveModelsMap[modelName] || 0) + 1;
 
@@ -2669,6 +3204,34 @@ export default function QualityInspectionRecords({
 
     const maxTotal = Math.max(1, ...modelStats.map(s => s.total));
 
+    // Calculate Pareto 80/20 data sorted descending
+    const sortedPareto = Object.entries(paretoDefectMap)
+      .map(([name, data]) => {
+        const topModelEntry = Object.entries(data.models).sort((a, b) => b[1] - a[1])[0];
+        const topModel = topModelEntry ? topModelEntry[0] : '';
+        return { name, count: data.count, topModel, models: data.models };
+      })
+      .sort((a, b) => b.count - a.count);
+
+    const totalParetoDefects = sortedPareto.reduce((sum, item) => sum + item.count, 0);
+
+    let paretoAccum = 0;
+    const paretoItems: OqcParetoItem[] = sortedPareto.map((item, idx) => {
+      paretoAccum += item.count;
+      const percentage = totalParetoDefects > 0 ? Number(((item.count / totalParetoDefects) * 100).toFixed(1)) : 0;
+      const cumulativePercentage = totalParetoDefects > 0 ? Math.min(100, Math.round((paretoAccum / totalParetoDefects) * 100)) : 0;
+      const isVitalFew = cumulativePercentage <= 85 || idx === 0;
+      return {
+        name: item.name,
+        count: item.count,
+        topModel: item.topModel,
+        models: item.models,
+        percentage,
+        cumulativePercentage,
+        isVitalFew
+      };
+    });
+
     const result = {
       liveLapRapTotal,
       datVal,
@@ -2682,6 +3245,8 @@ export default function QualityInspectionRecords({
       assembledModels,
       modelStats,
       maxTotal,
+      paretoItems,
+      totalParetoDefects,
     };
     oqcDashboardStatsCacheRef.current = result;
     return result;
@@ -8943,8 +9508,19 @@ export default function QualityInspectionRecords({
                 liveModelDefects,
                 assembledModels,
                 modelStats,
-                maxTotal
+                maxTotal,
+                paretoItems,
+                totalParetoDefects
               } = oqcDashboardStats;
+
+              const oqcFilterDescParts: string[] = [];
+              if (oqcFilterDate !== 'All') oqcFilterDescParts.push(`Ngày ${oqcFilterDate}`);
+              else if (oqcFilterWeek !== 'All') oqcFilterDescParts.push(`Tuần ${oqcFilterWeek}`);
+              if (oqcFilterMonth !== 'All') oqcFilterDescParts.push(`Tháng ${oqcFilterMonth}`);
+              if (oqcFilterYear !== 'All') oqcFilterDescParts.push(`Năm ${oqcFilterYear}`);
+              if (oqcFilterModel !== 'All') oqcFilterDescParts.push(`Model ${oqcFilterModel}`);
+              if (oqcSearch && oqcSearch.trim()) oqcFilterDescParts.push(`Từ khóa "${oqcSearch.trim()}"`);
+              const oqcCurrentFilterDesc = oqcFilterDescParts.length > 0 ? oqcFilterDescParts.join(' • ') : 'Toàn bộ dữ liệu hiện tại';
 
               const today = new Date();
               let targetMonth = today.getMonth() + 1;
@@ -9546,6 +10122,21 @@ export default function QualityInspectionRecords({
                           </div>
                     )}
                   </div>
+
+                  {/* 3.8. BIỂU ĐỒ PARETO (80/20) THEO LỖI KCS (OQC) - ĐỘNG THEO BỘ LỌC */}
+                  <OqcParetoChartComponent
+                    items={paretoItems || []}
+                    totalDefects={totalParetoDefects || 0}
+                    totalInspected={liveLapRapTotal || 0}
+                    filterDescription={oqcCurrentFilterDesc}
+                    onDefectClick={(name, count, modelName) => 
+                      setSelectedDashboardDefect({ 
+                        name, 
+                        count, 
+                        modelName: modelName || (oqcFilterModel !== 'All' ? oqcFilterModel : 'DKBike') 
+                      })
+                    }
+                  />
 
                   {/* 4. DEFECTS GRID */}
                   <div className="space-y-3">
