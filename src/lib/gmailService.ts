@@ -716,24 +716,21 @@ export const generateDailyLogEmailTemplate = (logs: any[], dateStr: string, send
             oqcList: oqcRecords
           })}
 
-          <!-- INTERACTIVE ACCORDION BUTTON FOR EXPAND/COLLAPSE -->
-          <details style="margin: 10px 0 14px 0; border: 1px solid #0284c7; border-radius: 8px; background-color: #ffffff; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-            <summary style="display: block; cursor: pointer; padding: 10px 14px; background: linear-gradient(135deg, #0284c7 0%, #1e40af 100%); color: #ffffff; font-weight: 800; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.3px; list-style: none; user-select: none; outline: none; border-radius: 6px;">
+          <!-- REPORT DETAIL SECTION (INLINE - NO ACCORDION) -->
+          <div style="margin: 10px 0 14px 0; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #ffffff; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            
+            <!-- Section Header -->
+            <div style="padding: 10px 14px; background: linear-gradient(135deg, #0284c7 0%, #1e40af 100%); color: #ffffff;">
               <table width="100%" cellpadding="0" cellspacing="0" border="0" style="color: #ffffff; font-size: 12px; font-weight: 800;">
                 <tr>
                   <td style="text-align: left; vertical-align: middle;">
-                    <span>📊 BẤM ĐỂ MỞ RỘNG TOÀN BỘ BÁO CÁO CHI TIẾT</span>
-                  </td>
-                  <td style="text-align: right; vertical-align: middle; width: 110px;">
-                    <span style="display: inline-block; background-color: rgba(255,255,255,0.25); color: #ffffff; padding: 2px 8px; border-radius: 12px; font-size: 10.5px; font-weight: 800; border: 1px solid rgba(255,255,255,0.4);">
-                      ▼ MỞ CHI TIẾT
-                    </span>
+                    <span>📊 BÁO CÁO CHI TIẾT CÔNG VIỆC QA/QC</span>
                   </td>
                 </tr>
               </table>
-            </summary>
+            </div>
             
-            <div style="padding: 14px; background-color: #fafbfc; border-top: 1px solid #bae6fd;">
+            <div style="padding: 14px; background-color: #fafbfc;">
               <!-- Table -->
               <div style="width: 100%; min-width: 100%; display: block; clear: both; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; margin: 5px 0 15px 0;">
                 <table class="responsive-table" width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; min-width: 820px; border-collapse: collapse; font-size: 13px; text-align: left; table-layout: fixed;">
@@ -760,7 +757,7 @@ export const generateDailyLogEmailTemplate = (logs: any[], dateStr: string, send
               <!-- Color Change Dynamic Section -->
               ${colorChanges && colorChanges.length > 0 ? renderColorChangeHtmlSection(colorChanges, `DANH SÁCH XE THÀNH PHẨM KCS ĐỔI MÀU TRONG NGÀY (${dateStr})`) : ''}
             </div>
-          </details>
+          </div>
 
           <!-- Bottom Summary Status -->
           <div style="margin-top: 15px; padding: 15px; background-color: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; font-size: 13px;">
@@ -1148,24 +1145,21 @@ export const generateTodayAndTomorrowEmailTemplate = (
             oqcList: oqcRecordsToday
           })}
 
-          <!-- INTERACTIVE ACCORDION BUTTON FOR EXPAND/COLLAPSE -->
-          <details style="margin: 10px 0 14px 0; border: 1px solid #0284c7; border-radius: 8px; background-color: #ffffff; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-            <summary style="display: block; cursor: pointer; padding: 10px 14px; background: linear-gradient(135deg, #0284c7 0%, #1e40af 100%); color: #ffffff; font-weight: 800; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.3px; list-style: none; user-select: none; outline: none; border-radius: 6px;">
+          <!-- REPORT DETAIL SECTION (INLINE - NO ACCORDION) -->
+          <div style="margin: 10px 0 14px 0; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #ffffff; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            
+            <!-- Section Header -->
+            <div style="padding: 10px 14px; background: linear-gradient(135deg, #0284c7 0%, #1e40af 100%); color: #ffffff;">
               <table width="100%" cellpadding="0" cellspacing="0" border="0" style="color: #ffffff; font-size: 12px; font-weight: 800;">
                 <tr>
                   <td style="text-align: left; vertical-align: middle;">
-                    <span>📊 BẤM ĐỂ MỞ RỘNG TOÀN BỘ BÁO CÁO CHI TIẾT</span>
-                  </td>
-                  <td style="text-align: right; vertical-align: middle; width: 110px;">
-                    <span style="display: inline-block; background-color: rgba(255,255,255,0.25); color: #ffffff; padding: 2px 8px; border-radius: 12px; font-size: 10.5px; font-weight: 800; border: 1px solid rgba(255,255,255,0.4);">
-                      ▼ MỞ CHI TIẾT
-                    </span>
+                    <span>📊 BÁO CÁO CHI TIẾT CÔNG VIỆC QA/QC</span>
                   </td>
                 </tr>
               </table>
-            </summary>
+            </div>
             
-            <div style="padding: 14px; background-color: #fafbfc; border-top: 1px solid #bae6fd;">
+            <div style="padding: 14px; background-color: #fafbfc;">
               <!-- SECTION 1: TODAY LOGS -->
               <div style="margin-bottom: 25px; border: 1px solid #bae6fd; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
                 <div style="background-color: #e0f2fe; padding: 10px 15px; border-bottom: 1px solid #bae6fd;">
@@ -1232,7 +1226,7 @@ export const generateTodayAndTomorrowEmailTemplate = (
               <!-- Color Change Dynamic Section Tomorrow -->
               ${colorChangesTomorrow && colorChangesTomorrow.length > 0 ? renderColorChangeHtmlSection(colorChangesTomorrow, `KẾ HOẠCH XE THÀNH PHẨM KCS ĐỔI MÀU DỰ KIẾN NGÀY MAI (${tomorrowStr})`) : ''}
             </div>
-          </details>
+          </div>
 
           <!-- Note -->
           <div style="padding: 15px; background-color: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; font-size: 12px; color: #475569;">

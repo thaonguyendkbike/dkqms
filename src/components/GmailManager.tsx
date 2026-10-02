@@ -132,8 +132,15 @@ export default function GmailManager({
     safeStorage.setItem('dk_selected_planning_thread', trimmed);
     setNewThreadInput('');
     setShowAddThreadInput(false);
+    // Reset old thread context to prevent sending to old thread
+    setThreadId(null);
+    setLastMessageId(null);
     setSuccessMessage(`Đã thêm luồng mới: "${trimmed}"`);
     setTimeout(() => setSuccessMessage(''), 4000);
+    // Auto-search for the new thread if threaded mode is active
+    if (isThreaded) {
+      activatePlanningGroup(trimmed);
+    }
   };
 
   const handleRemovePlanningThread = (title: string) => {
@@ -908,6 +915,9 @@ export default function GmailManager({
                       const val = e.target.value;
                       setSelectedThread(val);
                       safeStorage.setItem('dk_selected_planning_thread', val);
+                      // Reset old thread context when switching threads
+                      setThreadId(null);
+                      setLastMessageId(null);
                       if (isThreaded) {
                         activatePlanningGroup(val);
                       }
