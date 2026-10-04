@@ -744,5 +744,8 @@ export const INITIAL_DEALERS: Dealer[] = [
   { id: 'DLR-03', name: 'Đại lý Lạng Sơn', phone: '0912345678', address: '56 Trần Hưng Đạo, Lạng Sơn' },
   { id: 'DLR-04', name: 'Đại lý Bắc Giang', phone: '0966554433', address: '78 Nguyễn Văn Cừ, Bắc Giang' },
   { id: 'DLR-05', name: 'Đại lý Đà Nẵng', phone: '0905123456', address: '90 Lê Duẩn, Đà Nẵng' },
-  { id: 'DLR-06', name: 'Đại lý TP.HCM', phone: '0938112233', address: '101 Nguyễn Thị Minh Khai, Quận 1, TP.HCM' }
+  { id: 'DLR-06', name: 'Đại lý TP.HCM', phone: '0938112233', address: '101 Nguyễn Thị Minh Khai, Quận 1, TP.HCM' },
+  { id: 'DLR-07', name: 'ĐL THÀNH TRUNG - LÊ THỊ GÁI EM (THÀNH TRUNG)', phone: '0912345678', address: 'Đại lý ủy nhiệm DKBike' },
+  { id: 'DLR-08', name: 'ĐL Hoàn Hợi - Hải Dương', phone: '', address: 'Hải Dương' },
+  { id: 'DLR-09', name: 'ĐL Chính Tuyết - Thái Bình', phone: '', address: 'Thái Bình' }
 ];

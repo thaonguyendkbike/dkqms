@@ -4327,7 +4327,16 @@ export function App() {
     }
   }, [firebaseUser, staff]);
   const [models, setModels] = useState<DKBikeModel[]>(() => getSavedState('dk_models', INITIAL_MODELS));
-  const [dealers, setDealers] = useState<Dealer[]>(() => getSavedState('dk_dealers', INITIAL_DEALERS));
+  const [dealers, setDealers] = useState<Dealer[]>(() => {
+    const saved = getSavedState('dk_dealers', INITIAL_DEALERS);
+    const merged: Dealer[] = Array.isArray(saved) ? [...saved] : [];
+    INITIAL_DEALERS.forEach(initD => {
+      if (!merged.some(d => (d.name || '').trim().toLowerCase() === (initD.name || '').trim().toLowerCase())) {
+        merged.push(initD);
+      }
+    });
+    return merged;
+  });
 
   const [newDealerName, setNewDealerName] = useState('');
   const [newDealerPhone, setNewDealerPhone] = useState('');
@@ -5226,6 +5235,89 @@ export function App() {
     return str;
   };
 
+  /**
+   * Tự động dò tìm và điền theo Danh sách master Đại lý / Khách hàng (dk_dealers)
+   * Ví dụ:
+   * - Nhập: "ĐL Thành Trung" -> Tự động chuyển thành: "ĐL THÀNH TRUNG - LÊ THỊ GÁI EM (THÀNH TRUNG)"
+   * - Nhập: "Thành Trung"    -> Tự động chuyển thành: "ĐL THÀNH TRUNG - LÊ THỊ GÁI EM (THÀNH TRUNG)"
+   * - Nhập: "Hoàn Hợi"       -> Tự động chuyển thành: "ĐL Hoàn Hợi - Hải Dương"
+   */
+  const normalizeDealerName = (inputName: string | undefined | null, masterDealers?: Dealer[]): string => {
+    if (!inputName || !inputName.trim()) return inputName || '';
+    const raw = inputName.trim();
+    const list = (masterDealers && masterDealers.length > 0) ? masterDealers : dealers;
+    if (!list || list.length === 0) return raw;
+
+    // 1. Khớp chính xác 100% (bỏ qua hoa/thường, khoảng trắng thừa)
+    const exact = list.find(d => (d.name || '').trim().toLowerCase() === raw.toLowerCase());
+    if (exact) return exact.name;
+
+    // Chuẩn hóa chuỗi để so sánh cốt lõi: bỏ tiền tố đl, đại lý, khoảng trắng thừa, dấu ngoặc
+    const clean = (s: string) => {
+      return s
+        .toLowerCase()
+        .replace(/^(đl|đại lý|đaily|khách hàng|khach hang|kh)\s*[-:]*\s*/i, '')
+        .replace(/[\(\)\[\]\{\}\-–—_\.,\/\\:]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+
+    const rawClean = clean(raw);
+    if (!rawClean) return raw;
+
+    // 2. Tìm trong master xem tên master có chứa cụm từ nhập vào không
+    // Ví dụ: raw = "ĐL Thành Trung" -> rawClean = "thành trung"
+    // Master = "ĐL THÀNH TRUNG - LÊ THỊ GÁI EM (THÀNH TRUNG)" -> clean(master) = "thành trung lê thị gái em thành trung"
+    // clean(master).includes("thành trung") === true!
+    const containingMatches = list.filter(d => {
+      if (!d.name) return false;
+      const masterClean = clean(d.name);
+      return masterClean.includes(rawClean);
+    });
+
+    if (containingMatches.length === 1) {
+      return containingMatches[0].name;
+    }
+    if (containingMatches.length > 1) {
+      // Ưu tiên đại lý có tên bắt đầu bằng cụm từ đó hoặc có độ dài gần nhất
+      const sorted = [...containingMatches].sort((a, b) => {
+        const aClean = clean(a.name);
+        const bClean = clean(b.name);
+        const aStarts = aClean.startsWith(rawClean) ? 0 : 1;
+        const bStarts = bClean.startsWith(rawClean) ? 0 : 1;
+        if (aStarts !== bStarts) return aStarts - bStarts;
+        return a.name.length - b.name.length;
+      });
+      return sorted[0].name;
+    }
+
+    // 3. Ngược lại: kiểm tra xem có tên master nào nằm trọn trong chuỗi người dùng nhập không
+    const reverseMatches = list.filter(d => {
+      if (!d.name) return false;
+      const masterClean = clean(d.name);
+      return masterClean.length >= 3 && rawClean.includes(masterClean);
+    });
+    if (reverseMatches.length > 0) {
+      const best = reverseMatches.sort((a, b) => clean(b.name).length - clean(a.name).length)[0];
+      return best.name;
+    }
+
+    // 4. Tìm kiếm theo tất cả các từ khóa cốt lõi (token match)
+    const rawTokens = rawClean.split(' ').filter(t => t.length >= 2);
+    if (rawTokens.length >= 2) {
+      const tokenMatches = list.filter(d => {
+        if (!d.name) return false;
+        const masterClean = clean(d.name);
+        return rawTokens.every(tok => masterClean.includes(tok));
+      });
+      if (tokenMatches.length > 0) {
+        return tokenMatches[0].name;
+      }
+    }
+
+    return raw;
+  };
+
   const parseBulkCustomerFeedbackText = (text: string): Partial<MarketDefect>[] => {
     if (!text || !text.trim()) return [];
     const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
@@ -5364,12 +5456,15 @@ export function App() {
       const formattedTargetDate = formatQmsDate(targetDate);
       const formattedSaleDate = formattedSourceDate || formattedDefectDate;
 
+      // TỰ ĐỘNG DÒ TÌM VÀ ĐIỀN TÊN ĐẠI LÝ THEO DANH SÁCH MASTER (dk_dealers)
+      const normalizedDealerNameStr = normalizeDealerName(customerName, dealers);
+
       const item: Partial<MarketDefect> = {
         id: rawPaCode || undefined,
         feedbackType: originalCategory.includes('cải tiến') || type.includes('cải tiến') ? 'Đề xuất cải tiến' : 'Lỗi xe từ khách hàng',
         model: model || 'DK Roma SX',
-        dealer: customerName || 'Khách hàng / Đại lý',
-        customerName: customerName,
+        dealer: normalizedDealerNameStr || 'Khách hàng / Đại lý',
+        customerName: normalizedDealerNameStr,
         defectDate: formattedDefectDate,
         sourceDate: formattedSourceDate,
         originalCategory: originalCategory,
@@ -6115,6 +6210,7 @@ export function App() {
     guardAction(() => {
       const generatedId = data.id || nextDefectId;
       const fType = data.feedbackType || 'Lỗi xe từ khách hàng';
+      const resolvedDealer = normalizeDealerName(data.dealer || data.customerName, dealers);
       const newDefect: MarketDefect = {
         id: generatedId,
         feedbackType: fType,
@@ -6122,7 +6218,8 @@ export function App() {
         chassisNo: data.chassisNo || '',
         engineNo: data.engineNo || '',
         saleDate: data.saleDate || '11/04/2026',
-        dealer: data.dealer || 'Đại lý Hà Nội',
+        dealer: resolvedDealer || 'Đại lý Hà Nội',
+        customerName: resolvedDealer,
         defectDate: data.defectDate || new Date().toLocaleDateString('vi-VN'),
         type: data.type || 'Sự cố điện',
         description: data.description || '',
@@ -27569,8 +27666,15 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       setProjects(prev => prev.map(p => p.id === data.id ? data : p));
                       break;
                     case 'defect': {
+                      const normalizedDealer = normalizeDealerName(data.dealer || data.customerName || data.Dealer, dealers);
+                      const sanitizedDefect = {
+                        ...data,
+                        dealer: normalizedDealer,
+                        Dealer: normalizedDealer,
+                        customerName: normalizedDealer
+                      };
                       setDefects(prev => {
-                        const updated = prev.map(d => d.id === data.id ? data : d);
+                        const updated = prev.map(d => d.id === data.id ? sanitizedDefect : d);
                         safeStorage.setItem('dk_defects', JSON.stringify(updated));
                         safeStorage.setItem('dk_defects_is_dirty', 'true');
                         syncToServer('dk_defects', updated);
@@ -28789,6 +28893,24 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                   Dealer: e.target.value
                                 }
                               });
+                            }}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim();
+                              if (val) {
+                                const matched = normalizeDealerName(val, dealers);
+                                if (matched) {
+                                  setEditDefectDealerSearch(matched);
+                                  setGlobalEditModal({
+                                    ...globalEditModal,
+                                    data: {
+                                      ...globalEditModal.data,
+                                      dealer: matched,
+                                      Dealer: matched,
+                                      customerName: matched
+                                    }
+                                  });
+                                }
+                              }
                             }}
                             onFocus={() => setIsEditDefectDealerDropdownOpen(true)}
                             className="w-full bg-slate-50 border border-slate-200 rounded p-2 pr-8 text-slate-850 font-bold focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -32949,7 +33071,7 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                 <div>
                   <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Tên đại lý báo lỗi</label>
                   <div className="relative">
-                    <input type="hidden" name="dealer" value={selectedDefectDealer} required />
+                    <input type="hidden" name="dealer" value={selectedDefectDealer || normalizeDealerName(defectDealerSearch, dealers)} required />
                     <div className="relative flex items-center">
                       <input
                         type="text"
@@ -32960,6 +33082,16 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                           setIsDefectDealerDropdownOpen(true);
                           if (e.target.value !== selectedDefectDealer) {
                             setSelectedDefectDealer('');
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const val = e.target.value.trim();
+                          if (val) {
+                            const matched = normalizeDealerName(val, dealers);
+                            if (matched) {
+                              setDefectDealerSearch(matched);
+                              setSelectedDefectDealer(matched);
+                            }
                           }
                         }}
                         onFocus={() => setIsDefectDealerDropdownOpen(true)}
