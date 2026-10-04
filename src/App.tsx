@@ -8420,7 +8420,7 @@ Lưu ý: Nếu không có yêu cầu thêm dữ liệu, đừng đính kèm kh�
               if (actionData.action === 'ADD_DAILY_LOG') {
                 const payload = actionData.data || actionData.payload;
                 const maxStt = dailyLogs.length > 0 ? Math.max(...dailyLogs.map(l => l.stt || 0)) : 0;
-                const logDateStr = payload.date || new Date().toLocaleDateString('vi-VN');
+                const logDateStr = standardizeDate(payload.date || new Date().toLocaleDateString('vi-VN'));
                 const dateInfo = getWeekAndMonthFromDate(logDateStr);
 
                 const newLog: DailyLogRecord = {
@@ -8435,13 +8435,13 @@ Lưu ý: Nếu không có yêu cầu thêm dữ liệu, đừng đính kèm kh�
                   assignee: payload.assignee || 'Đoàn Anh Hùng',
                   timeWork: ['', '', '', '', '', '', '', ''],
                   result: String(payload.result || '0'),
-                  deadline: payload.deadline || new Date().toISOString().split('T')[0],
+                  deadline: payload.deadline ? standardizeDate(payload.deadline) : logDateStr,
                   statusPercent: payload.statusPercent || '0%',
                   note: payload.note || 'Trợ lý AI lập tự động theo chỉ thị của anh Thao.',
                   year: dateInfo.year
                 };
 
-                const updatedDailyLogs = [newLog, ...dailyLogs];
+                const updatedDailyLogs = sanitizeDailyLogs([newLog, ...dailyLogs]);
                 setDailyLogs(updatedDailyLogs);
                 syncToServer('dk_daily_logs', updatedDailyLogs);
                 systemConfirmation = `✓ Trợ lý đã lập công việc báo cáo ngày: "${newLog.content}" và giao cho PIC: ${newLog.assignee}.`;
@@ -8654,7 +8654,7 @@ Tập hợp số liệu gốc:
       images: []
     };
 
-    const logDateStr = new Date().toLocaleDateString('vi-VN');
+    const logDateStr = standardizeDate(new Date().toLocaleDateString('vi-VN'));
     const dateInfo = getWeekAndMonthFromDate(logDateStr);
     const autoDailyLog: DailyLogRecord = {
       id: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
@@ -8668,14 +8668,14 @@ Tập hợp số liệu gốc:
       assignee: 'Nguyễn Xuân Thao',
       timeWork: ['', '', '', '', '', '', '', ''],
       result: '0',
-      deadline: newTask.date,
+      deadline: newTask.date ? standardizeDate(newTask.date) : logDateStr,
       statusPercent: '0%',
       note: `Đồng bộ hóa tự động từ Bảng rủi ro QMS.`,
       year: dateInfo.year
     };
 
     const updatedTasks = [newTask, ...tasks];
-    const updatedDailyLogs = [autoDailyLog, ...dailyLogs];
+    const updatedDailyLogs = sanitizeDailyLogs([autoDailyLog, ...dailyLogs]);
     setTasks(updatedTasks);
     setDailyLogs(updatedDailyLogs);
     syncToServer('dk_tasks', updatedTasks);
@@ -8770,7 +8770,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     };
 
     // Tự động đồng bộ dạng Nhật trình báo cáo hằng ngày (Daily Work-log)
-    let logDateStr = new Date().toLocaleDateString('vi-VN'); // Định dạng DD/MM/YYYY
+    let logDateStr = standardizeDate(new Date().toLocaleDateString('vi-VN')); // Định dạng DD/MM/YYYY
     const dateInfo = getWeekAndMonthFromDate(logDateStr);
 
     let mappedCategory = 'IQC';
@@ -8792,14 +8792,14 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       assignee: taskAssignee,
       timeWork: ['', '', '', '', '', '', '', ''],
       result: String(taskResult),
-      deadline: newTask.date,
+      deadline: newTask.date ? standardizeDate(newTask.date) : logDateStr,
       statusPercent: taskTarget > 0 ? `${Math.round((taskResult / taskTarget) * 100)}%` : '0%',
       note: `Đồng bộ hóa tự động từ Hồ sơ CAPA #${newTask.id}. Độ ưu tiên: ${taskPriority}.`,
       year: dateInfo.year
     };
 
     const updatedTasks = [newTask, ...tasks];
-    const updatedDailyLogs = [autoDailyLog, ...dailyLogs];
+    const updatedDailyLogs = sanitizeDailyLogs([autoDailyLog, ...dailyLogs]);
     setTasks(updatedTasks);
     setDailyLogs(updatedDailyLogs);
     syncToServer('dk_tasks', updatedTasks);
@@ -16494,7 +16494,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     const groups: { [date: string]: DailyLogRecord[] } = {};
                     filteredDailyLogs.forEach(log => {
                       if (!log) return;
-                      const d = log.date || 'Không có ngày';
+                      const d = log.date ? standardizeDate(log.date) : 'Không có ngày';
                       if (!groups[d]) {
                         groups[d] = [];
                       }
@@ -27686,12 +27686,15 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         ? `[Cập nhật đề xuất cải tiến] Cập nhật hồ sơ đề xuất ${data.id} (Lĩnh vực: ${data.type}). Nội dung cập nhật: ${data.description || 'Không có mô tả'}.`
                         : `[Cập nhật lỗi thị trường] Cập nhật hồ sơ sự cố ${data.id} (Dòng xe: ${data.model}). Nội dung cập nhật chi tiết: ${data.description || 'Không có mô tả'}.`;
 
+                      const stdToday = standardizeDate(new Date().toLocaleDateString('vi-VN'));
+                      const dateInfo = getWeekAndMonthFromDate(stdToday);
+
                       // Tự động mô tả lỗi trong lịch sử nhật ký chất lượng khi sửa đổi
                       const editLogRecord: DailyLogRecord = {
                         id: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
                         stt: dailyLogs.length > 0 ? Math.max(...dailyLogs.map(l => l.stt || 0)) + 1 : 1,
-                        date: new Date().toLocaleDateString('vi-VN'),
-                        week: "T1",
+                        date: stdToday,
+                        week: dateInfo.week || "T1",
                         category: "Khách hàng/Bảo hành",
                         content: editLogContent,
                         target: "1",
@@ -27699,11 +27702,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         assignee: data.assignee || 'Trưởng nhóm QA/QC',
                         timeWork: ["Ok", "Ok", "", "", "", "", "", ""],
                         result: "1",
-                        deadline: data.targetDate || new Date().toISOString().split('T')[0],
+                        deadline: data.targetDate ? standardizeDate(data.targetDate) : stdToday,
                         statusPercent: data.status === 'Đã xử lý' ? "100%" : "50%",
-                        note: `Cập nhật tự động cho hồ sơ ${data.id}. Tiến độ xử lý: ${data.status}.`
+                        note: `Cập nhật tự động cho hồ sơ ${data.id}. Tiến độ xử lý: ${data.status}.`,
+                        year: dateInfo.year
                       };
-                      const updatedDailyLogs = [editLogRecord, ...dailyLogs];
+                      const updatedDailyLogs = sanitizeDailyLogs([editLogRecord, ...dailyLogs]);
                       setDailyLogs(updatedDailyLogs);
                       safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
                       syncToServer('dk_daily_logs', updatedDailyLogs);
