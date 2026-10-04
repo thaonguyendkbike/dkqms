@@ -332,7 +332,7 @@ const getDynamicControlItems = (model: string, matchingDefects: OQCRecord[]) => 
 };
 
 // Interface cho Tác vụ quản lý kế hoạch
-interface QualityTask {
+export interface QualityTask {
   id: string;
   section: 'backlog' | 'capa' | 'ptsp' | 'coordination' | 'eco';
   title: string;
@@ -665,7 +665,9 @@ export default function QualityPlanning({
   weeklyPlans,
   setWeeklyPlans,
   monthlyPlans,
-  setMonthlyPlans
+  setMonthlyPlans,
+  planningTasksProp,
+  setPlanningTasksProp
 }: { 
   modelsProp?: any[]; 
   suppliersProp?: any[];
@@ -673,6 +675,8 @@ export default function QualityPlanning({
   setWeeklyPlans?: (plans: any[]) => void;
   monthlyPlans?: any[];
   setMonthlyPlans?: (plans: any[]) => void;
+  planningTasksProp?: QualityTask[];
+  setPlanningTasksProp?: (tasks: QualityTask[]) => void;
 } = {}) {
   const currentDate = new Date();
   const defaultYear = currentDate.getFullYear();
@@ -1050,13 +1054,14 @@ export default function QualityPlanning({
   // --- UNIFIED WRAPPED SETTERS THAT SAVE SYNCHRONOUSLY TO PREVENT RACE CONDITIONS ---
   const saveAndSync = (key: string, data: any) => {
     localStorage.setItem(key, JSON.stringify(data));
+    localStorage.setItem(`${key}_is_dirty`, 'true');
     if (typeof (window as any).syncToServer === 'function') {
       (window as any).syncToServer(key, data);
-    } else {
-      try {
-        window.dispatchEvent(new CustomEvent('dk_planning_reload_state', { detail: { key, value: JSON.stringify(data) } }));
-      } catch (err) {}
     }
+    try {
+      window.dispatchEvent(new CustomEvent('dk_planning_reload_state', { detail: { key, value: JSON.stringify(data) } }));
+      window.dispatchEvent(new Event('storage'));
+    } catch (err) {}
   };
 
   const setWeeklyAssembly = (updateFnOrValue: any) => {
@@ -1740,11 +1745,14 @@ export default function QualityPlanning({
 
   // --- QUẢN LÝ TÁC VỤ CHẤT LƯỢNG (TASK SECTIONS) ---
   const [tasks, setTasks] = useState<QualityTask[]>(() => {
+    if (Array.isArray(planningTasksProp) && planningTasksProp.length > 0) {
+      return planningTasksProp;
+    }
     try {
       const saved = localStorage.getItem('dk_qms_quality_planning_tasks');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed;
         }
       }
@@ -1754,16 +1762,29 @@ export default function QualityPlanning({
     return getInitialQmsPlanningTasks(6, 2026);
   });
 
+  // Lắng nghe dữ liệu mới được đẩy từ bên ngoài qua props (ví dụ Firestore onSnapshot từ thiết bị khác)
+  useEffect(() => {
+    if (Array.isArray(planningTasksProp) && planningTasksProp.length > 0) {
+      const incomingStr = JSON.stringify(planningTasksProp);
+      if (JSON.stringify(tasks) !== incomingStr) {
+        setTasks(planningTasksProp);
+      }
+    }
+  }, [planningTasksProp]);
+
   useEffect(() => {
     try {
       const serialized = JSON.stringify(tasks);
       if (localStorage.getItem('dk_qms_quality_planning_tasks') !== serialized) {
         saveAndSync('dk_qms_quality_planning_tasks', tasks);
+        if (typeof setPlanningTasksProp === 'function') {
+          setPlanningTasksProp(tasks);
+        }
       }
     } catch (e) {
       console.error(e);
     }
-  }, [tasks]);
+  }, [tasks, setPlanningTasksProp]);
 
   const stateRef = useRef({
     customPqcItems,
@@ -4377,6 +4398,9 @@ export default function QualityPlanning({
         return;
       }
 
+      if (typeof (window as any).trackDeletedId === 'function') {
+        (window as any).trackDeletedId('dk_qms_quality_planning_tasks', id);
+      }
       setTasks(prev => prev.filter(t => t.id !== id));
     }
   };

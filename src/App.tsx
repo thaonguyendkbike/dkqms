@@ -2606,12 +2606,14 @@ export function App() {
   // Expose to window so any component (like QualityPlanning.tsx) can call this directly without monkey patching!
   useEffect(() => {
     (window as any).syncToServer = syncToServer;
+    (window as any).trackDeletedId = trackDeletedId;
     (window as any).triggerCloudSynchronization = triggerCloudSynchronization;
     (window as any).handleManualSyncRetry = handleManualSyncRetry;
     (window as any).handleForceCloudSync = handleForceCloudSync;
     (window as any).handleForcePullCloudData = handleForcePullCloudData;
     return () => {
       delete (window as any).syncToServer;
+      delete (window as any).trackDeletedId;
       delete (window as any).triggerCloudSynchronization;
       delete (window as any).handleManualSyncRetry;
       delete (window as any).handleForceCloudSync;
@@ -7114,11 +7116,11 @@ export function App() {
   // --- THIẾT LẬP LIÊN THÔNG DỮ LIỆU TÁC VỤ KẾ HOẠCH QMS ---
   const [planningTasks, setPlanningTasks] = useState<any[]>(() => {
     try {
-      const saved = localStorage.getItem('dk_qms_quality_planning_tasks');
+      const saved = safeStorage.getItem('dk_qms_quality_planning_tasks') || localStorage.getItem('dk_qms_quality_planning_tasks');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter((t: any) => !(t.isSample || (typeof t.id === 'string' && t.id.startsWith('T-PL-'))));
+          return parsed;
         }
       }
     } catch (e) {
@@ -7129,8 +7131,11 @@ export function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('dk_qms_quality_planning_tasks', JSON.stringify(planningTasks));
-      syncToServer('dk_qms_quality_planning_tasks', planningTasks);
+      if (planningTasks && planningTasks.length > 0) {
+        safeStorage.setItem('dk_qms_quality_planning_tasks', JSON.stringify(planningTasks));
+        safeStorage.setItem('dk_qms_quality_planning_tasks_is_dirty', 'true');
+        syncToServer('dk_qms_quality_planning_tasks', planningTasks);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -7139,7 +7144,7 @@ export function App() {
   useEffect(() => {
     if (activeTab === 'monthly_reports' || activeTab === 'weekly_reports' || activeTab === 'quality_planning') {
       try {
-        const saved = localStorage.getItem('dk_qms_quality_planning_tasks');
+        const saved = safeStorage.getItem('dk_qms_quality_planning_tasks') || localStorage.getItem('dk_qms_quality_planning_tasks');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
@@ -7149,6 +7154,28 @@ export function App() {
       } catch (e) { }
     }
   }, [activeTab]);
+
+  // Lắng nghe sự kiện lưu dữ liệu thời gian thực từ QualityPlanning (CustomEvent dk_planning_reload_state)
+  useEffect(() => {
+    const handlePlanningReload = (e: any) => {
+      const { key, value } = e.detail || {};
+      if (key === 'dk_qms_quality_planning_tasks' && value) {
+        try {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed)) {
+            setPlanningTasks(parsed);
+            safeStorage.setItem('dk_qms_quality_planning_tasks', value);
+            safeStorage.setItem('dk_qms_quality_planning_tasks_is_dirty', 'true');
+            syncToServer('dk_qms_quality_planning_tasks', parsed);
+          }
+        } catch (err) { }
+      }
+    };
+    window.addEventListener('dk_planning_reload_state', handlePlanningReload);
+    return () => {
+      window.removeEventListener('dk_planning_reload_state', handlePlanningReload);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -14174,6 +14201,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 setWeeklyPlans={setWeeklyPlans}
                 monthlyPlans={monthlyPlans}
                 setMonthlyPlans={setMonthlyPlans}
+                planningTasksProp={planningTasks}
+                setPlanningTasksProp={setPlanningTasks}
               />
             </div>
           )}
