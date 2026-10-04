@@ -12098,42 +12098,32 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       }
 
       const wb = XLSXStyle.utils.book_new();
-      const nowStr = new Date().toLocaleDateString('vi-VN') + ' ' + new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
       const dateFileStr = new Date().toISOString().split('T')[0];
 
+      // Mẫu chuẩn 21 cột đối chiếu khớp 100% với tính năng Nhập Hàng Loạt (Copy Excel / CSV)
       const headers = [
-        'STT',
-        'Mã Phản Ánh / Sự Cố',
-        'Loại Phản Ánh',
-        'Loại Phản Ánh Gốc',
-        'Dòng Xe (Model)',
-        'Đại Lý / Nguồn Phản Ánh',
-        'Tên Khách Hàng / Đại Lý',
-        'Ngày Phát Sinh Lỗi',
-        'Ngày Tiếp Nhận',
-        'Ngày Bán Xe',
-        'Số Khung',
-        'Số Máy',
-        'Phân Loại Lỗi / Lĩnh Vực',
-        'Mô Tả Triệu Chứng / Nội Dung Phản Ánh',
-        'Mức Độ Nghiêm Trọng',
-        'Cơ Sở Phân Loại Mức Độ',
-        'Đánh Giá Khách Hàng',
-        'Nguyên Nhân Cốt Lõi',
-        'Phương Án Xử Lý / Tạm Thời',
-        'Hành Động Khắc Phục (CAPA)',
-        'Hành Động Phòng Ngừa',
-        'Nhà Cung Cấp Liên Quan',
-        'Người Phụ Trách',
-        'Hạn Hoàn Thành',
-        'Nơi Phát Sinh',
-        'Mã CAPA / ECO Liên Kết',
-        'Trạng Thái Xử Lý',
-        'Ghi Chú Dữ Liệu',
-        'Link / Ảnh Đính Kèm'
+        'Mã phản ánh',
+        'Ngày nguồn',
+        'Nhân viên',
+        'Khu vực',
+        'Tỉnh/Thành phố',
+        'Tên khách hàng',
+        'Ngày tiếp nhận',
+        'Hình thức tiếp nhận',
+        'Model chuẩn hóa',
+        'Loại phản ánh gốc',
+        'Nhóm lỗi chuẩn hóa',
+        'Chi tiết phản ánh',
+        'Nguyên nhân',
+        'Phương án giải quyết',
+        'Người thực hiện',
+        'Ngày giải quyết',
+        'Tình trạng xử lý',
+        'Đánh giá KH',
+        'Mức độ',
+        'Cơ sở phân loại mức độ',
+        'Ghi chú dữ liệu'
       ];
-
-      const emptyPad = Array(headers.length - 1).fill('');
 
       const cleanVal = (val: any): string => {
         if (val === null || val === undefined) return '';
@@ -12149,220 +12139,174 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
 
       const aoaData: any[][] = [];
 
-      // Row 0: Banner Title
-      aoaData.push(['CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT - PHÒNG QUẢN LÝ CHẤT LƯỢNG (DK QMS)', ...emptyPad]);
-      // Row 1: Subtitle
-      aoaData.push(['BÁO CÁO TOÀN BỘ BẢN GHI PHẢN ÁNH KHÁCH HÀNG & SỰ CỐ THỊ TRƯỜNG', ...emptyPad]);
-      // Row 2: Metadata
-      aoaData.push([`Thời điểm xuất file: ${nowStr} | Số bản ghi: ${dataToExport.length} | Thương hiệu: DKBike - Xe cho cả gia đình`, ...emptyPad]);
-      // Row 3: Spacer
-      aoaData.push(Array(headers.length).fill(''));
-      // Row 4: Column Headers
+      // Dòng 0: Header 21 cột chuẩn (để người dùng có thể copy/paste 2 chiều hoàn hảo)
       aoaData.push(headers);
 
-      // Rows 5+: Data
-      dataToExport.forEach((item, index) => {
-        const imgList: string[] = [];
-        const processImg = (imgUrl?: string) => {
-          if (!imgUrl) return;
-          const s = String(imgUrl).trim();
-          if (!s) return;
-          if (s.startsWith('data:image/')) {
-            imgList.push('[Có ảnh Base64 đính kèm]');
-          } else if (s.startsWith('http://') || s.startsWith('https://')) {
-            imgList.push(s);
-          } else {
-            imgList.push(s.length > 200 ? '[Ảnh đính kèm]' : s);
+      // Dòng 1+: Dữ liệu chi tiết từng bản ghi
+      dataToExport.forEach((item) => {
+        // Trích xuất mã phản ánh gốc từ dataNotes nếu có dạng [Mã gốc: ...]
+        let displayCode = cleanVal(item.id);
+        if (item.dataNotes && item.dataNotes.includes('[Mã gốc:')) {
+          const match = item.dataNotes.match(/\[Mã gốc:\s*([^\]]+)\]/);
+          if (match && match[1]) {
+            displayCode = match[1].trim();
           }
-        };
-
-        processImg(item.imageUrl);
-        if (item.images && Array.isArray(item.images)) {
-          item.images.forEach(img => processImg(img));
         }
-        const uniqueImgs = Array.from(new Set(imgList));
-        const imgStr = cleanVal(uniqueImgs.join(' ; '));
+
+        const sourceDate = cleanVal(item.sourceDate || item.defectDate);
+        const defectDate = cleanVal(item.defectDate || item.sourceDate);
+        const customerName = cleanVal(item.customerName || item.dealer || 'Khách hàng / Đại lý');
+        const model = cleanVal(item.model);
+        const originalCategory = cleanVal(item.originalCategory || (item.feedbackType === 'Đề xuất cải tiến' ? 'Cải tiến' : 'Chất lượng'));
+        const type = cleanVal(item.type || 'Khác');
+        const description = cleanVal(item.description);
+        const rootCause = cleanVal(item.rootCause);
+        const correction = cleanVal(item.correction || item.correctiveAction);
+        const assignee = cleanVal(item.assignee);
+        const targetDate = cleanVal(item.targetDate);
+        const status = cleanVal(item.status || 'Chưa xử lý');
+        const customerRating = cleanVal(item.customerRating);
+        const severity = cleanVal(item.severity || 'Cao');
+        const severityRationale = cleanVal(item.severityRationale);
+        const dataNotes = cleanVal(item.dataNotes);
 
         aoaData.push([
-          index + 1,
-          cleanVal(item.id),
-          cleanVal(item.feedbackType || 'Lỗi xe từ khách hàng'),
-          cleanVal(item.originalCategory),
-          cleanVal(item.model),
-          cleanVal(item.dealer),
-          cleanVal(item.customerName),
-          cleanVal(item.defectDate),
-          cleanVal(item.sourceDate),
-          cleanVal(item.saleDate),
-          cleanVal(item.chassisNo),
-          cleanVal(item.engineNo),
-          cleanVal(item.type),
-          cleanVal(item.description),
-          cleanVal(item.severity || 'C'),
-          cleanVal(item.severityRationale),
-          cleanVal(item.customerRating),
-          cleanVal(item.rootCause),
-          cleanVal(item.correction),
-          cleanVal(item.correctiveAction),
-          cleanVal(item.preventiveAction),
-          cleanVal(item.supplierName),
-          cleanVal(item.assignee),
-          cleanVal(item.targetDate),
-          cleanVal(item.locationOfOrigin),
-          cleanVal(item.capaId),
-          cleanVal(item.status || 'Chưa xử lý'),
-          cleanVal(item.dataNotes),
-          imgStr
+          displayCode,
+          sourceDate,
+          '', // Cột 3: Nhân viên (để trống hoặc dự phòng)
+          '', // Cột 4: Khu vực
+          cleanVal(item.locationOfOrigin || ''), // Cột 5: Tỉnh/Thành phố
+          customerName,
+          defectDate,
+          'Tin nhắn / Hotline', // Cột 8: Hình thức tiếp nhận
+          model,
+          originalCategory,
+          type,
+          description,
+          rootCause,
+          correction,
+          assignee,
+          targetDate,
+          status,
+          customerRating,
+          severity,
+          severityRationale,
+          dataNotes
         ]);
       });
 
       const ws = XLSXStyle.utils.aoa_to_sheet(aoaData);
 
+      // Thiết lập độ rộng cột chuẩn 21 cột (Column widths)
       ws['!cols'] = [
-        { wch: 6 },   // STT
-        { wch: 16 },  // Mã Phản Ánh
-        { wch: 22 },  // Loại Phản Ánh
-        { wch: 20 },  // Loại Phản Ánh Gốc
-        { wch: 18 },  // Dòng Xe
-        { wch: 25 },  // Đại Lý
-        { wch: 22 },  // Tên KH / Đại lý
-        { wch: 15 },  // Ngày Phát Sinh
-        { wch: 15 },  // Ngày Tiếp Nhận
-        { wch: 15 },  // Ngày Bán Xe
-        { wch: 20 },  // Số Khung
-        { wch: 20 },  // Số Máy
-        { wch: 22 },  // Phân Loại Lỗi
-        { wch: 45 },  // Mô Tả Triệu Chứng
-        { wch: 18 },  // Mức Độ Nghiêm Trọng
-        { wch: 30 },  // Cơ Sở Phân Loại
-        { wch: 20 },  // Đánh Giá KH
-        { wch: 35 },  // Nguyên Nhân Cốt Lõi
-        { wch: 35 },  // Phương Án Xử Lý
-        { wch: 35 },  // Hành Động Khắc Phục
-        { wch: 35 },  // Hành Động Phòng Ngừa
-        { wch: 25 },  // NCC
-        { wch: 20 },  // Người Phụ Trách
-        { wch: 15 },  // Hạn Hoàn Thành
-        { wch: 25 },  // Nơi Phát Sinh
-        { wch: 18 },  // Mã CAPA
-        { wch: 16 },  // Trạng Thái Xử Lý
-        { wch: 25 },  // Ghi Chú Dữ Liệu
-        { wch: 30 }   // Link / Ảnh Đính Kèm
+        { wch: 14 }, // Mã phản ánh
+        { wch: 13 }, // Ngày nguồn
+        { wch: 14 }, // Nhân viên
+        { wch: 10 }, // Khu vực
+        { wch: 16 }, // Tỉnh/Thành phố
+        { wch: 26 }, // Tên khách hàng
+        { wch: 15 }, // Ngày tiếp nhận
+        { wch: 18 }, // Hình thức tiếp nhận
+        { wch: 18 }, // Model chuẩn hóa
+        { wch: 18 }, // Loại phản ánh gốc
+        { wch: 22 }, // Nhóm lỗi chuẩn hóa
+        { wch: 45 }, // Chi tiết phản ánh
+        { wch: 40 }, // Nguyên nhân
+        { wch: 42 }, // Phương án giải quyết
+        { wch: 18 }, // Người thực hiện
+        { wch: 15 }, // Ngày giải quyết
+        { wch: 16 }, // Tình trạng xử lý
+        { wch: 15 }, // Đánh giá KH
+        { wch: 14 }, // Mức độ
+        { wch: 45 }, // Cơ sở phân loại mức độ
+        { wch: 30 }  // Ghi chú dữ liệu
       ];
 
-      ws['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: headers.length - 1 } },
-        { s: { r: 2, c: 0 }, e: { r: 2, c: headers.length - 1 } }
-      ];
-
-      const heights = [
-        { hpt: 26 },
-        { hpt: 22 },
-        { hpt: 18 },
-        { hpt: 10 },
-        { hpt: 26 }
-      ];
+      // Thiết lập chiều cao dòng: Dòng tiêu đề 30pt, các dòng dữ liệu 24pt
+      const heights = [{ hpt: 30 }];
       for (let i = 0; i < dataToExport.length; i++) {
-        heights.push({ hpt: 22 });
+        heights.push({ hpt: 24 });
       }
       ws['!rows'] = heights;
 
-      const range = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1:AC5');
+      const range = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1:U2');
 
-      // Title Row (0)
+      // Định dạng Header Row (Dòng 0)
+      const excludedColIndices = [2, 3, 4, 7]; // Nhân viên, Khu vực, Tỉnh/TP, Hình thức tiếp nhận
+
       for (let C = range.s.c; C <= range.e.c; C++) {
         const cellAddr = XLSXStyle.utils.encode_cell({ r: 0, c: C });
         if (ws[cellAddr]) {
+          const isExcluded = excludedColIndices.includes(C);
           ws[cellAddr].s = {
-            font: { name: "Arial", sz: 12, bold: true, color: { rgb: "FFFFFF" } },
-            fill: { fgColor: { rgb: "0213B0" } },
-            alignment: { horizontal: "center", vertical: "center" }
-          };
-        }
-      }
-
-      // Subtitle Row (1)
-      for (let C = range.s.c; C <= range.e.c; C++) {
-        const cellAddr = XLSXStyle.utils.encode_cell({ r: 1, c: C });
-        if (ws[cellAddr]) {
-          ws[cellAddr].s = {
-            font: { name: "Arial", sz: 11, bold: true, color: { rgb: "0213B0" } },
-            fill: { fgColor: { rgb: "EEF2FF" } },
-            alignment: { horizontal: "center", vertical: "center" }
-          };
-        }
-      }
-
-      // Meta Row (2)
-      for (let C = range.s.c; C <= range.e.c; C++) {
-        const cellAddr = XLSXStyle.utils.encode_cell({ r: 2, c: C });
-        if (ws[cellAddr]) {
-          ws[cellAddr].s = {
-            font: { name: "Arial", sz: 9, italic: true, color: { rgb: "475569" } },
-            fill: { fgColor: { rgb: "F8FAFC" } },
-            alignment: { horizontal: "center", vertical: "center" }
-          };
-        }
-      }
-
-      // Headers Row (4)
-      for (let C = range.s.c; C <= range.e.c; C++) {
-        const cellAddr = XLSXStyle.utils.encode_cell({ r: 4, c: C });
-        if (ws[cellAddr]) {
-          ws[cellAddr].s = {
-            font: { name: "Arial", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
-            fill: { fgColor: { rgb: "1E293B" } },
+            font: {
+              name: "Segoe UI",
+              sz: 10,
+              bold: true,
+              color: { rgb: isExcluded ? "64748B" : "FFFFFF" }
+            },
+            fill: {
+              fgColor: { rgb: isExcluded ? "E2E8F0" : "0F5132" } // Xanh lá đậm chuẩn DKBike
+            },
             alignment: { horizontal: "center", vertical: "center", wrapText: true },
             border: {
-              top: { style: "thin", color: { rgb: "94A3B8" } },
-              bottom: { style: "thin", color: { rgb: "94A3B8" } },
-              left: { style: "thin", color: { rgb: "94A3B8" } },
-              right: { style: "thin", color: { rgb: "94A3B8" } }
+              top: { style: "thin", color: { rgb: "CBD5E1" } },
+              bottom: { style: "medium", color: { rgb: isExcluded ? "94A3B8" : "0A3622" } },
+              left: { style: "thin", color: { rgb: "CBD5E1" } },
+              right: { style: "thin", color: { rgb: "CBD5E1" } }
             }
           };
         }
       }
 
-      // Data Rows (5 to end)
-      for (let R = 5; R <= range.e.r; R++) {
+      // Định dạng Data Rows (Dòng 1 đến hết)
+      for (let R = 1; R <= range.e.r; R++) {
         const isEven = R % 2 === 0;
-        const bgRgb = isEven ? "F8FAFC" : "FFFFFF";
 
         for (let C = range.s.c; C <= range.e.c; C++) {
           const cellAddr = XLSXStyle.utils.encode_cell({ r: R, c: C });
           if (ws[cellAddr]) {
+            const isExcluded = excludedColIndices.includes(C);
             let align: any = { vertical: "center", wrapText: true };
-            if ([0, 1, 7, 8, 9, 14, 23, 25, 26].includes(C)) {
+            // Căn giữa cho các cột: Mã phản ánh, Ngày nguồn, Ngày tiếp nhận, Người thực hiện, Ngày giải quyết, Trạng thái, Đánh giá KH, Mức độ
+            if ([0, 1, 6, 14, 15, 16, 17, 18].includes(C)) {
               align.horizontal = "center";
             } else {
               align.horizontal = "left";
             }
 
-            let fillRgb = bgRgb;
-            let fontColorRgb = "1E293B";
+            let fillRgb = isExcluded ? (isEven ? "F1F5F9" : "F8FAFC") : (isEven ? "F0FDF4" : "FFFFFF");
+            let fontColorRgb = isExcluded ? "64748B" : "1E293B";
             let isBold = false;
 
             const cellValue = String(ws[cellAddr].v || '');
-            if (C === 26) {
+            if (C === 16) { // Cột Trạng thái xử lý
               isBold = true;
-              if (cellValue === 'Đã xử lý') {
+              if (cellValue.includes('Đã')) {
                 fillRgb = "DCFCE7";
                 fontColorRgb = "15803D";
-              } else if (cellValue === 'Đang xử lý') {
+              } else if (cellValue.includes('Đang')) {
                 fillRgb = "DBEAFE";
                 fontColorRgb = "1E40AF";
               } else {
                 fillRgb = "FEF3C7";
                 fontColorRgb = "B45309";
               }
-            } else if (C === 1) {
-              fontColorRgb = "0213B0";
+            } else if (C === 0) { // Cột Mã phản ánh
+              fontColorRgb = "0F5132";
               isBold = true;
+            } else if (C === 18) { // Cột Mức độ
+              if (cellValue === 'Nghiêm trọng' || cellValue === 'A') {
+                fontColorRgb = "B91C1C";
+                isBold = true;
+              } else if (cellValue === 'Cao' || cellValue === 'B') {
+                fontColorRgb = "C2410C";
+                isBold = true;
+              }
             }
 
             ws[cellAddr].s = {
-              font: { name: "Arial", sz: 9.5, color: { rgb: fontColorRgb }, bold: isBold },
+              font: { name: "Segoe UI", sz: 9.5, color: { rgb: fontColorRgb }, bold: isBold },
               fill: { fgColor: { rgb: fillRgb } },
               alignment: align,
               border: {
@@ -12376,11 +12320,11 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
         }
       }
 
-      XLSXStyle.utils.book_append_sheet(wb, ws, "Phản Ánh Khách Hàng");
+      XLSXStyle.utils.book_append_sheet(wb, ws, "PhanAnh_KhachHang");
 
-      const fileName = `DKBike_Bao_Cao_Phan_Anh_Khach_Hang_${dateFileStr}.xlsx`;
+      const fileName = `DKBike_Phan_Anh_Khach_Hang_21Cot_${dateFileStr}.xlsx`;
 
-      // Download helper with multi-fallback (writeFile -> Blob binary -> Blob array)
+      // Tải file trực tiếp xuống máy người dùng với fallback Blob
       try {
         XLSXStyle.writeFile(wb, fileName);
       } catch (err1) {
@@ -32105,21 +32049,31 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   <label className="block text-xs font-black uppercase text-slate-700 tracking-wider">
                     Dán nội dung sao chép từ Excel / CSV / Google Sheets (Ctrl + V):
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sampleText = `Mã phản ánh,Ngày nguồn,Nhân viên,Khu vực,Tỉnh/Thành phố,Tên khách hàng,Ngày tiếp nhận,Hình thức tiếp nhận,Model chuẩn hóa,Loại phản ánh gốc,Nhóm lỗi chuẩn hóa,Chi tiết phản ánh,Nguyên nhân,Phương án giải quyết,Người thực hiện,Ngày giải quyết,Tình trạng xử lý,Đánh giá KH,Mức độ,Cơ sở phân loại mức độ,Ghi chú dữ liệu
+                  <div className="flex items-center gap-3">
+                    <a
+                      href="/Mau_Nhap_Hang_Loat_Phan_Anh_Khach_Hang_DKBike.xlsx"
+                      download="Mau_Nhap_Hang_Loat_Phan_Anh_Khach_Hang_DKBike.xlsx"
+                      className="text-[11px] font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2.5 py-1 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-3xs transition"
+                      title="Tải file Excel mẫu 21 cột chuẩn về máy"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" /> Tải file Excel mẫu (.xlsx)
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const sampleText = `Mã phản ánh,Ngày nguồn,Nhân viên,Khu vực,Tỉnh/Thành phố,Tên khách hàng,Ngày tiếp nhận,Hình thức tiếp nhận,Model chuẩn hóa,Loại phản ánh gốc,Nhóm lỗi chuẩn hóa,Chi tiết phản ánh,Nguyên nhân,Phương án giải quyết,Người thực hiện,Ngày giải quyết,Tình trạng xử lý,Đánh giá KH,Mức độ,Cơ sở phân loại mức độ,Ghi chú dữ liệu
 PA-001,7/20/2026,Quỳnh,N2,Hải Dương,Hoàn Hợi,7/18/2026,Tin nhắn,D2,Chất lượng,Điện - điện tử,Xi nhan không hoạt động.,Chất lượng linh kiện,Gửi linh kiện bảo hành cho đại lý.,C. Thủy,7/18/2026,Đang xử lý,Chưa hài lòng,Cao,Ảnh hưởng tín hiệu an toàn khi lưu thông.,
 PA-002,7/20/2026,Quỳnh,N2,Hải Dương,Hoàn Hợi,7/16/2026,Không ghi nhận,ROMA SX V2,Chất lượng,Lỗi chức năng tổng thể,Xe phát sinh lỗi không xác định; đại lý phải tháo kiểm tra toàn xe và đổi xe cho khách.,"Chất lượng lắp ráp, linh kiện",Đổi xe.,,7/16/2026,Đã xử lý,Chưa hài lòng,Nghiêm trọng,Không xác định được lỗi và phải đổi toàn bộ xe.,
 PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,Chất lượng,Đèn - Còi - Khóa,Đèn pha lúc sáng lúc không.,Chất lượng linh kiện,Gửi pha đèn mới cho đại lý thay thế.,Thùy,7/18/2026,Đang xử lý,Hài lòng,Trung bình,Không ảnh hưởng vận hành chính nhưng gây phiền toái.,`;
-                      setBulkImportRawText(sampleText);
-                      const parsed = parseBulkCustomerFeedbackText(sampleText);
-                      setBulkImportParsedPreview(parsed);
-                    }}
-                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Copy className="w-3.5 h-3.5" /> Dán thử dữ liệu mẫu (Sample data)
-                  </button>
+                        setBulkImportRawText(sampleText);
+                        const parsed = parseBulkCustomerFeedbackText(sampleText);
+                        setBulkImportParsedPreview(parsed);
+                      }}
+                      className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Copy className="w-3.5 h-3.5" /> Dán thử dữ liệu mẫu (Sample data)
+                    </button>
+                  </div>
                 </div>
 
                 <textarea

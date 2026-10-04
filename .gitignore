@@ -7,3 +7,5 @@ coverage/
 .env*
 !.env.example
 db_persistence.json
+~$*
+
