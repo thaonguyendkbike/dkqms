@@ -92,10 +92,8 @@ if (typeof window !== 'undefined' && window.indexedDB) {
         if (cursor) {
           const k = String(cursor.key);
           const v = String(cursor.value);
-          // Populate RAM from IndexedDB
-          if (!memoryStore[k] || memoryStore[k].length < v.length) {
-            memoryStore[k] = v;
-          }
+          // Populate RAM from IndexedDB (IndexedDB is source of truth for persistent data)
+          memoryStore[k] = v;
           cursor.continue();
         } else {
           // Finished reading all keys from IndexedDB

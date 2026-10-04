@@ -65,6 +65,7 @@ export interface OQCRecord {
   isColorChanged?: boolean;
   isStatusChanged?: boolean;
   updatedAt?: string;
+  createdAt?: string;
 }
 
 export interface OqcColorChangeRecord {

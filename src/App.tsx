@@ -1371,16 +1371,28 @@ export function App() {
     });
 
     // 2. Xử lý các bản ghi tạo mới ở Local lúc offline
+    const localNewItems: any[] = [];
     localOrderedIds.forEach((id) => {
       if (!mergedMap.has(id) && !deletedSet.has(id)) {
         const lItem = localMap.get(id);
         if (lItem) {
           mergedMap.set(id, lItem);
+          localNewItems.push(lItem);
         }
       }
     });
 
-    let result = Array.from(mergedMap.values());
+    let result: any[];
+    if (key === 'dk_oqc_records' && localNewItems.length > 0) {
+      // Các xe/phiếu mới tạo ở local phải được đưa lên đầu danh sách để hiển thị ngay ở Trang 1
+      const serverOrMerged: any[] = [];
+      serverOrderedIds.forEach(id => {
+        if (mergedMap.has(id)) serverOrMerged.push(mergedMap.get(id));
+      });
+      result = [...localNewItems, ...serverOrMerged];
+    } else {
+      result = Array.from(mergedMap.values());
+    }
 
     // Chuẩn hóa và làm sạch đặc thù phân hệ
     if (key === 'dk_daily_logs') result = sanitizeDailyLogs(result);
@@ -1780,6 +1792,11 @@ export function App() {
             };
             if (r.chassisNo) clean.chassisNo = r.chassisNo;
             if (r.engineNo) clean.engineNo = r.engineNo;
+            if (r.checkedBy) clean.checkedBy = r.checkedBy;
+            if (r.updatedAt) clean.updatedAt = r.updatedAt;
+            if (r.createdAt) clean.createdAt = r.createdAt;
+            if (r.imageUrl) clean.imageUrl = r.imageUrl;
+            if (r.passFlag !== undefined) clean.passFlag = r.passFlag;
             if (r.oldColor) clean.oldColor = r.oldColor;
             if (r.oldModel) clean.oldModel = r.oldModel;
             if (r.isColorChanged) clean.isColorChanged = true;
@@ -1788,10 +1805,12 @@ export function App() {
             if (r.failedCount && r.failedCount > 0) clean.failedCount = r.failedCount;
             if (r.defectDetail && String(r.defectDetail).trim()) clean.defectDetail = String(r.defectDetail).trim();
             if (r.rootCause && String(r.rootCause).trim()) clean.rootCause = String(r.rootCause).trim();
+            if (r.defectCauseDetail && String(r.defectCauseDetail).trim()) clean.defectCauseDetail = String(r.defectCauseDetail).trim();
             if (r.evaluation && String(r.evaluation).trim()) clean.evaluation = String(r.evaluation).trim();
             if (r.treatment && String(r.treatment).trim()) clean.treatment = String(r.treatment).trim();
             if (r.checkTime && r.checkTime !== '08:30') clean.checkTime = r.checkTime;
             if (r.totalLlr && r.totalLlr !== 1) clean.totalLlr = r.totalLlr;
+            if (r.totalLsr) clean.totalLsr = r.totalLsr;
             return clean;
           });
 
@@ -6444,11 +6463,13 @@ export function App() {
           if (Array.isArray(parsed) && parsed.length > 0) {
             const deduplicated = deduplicateOqcRecords(parsed);
             setOqcRecords(prev => {
-              if (deduplicated.length >= prev.length) {
+              if (!prev || prev.length === 0) {
                 console.log(`[IndexedDB Ready Sync] Restored ${deduplicated.length} OQC records from IndexedDB.`);
                 return deduplicated;
               }
-              return prev;
+              const merged = smartMergeArrays(deduplicated, prev, 'dk_oqc_records');
+              console.log(`[IndexedDB Ready Sync] Merged ${deduplicated.length} IDB records with ${prev.length} in-memory records -> ${merged.length} total.`);
+              return deduplicated.length >= merged.length && prev.length === 0 ? deduplicated : merged;
             });
           }
         } catch (e) { }
@@ -6694,8 +6715,13 @@ export function App() {
       try {
         const parsed = JSON.parse(currentSavedStr);
         if (Array.isArray(parsed) && parsed.length > oqcRecords.length) {
-          console.warn(`[OQC Overwrite Protection] Blocked small state (${oqcRecords.length}) from overwriting large saved dataset (${parsed.length}). Restoring saved records.`);
-          setOqcRecords(deduplicateOqcRecords(parsed));
+          console.warn(`[OQC Overwrite Protection] Blocked small state (${oqcRecords.length}) from overwriting large saved dataset (${parsed.length}). Merging saved records.`);
+          if (oqcRecords.length > 0) {
+            const merged = smartMergeArrays(parsed, oqcRecords, 'dk_oqc_records');
+            setOqcRecords(deduplicateOqcRecords(merged));
+          } else {
+            setOqcRecords(deduplicateOqcRecords(parsed));
+          }
           return;
         }
       } catch (e) { }

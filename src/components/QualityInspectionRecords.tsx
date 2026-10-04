@@ -1782,26 +1782,21 @@ export default function QualityInspectionRecords({
   const saveOqcRecordsOptimized = useCallback((updated: OQCRecord[]) => {
     try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
 
-    // 1. Ghi đĩa cục bộ an toàn ngầm (Debounced 150ms - Không gây giật lag)
-    if (asyncLocalStorageTimer.current) clearTimeout(asyncLocalStorageTimer.current);
-    asyncLocalStorageTimer.current = setTimeout(() => {
-      safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-    }, 150);
+    // 1. Ghi bộ nhớ và IndexedDB ngay lập tức (không trì hoãn để tránh mất dữ liệu khi F5/reload)
+    safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
 
-    // 2. Gom đẩy Cloud ngầm sau 5 GIÂY không thao tác (Debounced Batch Push = 5000ms)
-    const OQC_CLOUD_SYNC_DELAY_MS = 5000;
+    // 2. Cập nhật State tức thì
+    setOqcRecords(updated);
+
+    // 3. Gom đẩy Cloud ngầm sau 2 GIÂY không thao tác (Debounced Batch Push = 2000ms)
+    const OQC_CLOUD_SYNC_DELAY_MS = 2000;
     if (asyncOqcSaveTimer.current) clearTimeout(asyncOqcSaveTimer.current);
     asyncOqcSaveTimer.current = setTimeout(() => {
       if (typeof (window as any).syncToServer === 'function') {
-        console.log("⏰ [5-Sec Cloud Sync Engine] Tiến hành đẩy dữ liệu KCS lên Cloud Firestore.");
+        console.log("⏰ [Cloud Sync Engine] Tiến hành đẩy dữ liệu KCS lên Cloud Firestore.");
         (window as any).syncToServer('dk_oqc_records', updated);
       }
     }, OQC_CLOUD_SYNC_DELAY_MS);
-
-    // 3. Hoãn cập nhật State toàn cục (App.tsx) và các thuật toán nặng ngầm để UI paint tức thì 0ms
-    setTimeout(() => {
-      setOqcRecords(updated);
-    }, 0);
   }, [setOqcRecords]);
 
   // Safe IQC persistence helper
@@ -2636,7 +2631,7 @@ export default function QualityInspectionRecords({
     const set = new Set<string>();
     for (let i = 0; i < oqcRecords.length; i++) {
       const d = oqcRecords[i].date;
-      if (d && d.trim()) set.add(d.trim());
+      if (d && d.trim()) set.add(standardizeDate(d.trim()));
     }
     return Array.from(set).sort((a, b) => {
       const partsA = a.split('/');
@@ -3870,7 +3865,7 @@ export default function QualityInspectionRecords({
         continue;
       }
       // 4. Date filter (Cached standardizeDate)
-      if (kcsFilterDate !== 'All' && (r.date ? standardizeDate(r.date) : '') !== kcsFilterDate) {
+      if (kcsFilterDate !== 'All' && standardizeDate(r.date || '') !== standardizeDate(kcsFilterDate)) {
         continue;
       }
       // 5. Search text
@@ -3899,8 +3894,28 @@ export default function QualityInspectionRecords({
       filtered.push(r);
     }
 
-    // Change 5: Removed runtime sort — data is pre-sorted at import/load time
-    // Sorting 31K records on every filter change was O(N log N) waste
+    // Sắp xếp xe mới nhất lên đầu (theo ngày giảm dần, giờ/thời gian cập nhật giảm dần)
+    // Đảm bảo các xe nghiệm thu hôm nay luôn hiện ngay tại Trang 1 cho người dùng thấy
+    filtered.sort((a, b) => {
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      if (dateA !== dateB) {
+        const partsA = dateA.split('/');
+        const partsB = dateB.split('/');
+        const da = parseInt(partsA[0], 10) || 1;
+        const ma = parseInt(partsA[1], 10) || 1;
+        const ya = parseInt(partsA[2], 10) || 2020;
+        const db = parseInt(partsB[0], 10) || 1;
+        const mb = parseInt(partsB[1], 10) || 1;
+        const yb = parseInt(partsB[2], 10) || 2020;
+        if (ya !== yb) return yb - ya;
+        if (ma !== mb) return mb - ma;
+        if (da !== db) return db - da;
+      }
+      const timeA = a.updatedAt || a.createdAt || a.checkTime || '';
+      const timeB = b.updatedAt || b.createdAt || b.checkTime || '';
+      return timeB.localeCompare(timeA);
+    });
 
     const totalCars = filtered.length;
     const yieldRate = totalCars > 0 ? Math.round((passedCount / totalCars) * 100) : 100;
@@ -5097,6 +5112,9 @@ export default function QualityInspectionRecords({
     }
     
     const finalStatus = newOqcStatus;
+    const stdDate = standardizeDate(newOqcDate || new Date().toLocaleDateString('vi-VN'));
+    const dateParts = stdDate.split('/');
+    const nowIso = new Date().toISOString();
 
     const newRecord: OQCRecord & { checkedBy?: string } = {
       id: `OQC-${newOqcSerialNo.trim().toUpperCase().replace(/[\/\s.#$\[\]]/g, '_')}`,
@@ -5110,14 +5128,16 @@ export default function QualityInspectionRecords({
       rootCause: newOqcRootCause,
       lsx: newOqcLsx,
       checkTime: newOqcCheckTime,
-      date: newOqcDate,
-      month: Number(newOqcDate.split('/')[1]) || 5,
-      year: Number(newOqcDate.split('/')[2]) || 2026,
+      date: stdDate,
+      month: Number(dateParts[1]) || (new Date().getMonth() + 1),
+      year: Number(dateParts[2]) || new Date().getFullYear(),
       totalLlr: 1,
       checkedBy: newOqcCheckedBy,
       imageUrl: newOqcImageUrl,
       evaluation: newOqcEvaluation,
-      treatment: newOqcTreatment
+      treatment: newOqcTreatment,
+      createdAt: nowIso,
+      updatedAt: nowIso
     };
 
     // Khi nhập tay dữ liệu mới: Tự động gộp các bản ghi trùng lặp
@@ -5152,6 +5172,7 @@ export default function QualityInspectionRecords({
       if (newRecord.model) existing.model = newRecord.model;
       if (newRecord.color) existing.color = newRecord.color;
       if (newRecord.lsx) existing.lsx = newRecord.lsx;
+      existing.updatedAt = nowIso;
       setOqcRecords(updatedOqcRecords);
       safeStorage.setItem('dk_oqc_records', JSON.stringify(updatedOqcRecords));
       try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) {}
@@ -5167,6 +5188,13 @@ export default function QualityInspectionRecords({
         (window as any).syncToServer('dk_oqc_records', updatedOqcRecords);
       }
     }
+
+    setKcsCurrentPage(1);
+    setKcsFilterDate('All');
+    setKcsFilterMonth('All');
+    setKcsFilterYear('All');
+    setKcsStatusFilter('All');
+    setKcsSearch('');
 
     setShowAddOqcModal(false);
     setNewOqcSerialNo('');
@@ -5196,9 +5224,10 @@ export default function QualityInspectionRecords({
 
     const now = new Date();
     const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-    const nowDate = now.toLocaleDateString('vi-VN');
+    const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
     const nowMonth = now.getMonth() + 1;
     const nowYear = now.getFullYear();
+    const nowIso = now.toISOString();
 
     const updated = oqcRecords.map(r => {
       if (r.id === editingOqcRecord.id || editingOqcGroupIds.includes(r.id)) {
@@ -5212,7 +5241,8 @@ export default function QualityInspectionRecords({
           checkTime: nowTime,
           date: nowDate,
           month: nowMonth,
-          year: nowYear
+          year: nowYear,
+          updatedAt: nowIso
         };
       }
       return r;
@@ -5699,6 +5729,12 @@ export default function QualityInspectionRecords({
       if (firstImportedLsx && kcsSelectedLsx !== 'All' && kcsSelectedLsx !== firstImportedLsx) {
         setKcsSelectedLsx('All');
       }
+      setKcsCurrentPage(1);
+      setKcsFilterDate('All');
+      setKcsFilterMonth('All');
+      setKcsFilterYear('All');
+      setKcsStatusFilter('All');
+      setKcsSearch('');
 
       const finalPassedCount = finalParsed.filter(r => r.status === 'Đạt').length;
       const finalFailedCount = finalParsed.filter(r => r.status === 'Lỗi').length;
@@ -6665,6 +6701,18 @@ export default function QualityInspectionRecords({
             >
               <Plus className="w-3.5 h-3.5" /> Ghi Nhận Sự Cố PQC
             </button>
+          )}
+          {qcMainSubTab === 'oqc' && (
+            <div className="flex flex-wrap gap-1.5">
+              <button 
+                type="button"
+                onClick={() => setShowAddOqcModal(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                title="Thêm phiếu kiểm tra nghiệm thu KCS OQC mới"
+              >
+                <Plus className="w-3.5 h-3.5" /> Thêm Nghiệm Thu KCS
+              </button>
+            </div>
           )}
           {qcMainSubTab === 'color_change' && (
             <div className="flex items-center gap-2">
@@ -12647,7 +12695,9 @@ export default function QualityInspectionRecords({
                       date: dateVal,
                       month: mVal,
                       year: yVal,
-                      totalLlr: 1
+                      totalLlr: 1,
+                      createdAt: new Date().toISOString(),
+                      updatedAt: new Date().toISOString()
                     });
                   }
 
@@ -12688,7 +12738,8 @@ export default function QualityInspectionRecords({
                           color: newRec.color || oldRec.color,
                           partCode: newRec.partCode || oldRec.partCode,
                           chassisNo: newRec.chassisNo || oldRec.chassisNo,
-                          engineNo: newRec.engineNo || oldRec.engineNo
+                          engineNo: newRec.engineNo || oldRec.engineNo,
+                          updatedAt: new Date().toISOString()
                         };
                       } else {
                         unchangedCount++;
@@ -12732,6 +12783,12 @@ export default function QualityInspectionRecords({
                   } else {
                     setKcsSelectedLsx('All');
                   }
+                  setKcsCurrentPage(1);
+                  setKcsFilterDate('All');
+                  setKcsFilterMonth('All');
+                  setKcsFilterYear('All');
+                  setKcsStatusFilter('All');
+                  setKcsSearch('');
                   setLsxImportText('');
                   setShowImportLsxModal(false);
                   alert(`🎉 Đối chiếu & Nạp LSX ${defaultLsx} thành công!\n\nChi tiết đối chiếu:\n• Thêm mới: ${addedCount} xe\n• Cập nhật thông tin: ${updatedCount} xe\n• Giữ nguyên (trùng khớp): ${unchangedCount} xe\n\n(Dữ liệu có thay đổi đã được đồng bộ an toàn lên Cloud Firebase)`);
@@ -12824,9 +12881,12 @@ export default function QualityInspectionRecords({
                 if (!newCarSerialNo.trim()) return;
 
                 const serial = newCarSerialNo.trim();
-                const todayStr = new Date().toLocaleDateString('vi-VN');
-                const todayMonth = new Date().getMonth() + 1;
-                const todayYear = new Date().getFullYear();
+                const now = new Date();
+                const todayStr = standardizeDate(now.toLocaleDateString('vi-VN'));
+                const dateParts = todayStr.split('/');
+                const todayMonth = Number(dateParts[1]) || (now.getMonth() + 1);
+                const todayYear = Number(dateParts[2]) || now.getFullYear();
+                const nowIso = now.toISOString();
 
                 const newRec: OQCRecord = {
                   id: `OQC-${serial.toUpperCase().replace(/[\/\s.#$\[\]]/g, '_')}`,
@@ -12839,18 +12899,20 @@ export default function QualityInspectionRecords({
                   failedCount: 0,
                   rootCause: '',
                   lsx: newCarLsx.trim(),
-                  checkTime: '',
+                  checkTime: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false }),
                   date: todayStr,
                   month: todayMonth,
                   year: todayYear,
-                  totalLlr: 1
+                  totalLlr: 1,
+                  createdAt: nowIso,
+                  updatedAt: nowIso
                 };
 
                 const existingIndex = oqcRecords.findIndex(r => r.serialNo.trim().toUpperCase() === serial.toUpperCase());
                 let updated: OQCRecord[];
                 if (existingIndex > -1) {
                   updated = [...oqcRecords];
-                  updated[existingIndex] = { ...updated[existingIndex], ...newRec };
+                  updated[existingIndex] = { ...updated[existingIndex], ...newRec, updatedAt: nowIso };
                 } else {
                   updated = [newRec, ...oqcRecords];
                 }
@@ -12862,6 +12924,12 @@ export default function QualityInspectionRecords({
                   (window as any).syncToServer('dk_oqc_records', updated);
                 }
                 setKcsSelectedLsx(newRec.lsx);
+                setKcsCurrentPage(1);
+                setKcsFilterDate('All');
+                setKcsFilterMonth('All');
+                setKcsFilterYear('All');
+                setKcsStatusFilter('All');
+                setKcsSearch('');
                 setNewCarSerialNo('');
                 setShowAddCarToLsxModal(false);
                 alert(`Đã thêm xe số khung ${serial} vào LSX ${newRec.lsx}!`);
