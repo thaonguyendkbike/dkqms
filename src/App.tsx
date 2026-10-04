@@ -5148,6 +5148,83 @@ export function App() {
     return result;
   };
 
+  // Helper chuẩn hóa ngày tháng đồng bộ toàn diện về định dạng DD/MM/YYYY
+  const formatQmsDate = (input: any): string => {
+    if (!input) return '';
+    const str = String(input).trim();
+    if (!str || str === '-' || str === 'null' || str === 'undefined') return '';
+
+    // 1. Kiểm tra số serial của Excel (tính từ ngày 1/1/1900, ví dụ 35000 - 75000 tương ứng 1995 - 2105)
+    const num = Number(str);
+    if (!isNaN(num) && num >= 35000 && num <= 75000) {
+      try {
+        const utcDays = Math.floor(num - 25569);
+        const utcValue = utcDays * 86400;
+        const dateInfo = new Date(utcValue * 1000);
+        const dd = String(dateInfo.getUTCDate()).padStart(2, '0');
+        const mm = String(dateInfo.getUTCMonth() + 1).padStart(2, '0');
+        const yyyy = dateInfo.getUTCFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+      } catch (e) {}
+    }
+
+    // 2. Bỏ phần giờ nếu có (ví dụ "20/07/2026 14:30:00" hoặc "2026-07-20T14:30:00")
+    const datePart = str.split(/[ T]/)[0].trim();
+    if (!datePart) return '';
+
+    // 3. Chuẩn hóa dấu phân cách (. thành / hoặc - thành /)
+    const normalized = datePart.replace(/\./g, '/').replace(/-/g, '/');
+    const parts = normalized.split('/').map(p => p.trim()).filter(Boolean);
+
+    if (parts.length === 3) {
+      const p0 = Number(parts[0]);
+      const p1 = Number(parts[1]);
+      const p2 = Number(parts[2]);
+
+      if (!isNaN(p0) && !isNaN(p1) && !isNaN(p2)) {
+        // Trường hợp YYYY/MM/DD (hoặc YYYY-MM-DD)
+        if (parts[0].length === 4) {
+          const yyyy = p0;
+          const mm = String(p1).padStart(2, '0');
+          const dd = String(p2).padStart(2, '0');
+          return `${dd}/${mm}/${yyyy}`;
+        }
+
+        // Trường hợp năm ở cuối: parts[2]
+        let yyyy = p2;
+        if (yyyy < 100) yyyy += 2000;
+
+        // Phân biệt DD/MM/YYYY vs MM/DD/YYYY:
+        // Nếu p0 > 12 và p1 <= 12 => p0 chắc chắn là Ngày, p1 là Tháng
+        // Nếu p0 <= 12 và p1 > 12 => p0 chắc chắn là Tháng, p1 là Ngày
+        // Nếu cả hai <= 12: mặc định p0 là Ngày, p1 là Tháng (theo chuẩn tiếng Việt DD/MM)
+        let dd = p0;
+        let mm = p1;
+        if (p0 <= 12 && p1 > 12) {
+          dd = p1;
+          mm = p0;
+        }
+
+        return `${String(dd).padStart(2, '0')}/${String(mm).padStart(2, '0')}/${yyyy}`;
+      }
+    }
+
+    // 4. Fallback qua Date parser nếu định dạng hợp lệ
+    try {
+      const d = new Date(str);
+      if (!isNaN(d.getTime())) {
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yyyy = d.getFullYear();
+        if (yyyy >= 2000 && yyyy <= 2100) {
+          return `${dd}/${mm}/${yyyy}`;
+        }
+      }
+    } catch (e) {}
+
+    return str;
+  };
+
   const parseBulkCustomerFeedbackText = (text: string): Partial<MarketDefect>[] => {
     if (!text || !text.trim()) return [];
     const rawLines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
@@ -5174,8 +5251,14 @@ export function App() {
         startRowIndex = i + 1;
         cols.forEach((colName, idx) => {
           const low = colName.toLowerCase();
-          // Exclude: Mã phản ánh, Nhân viên, Khu vực, Tỉnh/Thành phố, Hình thức tiếp nhận
-          if (low.includes('mã phản ánh') || low.includes('nhân viên') || low.includes('khu vực') || low.includes('tỉnh/thành phố') || low.includes('tỉnh') || low.includes('thành phố') || low.includes('hình thức tiếp nhận')) {
+          // Cột mã phản ánh (hỗ trợ ghi đè khi trùng mã)
+          if (low.includes('mã phản ánh') || low.includes('mã sự cố') || low.includes('mã pa') || low.includes('mã lỗi') || low === 'mã' || low === 'id' || low.includes('mã hồ sơ')) {
+            headerIndices['code'] = idx;
+            return;
+          }
+
+          // Exclude các cột không dùng: Nhân viên, Khu vực, Tỉnh/Thành phố, Hình thức tiếp nhận
+          if (low.includes('nhân viên') || low.includes('khu vực') || low.includes('tỉnh/thành phố') || low.includes('hình thức tiếp nhận')) {
             return;
           }
 
@@ -5189,7 +5272,7 @@ export function App() {
           else if (low.includes('nguyên nhân')) headerIndices['rootCause'] = idx;
           else if (low.includes('phương án') || low.includes('biện pháp') || low.includes('giải quyết')) headerIndices['correction'] = idx;
           else if (low.includes('người thực hiện') || low.includes('người xử lý')) headerIndices['assignee'] = idx;
-          else if (low.includes('ngày giải quyết') || low.includes('ngày xong')) headerIndices['targetDate'] = idx;
+          else if (low.includes('ngày giải quyết') || low.includes('ngày xong') || low.includes('hạn xử lý')) headerIndices['targetDate'] = idx;
           else if (low.includes('tình trạng') || low.includes('trạng thái')) headerIndices['status'] = idx;
           else if (low.includes('đánh giá kh') || low.includes('đánh giá')) headerIndices['customerRating'] = idx;
           else if (low.includes('mức độ') || low.includes('cấp độ')) headerIndices['severity'] = idx;
@@ -5228,6 +5311,7 @@ export function App() {
       let rawPaCode = '';
 
       if (hasDynamicHeader) {
+        if (headerIndices['code'] !== undefined) rawPaCode = (cols[headerIndices['code']] || '').trim();
         if (headerIndices['sourceDate'] !== undefined) sourceDate = cols[headerIndices['sourceDate']] || '';
         if (headerIndices['customerName'] !== undefined) customerName = cols[headerIndices['customerName']] || '';
         if (headerIndices['defectDate'] !== undefined) defectDate = cols[headerIndices['defectDate']] || '';
@@ -5246,7 +5330,7 @@ export function App() {
         if (headerIndices['dataNotes'] !== undefined) dataNotes = cols[headerIndices['dataNotes']] || '';
       } else {
         // Positional fallback for 21-column sheet
-        rawPaCode = cols[0] || '';
+        rawPaCode = (cols[0] || '').trim();
         sourceDate = cols[1] || '';
         // Col 2: Nhân viên (EXCLUDED)
         // Col 3: Khu vực (EXCLUDED)
@@ -5273,20 +5357,27 @@ export function App() {
 
       const formattedStatus = status.includes('Đã') ? 'Đã xử lý' : status.includes('Đề xuất') ? 'Đề xuất cải tiến' : status.includes('Chưa') ? 'Chưa xử lý' : 'Đang xử lý';
 
+      // Đồng bộ chuẩn hóa ngày tháng theo quy chuẩn DD/MM/YYYY
+      const formattedSourceDate = formatQmsDate(sourceDate);
+      const formattedDefectDate = formatQmsDate(defectDate) || formattedSourceDate || formatQmsDate(new Date().toLocaleDateString('vi-VN'));
+      const formattedTargetDate = formatQmsDate(targetDate);
+      const formattedSaleDate = formattedSourceDate || formattedDefectDate;
+
       const item: Partial<MarketDefect> = {
+        id: rawPaCode || undefined,
         feedbackType: originalCategory.includes('cải tiến') || type.includes('cải tiến') ? 'Đề xuất cải tiến' : 'Lỗi xe từ khách hàng',
         model: model || 'DK Roma SX',
         dealer: customerName || 'Khách hàng / Đại lý',
         customerName: customerName,
-        defectDate: defectDate || new Date().toLocaleDateString('vi-VN'),
-        sourceDate: sourceDate,
+        defectDate: formattedDefectDate,
+        sourceDate: formattedSourceDate,
         originalCategory: originalCategory,
         type: type || 'Khác',
         description: description || 'Nội dung phản ánh từ khách hàng',
         rootCause: rootCause,
         correction: correction,
         assignee: assignee || 'Trưởng nhóm QA/QC',
-        targetDate: targetDate,
+        targetDate: formattedTargetDate,
         status: formattedStatus as any,
         customerRating: customerRating,
         severity: severity || 'Cao',
@@ -5294,7 +5385,7 @@ export function App() {
         dataNotes: dataNotes ? (rawPaCode ? `[Mã gốc: ${rawPaCode}] ${dataNotes}` : dataNotes) : (rawPaCode ? `[Mã gốc: ${rawPaCode}]` : ''),
         chassisNo: '',
         engineNo: '',
-        saleDate: sourceDate || defectDate
+        saleDate: formattedSaleDate
       };
 
       parsedRecords.push(item);
@@ -5308,52 +5399,112 @@ export function App() {
 
     guardAction(() => {
       let currentIdNum = parseInt(nextDefectId.replace(/DEF-/i, ''), 10) || 4010;
+      let overwrittenCount = 0;
+      let newCount = 0;
+
+      // Bản sao danh sách defects để thực hiện ghi đè hoặc thêm mới
+      const workingDefects = [...defects];
       const newItems: MarketDefect[] = [];
 
-      bulkImportParsedPreview.forEach((item, idx) => {
-        const generatedId = `DEF-${currentIdNum + idx}`;
+      bulkImportParsedPreview.forEach((item) => {
+        const inputId = (item.id || '').trim();
         const fType = item.feedbackType || 'Lỗi xe từ khách hàng';
 
-        const newDefect: MarketDefect = {
-          id: generatedId,
-          feedbackType: fType,
-          model: item.model || 'DK Roma SX',
-          chassisNo: item.chassisNo || '',
-          engineNo: item.engineNo || '',
-          saleDate: item.saleDate || item.defectDate || new Date().toLocaleDateString('vi-VN'),
-          dealer: item.dealer || item.customerName || 'Đại lý',
-          customerName: item.customerName || '',
-          defectDate: item.defectDate || new Date().toLocaleDateString('vi-VN'),
-          sourceDate: item.sourceDate || '',
-          originalCategory: item.originalCategory || '',
-          type: item.type || 'Sự cố điện',
-          description: item.description || '',
-          severity: item.severity || 'Cao',
-          severityRationale: item.severityRationale || '',
-          rootCause: item.rootCause || '',
-          correction: item.correction || '',
-          assignee: item.assignee || 'Trưởng nhóm QA/QC',
-          targetDate: item.targetDate || '',
-          status: item.status || 'Chưa xử lý',
-          customerRating: item.customerRating || '',
-          dataNotes: item.dataNotes || '',
-          images: []
-        };
+        // Tìm kiếm bản ghi trùng mã phản ánh trong cơ sở dữ liệu hiện tại
+        let matchIdx = -1;
+        if (inputId) {
+          matchIdx = workingDefects.findIndex(d => {
+            if ((d.id || '').toLowerCase() === inputId.toLowerCase()) return true;
+            if (d.dataNotes && d.dataNotes.toLowerCase().includes(`[mã gốc: ${inputId.toLowerCase()}]`)) return true;
+            return false;
+          });
+        }
 
-        newItems.push(newDefect);
+        if (matchIdx !== -1) {
+          // --- TỰ ĐỘNG GHI ĐÈ KHI TRÙNG MÃ PHẢN ÁNH ---
+          const existing = workingDefects[matchIdx];
+          workingDefects[matchIdx] = {
+            ...existing,
+            feedbackType: fType,
+            model: item.model || existing.model,
+            dealer: item.dealer || item.customerName || existing.dealer,
+            customerName: item.customerName || existing.customerName,
+            defectDate: item.defectDate || existing.defectDate,
+            sourceDate: item.sourceDate || existing.sourceDate,
+            saleDate: item.saleDate || existing.saleDate,
+            originalCategory: item.originalCategory || existing.originalCategory,
+            type: item.type || existing.type,
+            description: item.description || existing.description,
+            rootCause: item.rootCause !== undefined && item.rootCause !== '' ? item.rootCause : existing.rootCause,
+            correction: item.correction !== undefined && item.correction !== '' ? item.correction : existing.correction,
+            assignee: item.assignee || existing.assignee,
+            targetDate: item.targetDate !== undefined && item.targetDate !== '' ? item.targetDate : existing.targetDate,
+            status: item.status || existing.status,
+            customerRating: item.customerRating !== undefined && item.customerRating !== '' ? item.customerRating : existing.customerRating,
+            severity: item.severity || existing.severity,
+            severityRationale: item.severityRationale !== undefined && item.severityRationale !== '' ? item.severityRationale : existing.severityRationale,
+            dataNotes: item.dataNotes || existing.dataNotes
+          };
+          overwrittenCount++;
+        } else {
+          // --- THÊM MỚI BẢN GHI NẾU KHÔNG TRÙNG MÃ ---
+          let generatedId = inputId;
+          const isIdAvailable = generatedId && 
+            !workingDefects.some(d => d.id.toLowerCase() === generatedId.toLowerCase()) && 
+            !newItems.some(d => d.id.toLowerCase() === generatedId.toLowerCase());
+
+          if (!isIdAvailable) {
+            while (
+              workingDefects.some(d => d.id === `DEF-${currentIdNum}`) ||
+              newItems.some(d => d.id === `DEF-${currentIdNum}`)
+            ) {
+              currentIdNum++;
+            }
+            generatedId = `DEF-${currentIdNum++}`;
+          }
+
+          const newDefect: MarketDefect = {
+            id: generatedId,
+            feedbackType: fType,
+            model: item.model || 'DK Roma SX',
+            chassisNo: item.chassisNo || '',
+            engineNo: item.engineNo || '',
+            saleDate: item.saleDate || item.defectDate || formatQmsDate(new Date().toLocaleDateString('vi-VN')),
+            dealer: item.dealer || item.customerName || 'Đại lý',
+            customerName: item.customerName || '',
+            defectDate: item.defectDate || formatQmsDate(new Date().toLocaleDateString('vi-VN')),
+            sourceDate: item.sourceDate || '',
+            originalCategory: item.originalCategory || '',
+            type: item.type || 'Sự cố điện',
+            description: item.description || '',
+            severity: item.severity || 'Cao',
+            severityRationale: item.severityRationale || '',
+            rootCause: item.rootCause || '',
+            correction: item.correction || '',
+            assignee: item.assignee || 'Trưởng nhóm QA/QC',
+            targetDate: item.targetDate || '',
+            status: item.status || 'Chưa xử lý',
+            customerRating: item.customerRating || '',
+            dataNotes: item.dataNotes || (inputId && inputId !== generatedId ? `[Mã gốc: ${inputId}]` : ''),
+            images: []
+          };
+
+          newItems.push(newDefect);
+          newCount++;
+        }
       });
 
-      const updatedDefects = [...newItems, ...defects];
-      setDefects(updatedDefects);
-      safeStorage.setItem('dk_defects', JSON.stringify(updatedDefects));
+      const finalDefects = [...newItems, ...workingDefects];
+      setDefects(finalDefects);
+      safeStorage.setItem('dk_defects', JSON.stringify(finalDefects));
       safeStorage.setItem('dk_defects_is_dirty', 'true');
-      syncToServer('dk_defects', updatedDefects);
+      syncToServer('dk_defects', finalDefects);
 
       setShowBulkImportDefectsModal(false);
       setBulkImportRawText('');
       setBulkImportParsedPreview([]);
 
-      alert(`Kính gửi anh Thao!\n\nHệ thống đã nhập thành công ${newItems.length} phản ánh khách hàng vào phân hệ Phản ánh Thị trường & đồng bộ lên QMS Firestore!`);
+      alert(`Kính gửi anh Thao!\n\nHệ thống đã xử lý thành công:\n- Ghi đè (cập nhật): ${overwrittenCount} bản ghi trùng mã phản ánh\n- Thêm mới: ${newCount} bản ghi mới\n\nToàn bộ dữ liệu đã được đồng bộ chuẩn ngày tháng DD/MM/YYYY, lưu an toàn vào safeStorage và đồng bộ thời gian thực lên QMS Firestore!`);
     });
   };
 
@@ -32028,18 +32179,22 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
               <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-4 text-emerald-950 space-y-2 shadow-xs">
                 <div className="flex items-center gap-2 font-bold text-sm text-emerald-900">
                   <CheckCircle className="w-4 h-4 text-emerald-600" />
-                  <span>Kính gửi anh Thao, Bộ lọc Tự động Lọc & Nhập Dữ liệu Thông minh</span>
+                  <span>Kính gửi anh Thao, Bộ lọc Tự động Lọc, Đồng bộ Ngày & Ghi đè Thông minh</span>
                 </div>
                 <p className="text-xs leading-relaxed text-slate-700 font-medium">
-                  Anh chỉ cần sao chép (Ctrl+C) toàn bộ nội dung bảng dữ liệu từ Excel, Google Sheets hoặc file CSV và dán (Ctrl+V) vào ô dưới đây. Hệ thống sẽ <strong className="text-rose-700 uppercase">TỰ ĐỘNG BỎ QUA 5 CỘT</strong> không sử dụng:
+                  Anh chỉ cần sao chép (Ctrl+C) toàn bộ nội dung bảng dữ liệu từ Excel hoặc file CSV và dán (Ctrl+V) vào ô dưới đây. Hệ thống sẽ:
+                  <br />
+                  • <strong className="text-blue-700">TỰ ĐỘNG GHI ĐÈ:</strong> Nếu phát hiện <strong>Mã phản ánh</strong> (DEF-xxxx hoặc PA-xxx) đã có trong cơ sở dữ liệu QMS, hệ thống sẽ tự động cập nhật đè nội dung mới lên bản ghi cũ.
+                  <br />
+                  • <strong className="text-emerald-700">ĐỒNG BỘ ĐỊNH DẠNG NGÀY:</strong> Tự động chuẩn hóa toàn diện <strong>Ngày nguồn, Ngày tiếp nhận, Ngày/Hạn xử lý</strong> về chuẩn <code>DD/MM/YYYY</code> (xử lý chuẩn cả định dạng Excel US, số serial Excel, gạch chéo hoặc gạch ngang).
+                  <br />
+                  • Tự động bỏ qua 4 cột phụ:
                   <span className="inline-flex gap-1.5 flex-wrap my-1 font-mono text-[11px] font-bold text-slate-800">
-                    <span className="line-through bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded border border-rose-200">Mã phản ánh</span>
-                    <span className="line-through bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded border border-rose-200">Nhân viên</span>
-                    <span className="line-through bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded border border-rose-200">Khu vực</span>
-                    <span className="line-through bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded border border-rose-200">Tỉnh/Thành phố</span>
-                    <span className="line-through bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded border border-rose-200">Hình thức tiếp nhận</span>
+                    <span className="line-through bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">Nhân viên</span>
+                    <span className="line-through bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">Khu vực</span>
+                    <span className="line-through bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">Tỉnh/Thành phố</span>
+                    <span className="line-through bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">Hình thức tiếp nhận</span>
                   </span>
-                  và trích xuất chính xác <strong>16 trường dữ liệu chất lượng</strong> (Model, Tên KH/Đại lý, Ngày tiếp nhận, Loại phản ánh gốc, Nhóm lỗi, Chi tiết, Nguyên nhân, Phương án giải quyết, Người thực hiện, Ngày giải quyết, Trạng thái, Đánh giá KH, Mức độ, Cơ sở mức độ, Ghi chú).
                 </p>
               </div>
 
@@ -32091,13 +32246,28 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
               </div>
 
               {/* Preview Section */}
-              {bulkImportParsedPreview.length > 0 && (
+              {bulkImportParsedPreview.length > 0 && (() => {
+                const previewOverwriteCount = bulkImportParsedPreview.filter(item => 
+                  item.id && defects.some(d => 
+                    (d.id || '').toLowerCase() === item.id!.toLowerCase() ||
+                    (d.dataNotes && d.dataNotes.toLowerCase().includes(`[mã gốc: ${item.id!.toLowerCase()}]`))
+                  )
+                ).length;
+                const previewNewCount = bulkImportParsedPreview.length - previewOverwriteCount;
+
+                return (
                 <div className="space-y-3 pt-2">
                   <div className="flex justify-between items-center bg-emerald-100/70 p-3 rounded-xl border border-emerald-200">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse"></span>
-                      <span className="font-extrabold text-emerald-900 text-xs">
-                        Đã phân tích thành công: <span className="text-emerald-700 text-sm font-black">{bulkImportParsedPreview.length}</span> bản ghi hợp lệ
+                      <span className="font-extrabold text-emerald-950 text-xs">
+                        Đã phân tích: <span className="text-emerald-700 text-sm font-black">{bulkImportParsedPreview.length}</span> bản ghi hợp lệ
+                      </span>
+                      <span className="text-[11px] font-bold text-blue-800 bg-blue-100/80 px-2 py-0.5 rounded-full border border-blue-300">
+                        {previewOverwriteCount} bản ghi ghi đè ✏️
+                      </span>
+                      <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-300">
+                        {previewNewCount} bản ghi mới ➕
                       </span>
                     </div>
                     <button
@@ -32118,22 +32288,48 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                       <thead>
                         <tr className="bg-slate-100 text-slate-700 font-extrabold border-b border-slate-200 uppercase text-[10px] tracking-wider sticky top-0 z-10 shadow-xs">
                           <th className="p-2.5 w-10 text-center">STT</th>
-                          <th className="p-2.5 min-w-[90px]">Ngày tiếp nhận</th>
+                          <th className="p-2.5 min-w-[100px]">Mã Phản Ánh</th>
+                          <th className="p-2.5 min-w-[95px]">Ngày tiếp nhận</th>
                           <th className="p-2.5 min-w-[120px]">Khách hàng / Đại lý</th>
                           <th className="p-2.5 min-w-[90px]">Model</th>
                           <th className="p-2.5 min-w-[110px]">Loại & Nhóm lỗi</th>
                           <th className="p-2.5 min-w-[200px]">Chi tiết phản ánh</th>
                           <th className="p-2.5 min-w-[150px]">Nguyên nhân & Phương án</th>
-                          <th className="p-2.5 min-w-[100px]">Người thực hiện</th>
+                          <th className="p-2.5 min-w-[110px]">Người xử lý & Hạn</th>
                           <th className="p-2.5 min-w-[100px]">Trạng thái & Mức độ</th>
                           <th className="p-2.5 w-10 text-center">Xóa</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {bulkImportParsedPreview.map((item, idx) => (
+                        {bulkImportParsedPreview.map((item, idx) => {
+                          const isDuplicate = !!(item.id && defects.some(d => 
+                            (d.id || '').toLowerCase() === item.id!.toLowerCase() ||
+                            (d.dataNotes && d.dataNotes.toLowerCase().includes(`[mã gốc: ${item.id!.toLowerCase()}]`))
+                          ));
+
+                          return (
                           <tr key={idx} className="hover:bg-slate-50 transition">
                             <td className="p-2.5 text-center font-bold text-slate-400">{idx + 1}</td>
-                            <td className="p-2.5 font-mono text-slate-700 font-bold">{item.defectDate || '-'}</td>
+                            <td className="p-2.5">
+                              <span className="font-mono font-bold text-slate-800 text-[11px] block">
+                                {item.id || 'Tự động sinh'}
+                              </span>
+                              {item.id && isDuplicate ? (
+                                <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-800 border border-blue-200 rounded text-[9px] font-black uppercase">
+                                  Ghi đè ✏️
+                                </span>
+                              ) : (
+                                <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded text-[9px] font-black uppercase">
+                                  Thêm mới ➕
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-2.5">
+                              <span className="font-mono text-slate-700 font-bold block">{item.defectDate || '-'}</span>
+                              {item.sourceDate && item.sourceDate !== item.defectDate && (
+                                <span className="text-[10px] text-slate-400 font-mono block">Nguồn: {item.sourceDate}</span>
+                              )}
+                            </td>
                             <td className="p-2.5 font-bold text-indigo-900">{item.dealer || item.customerName || '-'}</td>
                             <td className="p-2.5 font-black text-slate-800">{item.model || '-'}</td>
                             <td className="p-2.5">
@@ -32150,7 +32346,12 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                               {item.rootCause && <div className="text-slate-600"><strong>NN:</strong> {item.rootCause}</div>}
                               {item.correction && <div className="text-emerald-700"><strong>PA:</strong> {item.correction}</div>}
                             </td>
-                            <td className="p-2.5 font-semibold text-slate-700">{item.assignee || 'Trưởng nhóm QA'}</td>
+                            <td className="p-2.5">
+                              <span className="font-semibold text-slate-700 block">{item.assignee || 'Trưởng nhóm QA'}</span>
+                              {item.targetDate && (
+                                <span className="text-[10px] font-mono font-bold text-indigo-700 block mt-0.5">Hạn: {item.targetDate}</span>
+                              )}
+                            </td>
                             <td className="p-2.5">
                               <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase ${item.status === 'Đã xử lý' ? 'bg-emerald-100 text-emerald-800' :
                                 item.status === 'Đang xử lý' ? 'bg-amber-100 text-amber-800' :
@@ -32176,19 +32377,21 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                               </button>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Modal Footer Actions */}
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
               <span className="text-[11px] text-slate-500 font-semibold italic">
                 {bulkImportParsedPreview.length > 0
-                  ? `Sẵn sàng nhập ${bulkImportParsedPreview.length} bản ghi phản ánh vào cơ sở dữ liệu DKBike QMS.`
+                  ? `Sẵn sàng xử lý ${bulkImportParsedPreview.length} bản ghi phản ánh vào cơ sở dữ liệu DKBike QMS.`
                   : 'Vui lòng dán dữ liệu từ bảng Excel để bắt đầu nhập.'
                 }
               </span>
