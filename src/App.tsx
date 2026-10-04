@@ -3753,6 +3753,7 @@ export function App() {
   const [isDailyLogsFilterExpanded, setIsDailyLogsFilterExpanded] = useState(false);
   const [isMarketDefectsFilterExpanded, setIsMarketDefectsFilterExpanded] = useState(false);
   const [showDefectsDashboard, setShowDefectsDashboard] = useState(true);
+  const [defectsChartTab, setDefectsChartTab] = useState<'all' | 'model' | 'customer' | 'type'>('all');
   const [isEcoFilterExpanded, setIsEcoFilterExpanded] = useState(false);
   const [expandedDashboardModel, setExpandedDashboardModel] = useState<string | null>(null);
   const [dashboardErrorEdits, setDashboardErrorEdits] = useState<Record<string, { treatment: string; status: string }>>({});
@@ -24246,6 +24247,74 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   setMarketDefectsFilterQuickTime('All');
                 };
 
+                // --- TÍNH TOÁN DỮ LIỆU ĐỒ HỌA BIỂU ĐỒ BÁO CÁO (THEO BỘ LỌC ĐỘNG) ---
+                // 1. Thống kê theo Dòng Xe (Model)
+                const modelMap = new Map<string, { count: number; resolved: number; sevA: number }>();
+                dashboardDefects.forEach(d => {
+                  const m = (d.model || 'Khác').trim();
+                  const curr = modelMap.get(m) || { count: 0, resolved: 0, sevA: 0 };
+                  curr.count++;
+                  if (d.status === 'Đã xử lý') curr.resolved++;
+                  if (d.severity === 'A' || d.severity === 'Cao' || d.severity === 'Nghiêm trọng') curr.sevA++;
+                  modelMap.set(m, curr);
+                });
+                const modelChartData = Array.from(modelMap.entries())
+                  .map(([model, data]) => ({
+                    model,
+                    count: data.count,
+                    resolved: data.resolved,
+                    sevA: data.sevA,
+                    pct: dashboardDefects.length > 0 ? Math.round((data.count / dashboardDefects.length) * 100) : 0,
+                    resolveRate: data.count > 0 ? Math.round((data.resolved / data.count) * 100) : 0
+                  }))
+                  .sort((a, b) => b.count - a.count);
+                const maxModelCount = Math.max(...modelChartData.map(m => m.count), 1);
+
+                // 2. Thống kê theo Khách Hàng / Đại Lý (Top Dealers)
+                const customerMap = new Map<string, { count: number; resolved: number; latestDate: string }>();
+                dashboardDefects.forEach(d => {
+                  const c = (d.customerName || d.dealer || 'Khách hàng vãng lai').trim();
+                  const curr = customerMap.get(c) || { count: 0, resolved: 0, latestDate: '' };
+                  curr.count++;
+                  if (d.status === 'Đã xử lý') curr.resolved++;
+                  if (d.defectDate && (!curr.latestDate || d.defectDate > curr.latestDate)) curr.latestDate = d.defectDate;
+                  customerMap.set(c, curr);
+                });
+                const customerChartData = Array.from(customerMap.entries())
+                  .map(([customer, data]) => ({
+                    customer,
+                    count: data.count,
+                    resolved: data.resolved,
+                    latestDate: data.latestDate,
+                    pct: dashboardDefects.length > 0 ? Math.round((data.count / dashboardDefects.length) * 100) : 0,
+                    resolveRate: data.count > 0 ? Math.round((data.resolved / data.count) * 100) : 0
+                  }))
+                  .sort((a, b) => b.count - a.count)
+                  .slice(0, 8); // Top 8 đại lý phản ánh nhiều nhất
+                const maxCustomerCount = Math.max(...customerChartData.map(c => c.count), 1);
+
+                // 3. Thống kê theo Nhóm Lỗi (Defect Categories - Pareto)
+                const typeMap = new Map<string, { count: number; resolved: number; sevA: number }>();
+                dashboardDefects.forEach(d => {
+                  const t = (d.type || 'Chưa phân loại').trim();
+                  const curr = typeMap.get(t) || { count: 0, resolved: 0, sevA: 0 };
+                  curr.count++;
+                  if (d.status === 'Đã xử lý') curr.resolved++;
+                  if (d.severity === 'A' || d.severity === 'Cao' || d.severity === 'Nghiêm trọng') curr.sevA++;
+                  typeMap.set(t, curr);
+                });
+                const typeChartData = Array.from(typeMap.entries())
+                  .map(([type, data]) => ({
+                    type,
+                    count: data.count,
+                    resolved: data.resolved,
+                    sevA: data.sevA,
+                    pct: dashboardDefects.length > 0 ? Math.round((data.count / dashboardDefects.length) * 100) : 0,
+                    resolveRate: data.count > 0 ? Math.round((data.resolved / data.count) * 100) : 0
+                  }))
+                  .sort((a, b) => b.count - a.count);
+                const maxTypeCount = Math.max(...typeChartData.map(t => t.count), 1);
+
                 return (
                   <div className="bg-white border border-slate-300 rounded-xl p-5 shadow-sm space-y-4 animate-fadeIn" id="market_defects_dashboard">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-3 gap-2">
@@ -24473,6 +24542,308 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           <span>Đã xong/Gắn CAPA: <b className="text-emerald-700 font-bold">{totalResolved}</b></span>
                         </div>
                       </div>
+                    </div>
+
+                    {/* ============================================================== */}
+                    {/* KHU VỰC BIỂU ĐỒ BÁO CÁO PHÂN TÍCH CHẤT LƯỢNG (THEO BỘ LỌC ĐỘNG) */}
+                    {/* ============================================================== */}
+                    <div className="pt-3 border-t border-slate-200 space-y-3" id="market_defects_visual_charts">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                        <div className="flex items-center gap-2">
+                          <BarChart className="w-4 h-4 text-indigo-600" />
+                          <span className="text-xs font-black uppercase text-slate-800 tracking-wider">
+                            Biểu Đồ Báo Cáo Phân Tích ({dashboardDefects.length} hồ sơ theo bộ lọc)
+                          </span>
+                        </div>
+
+                        {/* Chart View Switcher Tabs */}
+                        <div className="flex items-center bg-white p-1 rounded-lg border border-slate-300 shadow-3xs text-[11px] font-bold">
+                          <button
+                            type="button"
+                            onClick={() => setDefectsChartTab('all')}
+                            className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${defectsChartTab === 'all'
+                              ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                              : 'text-slate-600 hover:text-indigo-600'
+                              }`}
+                          >
+                            <span>Tất cả</span>
+                            <span className="text-[10px] opacity-80">(3 biểu đồ)</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDefectsChartTab('model')}
+                            className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${defectsChartTab === 'model'
+                              ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                              : 'text-slate-600 hover:text-indigo-600'
+                              }`}
+                          >
+                            <Car className="w-3 h-3" />
+                            <span>Theo Dòng Xe</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDefectsChartTab('customer')}
+                            className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${defectsChartTab === 'customer'
+                              ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                              : 'text-slate-600 hover:text-indigo-600'
+                              }`}
+                          >
+                            <Building2 className="w-3 h-3" />
+                            <span>Theo Khách Hàng</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDefectsChartTab('type')}
+                            className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${defectsChartTab === 'type'
+                              ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
+                              : 'text-slate-600 hover:text-indigo-600'
+                              }`}
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>Theo Nhóm Lỗi</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Hiển thị nếu không có dữ liệu khớp bộ lọc */}
+                      {dashboardDefects.length === 0 ? (
+                        <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-500 space-y-1">
+                          <p className="text-xs font-bold">Không có bản ghi nào phù hợp với bộ lọc hiện tại để vẽ biểu đồ.</p>
+                          <p className="text-[11px] text-slate-400">Vui lòng điều chỉnh hoặc xóa bộ lọc để hiển thị đầy đủ biểu đồ thống kê.</p>
+                        </div>
+                      ) : (
+                        <div className={`grid gap-4 ${defectsChartTab === 'all' ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1'}`}>
+
+                          {/* BIỂU ĐỒ 1: THEO DÒNG XE (MODEL) */}
+                          {(defectsChartTab === 'all' || defectsChartTab === 'model') && (
+                            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3 flex flex-col justify-between hover:border-indigo-300 transition">
+                              <div>
+                                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="p-1 bg-indigo-100 text-indigo-700 rounded-md">
+                                      <Car className="w-3.5 h-3.5" />
+                                    </div>
+                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                                      Phân Bổ Theo Dòng Xe ({modelChartData.length})
+                                    </h4>
+                                  </div>
+                                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                                    Model
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-1 mb-3 italic">
+                                  * Nhấp vào thanh xe để lọc nhanh dữ liệu theo model.
+                                </p>
+
+                                <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                                  {modelChartData.map((item, idx) => {
+                                    const barWidth = Math.max(8, Math.round((item.count / maxModelCount) * 100));
+                                    const isSelected = marketDefectsFilterModel === item.model;
+
+                                    return (
+                                      <div
+                                        key={idx}
+                                        onClick={() => setMarketDefectsFilterModel(isSelected ? 'All' : item.model)}
+                                        className={`p-2.5 rounded-lg border transition cursor-pointer group ${isSelected
+                                          ? 'bg-indigo-50 border-indigo-300 ring-1 ring-indigo-400'
+                                          : 'bg-slate-50/70 border-slate-200/80 hover:bg-indigo-50/40 hover:border-indigo-200'
+                                          }`}
+                                        title={`Nhấp để ${isSelected ? 'bỏ lọc' : 'lọc'} theo model ${item.model}`}
+                                      >
+                                        <div className="flex justify-between items-center text-xs mb-1">
+                                          <span className="font-extrabold text-slate-800 group-hover:text-indigo-700 transition flex items-center gap-1 truncate max-w-[200px]">
+                                            <span className="w-4 text-[10px] text-slate-400 font-mono">#{idx + 1}</span>
+                                            <span className="truncate">{item.model}</span>
+                                          </span>
+                                          <div className="flex items-center gap-1.5 font-mono text-[11px] shrink-0">
+                                            <b className="text-indigo-900 font-black">{item.count}</b>
+                                            <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
+                                          </div>
+                                        </div>
+
+                                        {/* Bar Progress */}
+                                        <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                          <div
+                                            className="bg-linear-to-r from-indigo-500 to-blue-600 h-2 rounded-full transition-all duration-500"
+                                            style={{ width: `${barWidth}%` }}
+                                          />
+                                        </div>
+
+                                        <div className="flex justify-between items-center mt-1.5 text-[10px]">
+                                          <span className={`font-semibold ${item.resolveRate >= 80 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                            ✓ {item.resolveRate}% đã xử lý ({item.resolved}/{item.count})
+                                          </span>
+                                          {item.sevA > 0 ? (
+                                            <span className="text-rose-700 font-bold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 text-[9px]">
+                                              ⚠ {item.sevA} lỗi nghiêm trọng
+                                            </span>
+                                          ) : (
+                                            <span className="text-slate-400 text-[9px]">0 nghiêm trọng</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* BIỂU ĐỒ 2: THEO KHÁCH HÀNG / ĐẠI LÝ */}
+                          {(defectsChartTab === 'all' || defectsChartTab === 'customer') && (
+                            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3 flex flex-col justify-between hover:border-emerald-300 transition">
+                              <div>
+                                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="p-1 bg-emerald-100 text-emerald-700 rounded-md">
+                                      <Building2 className="w-3.5 h-3.5" />
+                                    </div>
+                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                                      Top Khách Hàng / Đại Lý (Top {customerChartData.length})
+                                    </h4>
+                                  </div>
+                                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                    Đại lý
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-1 mb-3 italic">
+                                  * Nhấp vào tên đại lý để tìm kiếm các sự cố liên quan.
+                                </p>
+
+                                <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                                  {customerChartData.map((item, idx) => {
+                                    const barWidth = Math.max(8, Math.round((item.count / maxCustomerCount) * 100));
+                                    const isSelected = marketDefectsSearch === item.customer;
+
+                                    return (
+                                      <div
+                                        key={idx}
+                                        onClick={() => setMarketDefectsSearch(isSelected ? '' : item.customer)}
+                                        className={`p-2.5 rounded-lg border transition cursor-pointer group ${isSelected
+                                          ? 'bg-emerald-50 border-emerald-300 ring-1 ring-emerald-400'
+                                          : 'bg-slate-50/70 border-slate-200/80 hover:bg-emerald-50/40 hover:border-emerald-200'
+                                          }`}
+                                        title={`Nhấp để tìm kiếm nhanh theo ${item.customer}`}
+                                      >
+                                        <div className="flex justify-between items-center text-xs mb-1">
+                                          <span className="font-extrabold text-slate-800 group-hover:text-emerald-700 transition flex items-center gap-1.5 truncate max-w-[200px]">
+                                            <span className={`w-4 text-[9px] font-black rounded text-center ${idx === 0 ? 'bg-amber-100 text-amber-800' :
+                                              idx === 1 ? 'bg-slate-200 text-slate-700' :
+                                                idx === 2 ? 'bg-amber-700/20 text-amber-900' : 'text-slate-400'
+                                              }`}>
+                                              #{idx + 1}
+                                            </span>
+                                            <span className="truncate">{item.customer}</span>
+                                          </span>
+                                          <div className="flex items-center gap-1.5 font-mono text-[11px] shrink-0">
+                                            <b className="text-emerald-900 font-black">{item.count}</b>
+                                            <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
+                                          </div>
+                                        </div>
+
+                                        {/* Bar Progress */}
+                                        <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                          <div
+                                            className="bg-linear-to-r from-emerald-500 to-teal-600 h-2 rounded-full transition-all duration-500"
+                                            style={{ width: `${barWidth}%` }}
+                                          />
+                                        </div>
+
+                                        <div className="flex justify-between items-center mt-1.5 text-[10px]">
+                                          <span className="text-slate-600 font-semibold">
+                                            ✓ {item.resolved}/{item.count} đã xử lý ({item.resolveRate}%)
+                                          </span>
+                                          {item.latestDate && (
+                                            <span className="text-slate-400 font-mono text-[9px]">
+                                              Gần nhất: {item.latestDate}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* BIỂU ĐỒ 3: THEO NHÓM LỖI (PARETO CATEGORIES) */}
+                          {(defectsChartTab === 'all' || defectsChartTab === 'type') && (
+                            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3 flex flex-col justify-between hover:border-amber-300 transition">
+                              <div>
+                                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="p-1 bg-amber-100 text-amber-700 rounded-md">
+                                      <AlertTriangle className="w-3.5 h-3.5" />
+                                    </div>
+                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                                      Cơ Cấu Nhóm Lỗi Pareto ({typeChartData.length})
+                                    </h4>
+                                  </div>
+                                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                    Nhóm lỗi
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-1 mb-3 italic">
+                                  * Nhấp vào nhóm lỗi để lọc danh sách sự cố tương ứng.
+                                </p>
+
+                                <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                                  {typeChartData.map((item, idx) => {
+                                    const barWidth = Math.max(8, Math.round((item.count / maxTypeCount) * 100));
+                                    const isSelected = marketDefectsSearch === item.type;
+
+                                    return (
+                                      <div
+                                        key={idx}
+                                        onClick={() => setMarketDefectsSearch(isSelected ? '' : item.type)}
+                                        className={`p-2.5 rounded-lg border transition cursor-pointer group ${isSelected
+                                          ? 'bg-amber-50 border-amber-300 ring-1 ring-amber-400'
+                                          : 'bg-slate-50/70 border-slate-200/80 hover:bg-amber-50/40 hover:border-amber-200'
+                                          }`}
+                                        title={`Nhấp để lọc theo nhóm lỗi ${item.type}`}
+                                      >
+                                        <div className="flex justify-between items-center text-xs mb-1">
+                                          <span className="font-extrabold text-slate-800 group-hover:text-amber-700 transition flex items-center gap-1 truncate max-w-[200px]">
+                                            <span className="w-4 text-[10px] text-slate-400 font-mono">#{idx + 1}</span>
+                                            <span className="truncate">{item.type}</span>
+                                          </span>
+                                          <div className="flex items-center gap-1.5 font-mono text-[11px] shrink-0">
+                                            <b className="text-amber-900 font-black">{item.count}</b>
+                                            <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
+                                          </div>
+                                        </div>
+
+                                        {/* Bar Progress */}
+                                        <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                          <div
+                                            className="bg-linear-to-r from-amber-500 to-rose-600 h-2 rounded-full transition-all duration-500"
+                                            style={{ width: `${barWidth}%` }}
+                                          />
+                                        </div>
+
+                                        <div className="flex justify-between items-center mt-1.5 text-[10px]">
+                                          <span className={`font-semibold ${item.resolveRate >= 80 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                            ✓ {item.resolveRate}% xử lý ({item.resolved}/{item.count})
+                                          </span>
+                                          {item.sevA > 0 ? (
+                                            <span className="text-rose-700 font-bold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 text-[9px]">
+                                              ⚠ {item.sevA} mức A/Cao
+                                            </span>
+                                          ) : (
+                                            <span className="text-slate-400 text-[9px]">0 nghiêm trọng</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

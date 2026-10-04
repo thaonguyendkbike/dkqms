@@ -17,3 +17,7 @@
 - Người dùng: **anh Thao** (không dùng "Thảo" hoặc "chị Thảo").
 - Tên công ty: **Công ty TNHH Xe điện DK Việt Nhật**
 - Thương hiệu: **DKBike** | Slogan: **Xe cho cả gia đình** | Phòng ban: **Quản lý chất lượng** (**QLCL** / **DK QMS**)
+
+## 5. Quy tắc Kiểm thử & Trình duyệt (No Localhost Browser Rule)
+- **Tuyệt đối KHÔNG tự ý mở trình duyệt để kiểm tra localhost** (KHÔNG dùng `browser_subagent` hay `open_browser_url` để mở localhost/web).
+- Mọi kiểm thử hoàn thành sau khi sửa code đều sử dụng `npx tsc --noEmit`. Khi code đạt chuẩn không lỗi, báo cáo kết quả và push git để anh Thao trực tiếp kiểm tra trên trình duyệt của anh.

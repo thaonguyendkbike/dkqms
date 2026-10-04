@@ -33,3 +33,7 @@
 - **Phòng ban**: "Quản lý chất lượng", viết tắt tiếng Việt là "QLCL", viết tắt tiếng Anh là "DK QMS"
 - **Yêu cầu áp dụng**: Khi thiết kế, chỉnh sửa, hiển thị biểu mẫu hoặc xuất bản/in các báo cáo, bắt buộc phải hiển thị đúng tên công ty, thương hiệu, khẩu hiệu và phòng ban theo quy chuẩn này.
 
+### 5. Quy tắc Trình duyệt & Môi trường Kiểm thử (No Localhost Browser Rule)
+- **Tuyệt đối KHÔNG tự ý mở trình duyệt để kiểm tra localhost** (KHÔNG dùng `browser_subagent` hay `open_browser_url` để mở localhost/web).
+- Khi sửa code xong, chỉ cần kiểm tra tính toàn vẹn cú pháp và kiểu dữ liệu bằng `npx tsc --noEmit`, sau đó báo cáo kết quả và push git để anh Thao trực tiếp kiểm tra trên trình duyệt của anh.
+
