@@ -181,6 +181,22 @@
     z-index: 99999 !important;
   }
 
+  body.printing-capa, body.printing-defect {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  body.printing-capa .fixed, body.printing-defect .fixed,
+  body.printing-capa #root, body.printing-defect #root {
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
   body.printing-capa #capa_print_zone > div {
     border: none !important;
     box-shadow: none !important;

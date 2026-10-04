@@ -397,12 +397,9 @@ export function mergeMasterModels(currentList: any[], baseList: any[] = INITIAL_
 
 function getSavedState<T>(key: string, baseData: T): T {
   try {
-    // ĐỌC TỪ safeStorage TRƯỚC (memoryStore + IndexedDB) cho dk_oqc_records
-    // vì safeStorage.setItem chủ động xóa dk_oqc_records khỏi native localStorage 
-    // để tránh lỗi tràn bộ nhớ 5MB. Nếu chỉ đọc localStorage thì sẽ trả về null → mất dữ liệu!
-    const saved = (key === 'dk_oqc_records')
-      ? (safeStorage.getItem(key) || localStorage.getItem(key))
-      : localStorage.getItem(key);
+    // ĐỌC TỪ safeStorage TRƯỚC (memoryStore + IndexedDB) cho mọi khóa
+    // vì safeStorage bảo vệ dữ liệu khi native localStorage bị đầy hoặc vượt quota 5MB
+    const saved = safeStorage.getItem(key) || localStorage.getItem(key);
     if (saved !== null) {
       const parsed = JSON.parse(saved);
       if (parsed === null || parsed === undefined) {
@@ -2205,9 +2202,7 @@ export function App() {
 
     return dirtyKeysList.map((key) => {
       const label = keyLabels[key] || key;
-      const localStr = (key === 'dk_oqc_records')
-        ? (safeStorage.getItem(key) || localStorage.getItem(key) || '[]')
-        : (localStorage.getItem(key) || '[]');
+      const localStr = safeStorage.getItem(key) || localStorage.getItem(key) || '[]';
       const serverStr = lastSyncedValues.current[key] || '[]';
 
       let localItems: any[] = [];
@@ -3066,7 +3061,8 @@ export function App() {
         setCapas(serverData.dk_capas);
         safeStorage.setItem('dk_capas', JSON.stringify(serverData.dk_capas));
       }
-      if (serverData.dk_ecos !== undefined && Array.isArray(serverData.dk_ecos)) {
+      const isEcosDirty = localStorage.getItem('dk_ecos_is_dirty') === 'true';
+      if (serverData.dk_ecos !== undefined && Array.isArray(serverData.dk_ecos) && !isEcosDirty) {
         setEcos(serverData.dk_ecos);
         safeStorage.setItem('dk_ecos', JSON.stringify(serverData.dk_ecos));
       }
@@ -3083,11 +3079,16 @@ export function App() {
         setPqcRecords(serverData.dk_pqc_records);
         safeStorage.setItem('dk_pqc_records', JSON.stringify(serverData.dk_pqc_records));
       }
-      if (serverData.dk_improvement_actions !== undefined && Array.isArray(serverData.dk_improvement_actions)) {
+      const isActionsDirty = localStorage.getItem('dk_improvement_actions_is_dirty') === 'true';
+      if (serverData.dk_improvement_actions !== undefined && Array.isArray(serverData.dk_improvement_actions) && !isActionsDirty) {
         setImprovementActions(serverData.dk_improvement_actions);
         safeStorage.setItem('dk_improvement_actions', JSON.stringify(serverData.dk_improvement_actions));
       }
-      if (serverData.dk_defects !== undefined) setDefects(serverData.dk_defects);
+      const isDefectsDirty = localStorage.getItem('dk_defects_is_dirty') === 'true';
+      if (serverData.dk_defects !== undefined && Array.isArray(serverData.dk_defects) && !isDefectsDirty) {
+        setDefects(serverData.dk_defects);
+        safeStorage.setItem('dk_defects', JSON.stringify(serverData.dk_defects));
+      }
       if (serverData.dk_copqs !== undefined) setCopqs(serverData.dk_copqs);
       if (serverData.dk_fmea !== undefined) setFmea(serverData.dk_fmea);
       if (serverData.dk_custom_forms !== undefined) setCustomForms(serverData.dk_custom_forms);
@@ -3749,7 +3750,7 @@ export function App() {
   const [marketDefectsFilterQuickTime, setMarketDefectsFilterQuickTime] = useState<string>('All');
   const [isDailyLogsFilterExpanded, setIsDailyLogsFilterExpanded] = useState(false);
   const [isMarketDefectsFilterExpanded, setIsMarketDefectsFilterExpanded] = useState(false);
-  const [showDefectsDashboard, setShowDefectsDashboard] = useState(false);
+  const [showDefectsDashboard, setShowDefectsDashboard] = useState(true);
   const [isEcoFilterExpanded, setIsEcoFilterExpanded] = useState(false);
   const [expandedDashboardModel, setExpandedDashboardModel] = useState<string | null>(null);
   const [dashboardErrorEdits, setDashboardErrorEdits] = useState<Record<string, { treatment: string; status: string }>>({});
@@ -4021,12 +4022,20 @@ export function App() {
       if (dateStr.includes('/')) {
         const parts = dateStr.split('/');
         if (parts.length === 3) {
-          return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+          if (parts[2].length === 4) {
+            return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+          } else if (parts[0].length === 4) {
+            return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+          }
         }
       } else if (dateStr.includes('-')) {
         const parts = dateStr.split('-');
         if (parts.length === 3) {
-          return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+          if (parts[0].length === 4) {
+            return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+          } else if (parts[2].length === 4) {
+            return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+          }
         }
       }
       const d = new Date(dateStr);
@@ -4102,13 +4111,15 @@ export function App() {
         matchesTime = false;
       }
 
-      return matchesSearch && matchesStatus && matchesModel && matchesTime;
+      return matchesSearch && matchesStatus && matchesModel && matchesTime && matchesSeverity && matchesFeedbackType;
     });
   }, [
     defects,
     marketDefectsSearch,
     marketDefectsFilterStatus,
     marketDefectsFilterModel,
+    marketDefectsFilterSeverity,
+    marketDefectsFilterFeedbackType,
     marketDefectsFilterMonth,
     marketDefectsFilterYear,
     marketDefectsFilterQuickTime
@@ -5332,6 +5343,8 @@ export function App() {
 
       const updatedDefects = [...newItems, ...defects];
       setDefects(updatedDefects);
+      safeStorage.setItem('dk_defects', JSON.stringify(updatedDefects));
+      safeStorage.setItem('dk_defects_is_dirty', 'true');
       syncToServer('dk_defects', updatedDefects);
 
       setShowBulkImportDefectsModal(false);
@@ -5936,6 +5949,8 @@ export function App() {
       };
       const updatedEcos = [newEco, ...ecos];
       setEcos(updatedEcos);
+      safeStorage.setItem('dk_ecos', JSON.stringify(updatedEcos));
+      safeStorage.setItem('dk_ecos_is_dirty', 'true');
       syncToServer('dk_ecos', updatedEcos);
       setEcoImageUrl('');
       alert("Thêm thay đổi thiết kế kỹ thuật ECO thành công!");
@@ -5972,6 +5987,8 @@ export function App() {
       };
       const updatedDefects = [newDefect, ...defects];
       setDefects(updatedDefects);
+      safeStorage.setItem('dk_defects', JSON.stringify(updatedDefects));
+      safeStorage.setItem('dk_defects_is_dirty', 'true');
       syncToServer('dk_defects', updatedDefects);
 
       setDefectImageUrl('');
@@ -6185,6 +6202,8 @@ export function App() {
           case 'defect': {
             const updated = defects.filter(d => d.id !== id);
             setDefects(updated);
+            safeStorage.setItem('dk_defects', JSON.stringify(updated));
+            safeStorage.setItem('dk_defects_is_dirty', 'true');
             syncToServer('dk_defects', updated);
             break;
           }
@@ -6199,14 +6218,14 @@ export function App() {
               return d;
             });
             setDefects(updatedDefects);
-            localStorage.setItem('dk_defects', JSON.stringify(updatedDefects));
-            localStorage.setItem('dk_defects_is_dirty', 'true');
+            safeStorage.setItem('dk_defects', JSON.stringify(updatedDefects));
+            safeStorage.setItem('dk_defects_is_dirty', 'true');
             syncToServer('dk_defects', updatedDefects);
 
             const updatedActions = improvementActions.filter(act => act.id !== id);
             setImprovementActions(updatedActions);
-            localStorage.setItem('dk_improvement_actions', JSON.stringify(updatedActions));
-            localStorage.setItem('dk_improvement_actions_is_dirty', 'true');
+            safeStorage.setItem('dk_improvement_actions', JSON.stringify(updatedActions));
+            safeStorage.setItem('dk_improvement_actions_is_dirty', 'true');
             syncToServer('dk_improvement_actions', updatedActions);
             break;
           }
@@ -6219,6 +6238,8 @@ export function App() {
           case 'eco': {
             const updated = ecos.filter(ec => ec.id !== id);
             setEcos(updated);
+            safeStorage.setItem('dk_ecos', JSON.stringify(updated));
+            safeStorage.setItem('dk_ecos_is_dirty', 'true');
             syncToServer('dk_ecos', updated);
             break;
           }
@@ -23991,6 +24012,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       : (marketDefectsSearch ||
                         marketDefectsFilterModel !== 'All' ||
                         marketDefectsFilterStatus !== 'All' ||
+                        marketDefectsFilterSeverity !== 'All' ||
+                        marketDefectsFilterFeedbackType !== 'All' ||
                         marketDefectsFilterMonth !== 'All' ||
                         marketDefectsFilterYear !== 'All' ||
                         marketDefectsFilterQuickTime !== 'All')
@@ -24003,6 +24026,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     {(marketDefectsSearch ||
                       marketDefectsFilterModel !== 'All' ||
                       marketDefectsFilterStatus !== 'All' ||
+                      marketDefectsFilterSeverity !== 'All' ||
+                      marketDefectsFilterFeedbackType !== 'All' ||
                       marketDefectsFilterMonth !== 'All' ||
                       marketDefectsFilterYear !== 'All' ||
                       marketDefectsFilterQuickTime !== 'All') && (
@@ -24032,15 +24057,44 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 </div>
               </div>
 
-              {/* Dashboard Thống kê Lỗi Xe & Đề Xuất Cải Tiến (Mặc định bị ẩn đi) */}
+              {/* Dashboard Thống kê Lỗi Xe & Đề Xuất Cải Tiến */}
               {showDefectsDashboard && (() => {
-                const allCustomerDefects = defects.filter(d => (d.feedbackType || 'Lỗi xe từ khách hàng') === 'Lỗi xe từ khách hàng');
-                const allSuggestions = defects.filter(d => d.feedbackType === 'Đề xuất cải tiến');
+                // Thống kê động hoàn toàn theo mọi tiêu chí bộ lọc (Tìm kiếm / Model / Xử lý / Mức độ / Phân loại / Thời gian)
+                const isDashboardFiltered = !!(marketDefectsSearch ||
+                  marketDefectsFilterModel !== 'All' ||
+                  marketDefectsFilterStatus !== 'All' ||
+                  marketDefectsFilterSeverity !== 'All' ||
+                  marketDefectsFilterFeedbackType !== 'All' ||
+                  marketDefectsFilterMonth !== 'All' ||
+                  marketDefectsFilterYear !== 'All' ||
+                  marketDefectsFilterQuickTime !== 'All');
+                const dashboardDefects = filteredMarketDefects;
+                const dashboardDefectIds = new Set(dashboardDefects.map(d => d.id));
+                const dashboardActions = isDashboardFiltered
+                  ? improvementActions.filter(act => {
+                      if (act.defectId && dashboardDefectIds.has(act.defectId)) return true;
+                      if (marketDefectsFilterModel !== 'All' && act.model === marketDefectsFilterModel) return true;
+                      if (marketDefectsSearch) {
+                        const q = marketDefectsSearch.toLowerCase();
+                        if ((act.id || '').toLowerCase().includes(q) ||
+                            (act.model || '').toLowerCase().includes(q) ||
+                            (act.content || '').toLowerCase().includes(q) ||
+                            (act.assignee || '').toLowerCase().includes(q) ||
+                            (act.ecoResult || '').toLowerCase().includes(q)) {
+                          return true;
+                        }
+                      }
+                      return false;
+                    })
+                  : improvementActions;
+
+                const allCustomerDefects = dashboardDefects.filter(d => (d.feedbackType || 'Lỗi xe từ khách hàng') === 'Lỗi xe từ khách hàng');
+                const allSuggestions = dashboardDefects.filter(d => d.feedbackType === 'Đề xuất cải tiến');
 
                 const custUnprocessed = allCustomerDefects.filter(d => d.status === 'Chưa xử lý').length;
                 const custProcessing = allCustomerDefects.filter(d => d.status === 'Đang xử lý').length;
                 const custProcessed = allCustomerDefects.filter(d => d.status === 'Đã xử lý').length;
-                const custSevA = allCustomerDefects.filter(d => d.severity === 'A').length;
+                const custSevA = allCustomerDefects.filter(d => d.severity === 'A' || d.severity === 'Cao').length;
 
                 const custRate = allCustomerDefects.length > 0 ? Math.round((custProcessed / allCustomerDefects.length) * 100) : 0;
 
@@ -24048,18 +24102,29 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 const sugPending = allSuggestions.length - sugConverted;
                 const sugRate = allSuggestions.length > 0 ? Math.round((sugConverted / allSuggestions.length) * 100) : 0;
 
-                const actTotal = improvementActions.length;
-                const actDone = improvementActions.filter(act => act.status === 'Đã hoàn thành').length;
+                const actTotal = dashboardActions.length;
+                const actDone = dashboardActions.filter(act => act.status === 'Đã hoàn thành').length;
                 const actInProg = actTotal - actDone;
                 const actRate = actTotal > 0 ? Math.round((actDone / actTotal) * 100) : 0;
 
-                const totalIssues = defects.length;
+                const totalIssues = dashboardDefects.length;
                 const totalResolved = custProcessed + sugConverted;
                 const overallRate = totalIssues > 0 ? Math.round((totalResolved / totalIssues) * 100) : 0;
 
+                const handleClearAllFilters = () => {
+                  setMarketDefectsSearch('');
+                  setMarketDefectsFilterModel('All');
+                  setMarketDefectsFilterStatus('All');
+                  setMarketDefectsFilterSeverity('All');
+                  setMarketDefectsFilterFeedbackType('All');
+                  setMarketDefectsFilterMonth('All');
+                  setMarketDefectsFilterYear('All');
+                  setMarketDefectsFilterQuickTime('All');
+                };
+
                 return (
                   <div className="bg-white border border-slate-300 rounded-xl p-5 shadow-sm space-y-4 animate-fadeIn" id="market_defects_dashboard">
-                    <div className="flex justify-between items-center border-b border-slate-200 pb-3">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-3 gap-2">
                       <div className="flex items-center gap-2">
                         <div className="p-2 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-600">
                           <Activity className="w-5 h-5" />
@@ -24071,14 +24136,87 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           <p className="text-[11px] text-slate-500">Phân tích trực quan tình trạng xử lý sự cố thị trường, sáng kiến cải tiến & kế hoạch ECO</p>
                         </div>
                       </div>
-                      <button
-                        onClick={() => setShowDefectsDashboard(false)}
-                        className="text-slate-500 hover:text-slate-800 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer flex items-center gap-1 text-xs font-bold border border-slate-300 bg-slate-50"
-                        title="Thu gọn Dashboard"
-                      >
-                        <EyeOff className="w-3.5 h-3.5" /> Thu gọn
-                      </button>
+                      <div className="flex items-center gap-2 self-end sm:self-center">
+                        {isDashboardFiltered && (
+                          <button
+                            onClick={handleClearAllFilters}
+                            className="text-indigo-600 hover:text-indigo-800 p-1.5 rounded-lg hover:bg-indigo-50 transition cursor-pointer flex items-center gap-1 text-xs font-bold border border-indigo-200 bg-white"
+                            title="Xóa nhanh toàn bộ bộ lọc đang áp dụng"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" /> Xóa bộ lọc
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setShowDefectsDashboard(false)}
+                          className="text-slate-500 hover:text-slate-800 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer flex items-center gap-1 text-xs font-bold border border-slate-300 bg-slate-50"
+                          title="Thu gọn Dashboard"
+                        >
+                          <EyeOff className="w-3.5 h-3.5" /> Thu gọn
+                        </button>
+                      </div>
                     </div>
+
+                    {/* Active Filter Dimension Tags Bar */}
+                    {isDashboardFiltered && (
+                      <div className="flex flex-wrap items-center gap-1.5 bg-indigo-50/70 border border-indigo-200 rounded-lg p-2 text-[11px] text-slate-700">
+                        <span className="font-extrabold text-indigo-800 text-[10px] uppercase flex items-center gap-1 mr-1">
+                          <SlidersHorizontal className="w-3 h-3" /> Đang lọc ({dashboardDefects.length}/{defects.length}):
+                        </span>
+                        {marketDefectsSearch && (
+                          <span className="inline-flex items-center gap-1 bg-white border border-indigo-300 rounded px-2 py-0.5 font-semibold text-slate-800">
+                            Tìm: <b className="text-indigo-700">"{marketDefectsSearch}"</b>
+                            <button onClick={() => setMarketDefectsSearch('')} className="text-slate-400 hover:text-slate-600 cursor-pointer ml-0.5">✕</button>
+                          </span>
+                        )}
+                        {marketDefectsFilterModel !== 'All' && (
+                          <span className="inline-flex items-center gap-1 bg-white border border-indigo-300 rounded px-2 py-0.5 font-semibold text-slate-800">
+                            Model: <b className="text-indigo-700">{marketDefectsFilterModel}</b>
+                            <button onClick={() => setMarketDefectsFilterModel('All')} className="text-slate-400 hover:text-slate-600 cursor-pointer ml-0.5">✕</button>
+                          </span>
+                        )}
+                        {marketDefectsFilterStatus !== 'All' && (
+                          <span className="inline-flex items-center gap-1 bg-white border border-indigo-300 rounded px-2 py-0.5 font-semibold text-slate-800">
+                            Xử lý: <b className="text-indigo-700">{marketDefectsFilterStatus}</b>
+                            <button onClick={() => setMarketDefectsFilterStatus('All')} className="text-slate-400 hover:text-slate-600 cursor-pointer ml-0.5">✕</button>
+                          </span>
+                        )}
+                        {marketDefectsFilterSeverity !== 'All' && (
+                          <span className="inline-flex items-center gap-1 bg-white border border-indigo-300 rounded px-2 py-0.5 font-semibold text-slate-800">
+                            Mức độ: <b className="text-indigo-700">Mức {marketDefectsFilterSeverity}</b>
+                            <button onClick={() => setMarketDefectsFilterSeverity('All')} className="text-slate-400 hover:text-slate-600 cursor-pointer ml-0.5">✕</button>
+                          </span>
+                        )}
+                        {marketDefectsFilterFeedbackType !== 'All' && (
+                          <span className="inline-flex items-center gap-1 bg-white border border-indigo-300 rounded px-2 py-0.5 font-semibold text-slate-800">
+                            Phân loại: <b className="text-indigo-700">{marketDefectsFilterFeedbackType}</b>
+                            <button onClick={() => setMarketDefectsFilterFeedbackType('All')} className="text-slate-400 hover:text-slate-600 cursor-pointer ml-0.5">✕</button>
+                          </span>
+                        )}
+                        {marketDefectsFilterQuickTime !== 'All' && (
+                          <span className="inline-flex items-center gap-1 bg-white border border-indigo-300 rounded px-2 py-0.5 font-semibold text-slate-800">
+                            Thời gian: <b className="text-indigo-700">
+                              {marketDefectsFilterQuickTime === 'today' ? 'Hôm nay' :
+                               marketDefectsFilterQuickTime === 'this_week' ? 'Tuần này' :
+                               marketDefectsFilterQuickTime === 'this_month' ? 'Tháng này' :
+                               marketDefectsFilterQuickTime === 'this_quarter' ? 'Quý này' : 'Năm nay'}
+                            </b>
+                            <button onClick={() => setMarketDefectsFilterQuickTime('All')} className="text-slate-400 hover:text-slate-600 cursor-pointer ml-0.5">✕</button>
+                          </span>
+                        )}
+                        {marketDefectsFilterMonth !== 'All' && (
+                          <span className="inline-flex items-center gap-1 bg-white border border-indigo-300 rounded px-2 py-0.5 font-semibold text-slate-800">
+                            Tháng: <b className="text-indigo-700">{marketDefectsFilterMonth}</b>
+                            <button onClick={() => setMarketDefectsFilterMonth('All')} className="text-slate-400 hover:text-slate-600 cursor-pointer ml-0.5">✕</button>
+                          </span>
+                        )}
+                        {marketDefectsFilterYear !== 'All' && (
+                          <span className="inline-flex items-center gap-1 bg-white border border-indigo-300 rounded px-2 py-0.5 font-semibold text-slate-800">
+                            Năm: <b className="text-indigo-700">{marketDefectsFilterYear}</b>
+                            <button onClick={() => setMarketDefectsFilterYear('All')} className="text-slate-400 hover:text-slate-600 cursor-pointer ml-0.5">✕</button>
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     {/* Metric Cards Grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -24233,9 +24371,9 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   </div>
 
                   <div className="space-y-3">
-                    <div className="flex flex-col md:flex-row gap-3">
+                    <div className="flex flex-col gap-3">
                       {/* Search Bar */}
-                      <div className="relative flex-1">
+                      <div className="relative w-full">
                         <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                         <input
                           type="text"
@@ -24254,7 +24392,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         )}
                       </div>
 
-                      {/* Dropdowns */}
+                      {/* Dropdowns Row 1: Model, Status, Severity, Feedback Type */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         {/* Model Filter */}
                         <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
@@ -24285,9 +24423,39 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             <option value="Đã xử lý">Đã xử lý</option>
                           </select>
                         </div>
+
+                        {/* Severity Filter */}
+                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Mức độ:</span>
+                          <select
+                            value={marketDefectsFilterSeverity}
+                            onChange={(e) => setMarketDefectsFilterSeverity(e.target.value)}
+                            className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
+                          >
+                            <option value="All">Tất cả mức độ</option>
+                            <option value="A">Mức A (Rất nghiêm trọng)</option>
+                            <option value="B">Mức B (Nghiêm trọng)</option>
+                            <option value="C">Mức C (Trung bình)</option>
+                            <option value="D">Mức D (Nhẹ)</option>
+                          </select>
+                        </div>
+
+                        {/* Feedback Type Filter */}
+                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Phân loại:</span>
+                          <select
+                            value={marketDefectsFilterFeedbackType}
+                            onChange={(e) => setMarketDefectsFilterFeedbackType(e.target.value)}
+                            className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
+                          >
+                            <option value="All">Tất cả phân loại</option>
+                            <option value="Lỗi xe từ khách hàng">🚗 Lỗi xe từ KH</option>
+                            <option value="Đề xuất cải tiến">💡 Đề xuất cải tiến</option>
+                          </select>
+                        </div>
                       </div>
 
-                      {/* Time Filters Row */}
+                      {/* Dropdowns Row 2: Time Filters */}
                       <div className="pt-2 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {/* Quick Time Filter */}
                         <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
@@ -24357,6 +24525,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   {(marketDefectsSearch ||
                     marketDefectsFilterModel !== 'All' ||
                     marketDefectsFilterStatus !== 'All' ||
+                    marketDefectsFilterSeverity !== 'All' ||
+                    marketDefectsFilterFeedbackType !== 'All' ||
                     marketDefectsFilterMonth !== 'All' ||
                     marketDefectsFilterYear !== 'All' ||
                     marketDefectsFilterQuickTime !== 'All'
@@ -24370,6 +24540,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             setMarketDefectsSearch('');
                             setMarketDefectsFilterModel('All');
                             setMarketDefectsFilterStatus('All');
+                            setMarketDefectsFilterSeverity('All');
+                            setMarketDefectsFilterFeedbackType('All');
                             setMarketDefectsFilterMonth('All');
                             setMarketDefectsFilterYear('All');
                             setMarketDefectsFilterQuickTime('All');
@@ -26904,6 +27076,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     case 'defect': {
                       setDefects(prev => {
                         const updated = prev.map(d => d.id === data.id ? data : d);
+                        safeStorage.setItem('dk_defects', JSON.stringify(updated));
+                        safeStorage.setItem('dk_defects_is_dirty', 'true');
                         syncToServer('dk_defects', updated);
                         return updated;
                       });
@@ -26932,6 +27106,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       };
                       const updatedDailyLogs = [editLogRecord, ...dailyLogs];
                       setDailyLogs(updatedDailyLogs);
+                      safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
                       syncToServer('dk_daily_logs', updatedDailyLogs);
                       break;
                     }
@@ -26941,15 +27116,17 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     case 'improvement_action':
                       setImprovementActions(prev => {
                         const updated = prev.map(act => act.id === data.id ? data : act);
-                        localStorage.setItem('dk_improvement_actions', JSON.stringify(updated));
+                        safeStorage.setItem('dk_improvement_actions', JSON.stringify(updated));
+                        safeStorage.setItem('dk_improvement_actions_is_dirty', 'true');
+                        syncToServer('dk_improvement_actions', updated);
                         return updated;
                       });
                       break;
                     case 'eco':
                       setEcos(prev => {
                         const updated = prev.map(ec => ec.id === data.id ? data : ec);
-                        localStorage.setItem('dk_ecos', JSON.stringify(updated));
-                        localStorage.setItem('dk_ecos_is_dirty', 'true');
+                        safeStorage.setItem('dk_ecos', JSON.stringify(updated));
+                        safeStorage.setItem('dk_ecos_is_dirty', 'true');
                         syncToServer('dk_ecos', updated);
                         return updated;
                       });
@@ -31072,24 +31249,24 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
 
                 const updated = [...improvementActions, newAction];
                 setImprovementActions(updated);
-                localStorage.setItem('dk_improvement_actions', JSON.stringify(updated));
+                safeStorage.setItem('dk_improvement_actions', JSON.stringify(updated));
+                safeStorage.setItem('dk_improvement_actions_is_dirty', 'true');
+                syncToServer('dk_improvement_actions', updated);
 
                 // Mark the defect as having an action (we can store the action ID in d.capaId!)
                 if (defectId) {
-                  setDefects(prev => prev.map(d => {
-                    if (d.id === defectId) {
-                      return { ...d, capaId: nextImprovementActionId, status: 'Đang xử lý' };
-                    }
-                    return d;
-                  }));
-                  // Save to localStorage too
-                  const updatedDefects = defects.map(d => {
-                    if (d.id === defectId) {
-                      return { ...d, capaId: nextImprovementActionId, status: 'Đang xử lý' };
-                    }
-                    return d;
+                  setDefects(prev => {
+                    const updatedDefects = prev.map(d => {
+                      if (d.id === defectId) {
+                        return { ...d, capaId: nextImprovementActionId, status: 'Đang xử lý' };
+                      }
+                      return d;
+                    });
+                    safeStorage.setItem('dk_defects', JSON.stringify(updatedDefects));
+                    safeStorage.setItem('dk_defects_is_dirty', 'true');
+                    syncToServer('dk_defects', updatedDefects);
+                    return updatedDefects;
                   });
-                  localStorage.setItem('dk_defects', JSON.stringify(updatedDefects));
                 }
 
                 setShowAddImprovementActionModal(false);
@@ -31776,7 +31953,9 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 });
 
                 setImprovementActions(updated);
-                localStorage.setItem('dk_improvement_actions', JSON.stringify(updated));
+                safeStorage.setItem('dk_improvement_actions', JSON.stringify(updated));
+                safeStorage.setItem('dk_improvement_actions_is_dirty', 'true');
+                syncToServer('dk_improvement_actions', updated);
 
                 setShowUpdateEcoModal(false);
                 setSelectedActionForEcoUpdate(null);
@@ -33237,8 +33416,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                       auditNotes: ecoAuditNotes
                     } : ec);
 
-                    localStorage.setItem('dk_ecos', JSON.stringify(updatedEcos));
-                    localStorage.setItem('dk_ecos_is_dirty', 'true');
+                    safeStorage.setItem('dk_ecos', JSON.stringify(updatedEcos));
+                    safeStorage.setItem('dk_ecos_is_dirty', 'true');
                     setEcos(updatedEcos);
                     syncToServer('dk_ecos', updatedEcos);
 
@@ -34540,8 +34719,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                     type="button"
                     onClick={() => {
                       const updatedEcos = ecos.map(ec => ec.id === editedEcoDoc.id ? editedEcoDoc : ec);
-                      localStorage.setItem('dk_ecos', JSON.stringify(updatedEcos));
-                      localStorage.setItem('dk_ecos_is_dirty', 'true');
+                      safeStorage.setItem('dk_ecos', JSON.stringify(updatedEcos));
+                      safeStorage.setItem('dk_ecos_is_dirty', 'true');
                       setEcos(updatedEcos);
                       syncToServer('dk_ecos', updatedEcos);
 
@@ -35131,13 +35310,247 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => window.print()}
+                  type="button"
+                  onClick={() => {
+                    if (!selectedDefectForReport) return;
+                    const def = selectedDefectForReport;
+                    const header = `
+                      <html xmlns:o='urn:schemas-microsoft-com:office:office' 
+                            xmlns:w='urn:schemas-microsoft-com:office:word' 
+                            xmlns='http://www.w3.org/TR/REC-html40'>
+                      <head>
+                        <meta charset="utf-8">
+                        <title>BienBan_LoiThiTruong_${def.id}</title>
+                        <style>
+                          body { font-family: 'Times New Roman', Times, serif; font-size: 13pt; line-height: 1.4; color: #111; margin: 20mm; }
+                          .header-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                          .header-left { text-align: left; font-size: 10pt; }
+                          .header-right { text-align: right; font-size: 10pt; font-family: monospace; }
+                          .title { text-align: center; font-size: 16pt; font-weight: bold; margin: 15px 0 5px 0; text-transform: uppercase; }
+                          .subtitle { text-align: center; font-size: 10pt; font-style: italic; margin-bottom: 15px; }
+                          .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+                          .meta-table td, .meta-table th { border: 1px solid #333; padding: 6px; font-size: 10.5pt; }
+                          .meta-table th { background-color: #f2f2f2; text-align: left; width: 22%; }
+                          .section-title { font-size: 11pt; font-weight: bold; text-transform: uppercase; background-color: #e6eef8; padding: 6px; border-left: 4px solid #1a365d; margin-top: 15px; }
+                          .section-content { font-size: 11pt; padding: 8px; border: 1px solid #ccc; background-color: #fafafa; margin-top: 4px; min-height: 40px; }
+                          .sig-table { width: 100%; border-collapse: collapse; margin-top: 30px; }
+                          .sig-table td { text-align: center; vertical-align: top; width: 33.3%; font-size: 10.5pt; }
+                          .sig-title { font-weight: bold; margin-bottom: 60px; }
+                        </style>
+                      </head>
+                      <body>
+                        <table class="header-table">
+                          <tr>
+                            <td class="header-left">
+                              <b>CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT</b><br/>
+                              <span>PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL) - DK QMS</span><br/>
+                              <span style="font-size:9pt;color:#555;">Thương hiệu DKBike - "Xe cho cả gia đình"</span>
+                            </td>
+                            <td class="header-right">
+                              <b>Mẫu số: BM-QLCL-15-DEF</b><br/>
+                              <span>Mã sự cố: <b>${def.id}</b></span><br/>
+                              <span>Ngày lập: ${def.defectDate || new Date().toLocaleDateString('vi-VN')}</span>
+                            </td>
+                          </tr>
+                        </table>
+
+                        <div class="title">BIÊN BẢN GIÁM ĐỊNH & BÁO CÁO LỖI THỊ TRƯỜNG</div>
+                        <div class="subtitle">(MARKET DEFECT ANALYSIS & QUALITY INSPECTION REPORT)</div>
+
+                        <table class="meta-table">
+                          <tr>
+                            <th>Khách hàng / Đại lý</th><td><b>${def.dealer || def.customerName || 'N/A'}</b></td>
+                            <th>Model xe</th><td><b>${def.model || 'Tất cả model'}</b></td>
+                          </tr>
+                          <tr>
+                            <th>Số Khung (VIN)</th><td>${def.chassisNo || 'N/A'}</td>
+                            <th>Số Máy (Engine)</th><td>${def.engineNo || 'N/A'}</td>
+                          </tr>
+                          <tr>
+                            <th>Mức độ nghiêm trọng</th><td><b>Mức ${def.severity || 'C'}</b></td>
+                            <th>Trạng thái xử lý</th><td>${def.status || 'Chưa xử lý'}</td>
+                          </tr>
+                          <tr>
+                            <th>Kỹ sư phụ trách</th><td>${def.assignee || 'Trực ban QLCL'}</td>
+                            <th>Nhà cung cấp</th><td>${def.supplierName || 'Không liên kết'}</td>
+                          </tr>
+                        </table>
+
+                        <div class="section-title">I. Mô tả triệu chứng, ý kiến khiếu nại của khách hàng / đại lý</div>
+                        <div class="section-content">${def.description || 'Chưa có mô tả.'}</div>
+
+                        <div class="section-title">II. Phân tích nguyên nhân cốt lõi (Root Cause Analysis)</div>
+                        <div class="section-content">${def.rootCause || 'Đang phân tích nguyên nhân...'}</div>
+
+                        <div class="section-title">III. Biện pháp khắc phục tại chỗ (Correction)</div>
+                        <div class="section-content">${def.correction || 'Chưa có.'}</div>
+
+                        <div class="section-title">IV. Hành động khắc phục & phòng ngừa (CAPA)</div>
+                        <div class="section-content">
+                          <b>1. Hành động khắc phục:</b> ${def.correctiveAction || 'Chưa cập nhật'}<br/>
+                          <b>2. Hành động phòng ngừa:</b> ${def.preventiveAction || 'Chưa cập nhật'}
+                        </div>
+
+                        <div class="section-title">V. Hồ sơ liên kết & tiến độ hoàn thành</div>
+                        <div class="section-content">
+                          Mã CAPA: <b>${def.capaId || 'Chưa gắn mã CAPA'}</b> | Hạn hoàn thành: <b>${def.targetDate || 'Chưa ấn định'}</b> | Trạng thái: <b>${def.status || 'Chưa xử lý'}</b>
+                        </div>
+
+                        <table class="sig-table">
+                          <tr>
+                            <td>
+                              <div class="sig-title">ĐẠI DIỆN KHÁCH HÀNG / ĐẠI LÝ</div>
+                              <div>${def.dealer || def.customerName || 'Đại diện xác nhận'}</div>
+                            </td>
+                            <td>
+                              <div class="sig-title">KỸ SƯ PHÂN TÍCH QLCL</div>
+                              <div>${def.assignee || 'Trực ban QLCL'}</div>
+                            </td>
+                            <td>
+                              <div class="sig-title">TRƯỞNG PHÒNG QLCL</div>
+                              <div>Nguyễn Xuân Thao</div>
+                            </td>
+                          </tr>
+                        </table>
+                      </body>
+                      </html>
+                    `;
+                    const blob = new Blob(['\ufeff' + header], { type: 'application/msword' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `BienBan_LoiThiTruong_DKBike_${def.id}.doc`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="px-3 py-1.5 bg-blue-600/80 hover:bg-blue-600 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+                  title="Xuất file biểu mẫu Microsoft Word (.doc)"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span className="hidden sm:inline">Xuất Word</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const zone = document.getElementById('defect_print_zone');
+                    if (!zone) {
+                      document.body.classList.add('printing-defect');
+                      const onAfter = () => {
+                        document.body.classList.remove('printing-defect');
+                        window.removeEventListener('afterprint', onAfter);
+                      };
+                      window.addEventListener('afterprint', onAfter);
+                      window.print();
+                      return;
+                    }
+
+                    // Tạo iframe ẩn nhưng có kích thước màn hình thật (1024x768) để engine Chromium layout đầy đủ bản in A4
+                    const iframe = document.createElement('iframe');
+                    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:1024px;height:768px;border:0;opacity:0;pointer-events:none;z-index:-9999;';
+                    document.body.appendChild(iframe);
+
+                    const iwin = iframe.contentWindow;
+                    const idoc = iframe.contentDocument || iwin?.document;
+                    if (!iwin || !idoc) {
+                      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+                      document.body.classList.add('printing-defect');
+                      const onAfter = () => {
+                        document.body.classList.remove('printing-defect');
+                        window.removeEventListener('afterprint', onAfter);
+                      };
+                      window.addEventListener('afterprint', onAfter);
+                      window.print();
+                      return;
+                    }
+
+                    const styleTags = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).map(el => el.outerHTML).join('\n');
+                    const docTitle = `BienBan_LoiThiTruong_${selectedDefectForReport.id || ''}`;
+
+                    idoc.open();
+                    idoc.write(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>${docTitle}</title>
+  <base href="${window.location.origin}/">
+  ${styleTags}
+  <style>
+    @page { size: A4 portrait; margin: 12mm 10mm; }
+    html, body {
+      background: #ffffff !important;
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow: visible !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+      color: #0f172a !important;
+    }
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      box-sizing: border-box !important;
+    }
+    #defect_print_zone {
+      overflow: visible !important;
+      max-height: none !important;
+      height: auto !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+    }
+    #defect_print_zone > div:first-child,
+    #defect_print_zone .space-y-5 > div,
+    #defect_print_zone .space-y-2 {
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }
+  </style>
+</head>
+<body>
+  ${zone.outerHTML}
+</body>
+</html>`);
+                    idoc.close();
+
+                    let cleanedUp = false;
+                    const doCleanup = () => {
+                      if (cleanedUp) return;
+                      cleanedUp = true;
+                      setTimeout(() => {
+                        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+                      }, 1500);
+                    };
+
+                    iwin.addEventListener('afterprint', doCleanup);
+                    setTimeout(doCleanup, 180000); // An toàn tối đa 3 phút
+
+                    setTimeout(() => {
+                      try {
+                        iwin.focus();
+                        iwin.print();
+                      } catch (err) {
+                        console.error('[Defect Report Print Fallback]:', err);
+                        doCleanup();
+                        document.body.classList.add('printing-defect');
+                        const onAfter = () => {
+                          document.body.classList.remove('printing-defect');
+                          window.removeEventListener('afterprint', onAfter);
+                        };
+                        window.addEventListener('afterprint', onAfter);
+                        window.print();
+                      }
+                    }, 450);
+                  }}
                   className="px-3.5 py-1.5 bg-indigo-600/80 hover:bg-indigo-600 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
                 >
                   <Printer className="w-4 h-4" />
                   <span>In Biên Bản</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setShowDefectReportModal(false);
                     setSelectedDefectForReport(null);
@@ -35151,7 +35564,7 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
             </div>
 
             {/* Printable Document Body */}
-            <div className="p-6 sm:p-8 overflow-y-auto grow space-y-6 bg-slate-50/50 print:p-0 print:overflow-visible">
+            <div id="defect_print_zone" className="p-6 sm:p-8 overflow-y-auto grow space-y-6 bg-slate-50/50 print:p-0 print:overflow-visible">
 
               {/* Document Letterhead */}
               <div className="bg-white border border-slate-300 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4 print:border-b-2 print:border-slate-800">
@@ -35217,11 +35630,11 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                 </div>
               </div>
 
-              {/* 5 Formal Sections with Enlarged Text Size */}
+              {/* Formal Sections */}
               <div className="space-y-5">
 
                 {/* SECTION 1 */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-xs space-y-2">
+                <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-xs space-y-2 break-inside-avoid print:break-inside-avoid">
                   <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                     <span className="w-3 h-3 rounded-full bg-red-600 inline-block shrink-0"></span>
                     <h4 className="font-black text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
@@ -35236,7 +35649,7 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                 </div>
 
                 {/* SECTION 2 */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-xs space-y-2">
+                <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-xs space-y-2 break-inside-avoid print:break-inside-avoid">
                   <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                     <span className="w-3 h-3 rounded-full bg-amber-600 inline-block shrink-0"></span>
                     <h4 className="font-black text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
@@ -35251,7 +35664,7 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                 </div>
 
                 {/* SECTION 3 */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-xs space-y-2">
+                <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-xs space-y-2 break-inside-avoid print:break-inside-avoid">
                   <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                     <span className="w-3 h-3 rounded-full bg-blue-600 inline-block shrink-0"></span>
                     <h4 className="font-black text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
@@ -35266,7 +35679,7 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                 </div>
 
                 {/* SECTION 4 */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-xs space-y-2">
+                <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-xs space-y-2 break-inside-avoid print:break-inside-avoid">
                   <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                     <span className="w-3 h-3 rounded-full bg-indigo-600 inline-block shrink-0"></span>
                     <h4 className="font-black text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
@@ -35290,7 +35703,7 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                 </div>
 
                 {/* SECTION 5 */}
-                <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-xs space-y-2">
+                <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-xs space-y-2 break-inside-avoid print:break-inside-avoid">
                   <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
                     <span className="w-3 h-3 rounded-full bg-emerald-600 inline-block shrink-0"></span>
                     <h4 className="font-black text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
@@ -35310,6 +35723,77 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                       <span className="text-slate-500 font-bold block">Trạng thái báo cáo:</span>
                       <strong className="text-emerald-700 text-sm font-black">{selectedDefectForReport.status || 'Chưa xử lý'}</strong>
                     </div>
+                  </div>
+                </div>
+
+                {/* SECTION 6: HÌNH ẢNH HIỆN TRƯỜNG THỰC TẾ */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-xs space-y-2 break-inside-avoid print:break-inside-avoid">
+                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                    <span className="w-3 h-3 rounded-full bg-violet-600 inline-block shrink-0"></span>
+                    <h4 className="font-black text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
+                      VI. HÌNH ẢNH KHUYẾT TẬT & HIỆN TRƯỜNG THỰC TẾ
+                    </h4>
+                  </div>
+                  <div className="p-4 bg-slate-50 border-2 border-slate-300 rounded-xl mt-2">
+                    {(() => {
+                      const rawImages = selectedDefectForReport.images && selectedDefectForReport.images.length > 0
+                        ? selectedDefectForReport.images
+                        : (selectedDefectForReport.imageUrl ? [selectedDefectForReport.imageUrl] : []);
+                      if (rawImages.length === 0) {
+                        return (
+                          <p className="text-slate-500 italic text-center py-4 text-xs font-semibold">
+                            (Hồ sơ này không đính kèm hình ảnh hiện trường sự cố)
+                          </p>
+                        );
+                      }
+                      return (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {rawImages.map((img, idx) => (
+                            <div key={idx} className="border border-slate-300 rounded-xl overflow-hidden bg-white shadow-xs p-1">
+                              <img
+                                src={img}
+                                alt={`Ảnh hiện trường ${idx + 1}`}
+                                className="w-full h-44 object-contain rounded-lg bg-slate-100"
+                              />
+                              <p className="text-[10px] text-center font-bold text-slate-600 mt-1">
+                                Ảnh hiện trường #{idx + 1}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* SECTION 7: KHỐI CHỮ KÝ XÁC NHẬN */}
+                <div className="bg-white p-6 rounded-2xl border border-slate-300 shadow-xs mt-4 break-inside-avoid print:break-inside-avoid">
+                  <div className="grid grid-cols-3 gap-4 text-center text-xs">
+                    <div className="space-y-1">
+                      <p className="font-extrabold text-slate-800 uppercase text-[11px]">ĐẠI DIỆN KHÁCH HÀNG / ĐẠI LÝ</p>
+                      <p className="text-[10px] text-slate-400 italic">(Ký, ghi rõ họ tên)</p>
+                      <div className="h-20 flex items-end justify-center">
+                        <p className="font-bold text-slate-700">{selectedDefectForReport.dealer || selectedDefectForReport.customerName || 'Đại lý xác nhận'}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="font-extrabold text-slate-800 uppercase text-[11px]">KỸ SƯ PHÂN TÍCH QLCL</p>
+                      <p className="text-[10px] text-slate-400 italic">(Ký, ghi rõ họ tên)</p>
+                      <div className="h-20 flex items-end justify-center">
+                        <p className="font-bold text-indigo-700">{selectedDefectForReport.assignee || 'Trực ban QLCL'}</p>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="font-extrabold text-slate-800 uppercase text-[11px]">TRƯỞNG PHÒNG QLCL (DK QMS)</p>
+                      <p className="text-[10px] text-slate-400 italic">(Ký duyệt ban hành)</p>
+                      <div className="h-20 flex items-end justify-center">
+                        <p className="font-bold text-slate-900">Nguyễn Xuân Thao</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="border-t border-slate-200 mt-4 pt-3 flex justify-between items-center text-[10px] text-slate-400">
+                    <span>BM-QLCL-15-DEF • Công ty TNHH Xe điện DK Việt Nhật</span>
+                    <span>Hệ thống Quản lý Chất lượng DKBike (DK QMS)</span>
                   </div>
                 </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { safeStorage as localStorage } from '../safeStorage';
+import { safeStorage, safeStorage as localStorage } from '../safeStorage';
 import { 
   Building2, 
   Calendar, 
@@ -351,7 +351,7 @@ export default function QMSDatabaseExplorer({
   const handleExportJSONBackup = () => {
     try {
       const backup: Record<string, any> = {};
-      const allKeys = Object.keys(localStorage);
+      const allKeys = safeStorage.getAllKeys();
       allKeys.forEach((key) => {
         if (key && key.startsWith('dk_')) {
           const val = localStorage.getItem(key);
