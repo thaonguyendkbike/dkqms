@@ -14261,92 +14261,143 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                        {models.map(model => {
-                          const modelPqc = pqcRecords.filter(r => r.model === model.name);
-                          const modelOqc = oqcRecords.filter(r => r.model === model.name);
-                          const modelDefects = defects.filter(d => d.model === model.name);
-                          const totalErrors = modelPqc.length + modelOqc.length + modelDefects.length;
-                          const isExpanded = expandedDashboardModel === model.name;
+                        {(() => {
+                          // Lọc danh sách model: chỉ hiển thị model có phát sinh lắp ráp trong OQC VÀ có phát sinh lỗi
+                          const masterModelsMap = new Map<string, { id: string; name: string; status: string }>();
+                          models.forEach(m => {
+                            if (m && m.name) {
+                              masterModelsMap.set(m.name.trim().toLowerCase(), m);
+                            }
+                          });
 
-                          return (
-                            <Fragment key={model.id}>
-                              <tr
-                                onClick={() => setExpandedDashboardModel(isExpanded ? null : model.name)}
-                                className="hover:bg-slate-50 cursor-pointer transition-colors"
-                              >
-                                <td className="p-3 font-extrabold text-slate-800 text-sm">
-                                  {model.name} {isExpanded ? '▼' : '▶'}
+                          // Nhận diện thêm các dòng xe thực tế phát sinh trong OQC (nếu chưa có trong master)
+                          oqcRecords.forEach(r => {
+                            if (r && r.model && r.model.trim()) {
+                              const key = r.model.trim().toLowerCase();
+                              if (!masterModelsMap.has(key)) {
+                                masterModelsMap.set(key, {
+                                  id: `MDL-OQC-${r.model.trim()}`,
+                                  name: r.model.trim(),
+                                  status: 'Đang sản xuất'
+                                });
+                              }
+                            }
+                          });
+
+                          // Áp dụng điều kiện lọc:
+                          // 1. Phải có phát sinh lắp ráp trong OQC (oqcRecords có bản ghi)
+                          // 2. Phải có phát sinh lỗi (tổng lỗi > 0)
+                          const activeDashboardModels = Array.from(masterModelsMap.values()).filter(model => {
+                            const modelNameLower = (model.name || '').trim().toLowerCase();
+                            const modelOqc = oqcRecords.filter(r => (r.model || '').trim().toLowerCase() === modelNameLower);
+                            if (modelOqc.length === 0) return false;
+
+                            const modelPqc = pqcRecords.filter(r => (r.model || '').trim().toLowerCase() === modelNameLower);
+                            const oqcDefectRecords = modelOqc.filter(r => r.status === 'Lỗi' || (r.defectDetail && r.defectDetail.trim() !== ''));
+                            const modelDefects = defects.filter(d => (d.model || '').trim().toLowerCase() === modelNameLower);
+                            const totalErrors = modelPqc.length + oqcDefectRecords.length + modelDefects.length;
+
+                            return totalErrors > 0;
+                          });
+
+                          if (activeDashboardModels.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan={6} className="text-center text-slate-400 italic py-6">
+                                  Không có dòng xe nào phát sinh lỗi trong quá trình lắp ráp OQC cần theo dõi.
                                 </td>
-                                <td className="p-3">
-                                  <span className={`px-2 py-0.5 rounded text-[10px] ${model.status === 'Đang sản xuất' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                                    }`}>
-                                    {model.status}
-                                  </span>
-                                </td>
-                                <td className="p-3 text-center font-extrabold">{totalErrors}</td>
-                                <td className="p-3 text-center text-indigo-700">{modelPqc.length}</td>
-                                <td className="p-3 text-center text-blue-700">{modelOqc.length}</td>
-                                <td className="p-3 text-center text-orange-700">{modelDefects.length}</td>
                               </tr>
+                            );
+                          }
 
-                              {isExpanded && (
-                                <tr>
-                                  <td colSpan={6} className="bg-slate-50/50 p-4 border-t border-b">
-                                    {totalErrors === 0 ? (
-                                      <p className="text-center text-slate-400 italic py-4">Chưa ghi nhận lỗi nào cho dòng xe này.</p>
-                                    ) : (
-                                      <div className="overflow-hidden border border-slate-200 rounded-xl bg-white shadow-xs">
-                                        <table className="w-full text-[11px] text-left">
-                                          <thead className="bg-slate-100/80 text-[10px] text-slate-500 uppercase border-b font-black">
-                                            <tr>
-                                              <th className="p-2.5">Mã lỗi</th>
-                                              <th className="p-2.5">Phân hệ</th>
-                                              <th className="p-2.5 w-1/3">Mô tả khuyết tật / Sự cố</th>
-                                              <th className="p-2.5 w-1/3">Phương án xử lý lỗi</th>
-                                              <th className="p-2.5">Trạng thái</th>
-                                              <th className="p-2.5 text-center">Thao tác</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody className="divide-y divide-slate-100 text-slate-700">
-                                            {/* Render PQC Errors */}
-                                            {modelPqc.map(r => renderErrorRow(r, 'PQC'))}
-                                            {/* Render OQC Errors (Grouped by defect, displaying only top 3 most frequent) */}
-                                            {(() => {
-                                              const oqcDefectRecords = modelOqc.filter(r => r.status === 'Lỗi' || (r.defectDetail && r.defectDetail.trim() !== ''));
-                                              const groupedOqc: Record<string, { defectDetail: string, count: number, records: OQCRecord[] }> = {};
+                          return activeDashboardModels.map(model => {
+                            const modelNameLower = (model.name || '').trim().toLowerCase();
+                            const modelPqc = pqcRecords.filter(r => (r.model || '').trim().toLowerCase() === modelNameLower);
+                            const modelOqc = oqcRecords.filter(r => (r.model || '').trim().toLowerCase() === modelNameLower);
+                            const oqcDefectRecords = modelOqc.filter(r => r.status === 'Lỗi' || (r.defectDetail && r.defectDetail.trim() !== ''));
+                            const modelDefects = defects.filter(d => (d.model || '').trim().toLowerCase() === modelNameLower);
+                            const totalErrors = modelPqc.length + oqcDefectRecords.length + modelDefects.length;
+                            const isExpanded = expandedDashboardModel === model.name;
 
-                                              oqcDefectRecords.forEach(r => {
-                                                const detail = (r.defectDetail || '').trim();
-                                                if (!detail) return;
-                                                if (!groupedOqc[detail]) {
-                                                  groupedOqc[detail] = {
-                                                    defectDetail: detail,
-                                                    count: 0,
-                                                    records: []
-                                                  };
-                                                }
-                                                groupedOqc[detail].count += r.failedCount || 1;
-                                                groupedOqc[detail].records.push(r);
-                                              });
-
-                                              const top3Oqc = Object.values(groupedOqc)
-                                                .sort((a, b) => b.count - a.count)
-                                                .slice(0, 3);
-
-                                              return top3Oqc.map((group, index) => renderOqcGroupRow(index, group.defectDetail, group.records, model.name));
-                                            })()}
-                                            {/* Render Market Defects */}
-                                            {modelDefects.map(r => renderErrorRow(r, 'MarketDefect'))}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                    )}
+                            return (
+                              <Fragment key={model.id}>
+                                <tr
+                                  onClick={() => setExpandedDashboardModel(isExpanded ? null : model.name)}
+                                  className="hover:bg-slate-50 cursor-pointer transition-colors"
+                                >
+                                  <td className="p-3 font-extrabold text-slate-800 text-sm">
+                                    {model.name} {isExpanded ? '▼' : '▶'}
                                   </td>
+                                  <td className="p-3">
+                                    <span className={`px-2 py-0.5 rounded text-[10px] ${model.status === 'Đang sản xuất' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                                      }`}>
+                                      {model.status}
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-center font-extrabold">{totalErrors}</td>
+                                  <td className="p-3 text-center text-indigo-700">{modelPqc.length}</td>
+                                  <td className="p-3 text-center text-blue-700">{oqcDefectRecords.length}</td>
+                                  <td className="p-3 text-center text-orange-700">{modelDefects.length}</td>
                                 </tr>
-                              )}
-                            </Fragment>
-                          );
-                        })}
+
+                                {isExpanded && (
+                                  <tr>
+                                    <td colSpan={6} className="bg-slate-50/50 p-4 border-t border-b">
+                                      {totalErrors === 0 ? (
+                                        <p className="text-center text-slate-400 italic py-4">Chưa ghi nhận lỗi nào cho dòng xe này.</p>
+                                      ) : (
+                                        <div className="overflow-hidden border border-slate-200 rounded-xl bg-white shadow-xs">
+                                          <table className="w-full text-[11px] text-left">
+                                            <thead className="bg-slate-100/80 text-[10px] text-slate-500 uppercase border-b font-black">
+                                              <tr>
+                                                <th className="p-2.5">Mã lỗi</th>
+                                                <th className="p-2.5">Phân hệ</th>
+                                                <th className="p-2.5 w-1/3">Mô tả khuyết tật / Sự cố</th>
+                                                <th className="p-2.5 w-1/3">Phương án xử lý lỗi</th>
+                                                <th className="p-2.5">Trạng thái</th>
+                                                <th className="p-2.5 text-center">Thao tác</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 text-slate-700">
+                                              {/* Render PQC Errors */}
+                                              {modelPqc.map(r => renderErrorRow(r, 'PQC'))}
+                                              {/* Render OQC Errors (Grouped by defect, displaying only top 3 most frequent) */}
+                                              {(() => {
+                                                const groupedOqc: Record<string, { defectDetail: string, count: number, records: OQCRecord[] }> = {};
+
+                                                oqcDefectRecords.forEach(r => {
+                                                  const detail = (r.defectDetail || '').trim() || (r.status === 'Lỗi' ? 'Lỗi kiểm tra OQC xuất xưởng' : '');
+                                                  if (!detail) return;
+                                                  if (!groupedOqc[detail]) {
+                                                    groupedOqc[detail] = {
+                                                      defectDetail: detail,
+                                                      count: 0,
+                                                      records: []
+                                                    };
+                                                  }
+                                                  groupedOqc[detail].count += r.failedCount || 1;
+                                                  groupedOqc[detail].records.push(r);
+                                                });
+
+                                                const top3Oqc = Object.values(groupedOqc)
+                                                  .sort((a, b) => b.count - a.count)
+                                                  .slice(0, 3);
+
+                                                return top3Oqc.map((group, index) => renderOqcGroupRow(index, group.defectDetail, group.records, model.name));
+                                              })()}
+                                              {/* Render Market Defects */}
+                                              {modelDefects.map(r => renderErrorRow(r, 'MarketDefect'))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
+                            );
+                          });
+                        })()}
                       </tbody>
                     </table>
                   </div>
