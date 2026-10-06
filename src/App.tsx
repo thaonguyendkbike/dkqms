@@ -6662,8 +6662,10 @@ export function App() {
             break;
           }
           case 'capa': {
-            const updatedCapas = capas.filter(c => c.id !== id);
+            const updatedCapas = capas.filter(c => c.id !== id && c.CAPAID !== id);
             setCapas(updatedCapas);
+            safeStorage.setItem('dk_capas', JSON.stringify(updatedCapas));
+            safeStorage.setItem('dk_capas_is_dirty', 'true');
             syncToServer('dk_capas', updatedCapas);
 
             const updatedDefects = defects.map(d => {
@@ -6673,6 +6675,8 @@ export function App() {
               return d;
             });
             setDefects(updatedDefects);
+            safeStorage.setItem('dk_defects', JSON.stringify(updatedDefects));
+            safeStorage.setItem('dk_defects_is_dirty', 'true');
             syncToServer('dk_defects', updatedDefects);
             break;
           }
@@ -8916,13 +8920,52 @@ Tập hợp số liệu gốc:
       year: dateInfo.year
     };
 
+    const nextCapaId = getNextCapaId(capas);
+    const newCapaItem: CAPA = {
+      id: nextCapaId,
+      CAPAID: nextCapaId,
+      title: `[Tự động từ Cảnh báo Rủi ro] Xử lý lỗi ${type} trên Model ${model}`,
+      Issue: `[Tự động từ Cảnh báo Rủi ro] Xử lý lỗi ${type} trên Model ${model}`,
+      source: 'Cảnh báo rủi ro Dashboard',
+      assignee: 'Nguyễn Xuân Thao',
+      Owner: 'Nguyễn Xuân Thao',
+      targetDate: new Date().toISOString().split('T')[0],
+      DueDate: new Date().toISOString().split('T')[0],
+      status: 'Mở',
+      Status: 'Mở',
+      priority: 'Khẩn cấp',
+      rootCause: `Rủi ro chất lượng phát hiện: ${description}. Đang điều tra nguyên nhân bằng biểu đồ Xương cá & 5-Whys`,
+      RootCause: `Rủi ro chất lượng phát hiện: ${description}. Đang điều tra nguyên nhân bằng biểu đồ Xương cá & 5-Whys`,
+      Correction: 'Cô lập và cách ly lô xe lắp ráp liên quan, đo đạc kích thước dung sai',
+      actions: 'Rà soát lại quy trình ép khuôn, kiểm định lực siết búa gầm và điều chỉnh thông số Jig lắp ráp.',
+      CorrectiveAction: 'Rà soát lại quy trình ép khuôn, kiểm định lực siết búa gầm và điều chỉnh thông số Jig lắp ráp.',
+      PreventiveAction: 'Đưa vào danh mục kiểm soát trọng yếu tuần và đánh giá hiệu lực định kỳ.',
+      locationOfOrigin: origin || 'Phòng QLCL',
+      locationDetail: origin || '',
+      modelName: model || '',
+      images: [],
+      isRepeated: false,
+      Effectiveness: 'Chưa đánh giá',
+      effectiveness: 'Chưa đánh giá'
+    };
+
+    const updatedCapas = [newCapaItem, ...capas];
+    setCapas(updatedCapas);
+    safeStorage.setItem('dk_capas', JSON.stringify(updatedCapas));
+    safeStorage.setItem('dk_capas_is_dirty', 'true');
+    syncToServer('dk_capas', updatedCapas);
+
     const updatedTasks = [newTask, ...tasks];
     const updatedDailyLogs = sanitizeDailyLogs([autoDailyLog, ...dailyLogs]);
     setTasks(updatedTasks);
     setDailyLogs(updatedDailyLogs);
+    safeStorage.setItem('dk_tasks', JSON.stringify(updatedTasks));
+    safeStorage.setItem('dk_tasks_is_dirty', 'true');
     syncToServer('dk_tasks', updatedTasks);
+    safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
+    safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
     syncToServer('dk_daily_logs', updatedDailyLogs);
-    alert(`🎉 [HỆ THỐNG QMS AUTOMATION - ĐỒNG BỘ THÀNH CÔNG]\n\nĐã tự động khởi tạo Hồ sơ CAPA khẩn cấp #${newTask.id} thành công!\nSự cố rủi ro: ${type} trên Model ${model} đã được đưa vào danh sách theo dõi cải tiến.`);
+    alert(`🎉 [HỆ THỐNG QMS AUTOMATION - ĐỒNG BỘ THÀNH CÔNG]\n\nĐã tự động khởi tạo Hồ sơ CAPA khẩn cấp #${newCapaItem.id} và Giao việc #${newTask.id} thành công!\nSự cố rủi ro: ${type} trên Model ${model} đã được đưa vào danh sách theo dõi cải tiến.`);
   };
 
   // 3. AI Autopilot Executive Review: Gọi Gemini để phân tích toàn bộ Dashboard hiện tại
@@ -15182,29 +15225,40 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           CorrectiveAction: newCapaCorrectiveAction || newCapaActions,
                           PreventiveAction: newCapaPreventiveAction || 'Tiến hành rà soát chuyên sâu theo quý',
                           locationOfOrigin: newCapaLocationOfOrigin || 'Phòng QLCL',
+                          locationDetail: newCapaLocationDetail || '',
+                          priority: newCapaPriority || 'Trung bình',
                           images: newCapaImages.length > 0 ? newCapaImages : (newCapaImage ? [newCapaImage] : []),
                           isRepeated: newCapaIsRepeated,
                           supplierName: newCapaSupplier || '',
                           modelName: newCapaModel || '',
                           imageUrl: newCapaImages[0] || newCapaImage || undefined,
-                          Effectiveness: newCapaEffectiveness as any
+                          Effectiveness: newCapaEffectiveness as any,
+                          effectiveness: newCapaEffectiveness as any
                         };
                         const updatedCapas = [item, ...capas];
                         setCapas(updatedCapas);
+                        safeStorage.setItem('dk_capas', JSON.stringify(updatedCapas));
+                        safeStorage.setItem('dk_capas_is_dirty', 'true');
                         syncToServer('dk_capas', updatedCapas);
 
                         // Sync with original defect
                         if (originatingDefectId) {
-                          setDefects(prev => prev.map(def => {
-                            if (def.id === originatingDefectId) {
-                              return {
-                                ...def,
-                                capaId: nextId,
-                                status: 'Đang xử lý'
-                              };
-                            }
-                            return def;
-                          }));
+                          setDefects(prev => {
+                            const updated = prev.map(def => {
+                              if (def.id === originatingDefectId) {
+                                return {
+                                  ...def,
+                                  capaId: nextId,
+                                  status: 'Đang xử lý'
+                                };
+                              }
+                              return def;
+                            });
+                            safeStorage.setItem('dk_defects', JSON.stringify(updated));
+                            safeStorage.setItem('dk_defects_is_dirty', 'true');
+                            syncToServer('dk_defects', updated);
+                            return updated;
+                          });
                           setOriginatingDefectId(null);
                         }
 
@@ -15817,7 +15871,9 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       (c.assignee?.toLowerCase() || '').includes(query);
 
                     const statusValue = c.status || c.Status || 'Mở';
-                    const sFilter = capaStatusFilter === 'Tất cả' || statusValue === capaStatusFilter;
+                    const isClosed = (s: string) => s === 'Đóng' || s === 'Đã đóng';
+                    const sFilter = capaStatusFilter === 'Tất cả' ||
+                      (isClosed(capaStatusFilter) ? isClosed(statusValue) : statusValue === capaStatusFilter);
                     const matchSupplier = capaSupplierFilter === 'Tất cả' || c.supplierName === capaSupplierFilter;
                     const matchModel = capaModelFilter === 'Tất cả' ||
                       (c.modelName && (
@@ -15954,6 +16010,14 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                       📄 Báo cáo
                                     </button>
                                     <button
+                                      type="button"
+                                      onClick={() => setViewDetailModal({ type: 'capa', data: cap })}
+                                      className="bg-blue-50 hover:bg-blue-100 text-blue-700 p-1.5 rounded transition cursor-pointer border border-blue-200"
+                                      title="Xem chi tiết hồ sơ CAPA"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
                                       onClick={() => handleOpenEditModal('capa', cap)}
                                       className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 p-1.5 rounded transition cursor-pointer border border-indigo-100"
                                       title="Sửa liên kết và dữ liệu"
@@ -16068,6 +16132,14 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 title="Xuất văn bản Word / in ấn QMS"
                               >
                                 📄 Báo cáo
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setViewDetailModal({ type: 'capa', data: cap })}
+                                className="bg-blue-50 hover:bg-blue-100 text-blue-700 p-1.5 rounded border border-blue-200"
+                                title="Xem chi tiết hồ sơ CAPA"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => handleOpenEditModal('capa', cap)}
@@ -25429,6 +25501,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        setCapaSearch(d.capaId);
                                         setActiveTab('tasks');
                                         setTimeout(() => {
                                           const el = document.getElementById('capa_tracking_sub');
@@ -27803,9 +27876,47 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     case 'supplier':
                       setSuppliers(prev => prev.map(s => s.id === data.id ? data : s));
                       break;
-                    case 'capa':
-                      setCapas(prev => prev.map(c => c.id === data.id ? data : c));
+                    case 'capa': {
+                      const idVal = data.id || data.CAPAID;
+                      const titleVal = data.title || data.Issue || '';
+                      const assigneeVal = data.assignee || data.Owner || '';
+                      const targetDateVal = data.targetDate || data.DueDate || '';
+                      const statusVal = data.status || data.Status || 'Mở';
+                      const rootCauseVal = data.rootCause || data.RootCause || '';
+                      const effVal = data.Effectiveness || data.effectiveness || 'Chưa đánh giá';
+                      const sanitizedCapa: CAPA = {
+                        ...data,
+                        id: idVal,
+                        CAPAID: idVal,
+                        title: titleVal,
+                        Issue: titleVal,
+                        assignee: assigneeVal,
+                        Owner: assigneeVal,
+                        targetDate: targetDateVal,
+                        DueDate: targetDateVal,
+                        status: statusVal,
+                        Status: statusVal as any,
+                        rootCause: rootCauseVal,
+                        RootCause: rootCauseVal,
+                        Effectiveness: effVal as any,
+                        effectiveness: effVal as any,
+                        locationOfOrigin: data.locationOfOrigin || '',
+                        locationDetail: data.locationDetail || '',
+                        priority: data.priority || 'Trung bình',
+                        Correction: data.Correction || '',
+                        CorrectiveAction: data.CorrectiveAction || data.actions || '',
+                        actions: data.CorrectiveAction || data.actions || '',
+                        PreventiveAction: data.PreventiveAction || ''
+                      };
+                      setCapas(prev => {
+                        const updated = prev.map(c => (c.id === idVal || c.CAPAID === idVal) ? sanitizedCapa : c);
+                        safeStorage.setItem('dk_capas', JSON.stringify(updated));
+                        safeStorage.setItem('dk_capas_is_dirty', 'true');
+                        syncToServer('dk_capas', updated);
+                        return updated;
+                      });
                       break;
+                    }
                     case 'ptsp':
                       setProjects(prev => prev.map(p => p.id === data.id ? data : p));
                       break;
@@ -28247,8 +28358,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Chi tiết lỗi & Sự cố</label>
                     <input
                       type="text"
-                      value={globalEditModal.data.title || ''}
-                      onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, title: e.target.value } })}
+                      value={globalEditModal.data.title || globalEditModal.data.Issue || ''}
+                      onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, title: e.target.value, Issue: e.target.value } })}
                       className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800"
                       required
                     />
@@ -28272,7 +28383,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     <div>
                       <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Người chịu trách nhiệm</label>
                       <select
-                        value={globalEditModal.data.assignee || ''}
+                        value={globalEditModal.data.assignee || globalEditModal.data.Owner || ''}
                         onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, assignee: e.target.value, Owner: e.target.value } })}
                         className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-bold"
                       >
@@ -28365,33 +28476,47 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="checkbox"
-                      id="edit_capa_repeated"
-                      checked={!!globalEditModal.data.isRepeated}
-                      onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, isRepeated: e.target.checked } })}
-                      className="rounded text-indigo-650 border-slate-300 focus:ring-indigo-600 h-4 w-4"
-                    />
-                    <label htmlFor="edit_capa_repeated" className="text-xs font-bold text-slate-700 cursor-pointer">
-                      ⚠️ Cảnh báo lỗi lặp lại (Có nguy cơ tái phát, sườn rơ dập bavia...)
-                    </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center pt-1">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Mức độ khẩn cấp (Priority)</label>
+                      <select
+                        value={globalEditModal.data.priority || 'Trung bình'}
+                        onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, priority: e.target.value } })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 text-xs font-bold"
+                      >
+                        <option value="Khẩn cấp">🚨 Khẩn cấp (Sản xuất dừng chờ)</option>
+                        <option value="Trung bình">⚠️ Trung bình (Theo dõi đặc biệt)</option>
+                        <option value="Thường">✓ Thường (Cải tiến ISO/QMS)</option>
+                      </select>
+                    </div>
+                    <div className="pt-4 flex items-center">
+                      <input
+                        type="checkbox"
+                        id="edit_capa_repeated"
+                        checked={!!globalEditModal.data.isRepeated}
+                        onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, isRepeated: e.target.checked } })}
+                        className="rounded text-indigo-650 border-slate-300 focus:ring-indigo-600 h-4 w-4"
+                      />
+                      <label htmlFor="edit_capa_repeated" className="text-xs font-bold text-slate-700 cursor-pointer ml-2">
+                        ⚠️ Cảnh báo lỗi lặp lại (Có nguy cơ tái phát)
+                      </label>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Hạn chót đóng</label>
                       <input
-                        type="text"
-                        value={globalEditModal.data.targetDate || ''}
-                        onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, targetDate: e.target.value } })}
-                        className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-mono"
+                        type="date"
+                        value={globalEditModal.data.targetDate || globalEditModal.data.DueDate || ''}
+                        onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, targetDate: e.target.value, DueDate: e.target.value } })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-mono text-xs"
                       />
                     </div>
                     <div>
                       <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Trạng thái CAPA</label>
                       <select
-                        value={globalEditModal.data.status || 'Mở'}
-                        onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, status: e.target.value } })}
+                        value={globalEditModal.data.status || globalEditModal.data.Status || 'Mở'}
+                        onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, status: e.target.value, Status: e.target.value } })}
                         className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800"
                       >
                         <option value="Mở">Mở (Open)</option>
@@ -28400,24 +28525,36 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       </select>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Nơi phát sinh sự cố</label>
-                    <select
-                      value={globalEditModal.data.locationOfOrigin || ''}
-                      onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, locationOfOrigin: e.target.value } })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 text-xs font-semibold outline-none"
-                    >
-                      <option value="">-- Chọn nơi phát sinh --</option>
-                      <option value="Phòng QLCL">Phòng QLCL</option>
-                      <option value="Kho LK/Xưởng lắp ráp">Kho LK/Xưởng lắp ráp</option>
-                      <option value="Khách hàng/Phòng kinh doanh">Khách hàng/Phòng kinh doanh</option>
-                    </select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Nơi phát sinh sự cố</label>
+                      <select
+                        value={globalEditModal.data.locationOfOrigin || ''}
+                        onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, locationOfOrigin: e.target.value } })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 text-xs font-semibold outline-none"
+                      >
+                        <option value="">-- Chọn nơi phát sinh --</option>
+                        <option value="Phòng QLCL">Phòng QLCL</option>
+                        <option value="Kho LK/Xưởng lắp ráp">Kho LK/Xưởng lắp ráp</option>
+                        <option value="Khách hàng/Phòng kinh doanh">Khách hàng/Phòng kinh doanh</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Chi tiết vị trí vật lý cụ thể</label>
+                      <input
+                        type="text"
+                        value={globalEditModal.data.locationDetail || ''}
+                        onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, locationDetail: e.target.value } })}
+                        placeholder="Ví dụ: Trạm KCS số 3 dòng điện..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 text-xs"
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Nguyên nhân cốt lõi (Root Cause)</label>
                     <textarea
-                      value={globalEditModal.data.rootCause || ''}
-                      onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, rootCause: e.target.value } })}
+                      value={globalEditModal.data.rootCause || globalEditModal.data.RootCause || ''}
+                      onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, rootCause: e.target.value, RootCause: e.target.value } })}
                       className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 h-14 text-xs"
                     />
                   </div>
@@ -28448,8 +28585,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   <div>
                     <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Đánh giá hiệu lực (Effectiveness)</label>
                     <select
-                      value={globalEditModal.data.Effectiveness || 'Chưa đánh giá'}
-                      onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, Effectiveness: e.target.value } })}
+                      value={globalEditModal.data.Effectiveness || globalEditModal.data.effectiveness || 'Chưa đánh giá'}
+                      onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, Effectiveness: e.target.value, effectiveness: e.target.value } })}
                       className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-bold"
                     >
                       <option value="Chưa đánh giá">Chưa đánh giá</option>
@@ -36010,8 +36147,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                       <table class="header-table">
                         <tr>
                           <td class="header-logo">
-                            <b>TRỰC BAN QUẢN LÝ CHẤT LƯỢNG (QMS)</b><br/>
-                            <span style="font-size:11px;color:#475569;">DKBIKE VIỆT NAM (QMS DEP)</span>
+                            <b>CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT</b><br/>
+                            <span style="font-size:11px;color:#475569;">PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL) - DK QMS | DKBike - Xe cho cả gia đình</span>
                           </td>
                           <td class="header-ref">
                             <b>Mẫu số: BM-QLCL-12-CAPA</b><br/>

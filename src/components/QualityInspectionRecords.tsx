@@ -11355,7 +11355,10 @@ export default function QualityInspectionRecords({
             const totalPtsp = currentPtsp.length;
             const passedPtsp = currentPtsp.filter(t => t.progress === 100).length;
 
-            const unresolvedCapas = capas.filter(c => c.Status !== 'Đã đóng');
+            const unresolvedCapas = capas.filter(c => {
+              const st = (c.status || c.Status || '').trim().toLowerCase();
+              return st !== 'đã đóng' && st !== 'đóng';
+            });
             const unresolvedPqc = currentPqc.filter(p => p.status !== 'Đạt hoàn toàn');
             
             return (
@@ -11680,15 +11683,15 @@ export default function QualityInspectionRecords({
                       ) : (
                         <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1 text-xs">
                           {unresolvedCapas.map((capa) => (
-                            <div key={capa.CAPAID} className="p-2 border border-slate-100 bg-slate-50/80 rounded-lg space-y-1">
+                            <div key={capa.id || capa.CAPAID} className="p-2 border border-slate-100 bg-slate-50/80 rounded-lg space-y-1">
                               <div className="flex justify-between">
-                                <span className="font-black text-[9px] text-blue-800 font-mono">{capa.CAPAID}</span>
+                                <span className="font-black text-[9px] text-blue-800 font-mono">{capa.id || capa.CAPAID}</span>
                                 <span className="text-rose-600 font-bold text-[10px] uppercase">Chưa khắc phục</span>
                               </div>
-                              <p className="font-semibold text-slate-850 text-xs line-clamp-2">{capa.Issue}</p>
+                              <p className="font-semibold text-slate-850 text-xs line-clamp-2">{capa.title || capa.Issue}</p>
                               <div className="flex justify-between text-[10px] text-slate-400 font-semibold font-medium">
-                                <span>Phụ trách: <strong>{capa.Owner}</strong></span>
-                                <span>Hạn: <strong>{capa.DueDate}</strong></span>
+                                <span>Phụ trách: <strong>{capa.assignee || capa.Owner}</strong></span>
+                                <span>Hạn: <strong>{capa.targetDate || capa.DueDate}</strong></span>
                               </div>
                             </div>
                           ))}

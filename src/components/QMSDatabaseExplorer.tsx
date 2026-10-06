@@ -423,7 +423,7 @@ export default function QMSDatabaseExplorer({
   };
 
   const deleteCapa = (id: string) => {
-    setCapas(prev => prev.filter(c => c.CAPAID !== id));
+    setCapas(prev => prev.filter(c => (c.CAPAID || c.id) !== id && c.id !== id));
     triggerToast(`Đã xóa hồ sơ CAPA ${id}`);
   };
 
@@ -642,14 +642,21 @@ export default function QMSDatabaseExplorer({
       const item: CAPA = {
         id: id,
         CAPAID: id,
+        title: newCapa.Issue || '',
         Issue: newCapa.Issue || '',
+        rootCause: newCapa.RootCause || '',
         RootCause: newCapa.RootCause || '',
+        actions: newCapa.CorrectiveAction || '',
         Correction: newCapa.Correction || '',
         CorrectiveAction: newCapa.CorrectiveAction || '',
         PreventiveAction: newCapa.PreventiveAction || '',
+        assignee: newCapa.Owner || 'Nguyễn Xuân Thao',
         Owner: newCapa.Owner || 'Nguyễn Xuân Thao',
+        targetDate: newCapa.DueDate || '2026-05-30',
         DueDate: newCapa.DueDate || '2026-05-30',
+        status: newCapa.Status || 'Mở',
         Status: newCapa.Status || 'Mở',
+        effectiveness: newCapa.Effectiveness || 'Chưa đánh giá',
         Effectiveness: newCapa.Effectiveness || 'Chưa đánh giá',
         isRepeated: false
       };

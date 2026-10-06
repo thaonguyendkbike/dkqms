@@ -151,6 +151,8 @@ export interface CAPA {
   supplierName?: string;
   modelName?: string;
   locationOfOrigin?: string;
+  locationDetail?: string;
+  priority?: string;
   images?: string[];
 }
 
