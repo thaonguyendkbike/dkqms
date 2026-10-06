@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo, FormEvent, useEffect, useRef, Fragment } from 'react';
+import { useState, useMemo, memo, useCallback, FormEvent, useEffect, useRef, Fragment } from 'react';
 import { safeStorage, safeStorage as localStorage, sanitizeFirestorePayload, onSafeStorageReady } from './safeStorage';
 import { calculateAQLSample } from './utils/aqlUtils';
 import XLSXStyle from 'xlsx-js-style';
@@ -891,6 +891,408 @@ export const getProjectImageUrl = (p: any) => {
   // CAD blueprint/engineering fallback
   return 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80';
 };
+
+interface DashboardModelDefectTrackerProps {
+  models: DKBikeModel[];
+  oqcRecords: OQCRecord[];
+  pqcRecords: PQCRecord[];
+  defects: any[];
+  setActiveTab: (tab: any) => void;
+  setQcMainSubTab: (subTab: any) => void;
+  setPqcSearch: (val: string) => void;
+  setOqcSearch: (val: string) => void;
+  setMarketDefectsSearch: (val: string) => void;
+  setEditingModelIssue: (issue: any) => void;
+}
+
+const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
+  models,
+  oqcRecords,
+  pqcRecords,
+  defects,
+  setActiveTab,
+  setQcMainSubTab,
+  setPqcSearch,
+  setOqcSearch,
+  setMarketDefectsSearch,
+  setEditingModelIssue
+}: DashboardModelDefectTrackerProps) {
+  // Trạng thái mở rộng dòng xe cục bộ: khi đóng/mở dòng xe thì CHỈ component này render lại, KHÔNG kích hoạt App render lại!
+  const [expandedModel, setExpandedModel] = useState<string | null>(null);
+
+  // Tính toán dữ liệu lỗi theo từng dòng xe tối ưu bằng Hash Map 1-pass (O(N) thay vì O(N*M))
+  const modelDefectSummaries = useMemo(() => {
+    // 1. Single pass qua oqcRecords (O(N_oqc))
+    const oqcByModel = new Map<string, { total: number; defects: OQCRecord[]; grouped: Record<string, { defectDetail: string; count: number; records: OQCRecord[] }> }>();
+    for (let i = 0; i < oqcRecords.length; i++) {
+      const r = oqcRecords[i];
+      const rawModel = (r.model || '').trim();
+      if (!rawModel) continue;
+      const key = rawModel.toLowerCase();
+
+      let entry = oqcByModel.get(key);
+      if (!entry) {
+        entry = { total: 0, defects: [], grouped: {} };
+        oqcByModel.set(key, entry);
+      }
+      entry.total++;
+
+      const isDefect = r.status === 'Lỗi' || Boolean(r.defectDetail && r.defectDetail.trim());
+      if (isDefect) {
+        entry.defects.push(r);
+        const detail = (r.defectDetail || '').trim() || 'Lỗi kiểm tra OQC xuất xưởng';
+        if (!entry.grouped[detail]) {
+          entry.grouped[detail] = { defectDetail: detail, count: 0, records: [] };
+        }
+        entry.grouped[detail].count += r.failedCount || 1;
+        entry.grouped[detail].records.push(r);
+      }
+    }
+
+    // 2. Single pass qua pqcRecords (O(N_pqc))
+    const pqcByModel = new Map<string, PQCRecord[]>();
+    for (let i = 0; i < pqcRecords.length; i++) {
+      const r = pqcRecords[i];
+      const key = (r.model || '').trim().toLowerCase();
+      if (!key) continue;
+      let list = pqcByModel.get(key);
+      if (!list) {
+        list = [];
+        pqcByModel.set(key, list);
+      }
+      list.push(r);
+    }
+
+    // 3. Single pass qua market defects (O(N_defects))
+    const marketDefectsByModel = new Map<string, any[]>();
+    for (let i = 0; i < defects.length; i++) {
+      const d = defects[i];
+      const key = (d.model || '').trim().toLowerCase();
+      if (!key) continue;
+      let list = marketDefectsByModel.get(key);
+      if (!list) {
+        list = [];
+        marketDefectsByModel.set(key, list);
+      }
+      list.push(d);
+    }
+
+    // 4. Master models map để tra cứu nhanh thông tin dòng xe
+    const masterModelsMap = new Map<string, { id: string; name: string; status: string }>();
+    for (let i = 0; i < models.length; i++) {
+      const m = models[i];
+      if (m && m.name) {
+        masterModelsMap.set(m.name.trim().toLowerCase(), m);
+      }
+    }
+
+    const results: Array<{
+      id: string;
+      name: string;
+      status: string;
+      totalErrors: number;
+      pqcRecords: PQCRecord[];
+      oqcDefects: OQCRecord[];
+      top3Oqc: Array<{ defectDetail: string; count: number; records: OQCRecord[] }>;
+      marketDefects: any[];
+    }> = [];
+
+    // Chỉ xét các model có phát sinh lắp ráp trong OQC
+    for (const [key, oqcData] of oqcByModel.entries()) {
+      if (oqcData.total === 0) continue;
+
+      const pqcList = pqcByModel.get(key) || [];
+      const marketList = marketDefectsByModel.get(key) || [];
+      const totalErrors = pqcList.length + oqcData.defects.length + marketList.length;
+
+      // Không phát sinh lỗi thì không hiển thị
+      if (totalErrors === 0) continue;
+
+      const master = masterModelsMap.get(key);
+      const name = master ? master.name : (oqcData.defects[0]?.model || oqcRecords.find(r => (r.model || '').trim().toLowerCase() === key)?.model || key);
+      const id = master ? master.id : `MDL-OQC-${key}`;
+      const status = master ? master.status : 'Đang sản xuất';
+
+      const top3Oqc = Object.values(oqcData.grouped)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+
+      results.push({
+        id,
+        name,
+        status,
+        totalErrors,
+        pqcRecords: pqcList,
+        oqcDefects: oqcData.defects,
+        top3Oqc,
+        marketDefects: marketList
+      });
+    }
+
+    // Giữ thứ tự ưu tiên hiển thị theo master models
+    results.sort((a, b) => {
+      const idxA = models.findIndex(m => m.name.trim().toLowerCase() === a.name.trim().toLowerCase());
+      const idxB = models.findIndex(m => m.name.trim().toLowerCase() === b.name.trim().toLowerCase());
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return results;
+  }, [models, oqcRecords, pqcRecords, defects]);
+
+  const renderErrorRow = useCallback((r: any, type: 'PQC' | 'OQC' | 'MarketDefect') => {
+    const currentTreatment = type === 'PQC'
+      ? r.treatment || ''
+      : (type === 'OQC' ? r.treatment || '' : r.correctiveAction || r.correction || '');
+
+    const currentStatus = type === 'PQC'
+      ? (r.status === 'Đạt hoàn toàn' ? 'Đã xử lý' : 'Cần theo dõi')
+      : (type === 'OQC'
+        ? (r.status === 'Đạt' ? 'Đã xử lý' : (r.status === 'Lỗi' ? 'Cần theo dõi' : 'Chưa xử lý'))
+        : (r.status === 'Đã xử lý' ? 'Đã xử lý' : (r.status === 'Đang xử lý' ? 'Cần theo dõi' : 'Chưa xử lý')));
+
+    const handleJumpToTab = () => {
+      if (type === 'PQC') {
+        setActiveTab('quality_inspection_records');
+        setQcMainSubTab('pqc');
+        setPqcSearch(r.id);
+      } else if (type === 'OQC') {
+        setActiveTab('quality_inspection_records');
+        setQcMainSubTab('oqc');
+        setOqcSearch(r.id);
+      } else {
+        setActiveTab('defects');
+        setMarketDefectsSearch(r.id);
+      }
+    };
+
+    const handleOpenEditModal = () => {
+      setEditingModelIssue({
+        id: r.id,
+        type,
+        modelName: r.model || '',
+        description: type === 'PQC' ? r.findings : (type === 'OQC' ? r.defectDetail : r.description),
+        treatment: currentTreatment,
+        status: currentStatus,
+        originalRecord: r
+      });
+    };
+
+    return (
+      <tr key={r.id} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-b-0">
+        <td className="p-2.5 font-mono">
+          <button
+            onClick={handleJumpToTab}
+            className="text-indigo-600 hover:text-indigo-850 font-extrabold underline bg-transparent border-none p-0 cursor-pointer text-[11px] flex items-center gap-1.5"
+            title="Nhảy nhanh đến phân hệ gốc"
+          >
+            {r.id || r.serialNo} 🔍
+          </button>
+        </td>
+        <td className="p-2.5">
+          <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${type === 'PQC' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' :
+            type === 'OQC' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+              'bg-rose-50 text-rose-700 border border-rose-100'
+            }`}>
+            {type === 'MarketDefect' ? 'Thị trường' : type}
+          </span>
+        </td>
+        <td className="p-2.5 text-slate-700 font-medium">
+          {type === 'PQC' ? r.findings : (type === 'OQC' ? r.defectDetail : r.description)}
+        </td>
+        <td className="p-2.5 text-slate-600 italic">
+          {currentTreatment || <span className="text-slate-400 font-normal text-[10px] not-italic">Chưa nhập phương án...</span>}
+        </td>
+        <td className="p-2.5">
+          <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${currentStatus === 'Đã xử lý' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' :
+            currentStatus === 'Cần theo dõi' ? 'bg-amber-50 text-amber-700 border border-amber-150' :
+              'bg-slate-150 text-slate-600 border border-slate-200'
+            }`}>
+            {currentStatus}
+          </span>
+        </td>
+        <td className="p-2.5 text-center">
+          <button
+            onClick={handleOpenEditModal}
+            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold border border-indigo-200 transition cursor-pointer flex items-center gap-1 mx-auto"
+          >
+            <Pencil className="w-2.5 h-2.5" />
+            <span>Sửa</span>
+          </button>
+        </td>
+      </tr>
+    );
+  }, [setActiveTab, setQcMainSubTab, setPqcSearch, setOqcSearch, setMarketDefectsSearch, setEditingModelIssue]);
+
+  const renderOqcGroupRow = useCallback((index: number, defectDetail: string, records: OQCRecord[], modelName: string) => {
+    const editKey = `OQC_GROUP_${modelName}_${defectDetail}`;
+    const currentTreatment = records.find(item => item.treatment)?.treatment || '';
+
+    let initialStatus = 'Cần theo dõi';
+    if (records.every(item => item.status === 'Đạt')) {
+      initialStatus = 'Đã xử lý';
+    } else if (records.every(item => item.status === 'Chưa kiểm tra')) {
+      initialStatus = 'Chưa xử lý';
+    }
+
+    const handleJumpToTab = () => {
+      setActiveTab('quality_inspection_records');
+      setQcMainSubTab('oqc');
+      setOqcSearch(defectDetail);
+    };
+
+    const handleOpenEditModal = () => {
+      setEditingModelIssue({
+        id: editKey,
+        type: 'OQC',
+        modelName,
+        description: defectDetail,
+        treatment: currentTreatment,
+        status: initialStatus,
+        originalRecord: records
+      });
+    };
+
+    const formattedIndex = String(index + 1).padStart(2, '0');
+
+    return (
+      <tr key={editKey} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-b-0">
+        <td className="p-2.5 font-mono">
+          <button
+            onClick={handleJumpToTab}
+            className="text-indigo-600 hover:text-indigo-850 font-extrabold underline bg-transparent border-none p-0 cursor-pointer text-[11px] flex items-center gap-1.5"
+            title={`Tìm kiếm các lỗi "${defectDetail}" của dòng xe ${modelName}`}
+          >
+            {formattedIndex} 🔍
+          </button>
+        </td>
+        <td className="p-2.5">
+          <span className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-100 uppercase">
+            OQC (Nhóm)
+          </span>
+        </td>
+        <td className="p-2.5 text-slate-700 font-medium">
+          {defectDetail} <span className="text-slate-400 font-normal text-[10px]">({records.length} lần)</span>
+        </td>
+        <td className="p-2.5 text-slate-600 italic">
+          {currentTreatment || <span className="text-slate-400 font-normal text-[10px] not-italic">Chưa nhập phương án...</span>}
+        </td>
+        <td className="p-2.5">
+          <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${initialStatus === 'Đã xử lý' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' :
+            initialStatus === 'Cần theo dõi' ? 'bg-amber-50 text-amber-700 border border-amber-150' :
+              'bg-slate-150 text-slate-600 border border-slate-200'
+            }`}>
+            {initialStatus}
+          </span>
+        </td>
+        <td className="p-2.5 text-center">
+          <button
+            onClick={handleOpenEditModal}
+            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold border border-indigo-200 transition cursor-pointer flex items-center gap-1 mx-auto"
+          >
+            <Pencil className="w-2.5 h-2.5" />
+            <span>Sửa</span>
+          </button>
+        </td>
+      </tr>
+    );
+  }, [setActiveTab, setQcMainSubTab, setOqcSearch, setEditingModelIssue]);
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mt-6 mb-6" id="dashboard_model_defect_tracker">
+      <div className="px-5 py-4 bg-slate-50 border-b border-slate-200">
+        <h3 className="text-xs font-extrabold text-slate-800 uppercase flex items-center gap-1.5">
+          🏍️ BẢNG THEO DÕI LỖI & PHƯƠNG ÁN XỬ LÝ THEO DÒNG XE (MODEL)
+        </h3>
+        <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Nhấp vào dòng xe để xem chi tiết lịch sử lỗi PQC, OQC và Lỗi thị trường liên quan</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left font-sans text-xs">
+          <thead className="text-[10px] font-bold text-slate-400 uppercase bg-slate-50/50 border-b">
+            <tr>
+              <th className="p-3">Dòng xe (Model)</th>
+              <th className="p-3">Trạng thái sản xuất</th>
+              <th className="p-3 text-center">Tổng lỗi ghi nhận</th>
+              <th className="p-3 text-center text-indigo-700">Lỗi PQC</th>
+              <th className="p-3 text-center text-blue-700">Lỗi OQC</th>
+              <th className="p-3 text-center text-orange-700">Lỗi thị trường</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+            {modelDefectSummaries.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center text-slate-400 italic py-6">
+                  Không có dòng xe nào phát sinh lỗi trong quá trình lắp ráp OQC cần theo dõi.
+                </td>
+              </tr>
+            ) : (
+              modelDefectSummaries.map(item => {
+                const isExpanded = expandedModel === item.name;
+
+                return (
+                  <Fragment key={item.id}>
+                    <tr
+                      onClick={() => setExpandedModel(isExpanded ? null : item.name)}
+                      className="hover:bg-slate-50 cursor-pointer transition-colors"
+                    >
+                      <td className="p-3 font-extrabold text-slate-800 text-sm">
+                        {item.name} {isExpanded ? '▼' : '▶'}
+                      </td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] ${item.status === 'Đang sản xuất' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                          {item.status}
+                        </span>
+                      </td>
+                      <td className="p-3 text-center font-extrabold">{item.totalErrors}</td>
+                      <td className="p-3 text-center text-indigo-700">{item.pqcRecords.length}</td>
+                      <td className="p-3 text-center text-blue-700">{item.oqcDefects.length}</td>
+                      <td className="p-3 text-center text-orange-700">{item.marketDefects.length}</td>
+                    </tr>
+
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={6} className="bg-slate-50/50 p-4 border-t border-b">
+                          {item.totalErrors === 0 ? (
+                            <p className="text-center text-slate-400 italic py-4">Chưa ghi nhận lỗi nào cho dòng xe này.</p>
+                          ) : (
+                            <div className="overflow-hidden border border-slate-200 rounded-xl bg-white shadow-xs">
+                              <table className="w-full text-[11px] text-left">
+                                <thead className="bg-slate-100/80 text-[10px] text-slate-500 uppercase border-b font-black">
+                                  <tr>
+                                    <th className="p-2.5">Mã lỗi</th>
+                                    <th className="p-2.5">Phân hệ</th>
+                                    <th className="p-2.5 w-1/3">Mô tả khuyết tật / Sự cố</th>
+                                    <th className="p-2.5 w-1/3">Phương án xử lý lỗi</th>
+                                    <th className="p-2.5">Trạng thái</th>
+                                    <th className="p-2.5 text-center">Thao tác</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 text-slate-700">
+                                  {/* Render PQC Errors */}
+                                  {item.pqcRecords.map(r => renderErrorRow(r, 'PQC'))}
+                                  {/* Render OQC Errors */}
+                                  {item.top3Oqc.map((group, index) => renderOqcGroupRow(index, group.defectDetail, group.records, item.name))}
+                                  {/* Render Market Defects */}
+                                  {item.marketDefects.map(r => renderErrorRow(r, 'MarketDefect'))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+});
 
 export function App() {
   // Dynamic initialization based on current system/browser date
@@ -3755,167 +4157,7 @@ export function App() {
   const [showDefectsDashboard, setShowDefectsDashboard] = useState(true);
   const [defectsChartTab, setDefectsChartTab] = useState<'all' | 'model' | 'customer' | 'type'>('all');
   const [isEcoFilterExpanded, setIsEcoFilterExpanded] = useState(false);
-  const [expandedDashboardModel, setExpandedDashboardModel] = useState<string | null>(null);
   const [dashboardErrorEdits, setDashboardErrorEdits] = useState<Record<string, { treatment: string; status: string }>>({});
-
-  const renderErrorRow = (r: any, type: 'PQC' | 'OQC' | 'MarketDefect') => {
-    const currentTreatment = type === 'PQC'
-      ? r.treatment || ''
-      : (type === 'OQC' ? r.treatment || '' : r.correctiveAction || r.correction || '');
-
-    const currentStatus = type === 'PQC'
-      ? (r.status === 'Đạt hoàn toàn' ? 'Đã xử lý' : 'Cần theo dõi')
-      : (type === 'OQC'
-        ? (r.status === 'Đạt' ? 'Đã xử lý' : (r.status === 'Lỗi' ? 'Cần theo dõi' : 'Chưa xử lý'))
-        : (r.status === 'Đã xử lý' ? 'Đã xử lý' : (r.status === 'Đang xử lý' ? 'Cần theo dõi' : 'Chưa xử lý')));
-
-    const handleJumpToTab = () => {
-      if (type === 'PQC') {
-        setActiveTab('quality_inspection_records');
-        setQcMainSubTab('pqc');
-        setPqcSearch(r.id);
-      } else if (type === 'OQC') {
-        setActiveTab('quality_inspection_records');
-        setQcMainSubTab('oqc');
-        setOqcSearch(r.id);
-      } else {
-        setActiveTab('defects');
-        setMarketDefectsSearch(r.id);
-      }
-    };
-
-    const handleOpenEditModal = () => {
-      setEditingModelIssue({
-        id: r.id,
-        type,
-        modelName: r.model || '',
-        description: type === 'PQC' ? r.findings : (type === 'OQC' ? r.defectDetail : r.description),
-        treatment: currentTreatment,
-        status: currentStatus,
-        originalRecord: r
-      });
-    };
-
-    return (
-      <tr key={r.id} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-b-0">
-        <td className="p-2.5 font-mono">
-          <button
-            onClick={handleJumpToTab}
-            className="text-indigo-600 hover:text-indigo-850 font-extrabold underline bg-transparent border-none p-0 cursor-pointer text-[11px] flex items-center gap-1.5"
-            title="Nhảy nhanh đến phân hệ gốc"
-          >
-            {r.id || r.serialNo} 🔍
-          </button>
-        </td>
-        <td className="p-2.5">
-          <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${type === 'PQC' ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' :
-            type === 'OQC' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
-              'bg-rose-50 text-rose-700 border border-rose-100'
-            }`}>
-            {type === 'MarketDefect' ? 'Thị trường' : type}
-          </span>
-        </td>
-        <td className="p-2.5 text-slate-700 font-medium">
-          {type === 'PQC' ? r.findings : (type === 'OQC' ? r.defectDetail : r.description)}
-        </td>
-        <td className="p-2.5 text-slate-600 italic">
-          {currentTreatment || <span className="text-slate-400 font-normal text-[10px] not-italic">Chưa nhập phương án...</span>}
-        </td>
-        <td className="p-2.5">
-          <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${currentStatus === 'Đã xử lý' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' :
-            currentStatus === 'Cần theo dõi' ? 'bg-amber-50 text-amber-700 border border-amber-150' :
-              'bg-slate-150 text-slate-600 border border-slate-200'
-            }`}>
-            {currentStatus}
-          </span>
-        </td>
-        <td className="p-2.5 text-center">
-          <button
-            onClick={handleOpenEditModal}
-            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold border border-indigo-200 transition cursor-pointer flex items-center gap-1 mx-auto"
-          >
-            <Pencil className="w-2.5 h-2.5" />
-            <span>Sửa</span>
-          </button>
-        </td>
-      </tr>
-    );
-  };
-
-  const renderOqcGroupRow = (index: number, defectDetail: string, records: OQCRecord[], modelName: string) => {
-    const editKey = `OQC_GROUP_${modelName}_${defectDetail}`;
-
-    const currentTreatment = records.find(item => item.treatment)?.treatment || '';
-
-    let initialStatus = 'Cần theo dõi';
-    if (records.every(item => item.status === 'Đạt')) {
-      initialStatus = 'Đã xử lý';
-    } else if (records.every(item => item.status === 'Chưa kiểm tra')) {
-      initialStatus = 'Chưa xử lý';
-    }
-
-    const handleJumpToTab = () => {
-      setActiveTab('quality_inspection_records');
-      setQcMainSubTab('oqc');
-      setOqcSearch(defectDetail);
-    };
-
-    const handleOpenEditModal = () => {
-      setEditingModelIssue({
-        id: editKey,
-        type: 'OQC',
-        modelName,
-        description: defectDetail,
-        treatment: currentTreatment,
-        status: initialStatus,
-        originalRecord: records
-      });
-    };
-
-    const formattedIndex = String(index + 1).padStart(2, '0');
-
-    return (
-      <tr key={editKey} className="hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-b-0">
-        <td className="p-2.5 font-mono">
-          <button
-            onClick={handleJumpToTab}
-            className="text-indigo-600 hover:text-indigo-850 font-extrabold underline bg-transparent border-none p-0 cursor-pointer text-[11px] flex items-center gap-1.5"
-            title={`Tìm kiếm các lỗi "${defectDetail}" của dòng xe ${modelName}`}
-          >
-            {formattedIndex} 🔍
-          </button>
-        </td>
-        <td className="p-2.5">
-          <span className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-blue-50 text-blue-700 border border-blue-100 uppercase">
-            OQC (Nhóm)
-          </span>
-        </td>
-        <td className="p-2.5 text-slate-700 font-medium">
-          {defectDetail} <span className="text-slate-400 font-normal text-[10px]">({records.length} lần)</span>
-        </td>
-        <td className="p-2.5 text-slate-600 italic">
-          {currentTreatment || <span className="text-slate-400 font-normal text-[10px] not-italic">Chưa nhập phương án...</span>}
-        </td>
-        <td className="p-2.5">
-          <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${initialStatus === 'Đã xử lý' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' :
-            initialStatus === 'Cần theo dõi' ? 'bg-amber-50 text-amber-700 border border-amber-150' :
-              'bg-slate-150 text-slate-600 border border-slate-200'
-            }`}>
-            {initialStatus}
-          </span>
-        </td>
-        <td className="p-2.5 text-center">
-          <button
-            onClick={handleOpenEditModal}
-            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold border border-indigo-200 transition cursor-pointer flex items-center gap-1 mx-auto"
-          >
-            <Pencil className="w-2.5 h-2.5" />
-            <span>Sửa</span>
-          </button>
-        </td>
-      </tr>
-    );
-  };
 
   const handleSaveModelIssue = (e: FormEvent) => {
     e.preventDefault();
@@ -14241,167 +14483,18 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 </div>
 
                 {/* BẢNG THEO DÕI LỖI & PHƯƠNG ÁN XỬ LÝ THEO DÒNG XE (MODEL) */}
-                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mt-6 mb-6" id="dashboard_model_defect_tracker">
-                  <div className="px-5 py-4 bg-slate-50 border-b border-slate-200">
-                    <h3 className="text-xs font-extrabold text-slate-800 uppercase flex items-center gap-1.5">
-                      🏍️ BẢNG THEO DÕI LỖI & PHƯƠNG ÁN XỬ LÝ THEO DÒNG XE (MODEL)
-                    </h3>
-                    <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Nhấp vào dòng xe để xem chi tiết lịch sử lỗi PQC, OQC và Lỗi thị trường liên quan</p>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left font-sans text-xs">
-                      <thead className="text-[10px] font-bold text-slate-400 uppercase bg-slate-50/50 border-b">
-                        <tr>
-                          <th className="p-3">Dòng xe (Model)</th>
-                          <th className="p-3">Trạng thái sản xuất</th>
-                          <th className="p-3 text-center">Tổng lỗi ghi nhận</th>
-                          <th className="p-3 text-center text-indigo-700">Lỗi PQC</th>
-                          <th className="p-3 text-center text-blue-700">Lỗi OQC</th>
-                          <th className="p-3 text-center text-orange-700">Lỗi thị trường</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                        {(() => {
-                          // Lọc danh sách model: chỉ hiển thị model có phát sinh lắp ráp trong OQC VÀ có phát sinh lỗi
-                          const masterModelsMap = new Map<string, { id: string; name: string; status: string }>();
-                          models.forEach(m => {
-                            if (m && m.name) {
-                              masterModelsMap.set(m.name.trim().toLowerCase(), m);
-                            }
-                          });
-
-                          // Nhận diện thêm các dòng xe thực tế phát sinh trong OQC (nếu chưa có trong master)
-                          oqcRecords.forEach(r => {
-                            if (r && r.model && r.model.trim()) {
-                              const key = r.model.trim().toLowerCase();
-                              if (!masterModelsMap.has(key)) {
-                                masterModelsMap.set(key, {
-                                  id: `MDL-OQC-${r.model.trim()}`,
-                                  name: r.model.trim(),
-                                  status: 'Đang sản xuất'
-                                });
-                              }
-                            }
-                          });
-
-                          // Áp dụng điều kiện lọc:
-                          // 1. Phải có phát sinh lắp ráp trong OQC (oqcRecords có bản ghi)
-                          // 2. Phải có phát sinh lỗi (tổng lỗi > 0)
-                          const activeDashboardModels = Array.from(masterModelsMap.values()).filter(model => {
-                            const modelNameLower = (model.name || '').trim().toLowerCase();
-                            const modelOqc = oqcRecords.filter(r => (r.model || '').trim().toLowerCase() === modelNameLower);
-                            if (modelOqc.length === 0) return false;
-
-                            const modelPqc = pqcRecords.filter(r => (r.model || '').trim().toLowerCase() === modelNameLower);
-                            const oqcDefectRecords = modelOqc.filter(r => r.status === 'Lỗi' || (r.defectDetail && r.defectDetail.trim() !== ''));
-                            const modelDefects = defects.filter(d => (d.model || '').trim().toLowerCase() === modelNameLower);
-                            const totalErrors = modelPqc.length + oqcDefectRecords.length + modelDefects.length;
-
-                            return totalErrors > 0;
-                          });
-
-                          if (activeDashboardModels.length === 0) {
-                            return (
-                              <tr>
-                                <td colSpan={6} className="text-center text-slate-400 italic py-6">
-                                  Không có dòng xe nào phát sinh lỗi trong quá trình lắp ráp OQC cần theo dõi.
-                                </td>
-                              </tr>
-                            );
-                          }
-
-                          return activeDashboardModels.map(model => {
-                            const modelNameLower = (model.name || '').trim().toLowerCase();
-                            const modelPqc = pqcRecords.filter(r => (r.model || '').trim().toLowerCase() === modelNameLower);
-                            const modelOqc = oqcRecords.filter(r => (r.model || '').trim().toLowerCase() === modelNameLower);
-                            const oqcDefectRecords = modelOqc.filter(r => r.status === 'Lỗi' || (r.defectDetail && r.defectDetail.trim() !== ''));
-                            const modelDefects = defects.filter(d => (d.model || '').trim().toLowerCase() === modelNameLower);
-                            const totalErrors = modelPqc.length + oqcDefectRecords.length + modelDefects.length;
-                            const isExpanded = expandedDashboardModel === model.name;
-
-                            return (
-                              <Fragment key={model.id}>
-                                <tr
-                                  onClick={() => setExpandedDashboardModel(isExpanded ? null : model.name)}
-                                  className="hover:bg-slate-50 cursor-pointer transition-colors"
-                                >
-                                  <td className="p-3 font-extrabold text-slate-800 text-sm">
-                                    {model.name} {isExpanded ? '▼' : '▶'}
-                                  </td>
-                                  <td className="p-3">
-                                    <span className={`px-2 py-0.5 rounded text-[10px] ${model.status === 'Đang sản xuất' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                                      }`}>
-                                      {model.status}
-                                    </span>
-                                  </td>
-                                  <td className="p-3 text-center font-extrabold">{totalErrors}</td>
-                                  <td className="p-3 text-center text-indigo-700">{modelPqc.length}</td>
-                                  <td className="p-3 text-center text-blue-700">{oqcDefectRecords.length}</td>
-                                  <td className="p-3 text-center text-orange-700">{modelDefects.length}</td>
-                                </tr>
-
-                                {isExpanded && (
-                                  <tr>
-                                    <td colSpan={6} className="bg-slate-50/50 p-4 border-t border-b">
-                                      {totalErrors === 0 ? (
-                                        <p className="text-center text-slate-400 italic py-4">Chưa ghi nhận lỗi nào cho dòng xe này.</p>
-                                      ) : (
-                                        <div className="overflow-hidden border border-slate-200 rounded-xl bg-white shadow-xs">
-                                          <table className="w-full text-[11px] text-left">
-                                            <thead className="bg-slate-100/80 text-[10px] text-slate-500 uppercase border-b font-black">
-                                              <tr>
-                                                <th className="p-2.5">Mã lỗi</th>
-                                                <th className="p-2.5">Phân hệ</th>
-                                                <th className="p-2.5 w-1/3">Mô tả khuyết tật / Sự cố</th>
-                                                <th className="p-2.5 w-1/3">Phương án xử lý lỗi</th>
-                                                <th className="p-2.5">Trạng thái</th>
-                                                <th className="p-2.5 text-center">Thao tác</th>
-                                              </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-100 text-slate-700">
-                                              {/* Render PQC Errors */}
-                                              {modelPqc.map(r => renderErrorRow(r, 'PQC'))}
-                                              {/* Render OQC Errors (Grouped by defect, displaying only top 3 most frequent) */}
-                                              {(() => {
-                                                const groupedOqc: Record<string, { defectDetail: string, count: number, records: OQCRecord[] }> = {};
-
-                                                oqcDefectRecords.forEach(r => {
-                                                  const detail = (r.defectDetail || '').trim() || (r.status === 'Lỗi' ? 'Lỗi kiểm tra OQC xuất xưởng' : '');
-                                                  if (!detail) return;
-                                                  if (!groupedOqc[detail]) {
-                                                    groupedOqc[detail] = {
-                                                      defectDetail: detail,
-                                                      count: 0,
-                                                      records: []
-                                                    };
-                                                  }
-                                                  groupedOqc[detail].count += r.failedCount || 1;
-                                                  groupedOqc[detail].records.push(r);
-                                                });
-
-                                                const top3Oqc = Object.values(groupedOqc)
-                                                  .sort((a, b) => b.count - a.count)
-                                                  .slice(0, 3);
-
-                                                return top3Oqc.map((group, index) => renderOqcGroupRow(index, group.defectDetail, group.records, model.name));
-                                              })()}
-                                              {/* Render Market Defects */}
-                                              {modelDefects.map(r => renderErrorRow(r, 'MarketDefect'))}
-                                            </tbody>
-                                          </table>
-                                        </div>
-                                      )}
-                                    </td>
-                                  </tr>
-                                )}
-                              </Fragment>
-                            );
-                          });
-                        })()}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <DashboardModelDefectTracker
+                  models={models}
+                  oqcRecords={oqcRecords}
+                  pqcRecords={pqcRecords}
+                  defects={defects}
+                  setActiveTab={setActiveTab}
+                  setQcMainSubTab={setQcMainSubTab}
+                  setPqcSearch={setPqcSearch}
+                  setOqcSearch={setOqcSearch}
+                  setMarketDefectsSearch={setMarketDefectsSearch}
+                  setEditingModelIssue={setEditingModelIssue}
+                />
 
                 {/* THAM CHIẾU QUY TRÌNH & ĐỒNG BỘ KHÁC */}
                 <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4.5 text-center shadow-inner relative overflow-hidden" id="dashboard_iso_milestone">
