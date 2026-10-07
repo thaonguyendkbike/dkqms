@@ -3496,7 +3496,23 @@ export function App() {
       if (serverData.dk_copqs !== undefined) setCopqs(serverData.dk_copqs);
       if (serverData.dk_fmea !== undefined) setFmea(serverData.dk_fmea);
       if (serverData.dk_custom_forms !== undefined) setCustomForms(serverData.dk_custom_forms);
-      if (serverData.dk_models !== undefined && Array.isArray(serverData.dk_models)) setModels(mergeMasterModels(serverData.dk_models, INITIAL_MODELS));
+      const isModelsDirty = localStorage.getItem('dk_models_is_dirty') === 'true';
+      if (serverData.dk_models !== undefined && Array.isArray(serverData.dk_models)) {
+        const localSaved = safeStorage.getItem('dk_models') || localStorage.getItem('dk_models');
+        let localParsed: any[] = [];
+        try { localParsed = localSaved ? JSON.parse(localSaved) : []; } catch (e) { }
+        if (!isModelsDirty) {
+          const merged = mergeMasterModels(serverData.dk_models, localParsed.length > 0 ? localParsed : INITIAL_MODELS);
+          setModels(merged);
+          safeStorage.setItem('dk_models', JSON.stringify(merged));
+        } else {
+          // Bảo vệ dữ liệu bẩn của người dùng: Hợp nhất dữ liệu cục bộ với Cloud và đồng bộ
+          const merged = mergeMasterModels(localParsed, serverData.dk_models);
+          setModels(merged);
+          safeStorage.setItem('dk_models', JSON.stringify(merged));
+          syncToServer('dk_models', merged);
+        }
+      }
       if (serverData.dk_dealers !== undefined && Array.isArray(serverData.dk_dealers)) setDealers(serverData.dk_dealers);
       if (serverData.dk_equipments !== undefined) setEquipments(ensureUniqueIds(serverData.dk_equipments, 'EQP'));
       if (serverData.dk_maintenance_logs !== undefined) setMaintenanceLogs(ensureUniqueIds(serverData.dk_maintenance_logs, 'MNL'));
@@ -3948,7 +3964,8 @@ export function App() {
         'dk_oqc_color_changes',
         'dk_oqc_part_codes',
         'dk_oqc_handover_list',
-        'dk_supplier_production_audits'
+        'dk_supplier_production_audits',
+        'dk_models'
       ];
 
       STANDARD_DOC_SYNC_KEYS.forEach((key) => {
@@ -3987,6 +4004,10 @@ export function App() {
             setSupplierProductionAudits(list);
           } else if (key === 'dk_oqc_handover_list') {
             setOqcHandoverList(list);
+          } else if (key === 'dk_models') {
+            if (list.length > 0) {
+              setModels(mergeMasterModels(list, INITIAL_MODELS));
+            }
           }
         }, (err) => {
           console.warn(`[Doc onSnapshot Warning] for ${key}:`, err);
@@ -6765,6 +6786,8 @@ export function App() {
           case 'model': {
             const updated = models.filter(m => m.id !== id);
             setModels(updated);
+            safeStorage.setItem('dk_models', JSON.stringify(updated));
+            safeStorage.setItem('dk_models_is_dirty', 'true');
             syncToServer('dk_models', updated);
             break;
           }
@@ -7176,7 +7199,7 @@ export function App() {
   }, [staff]);
 
   useEffect(() => {
-    localStorage.setItem('dk_models', JSON.stringify(models));
+    safeStorage.setItem('dk_models', JSON.stringify(models));
     if (localStorage.getItem('dk_models_is_dirty') === 'true') {
       syncToServer('dk_models', models);
     }
@@ -27486,15 +27509,19 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         const newId = `MDL-${nextIdNum.toString().padStart(2, '0')}`;
                         const newModel = {
                           id: newId,
-                          name: newModelName,
+                          name: newModelName.trim(),
                           status: newModelStatus,
                           releaseYear: Number(newModelYear) || 2026
                         };
-                        setModels([...models, newModel]);
+                        const updatedModels = [...models, newModel];
+                        setModels(updatedModels);
+                        safeStorage.setItem('dk_models', JSON.stringify(updatedModels));
+                        safeStorage.setItem('dk_models_is_dirty', 'true');
+                        syncToServer('dk_models', updatedModels);
                         setNewModelName('');
                         setNewModelStatus('Đang sản xuất');
                         setNewModelYear(2026);
-                        alert(`Đã khai sinh Model xe điện ${newModelName} thành công với mã ${newId}!`);
+                        alert(`Đã khai sinh Model xe điện ${newModelName.trim()} thành công với mã ${newId}!`);
                       }}
                       className="space-y-3.5 text-xs text-slate-700 font-semibold"
                     >
@@ -28002,9 +28029,14 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       }
                       setStaff(prev => prev.map(st => st.id === data.id ? data : st));
                       break;
-                    case 'model':
-                      setModels(prev => prev.map(m => m.id === data.id ? data : m));
+                    case 'model': {
+                      const updatedModels = models.map(m => m.id === data.id ? data : m);
+                      setModels(updatedModels);
+                      safeStorage.setItem('dk_models', JSON.stringify(updatedModels));
+                      safeStorage.setItem('dk_models_is_dirty', 'true');
+                      syncToServer('dk_models', updatedModels);
                       break;
+                    }
                     case 'dealer':
                       setDealers(prev => prev.map(dl => dl.id === data.id ? data : dl));
                       break;
