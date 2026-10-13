@@ -3636,6 +3636,12 @@ export default function QualityInspectionRecords({
   const [showImportOqcModal, setShowImportOqcModal] = useState(false);
   const [oqcImportText, setOqcImportText] = useState('');
   const [oqcImportError, setOqcImportError] = useState('');
+  const [oqcImportDefaultLsx, setOqcImportDefaultLsx] = useState('');
+  const [showMissingLsxModal, setShowMissingLsxModal] = useState(false);
+  const [missingLsxList, setMissingLsxList] = useState<Array<{ index: number; serialNo: string; model: string; color: string; status: string; lsx: string }>>([]);
+  const [quickLsxBatchInput, setQuickLsxBatchInput] = useState('');
+  const [pendingParsedRecords, setPendingParsedRecords] = useState<OQCRecord[]>([]);
+  const [pendingReplaceAll, setPendingReplaceAll] = useState(false);
 
   // OQC Color Change states, scanning & persistence
   const [showColorChangeModal, setShowColorChangeModal] = useState(false);
@@ -5289,6 +5295,155 @@ export default function QualityInspectionRecords({
     setShowImportOqcModal(true);
   };
 
+  const isLsxEmpty = (val?: string): boolean => {
+    if (!val) return true;
+    const trimmed = val.trim();
+    if (!trimmed || trimmed === '-' || trimmed === '--' || trimmed.toUpperCase() === 'N/A') return true;
+    const lower = trimmed.toLowerCase();
+    if (lower === 'chưa có' || lower === 'chưa có lsx' || lower === 'trống' || lower === 'none' || lower === 'null') return true;
+    return false;
+  };
+
+  const commitOqcImport = (finalParsed: OQCRecord[], isReplaceAll: boolean) => {
+    let finalUpdatedList: OQCRecord[] = [];
+    let updatedCount = 0;
+    let addedCount = 0;
+
+    if (isReplaceAll) {
+      // GHI ĐÈ THAY THẾ TOÀN BỘ (REPLACE ALL): Xóa sạch dữ liệu cũ, chỉ lấy dữ liệu mới vừa dán
+      finalUpdatedList = finalParsed;
+      addedCount = finalParsed.length;
+    } else {
+      // Multi-key lookup map for existing records
+      const finalParsedLookupMap = new Map<string, OQCRecord>();
+      finalParsed.forEach(r => {
+        if (r.serialNo) finalParsedLookupMap.set(r.serialNo.trim().toUpperCase(), r);
+        if (r.chassisNo) finalParsedLookupMap.set(r.chassisNo.trim().toUpperCase(), r);
+        if (r.id) finalParsedLookupMap.set(r.id.trim().toUpperCase().replace(/^OQC-/, ''), r);
+      });
+
+      const updatedExistingRecords: OQCRecord[] = [];
+      const matchedImportedSerials = new Set<string>();
+
+      oqcRecords.forEach(oldRec => {
+        const sKey = (oldRec.serialNo || '').trim().toUpperCase();
+        const cKey = (oldRec.chassisNo || '').trim().toUpperCase();
+        const idKey = (oldRec.id || '').trim().toUpperCase().replace(/^OQC-/, '');
+
+        const newRec = (sKey && finalParsedLookupMap.get(sKey)) || 
+                       (cKey && finalParsedLookupMap.get(cKey)) || 
+                       (idKey && finalParsedLookupMap.get(idKey));
+
+        if (newRec) {
+          updatedCount++;
+          // GHI ĐÈ ƯU TIÊN 100% CÁC TRƯỜNG DỮ LIỆU TỪ FILE EXCEL
+          updatedExistingRecords.push({
+            ...oldRec,
+            status: newRec.status,
+            defectDetail: newRec.defectDetail,
+            failedCount: newRec.failedCount,
+            rootCause: newRec.rootCause,
+            model: newRec.model || oldRec.model,
+            color: newRec.color || oldRec.color,
+            lsx: newRec.lsx || oldRec.lsx,
+            partCode: (newRec.partCode && newRec.partCode !== 'TEM-GEN') ? newRec.partCode : (oldRec.partCode === 'TEM-GEN' ? '' : (oldRec.partCode || newRec.partCode || '')),
+            chassisNo: newRec.chassisNo || oldRec.chassisNo,
+            engineNo: newRec.engineNo || oldRec.engineNo,
+            date: newRec.date || oldRec.date,
+            month: newRec.month || oldRec.month,
+            year: newRec.year || oldRec.year,
+            checkTime: newRec.checkTime || oldRec.checkTime || '08:30'
+          });
+          if (newRec.serialNo) matchedImportedSerials.add(newRec.serialNo.trim().toUpperCase());
+        } else {
+          updatedExistingRecords.push(oldRec);
+        }
+      });
+
+      // Add any brand new serials that were not in oqcRecords before
+      const brandNewRecords: OQCRecord[] = [];
+      finalParsed.forEach(newRec => {
+        const sUpper = (newRec.serialNo || '').trim().toUpperCase();
+        if (!matchedImportedSerials.has(sUpper)) {
+          brandNewRecords.push(newRec);
+          addedCount++;
+        }
+      });
+
+      finalUpdatedList = [...brandNewRecords, ...updatedExistingRecords];
+    }
+
+    // GHI ĐÈ AN TOÀN VÀO SAFE STORAGE & ĐẨY LÊN CLOUD FIREBASE
+    setOqcRecords(finalUpdatedList);
+    safeStorage.setItem('dk_oqc_records', JSON.stringify(finalUpdatedList));
+    try {
+      localStorage.setItem('dk_oqc_records_is_dirty', 'true');
+    } catch (e) {}
+
+    // Trigger immediate synchronization to Firebase
+    if (typeof (window as any).syncToServer === 'function') {
+      (window as any).syncToServer('dk_oqc_records', finalUpdatedList);
+    }
+
+    // Automatically reset LSX filter to 'All' so that all imported cars are immediately visible
+    const firstImportedLsx = finalParsed[0]?.lsx;
+    if (firstImportedLsx && kcsSelectedLsx !== 'All' && kcsSelectedLsx !== firstImportedLsx) {
+      setKcsSelectedLsx('All');
+    }
+    setKcsCurrentPage(1);
+    setKcsFilterDate('All');
+    setKcsFilterMonth('All');
+    setKcsFilterYear('All');
+    setKcsStatusFilter('All');
+    setKcsSearch('');
+
+    const finalPassedCount = finalParsed.filter(r => r.status === 'Đạt').length;
+    const finalFailedCount = finalParsed.filter(r => r.status === 'Lỗi').length;
+
+    setOqcImportText('');
+    setShowImportOqcModal(false);
+    setShowMissingLsxModal(false);
+    setOqcImportReplaceAll(false);
+    setPendingParsedRecords([]);
+    setMissingLsxList([]);
+
+    if (isReplaceAll) {
+      alert(`🎉 NẠP MỚI TOÀN BỘ KCS THÀNH CÔNG!\n\nĐã thay thế toàn bộ CSDL bằng ${finalParsed.length} xe vừa nạp:\n• Số xe ĐẠT: ${finalPassedCount} xe\n• Số xe LỖI: ${finalFailedCount} xe\n\n(Dữ liệu đã tự động lưu an toàn và đồng bộ lên Cloud Firebase)`);
+    } else {
+      alert(`🎉 Nhập KCS & Ghi đè thành công!\n\nChi tiết file Excel vừa nạp (${finalParsed.length} xe):\n• Số xe ĐẠT: ${finalPassedCount} xe\n• Số xe LỖI: ${finalFailedCount} xe\n\nĐối chiếu theo Số Sêri:\n• Đã ghi đè cập nhật: ${updatedCount} xe\n• Thêm mới: ${addedCount} xe\n\n(Dữ liệu đã tự động lưu an toàn và đồng bộ lên Cloud Firebase)`);
+    }
+  };
+
+  const handleApplyBatchLsx = () => {
+    const trimmed = quickLsxBatchInput.trim();
+    if (!trimmed) {
+      alert('⚠️ Vui lòng nhập mã LSX (ví dụ: 26-178) để áp dụng cho tất cả các xe đang thiếu!');
+      return;
+    }
+    setMissingLsxList(prev => prev.map(item => ({ ...item, lsx: trimmed })));
+  };
+
+  const handleConfirmMissingLsxAndCommit = () => {
+    const stillMissing = missingLsxList.filter(item => isLsxEmpty(item.lsx));
+    if (stillMissing.length > 0) {
+      if (!window.confirm(`⚠️ CẢNH BÁO: Vẫn còn ${stillMissing.length} xe chưa được điền mã LSX!\n\nAnh Thao có chắc chắn muốn bỏ qua và tiếp tục lưu các xe này với mã 'Chưa có' không?`)) {
+        return;
+      }
+    }
+
+    const updated = [...pendingParsedRecords];
+    missingLsxList.forEach(item => {
+      if (updated[item.index]) {
+        updated[item.index] = {
+          ...updated[item.index],
+          lsx: item.lsx.trim() || 'Chưa có'
+        };
+      }
+    });
+
+    commitOqcImport(updated, pendingReplaceAll);
+  };
+
   const handleImportOqcSubmit = (e: FormEvent) => {
     e.preventDefault();
     setOqcImportError('');
@@ -5449,7 +5604,10 @@ export default function QualityInspectionRecords({
         let partCodeVal = rawPartCode || '';
         let chassisNoVal = rawChassisCol;
         let engineNoVal = rawEngineCol;
-        let lsxVal = rawLsxCol || '';
+        let lsxVal = (rawLsxCol || '').trim();
+        if (isLsxEmpty(lsxVal) && oqcImportDefaultLsx.trim()) {
+          lsxVal = oqcImportDefaultLsx.trim();
+        }
 
         // 2. MODEL AND COLOR INTELLIGENCE:
         // Never allow status strings in Model or Color
@@ -5644,110 +5802,31 @@ export default function QualityInspectionRecords({
       }
       const finalParsed = Object.values(mergedParsed);
 
-      let finalUpdatedList: OQCRecord[] = [];
-      let updatedCount = 0;
-      let addedCount = 0;
+      // Check for any records missing LSX
+      const missingItems: Array<{ index: number; serialNo: string; model: string; color: string; status: string; lsx: string }> = [];
+      finalParsed.forEach((r, idx) => {
+        if (isLsxEmpty(r.lsx)) {
+          missingItems.push({
+            index: idx,
+            serialNo: r.serialNo,
+            model: r.model,
+            color: r.color,
+            status: r.status,
+            lsx: ''
+          });
+        }
+      });
 
-      if (oqcImportReplaceAll) {
-        // GHI ĐÈ THAY THẾ TOÀN BỘ (REPLACE ALL): Xóa sạch dữ liệu cũ, chỉ lấy dữ liệu mới vừa dán
-        finalUpdatedList = finalParsed;
-        addedCount = finalParsed.length;
-      } else {
-        // Multi-key lookup map for existing records
-        const finalParsedLookupMap = new Map<string, OQCRecord>();
-        finalParsed.forEach(r => {
-          if (r.serialNo) finalParsedLookupMap.set(r.serialNo.trim().toUpperCase(), r);
-          if (r.chassisNo) finalParsedLookupMap.set(r.chassisNo.trim().toUpperCase(), r);
-          if (r.id) finalParsedLookupMap.set(r.id.trim().toUpperCase().replace(/^OQC-/, ''), r);
-        });
-
-        const updatedExistingRecords: OQCRecord[] = [];
-        const matchedImportedSerials = new Set<string>();
-
-        oqcRecords.forEach(oldRec => {
-          const sKey = (oldRec.serialNo || '').trim().toUpperCase();
-          const cKey = (oldRec.chassisNo || '').trim().toUpperCase();
-          const idKey = (oldRec.id || '').trim().toUpperCase().replace(/^OQC-/, '');
-
-          const newRec = (sKey && finalParsedLookupMap.get(sKey)) || 
-                         (cKey && finalParsedLookupMap.get(cKey)) || 
-                         (idKey && finalParsedLookupMap.get(idKey));
-
-          if (newRec) {
-            updatedCount++;
-            // GHI ĐÈ ƯU TIÊN 100% CÁC TRƯỜNG DỮ LIỆU TỪ FILE EXCEL
-            updatedExistingRecords.push({
-              ...oldRec,
-              status: newRec.status,
-              defectDetail: newRec.defectDetail,
-              failedCount: newRec.failedCount,
-              rootCause: newRec.rootCause,
-              model: newRec.model || oldRec.model,
-              color: newRec.color || oldRec.color,
-              lsx: newRec.lsx || oldRec.lsx,
-              partCode: (newRec.partCode && newRec.partCode !== 'TEM-GEN') ? newRec.partCode : (oldRec.partCode === 'TEM-GEN' ? '' : (oldRec.partCode || newRec.partCode || '')),
-              chassisNo: newRec.chassisNo || oldRec.chassisNo,
-              engineNo: newRec.engineNo || oldRec.engineNo,
-              date: newRec.date || oldRec.date,
-              month: newRec.month || oldRec.month,
-              year: newRec.year || oldRec.year,
-              checkTime: newRec.checkTime || oldRec.checkTime || '08:30'
-            });
-            if (newRec.serialNo) matchedImportedSerials.add(newRec.serialNo.trim().toUpperCase());
-          } else {
-            updatedExistingRecords.push(oldRec);
-          }
-        });
-
-        // Add any brand new serials that were not in oqcRecords before
-        const brandNewRecords: OQCRecord[] = [];
-        finalParsed.forEach(newRec => {
-          const sUpper = (newRec.serialNo || '').trim().toUpperCase();
-          if (!matchedImportedSerials.has(sUpper)) {
-            brandNewRecords.push(newRec);
-            addedCount++;
-          }
-        });
-
-        finalUpdatedList = [...brandNewRecords, ...updatedExistingRecords];
+      if (missingItems.length > 0) {
+        setPendingParsedRecords(finalParsed);
+        setPendingReplaceAll(oqcImportReplaceAll);
+        setMissingLsxList(missingItems);
+        setQuickLsxBatchInput('');
+        setShowMissingLsxModal(true);
+        return;
       }
 
-      // GHI ĐÈ AN TOÀN VÀO SAFE STORAGE & ĐẨY LÊN CLOUD FIREBASE
-      setOqcRecords(finalUpdatedList);
-      safeStorage.setItem('dk_oqc_records', JSON.stringify(finalUpdatedList));
-      try {
-        localStorage.setItem('dk_oqc_records_is_dirty', 'true');
-      } catch (e) {}
-
-      // Trigger immediate synchronization to Firebase
-      if (typeof (window as any).syncToServer === 'function') {
-        (window as any).syncToServer('dk_oqc_records', finalUpdatedList);
-      }
-
-      // Automatically reset LSX filter to 'All' so that all imported cars are immediately visible
-      const firstImportedLsx = finalParsed[0]?.lsx;
-      if (firstImportedLsx && kcsSelectedLsx !== 'All' && kcsSelectedLsx !== firstImportedLsx) {
-        setKcsSelectedLsx('All');
-      }
-      setKcsCurrentPage(1);
-      setKcsFilterDate('All');
-      setKcsFilterMonth('All');
-      setKcsFilterYear('All');
-      setKcsStatusFilter('All');
-      setKcsSearch('');
-
-      const finalPassedCount = finalParsed.filter(r => r.status === 'Đạt').length;
-      const finalFailedCount = finalParsed.filter(r => r.status === 'Lỗi').length;
-
-      setOqcImportText('');
-      setShowImportOqcModal(false);
-      setOqcImportReplaceAll(false);
-
-      if (oqcImportReplaceAll) {
-        alert(`🎉 NẠP MỚI TOÀN BỘ KCS THÀNH CÔNG!\n\nĐã thay thế toàn bộ CSDL bằng ${finalParsed.length} xe vừa nạp:\n• Số xe ĐẠT: ${finalPassedCount} xe\n• Số xe LỖI: ${finalFailedCount} xe\n\n(Dữ liệu đã tự động lưu an toàn và đồng bộ lên Cloud Firebase)`);
-      } else {
-        alert(`🎉 Nhập KCS & Ghi đè thành công!\n\nChi tiết file Excel vừa nạp (${finalParsed.length} xe):\n• Số xe ĐẠT: ${finalPassedCount} xe\n• Số xe LỖI: ${finalFailedCount} xe\n\nĐối chiếu theo Số Sêri:\n• Đã ghi đè cập nhật: ${updatedCount} xe\n• Thêm mới: ${addedCount} xe\n\n(Dữ liệu đã tự động lưu an toàn và đồng bộ lên Cloud Firebase)`);
-      }
+      commitOqcImport(finalParsed, oqcImportReplaceAll);
     } catch (err: any) {
       setOqcImportError(`Lỗi phân rã dữ liệu: ${err.message || err}`);
     }
@@ -13913,6 +13992,25 @@ export default function QualityInspectionRecords({
                 </button>
               </div>
 
+              {/* Optional Default LSX field */}
+              <div className="flex flex-wrap items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-200 gap-2">
+                <div className="flex items-center gap-2 flex-1 min-w-[280px]">
+                  <label className="text-[11px] font-bold text-slate-700 whitespace-nowrap">
+                    Mã LSX mặc định:
+                  </label>
+                  <input
+                    type="text"
+                    value={oqcImportDefaultLsx}
+                    onChange={(e) => setOqcImportDefaultLsx(e.target.value)}
+                    placeholder="Ví dụ: 26-178 (Tùy chọn - Gán tự động nếu file thiếu cột LSX)"
+                    className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 flex-1 max-w-[280px]"
+                  />
+                </div>
+                <span className="text-[10.5px] text-slate-400 italic">
+                  * Nếu file Excel thiếu cột LSX và ô này để trống, hệ thống sẽ tự động nhắc bổ sung ngay khi bấm Import.
+                </span>
+              </div>
+
               <div className="flex-1 min-h-0 flex flex-col space-y-1">
                 <label className="font-extrabold text-slate-700 block">Dán nội dung bảng tính Excel tại đây:</label>
                 <textarea
@@ -13936,6 +14034,7 @@ export default function QualityInspectionRecords({
                     setShowImportOqcModal(false);
                     setOqcImportError('');
                     setOqcImportText('');
+                    setOqcImportDefaultLsx('');
                   }}
                   className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition"
                 >
@@ -13949,6 +14048,148 @@ export default function QualityInspectionRecords({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: BỔ SUNG LỆNH SẢN XUẤT (LSX) CHO CÁC XE THIẾU KHI NHẬP EXCEL */}
+      {showMissingLsxModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full p-4 sm:p-6 border border-amber-300 flex flex-col max-h-[92vh]">
+            {/* Header */}
+            <div className="flex justify-between items-start border-b border-amber-100 pb-3 mb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 bg-amber-100 text-amber-700 rounded-xl border border-amber-300">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 animate-bounce" />
+                </span>
+                <div>
+                  <h3 className="font-black text-slate-800 text-sm sm:text-base uppercase flex items-center gap-2">
+                    ⚠️ Phát Hiện <span className="text-amber-600 font-mono text-base sm:text-lg">{missingLsxList.length}</span> Xe Chưa Có Lệnh Sản Xuất (LSX)
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    File Excel vừa dán thiếu thông tin Lệnh sản xuất. Vui lòng bổ sung LSX để đồng bộ chuẩn xác vào trạm KCS!
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowMissingLsxModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer font-black text-base"
+                title="Đóng cửa sổ bổ sung"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Batch Fill Bar */}
+            <div className="bg-amber-50/80 p-3 rounded-xl border border-amber-200 flex flex-wrap items-center justify-between gap-2.5 mb-3 text-xs">
+              <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
+                <span className="font-extrabold text-amber-900 flex items-center gap-1">
+                  <Zap className="w-4 h-4 text-amber-600" />
+                  Điền nhanh cùng 1 mã LSX cho tất cả {missingLsxList.length} xe:
+                </span>
+                <input
+                  type="text"
+                  value={quickLsxBatchInput}
+                  onChange={(e) => setQuickLsxBatchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleApplyBatchLsx();
+                    }
+                  }}
+                  placeholder="Ví dụ: 26-178 hoặc 26-180"
+                  className="bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 w-44"
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyBatchLsx}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs px-3 py-1.5 rounded-lg transition shadow-xs cursor-pointer flex items-center gap-1"
+                >
+                  <Check className="w-3.5 h-3.5" /> Áp dụng tất cả
+                </button>
+              </div>
+            </div>
+
+            {/* Editable List of Missing Cars */}
+            <div className="flex-1 min-h-0 flex flex-col space-y-1">
+              <div className="flex justify-between items-center text-slate-600 text-[11px] font-bold px-1">
+                <span>Danh sách chi tiết các xe thiếu LSX (có thể gõ riêng cho từng xe):</span>
+                <span className="text-amber-700 font-extrabold">
+                  Đã điền: {missingLsxList.filter(x => !isLsxEmpty(x.lsx)).length}/{missingLsxList.length} xe
+                </span>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto border border-slate-200 rounded-xl bg-slate-50 shadow-inner">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-200/80 text-slate-700 font-bold sticky top-0 z-10 text-[11px]">
+                    <tr>
+                      <th className="p-2 text-center w-12">STT</th>
+                      <th className="p-2">Số Sêri</th>
+                      <th className="p-2">Dòng xe (Model)</th>
+                      <th className="p-2">Màu xe</th>
+                      <th className="p-2 text-center w-24">Tình trạng</th>
+                      <th className="p-2 w-48 text-amber-900 font-black">Mã LSX bổ sung *</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {missingLsxList.map((item, idx) => (
+                      <tr key={item.serialNo || idx} className="hover:bg-amber-50/40 transition">
+                        <td className="p-2 text-center font-bold text-slate-500 text-[11px]">{idx + 1}</td>
+                        <td className="p-2 font-mono font-bold text-slate-800">{item.serialNo}</td>
+                        <td className="p-2 font-medium text-slate-700">{item.model || '--'}</td>
+                        <td className="p-2 font-medium text-slate-600">{item.color || '--'}</td>
+                        <td className="p-2 text-center">
+                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                            item.status === 'Đạt' 
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                              : item.status === 'Lỗi'
+                              ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                              : 'bg-slate-100 text-slate-700 border border-slate-300'
+                          }`}>
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="p-1.5">
+                          <input
+                            type="text"
+                            value={item.lsx}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setMissingLsxList(prev => prev.map((it, i) => i === idx ? { ...it, lsx: val } : it));
+                            }}
+                            placeholder="Nhập LSX..."
+                            className={`w-full px-2 py-1 text-xs font-mono font-bold rounded border transition focus:outline-none focus:ring-1 ${
+                              isLsxEmpty(item.lsx)
+                                ? 'bg-amber-50 border-amber-300 focus:ring-amber-500 text-amber-900'
+                                : 'bg-emerald-50 border-emerald-300 focus:ring-emerald-500 text-emerald-900'
+                            }`}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center justify-between border-t border-slate-200 pt-3 mt-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setShowMissingLsxModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition text-xs cursor-pointer"
+              >
+                Quay lại kiểm tra file Excel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmMissingLsxAndCommit}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition shadow-md shadow-indigo-300 text-xs cursor-pointer flex items-center gap-1.5 active:scale-95"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Xác nhận &amp; Hoàn tất Nhập Dữ Liệu
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -14514,15 +14755,6 @@ export default function QualityInspectionRecords({
                 <span className="flex items-center gap-1.5">
                   📋 Thứ tự các cột dữ liệu theo bảng tính Excel (4 cột chuẩn):
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setColorChangeText("26DK00166\tDK S2 App - Cà phê\tDK S2 - Cà phê\t03/01/2026\n26DK00167\tDK S2 App - Cà phê\tDK S2 - Cà phê\t03/01/2026\n26DK00665\tDK S88 (EZ2_App) - Trắng đen\tDK S88 (EZ2_App) - Trắng hồng\t13/01/2026\n25DK26866\tDK ROMA SX v2_App - Ghi pha lê\tDK ROMA SX v2_App - Ghi khói\t17/10/2025\n25DK29694\tDK ROMA SX v2_App - Xám khói tuyết\tDK ROMA SX v2_App - Cafe\t08/12/2025");
-                  }}
-                  className="text-purple-800 hover:text-purple-950 bg-purple-100 hover:bg-purple-200 px-2.5 py-1 rounded-lg font-black text-[10.5px] transition cursor-pointer border border-purple-300 flex items-center gap-1"
-                >
-                  ⚡ Dán mẫu ví dụ (5 xe từ ảnh)
-                </button>
               </div>
               <div className="font-mono bg-white px-3 py-2 rounded-lg border border-purple-200 text-[11px] text-purple-900 font-black overflow-x-auto whitespace-nowrap">
                 1. Số Sêri &nbsp;|&nbsp; 2. Model &amp; Màu Cũ (trước đổi) &nbsp;|&nbsp; 3. Model &amp; Màu Mới (sau đổi) &nbsp;|&nbsp; 4. Ngày đổi (dd/mm/yyyy)
