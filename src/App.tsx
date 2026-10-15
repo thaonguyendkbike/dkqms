@@ -1405,8 +1405,8 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
           ]);
         });
 
-        // 2. OQC records (nhóm lỗi của xe)
-        const oqcGroups = (item.allOqcGroups && item.allOqcGroups.length > 0) ? item.allOqcGroups : (item.top3Oqc || []);
+        // 2. OQC records (Chỉ lấy 3 lỗi có số lượng nhiều nhất của dòng xe)
+        const oqcGroups = (item.top3Oqc || []).slice(0, 3);
         oqcGroups.forEach((group, gIdx) => {
           const currentTreatment = group.records.find(rec => rec.treatment)?.treatment || '';
           let initialStatus = 'Cần theo dõi';
