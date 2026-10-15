@@ -526,6 +526,42 @@ export function getMondayOfWeek(year: number, month: number, weekNum: number): D
 return new Date(year, month - 1, mon1Day + (weekNum - 1) * 7);
 }
 
+export function parseLogDate(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const cleanStr = dateStr.trim();
+  // If format is like YYYY-MM-DD
+  if (cleanStr.includes('-')) {
+    const parts = cleanStr.split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      return new Date(year, month, day);
+    }
+  }
+  // If format is like D/M/YYYY, DD/MM/YYYY or DD/MM
+  if (cleanStr.includes('/')) {
+    const parts = cleanStr.split('/');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const year = parseInt(parts[2], 10);
+      return new Date(year, month, day);
+    } else if (parts.length === 2) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const year = new Date().getFullYear();
+      return new Date(year, month, day);
+    }
+  }
+  // Fallback to standard javascript Date parse
+  const parsed = new Date(cleanStr);
+  if (!isNaN(parsed.getTime())) {
+    return parsed;
+  }
+  return null;
+}
+
 export function isOqcRecordPassed(r: any): boolean {
   if (!r) return false;
   const statusStr = String(r.status || r.result || '').trim().toLowerCase();
@@ -6813,7 +6849,7 @@ export function App() {
   const [logMonthFilter, setLogMonthFilter] = useState<number | 'All'>('All');
   const [logYearFilter, setLogYearFilter] = useState<number | 'All'>('All');
   const [logPage, setLogPage] = useState(1);
-  const [logLimit, setLogLimit] = useState(25);
+  const [logLimit, setLogLimit] = useState(10);
   const [showLogFilter, setShowLogFilter] = useState(false);
 
   // Enhanced Daily Log UX States
@@ -8034,10 +8070,27 @@ export function App() {
     });
   }, [dailyLogs, logSearch, logWeek, logCategory, logAssignee, logStatus, logDateFilter, logMonthFilter, logYearFilter]);
 
+  const sortedFilteredDailyLogs = useMemo(() => {
+    return [...filteredDailyLogs].sort((a, b) => {
+      const dateA = parseLogDate(a.date || '') || new Date(0);
+      const dateB = parseLogDate(b.date || '') || new Date(0);
+      const diff = dateB.getTime() - dateA.getTime();
+      if (diff !== 0) return diff;
+      return (Number(b.stt) || 0) - (Number(a.stt) || 0);
+    });
+  }, [filteredDailyLogs]);
+
   const paginatedDailyLogs = useMemo(() => {
     const startIndex = (logPage - 1) * logLimit;
-    return filteredDailyLogs.slice(startIndex, startIndex + logLimit);
-  }, [filteredDailyLogs, logPage, logLimit]);
+    return sortedFilteredDailyLogs.slice(startIndex, startIndex + logLimit);
+  }, [sortedFilteredDailyLogs, logPage, logLimit]);
+
+  useEffect(() => {
+    const maxPage = Math.ceil(filteredDailyLogs.length / logLimit) || 1;
+    if (logPage > maxPage) {
+      setLogPage(maxPage);
+    }
+  }, [filteredDailyLogs.length, logLimit, logPage]);
 
   const logStats = useMemo(() => {
     let completed = 0;
@@ -12046,41 +12099,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     }
   };
 
-  const parseLogDate = (dateStr: string): Date | null => {
-    if (!dateStr) return null;
-    const cleanStr = dateStr.trim();
-    // If format is like YYYY-MM-DD
-    if (cleanStr.includes('-')) {
-      const parts = cleanStr.split('-');
-      if (parts.length === 3) {
-        const year = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const day = parseInt(parts[2], 10);
-        return new Date(year, month, day);
-      }
-    }
-    // If format is like D/M/YYYY, DD/MM/YYYY or DD/MM
-    if (cleanStr.includes('/')) {
-      const parts = cleanStr.split('/');
-      if (parts.length === 3) {
-        const day = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const year = parseInt(parts[2], 10);
-        return new Date(year, month, day);
-      } else if (parts.length === 2) {
-        const day = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const year = new Date().getFullYear();
-        return new Date(year, month, day);
-      }
-    }
-    // Fallback to standard javascript Date parse
-    const parsed = new Date(cleanStr);
-    if (!isNaN(parsed.getTime())) {
-      return parsed;
-    }
-    return null;
-  };
+  // parseLogDate is defined at module scope
 
   const handleExportExcel = (customDate?: Date) => {
     const today = customDate || new Date();
@@ -16731,7 +16750,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 <div className="space-y-6">
                   {(() => {
                     const groups: { [date: string]: DailyLogRecord[] } = {};
-                    filteredDailyLogs.forEach(log => {
+                    paginatedDailyLogs.forEach(log => {
                       if (!log) return;
                       const d = log.date ? standardizeDate(log.date) : 'Không có ngày';
                       if (!groups[d]) {
@@ -16746,7 +16765,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       return dateB.getTime() - dateA.getTime();
                     });
 
-                    if (sortedDates.length === 0) {
+                    if (filteredDailyLogs.length === 0) {
                       return (
                         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400 font-medium shadow-xs">
                           <AlertCircle className="w-10 h-10 text-slate-350 mx-auto mb-2.5" />
@@ -16940,6 +16959,65 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       );
                     });
                   })()}
+
+                  {/* Pagination bar for Calendar View */}
+                  {filteredDailyLogs.length > 0 && (
+                    <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 font-medium">
+                      <div className="flex items-center gap-1.5">
+                        <span>Hiển thị</span>
+                        <select
+                          value={logLimit}
+                          onChange={(e) => { setLogLimit(parseInt(e.target.value)); setLogPage(1); }}
+                          className="bg-white border border-slate-200 rounded px-1.5 py-0.5 focus:outline-none"
+                        >
+                          {[10, 25, 50, 100].map(lim => (
+                            <option key={lim} value={lim}>{lim} đầu việc</option>
+                          ))}
+                        </select>
+                        <span>
+                          trên tổng số <b>{filteredDailyLogs.length}</b> đầu việc của bộ lọc.
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setLogPage(1)}
+                          disabled={logPage === 1}
+                          className="p-1 px-2 rounded bg-white border border-slate-200 shadow-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                          title="Trang đầu"
+                        >
+                          Trang đầu
+                        </button>
+                        <button
+                          onClick={() => setLogPage(prev => Math.max(1, prev - 1))}
+                          disabled={logPage === 1}
+                          className="p-1.5 rounded bg-white border border-slate-200 shadow-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                          title="Trang trước"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded font-bold">
+                          Trang {logPage} / {Math.ceil(filteredDailyLogs.length / logLimit) || 1}
+                        </span>
+                        <button
+                          onClick={() => setLogPage(prev => Math.min(Math.ceil(filteredDailyLogs.length / logLimit), prev + 1))}
+                          disabled={logPage >= Math.ceil(filteredDailyLogs.length / logLimit)}
+                          className="p-1.5 rounded bg-white border border-slate-200 shadow-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                          title="Trang sau"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setLogPage(Math.ceil(filteredDailyLogs.length / logLimit) || 1)}
+                          disabled={logPage >= Math.ceil(filteredDailyLogs.length / logLimit)}
+                          className="p-1 px-2 rounded bg-white border border-slate-200 shadow-sm text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+                          title="Trang cuối"
+                        >
+                          Trang cuối
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 /* MASTER SPREADSHEET ONE-TABLE UNIFIED WORKSPACE */
