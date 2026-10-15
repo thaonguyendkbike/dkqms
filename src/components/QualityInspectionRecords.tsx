@@ -5833,29 +5833,327 @@ export default function QualityInspectionRecords({
   };
 
   const handleExportOqcCSV = () => {
-    const csvHeaders = ["STT", "Mã quy cách", "Số Sêri", "Model & Màu sắc", "Tình trạng", "Chi tiết lỗi", "Số lỗi", "Nguyên nhân", "LSX", "Giờ kiểm", "Ngày"];
-    const csvContent = oqcRecords.map((r, i) => [
-      i + 1,
-      r.partCode,
-      r.serialNo,
-      `${r.model} - ${r.color}`,
-      r.status,
-      r.defectDetail,
-      r.failedCount,
-      r.rootCause,
-      r.lsx,
-      r.checkTime,
-      r.date
-    ]);
-    
-    let csvString = "\uFEFF" + [csvHeaders.join(","), ...csvContent.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", `Bao_cao_OQC_KCS_Thanh_pham_2026.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      // 1. Xác định danh sách bản ghi cần xuất dựa theo ngữ cảnh màn hình và bộ lọc hiện tại
+      let targetRecords: OQCRecord[] = [];
+      let filterDescription = "Tất cả dữ liệu";
+
+      if (qcMainSubTab === 'oqc' && oqcSubView === 'station' && kcsStationStats?.displayRecords && kcsStationStats.displayRecords.length > 0) {
+        targetRecords = kcsStationStats.displayRecords;
+        const filters: string[] = [];
+        if (kcsSelectedLsx && kcsSelectedLsx !== 'All') filters.push(`LSX: ${kcsSelectedLsx}`);
+        if (kcsStatusFilter && kcsStatusFilter !== 'All') filters.push(`Trạng thái: ${kcsStatusFilter}`);
+        if (kcsFilterDate && kcsFilterDate !== 'All') filters.push(`Ngày: ${kcsFilterDate}`);
+        if (kcsFilterMonth && kcsFilterMonth !== 'All') filters.push(`Tháng: ${kcsFilterMonth}`);
+        if (kcsFilterYear && kcsFilterYear !== 'All') filters.push(`Năm: ${kcsFilterYear}`);
+        if (kcsSearch && kcsSearch.trim()) filters.push(`Tìm kiếm: "${kcsSearch.trim()}"`);
+        filterDescription = filters.length > 0 ? filters.join(' | ') : "Toàn bộ Trạm KCS";
+      } else if (filteredOqc && filteredOqc.length > 0 && (oqcSearch?.trim() || oqcFilterModel !== 'All' || oqcFilterColor !== 'All' || oqcFilterDate !== 'All' || oqcFilterStatus !== 'All' || oqcFilterMonth !== 'All' || oqcFilterYear !== 'All')) {
+        targetRecords = filteredOqc;
+        filterDescription = "Dữ liệu theo bộ lọc chung OQC";
+      } else {
+        targetRecords = oqcRecords;
+      }
+
+      if (!targetRecords || targetRecords.length === 0) {
+        alert("Không có bản ghi OQC nào để xuất dữ liệu!");
+        return;
+      }
+
+      const totalCount = targetRecords.length;
+      const passedCount = targetRecords.filter(r => r.status === 'Đạt').length;
+      const failedCount = targetRecords.filter(r => r.status === 'Lỗi').length;
+      const pendingCount = targetRecords.filter(r => r.status !== 'Đạt' && r.status !== 'Lỗi').length;
+      const passRate = totalCount > 0 ? ((passedCount / totalCount) * 100).toFixed(1) : "0.0";
+      const nowStr = new Date().toLocaleDateString('vi-VN');
+
+      // 2. Xây dựng ma trận dữ liệu Excel (AOA)
+      const aoaData: any[][] = [];
+      const rowTracker: { type: string; isZebra?: boolean }[] = [];
+      const merges: any[] = [];
+
+      const addRow = (row: any[], type: string, isZebra: boolean = false) => {
+        const fullRow = [...row];
+        while (fullRow.length < 16) {
+          fullRow.push("");
+        }
+        aoaData.push(fullRow);
+        rowTracker.push({ type, isZebra });
+        return aoaData.length - 1;
+      };
+
+      // Header Công ty & Thương hiệu (Quy chuẩn DKBike)
+      const r0 = addRow(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT - PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL)"], 'header-company');
+      merges.push({ s: { r: r0, c: 0 }, e: { r: r0, c: 15 } });
+
+      const r1 = addRow(["DKBike - Xe cho cả gia đình | Hệ thống Quản lý Chất lượng DK QMS"], 'header-department');
+      merges.push({ s: { r: r1, c: 0 }, e: { r: r1, c: 15 } });
+
+      const r2 = addRow(["BÁO CÁO DỮ LIỆU KIỂM TRA CHẤT LƯỢNG THÀNH PHẨM (OQC / KCS)"], 'header-title');
+      merges.push({ s: { r: r2, c: 0 }, e: { r: r2, c: 15 } });
+
+      const r3 = addRow([
+        `Phạm vi: ${filterDescription} | Ngày xuất: ${nowStr} | Tổng: ${totalCount} xe (Đạt: ${passedCount} - ${passRate}% | Lỗi: ${failedCount} | Chưa kiểm: ${pendingCount})`
+      ], 'header-meta');
+      merges.push({ s: { r: r3, c: 0 }, e: { r: r3, c: 15 } });
+
+      addRow([], 'empty');
+
+      // Tiêu đề các cột dữ liệu (Chuẩn 16 cột khớp 100% với giao diện Trạm KCS và nghiệp vụ xe)
+      const headers = [
+        "STT",
+        "Mã quy cách",
+        "Số Sêri (Tem ĐT)",
+        "Số khung",
+        "Số động cơ",
+        "Dòng xe (Model)",
+        "Màu sắc",
+        "Lệnh sản xuất (LSX)",
+        "KCS / Trạng thái",
+        "Chi tiết lỗi",
+        "Số lỗi",
+        "Nguyên nhân lỗi",
+        "Phương án xử lý",
+        "Người kiểm tra",
+        "Giờ kiểm",
+        "Ngày kiểm"
+      ];
+      addRow(headers, 'table-header');
+
+      // Dữ liệu từng xe
+      targetRecords.forEach((r, idx) => {
+        const override = (localOqcOverrides as any)?.[r.id];
+        const rec = override ? { ...r, ...override } : r;
+
+        const numErrors = rec.failedCount !== undefined
+          ? rec.failedCount
+          : (rec.status === 'Lỗi' ? (rec.defectDetail ? rec.defectDetail.split(',').filter(Boolean).length || 1 : 1) : 0);
+
+        addRow([
+          idx + 1,
+          rec.partCode || '--',
+          rec.serialNo || '--',
+          rec.chassisNo || '--',
+          rec.engineNo || '--',
+          rec.model || '--',
+          rec.color || '--',
+          rec.lsx || '--',
+          rec.status || 'Chưa kiểm tra',
+          rec.defectDetail || '',
+          numErrors,
+          rec.rootCause || '',
+          rec.treatment || '',
+          rec.checkedBy || '',
+          rec.checkTime || '--:--',
+          rec.date || ''
+        ], 'data-row', idx % 2 === 1);
+      });
+
+      // Dòng tổng kết cuối bảng
+      const totalErrors = targetRecords.reduce((sum, r) => {
+        const override = (localOqcOverrides as any)?.[r.id];
+        const rec = override ? { ...r, ...override } : r;
+        return sum + (rec.failedCount !== undefined ? rec.failedCount : (rec.status === 'Lỗi' ? 1 : 0));
+      }, 0);
+
+      const rTot = addRow([
+        "TỔNG CỘNG",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        `Đạt: ${passedCount} | Lỗi: ${failedCount}`,
+        "",
+        totalErrors,
+        "",
+        "",
+        "",
+        "",
+        `${totalCount} xe`
+      ], 'summary-total');
+      merges.push({ s: { r: rTot, c: 0 }, e: { r: rTot, c: 7 } });
+
+      // 3. Styling bảng tính Excel chuyên nghiệp bằng XLSXStyle
+      const wb = XLSXStyle.utils.book_new();
+      const ws = XLSXStyle.utils.aoa_to_sheet(aoaData);
+
+      const borderThinGray = { style: "thin", color: { rgb: "E2E8F0" } };
+      const borderMediumNavy = { style: "medium", color: { rgb: "1E293B" } };
+      const cellBordersNormal = {
+        top: borderThinGray, bottom: borderThinGray,
+        left: borderThinGray, right: borderThinGray
+      };
+
+      const decodedRange = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1:A1');
+      const totalRows = decodedRange.e.r + 1;
+      const totalCols = decodedRange.e.c + 1;
+
+      for (let r = 0; r < totalRows; r++) {
+        const tracker = rowTracker[r];
+        const rType = tracker?.type;
+        const isZebra = tracker?.isZebra;
+
+        for (let c = 0; c < totalCols; c++) {
+          const cellRef = XLSXStyle.utils.encode_cell({ r, c });
+          let cell = ws[cellRef];
+          if (!cell) {
+            cell = ws[cellRef] = { t: 's', v: '' };
+          }
+
+          if (rType === 'header-company') {
+            cell.s = {
+              font: { name: 'Segoe UI', sz: 11, bold: true, color: { rgb: "0F172A" } },
+              alignment: { horizontal: 'left', vertical: 'center' }
+            };
+          } else if (rType === 'header-department') {
+            cell.s = {
+              font: { name: 'Segoe UI', sz: 9.5, italic: true, color: { rgb: "475569" } },
+              alignment: { horizontal: 'left', vertical: 'center' }
+            };
+          } else if (rType === 'header-title') {
+            cell.s = {
+              font: { name: 'Segoe UI', sz: 13, bold: true, color: { rgb: "1E3A8A" } },
+              alignment: { horizontal: 'left', vertical: 'center' }
+            };
+          } else if (rType === 'header-meta') {
+            cell.s = {
+              font: { name: 'Segoe UI', sz: 9.5, italic: true, color: { rgb: "64748B" } },
+              alignment: { horizontal: 'left', vertical: 'center' }
+            };
+          } else if (rType === 'table-header') {
+            cell.s = {
+              font: { name: 'Segoe UI', sz: 10, bold: true, color: { rgb: "FFFFFF" } },
+              fill: { fgColor: { rgb: "1E293B" } },
+              alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+              border: cellBordersNormal
+            };
+          } else if (rType === 'data-row') {
+            // Căn lề từng cột
+            const isCenterCol = [0, 1, 2, 3, 4, 7, 8, 10, 13, 14, 15].includes(c);
+            const isStatusCol = c === 8;
+            const isSerialOrChassis = [2, 3].includes(c);
+
+            let statusFgColor = "334155";
+            let statusBgColor = isZebra ? "F8FAFC" : "FFFFFF";
+
+            if (isStatusCol) {
+              const val = String(cell.v || '');
+              if (val === 'Đạt') {
+                statusFgColor = "047857";
+                statusBgColor = "ECFDF5";
+              } else if (val === 'Lỗi') {
+                statusFgColor = "B91C1C";
+                statusBgColor = "FEF2F2";
+              }
+            }
+
+            cell.s = {
+              font: {
+                name: 'Segoe UI',
+                sz: 9.5,
+                bold: isSerialOrChassis || isStatusCol || c === 0 || c === 5 || c === 7,
+                color: { rgb: isStatusCol ? statusFgColor : "1E293B" }
+              },
+              fill: { fgColor: { rgb: isStatusCol ? statusBgColor : (isZebra ? "F8FAFC" : "FFFFFF") } },
+              alignment: {
+                horizontal: isCenterCol ? 'center' : 'left',
+                vertical: 'center',
+                wrapText: [9, 11, 12].includes(c)
+              },
+              border: cellBordersNormal
+            };
+          } else if (rType === 'summary-total') {
+            cell.s = {
+              font: { name: 'Segoe UI', sz: 10, bold: true, color: { rgb: "0F172A" } },
+              fill: { fgColor: { rgb: "E2E8F0" } },
+              alignment: { horizontal: c === 0 ? 'left' : 'center', vertical: 'center' },
+              border: {
+                top: borderMediumNavy,
+                bottom: borderMediumNavy,
+                left: cellBordersNormal.left,
+                right: cellBordersNormal.right
+              }
+            };
+          }
+        }
+      }
+
+      ws['!merges'] = merges;
+      ws['!cols'] = [
+        { wch: 6 },   // 0: STT
+        { wch: 15 },  // 1: Mã quy cách
+        { wch: 18 },  // 2: Số Sêri
+        { wch: 22 },  // 3: Số khung
+        { wch: 18 },  // 4: Số động cơ
+        { wch: 20 },  // 5: Dòng xe (Model)
+        { wch: 14 },  // 6: Màu sắc
+        { wch: 15 },  // 7: Lệnh sản xuất (LSX)
+        { wch: 16 },  // 8: KCS / Trạng thái
+        { wch: 32 },  // 9: Chi tiết lỗi
+        { wch: 9 },   // 10: Số lỗi
+        { wch: 26 },  // 11: Nguyên nhân lỗi
+        { wch: 26 },  // 12: Phương án xử lý
+        { wch: 16 },  // 13: Người kiểm tra
+        { wch: 12 },  // 14: Giờ kiểm
+        { wch: 13 }   // 15: Ngày kiểm
+      ];
+
+      const safeDateStr = nowStr.replace(/\//g, '_');
+      const filename = `DKBike_Bao_cao_OQC_KCS_Thanh_pham_${safeDateStr}.xlsx`;
+      XLSXStyle.utils.book_append_sheet(wb, ws, "KCS_Thanh_Pham_OQC");
+      XLSXStyle.writeFile(wb, filename);
+    } catch (excelErr: any) {
+      console.warn("Lỗi xuất Excel OQC bằng XLSXStyle, fallback sang CSV:", excelErr);
+      // Fallback CSV nếu xảy ra sự cố thư viện
+      const csvHeaders = [
+        "STT",
+        "Mã quy cách",
+        "Số Sêri (Tem ĐT)",
+        "Số khung",
+        "Số động cơ",
+        "Dòng xe (Model)",
+        "Màu sắc",
+        "Lệnh sản xuất (LSX)",
+        "KCS / Trạng thái",
+        "Chi tiết lỗi",
+        "Số lỗi",
+        "Nguyên nhân lỗi",
+        "Phương án xử lý",
+        "Người kiểm tra",
+        "Giờ kiểm",
+        "Ngày kiểm"
+      ];
+      const csvContent = oqcRecords.map((r, i) => [
+        i + 1,
+        r.partCode || '--',
+        r.serialNo || '--',
+        r.chassisNo || '--',
+        r.engineNo || '--',
+        r.model || '--',
+        r.color || '--',
+        r.lsx || '--',
+        r.status || 'Chưa kiểm tra',
+        r.defectDetail || '',
+        r.failedCount !== undefined ? r.failedCount : (r.status === 'Lỗi' ? 1 : 0),
+        r.rootCause || '',
+        r.treatment || '',
+        r.checkedBy || '',
+        r.checkTime || '--:--',
+        r.date || ''
+      ]);
+
+      const csvString = "\uFEFF" + [csvHeaders.join(","), ...csvContent.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute("download", `DKBike_Bao_cao_OQC_KCS_Thanh_pham_2026.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   // Audio Beep Feedback for Barcode Scanner
