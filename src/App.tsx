@@ -959,7 +959,7 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
   // Tính toán dữ liệu lỗi theo từng dòng xe tối ưu bằng Hash Map 1-pass (O(N) thay vì O(N*M))
   const modelDefectSummaries = useMemo(() => {
     // 1. Single pass qua oqcRecords (O(N_oqc))
-    const oqcByModel = new Map<string, { total: number; defects: OQCRecord[]; grouped: Record<string, { defectDetail: string; count: number; records: OQCRecord[] }> }>();
+    const oqcByModel = new Map<string, { total: number; totalLlr: number; defects: OQCRecord[]; grouped: Record<string, { defectDetail: string; count: number; records: OQCRecord[] }> }>();
     for (let i = 0; i < oqcRecords.length; i++) {
       const r = oqcRecords[i];
       const rawModel = (r.model || '').trim();
@@ -968,10 +968,12 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
 
       let entry = oqcByModel.get(key);
       if (!entry) {
-        entry = { total: 0, defects: [], grouped: {} };
+        entry = { total: 0, totalLlr: 0, defects: [], grouped: {} };
         oqcByModel.set(key, entry);
       }
       entry.total++;
+      const llr = Number(r.totalLlr);
+      entry.totalLlr += (llr > 0 ? llr : 1);
 
       const isDefect = r.status === 'Lỗi' || Boolean(r.defectDetail && r.defectDetail.trim());
       if (isDefect) {
@@ -1025,7 +1027,7 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
     const results: Array<{
       id: string;
       name: string;
-      status: string;
+      assemblyQty: number;
       totalErrors: number;
       pqcRecords: PQCRecord[];
       oqcDefects: OQCRecord[];
@@ -1048,16 +1050,16 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
       const master = masterModelsMap.get(key);
       const name = master ? master.name : (oqcData.defects[0]?.model || oqcRecords.find(r => (r.model || '').trim().toLowerCase() === key)?.model || key);
       const id = master ? master.id : `MDL-OQC-${key}`;
-      const status = master ? master.status : 'Đang sản xuất';
 
       const allOqcGroups = Object.values(oqcData.grouped)
         .sort((a, b) => b.count - a.count);
       const top3Oqc = allOqcGroups.slice(0, 3);
+      const assemblyQty = (oqcData.totalLlr && oqcData.totalLlr > oqcData.total) ? oqcData.totalLlr : oqcData.total;
 
       results.push({
         id,
         name,
-        status,
+        assemblyQty,
         totalErrors,
         pqcRecords: pqcList,
         oqcDefects: oqcData.defects,
@@ -1261,14 +1263,14 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
         ['BẢNG THEO DÕI LỖI & PHƯƠNG ÁN XỬ LÝ THEO DÒNG XE (MODEL)', '', '', '', '', '', ''],
         [`Thời điểm xuất: ${exportTimeStr} | Slogan: DKBike - Xe cho cả gia đình`, '', '', '', '', '', ''],
         [],
-        ['STT', 'Dòng xe (Model)', 'Trạng thái sản xuất', 'Tổng lỗi ghi nhận', 'Lỗi PQC', 'Lỗi OQC', 'Lỗi thị trường']
+        ['STT', 'Dòng xe (Model)', 'Số lượng lắp ráp', 'Tổng lỗi ghi nhận', 'Lỗi PQC', 'Lỗi OQC', 'Lỗi thị trường']
       ];
 
       modelDefectSummaries.forEach((item, idx) => {
         aoaSummary.push([
           idx + 1,
           item.name,
-          item.status,
+          item.assemblyQty,
           item.totalErrors,
           item.pqcRecords.length,
           item.oqcDefects.length,
@@ -1277,6 +1279,7 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
       });
 
       // Dòng tổng cộng
+      const totalAssemblyAll = modelDefectSummaries.reduce((sum, item) => sum + item.assemblyQty, 0);
       const totalErrorsAll = modelDefectSummaries.reduce((sum, item) => sum + item.totalErrors, 0);
       const totalPqcAll = modelDefectSummaries.reduce((sum, item) => sum + item.pqcRecords.length, 0);
       const totalOqcAll = modelDefectSummaries.reduce((sum, item) => sum + item.oqcDefects.length, 0);
@@ -1285,7 +1288,7 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
       aoaSummary.push([
         'TỔNG CỘNG',
         `Toàn bộ ${modelDefectSummaries.length} dòng xe`,
-        '',
+        totalAssemblyAll,
         totalErrorsAll,
         totalPqcAll,
         totalOqcAll,
@@ -1297,7 +1300,7 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
       wsSummary['!cols'] = [
         { wch: 8 },  // STT
         { wch: 28 }, // Dòng xe
-        { wch: 22 }, // Trạng thái sản xuất
+        { wch: 20 }, // Số lượng lắp ráp
         { wch: 18 }, // Tổng lỗi ghi nhận
         { wch: 14 }, // Lỗi PQC
         { wch: 14 }, // Lỗi OQC
@@ -1344,11 +1347,12 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
             };
           } else if (R > 5 && R < rangeSummary.e.r) {
             const isEven = R % 2 === 0;
-            const isCenter = C === 0 || C === 2 || C >= 3;
+            const isCenter = C === 0 || C >= 3;
+            const isRight = C === 2;
             wsSummary[cellAddr].s = {
-              font: { name: 'Arial', sz: 9.5, bold: C === 1 || C === 3, color: { rgb: C === 3 ? 'B91C1C' : '1E293B' } },
+              font: { name: 'Arial', sz: 9.5, bold: C === 1 || C === 2 || C === 3, color: { rgb: C === 3 ? 'B91C1C' : '1E293B' } },
               fill: { fgColor: { rgb: isEven ? 'F8FAFC' : 'FFFFFF' } },
-              alignment: { horizontal: isCenter ? 'center' : 'left', vertical: 'center' },
+              alignment: { horizontal: isRight ? 'right' : (isCenter ? 'center' : 'left'), vertical: 'center' },
               border: {
                 top: { style: 'thin', color: { rgb: 'E2E8F0' } },
                 bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
@@ -1360,7 +1364,7 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
             wsSummary[cellAddr].s = {
               font: { name: 'Arial', sz: 10, bold: true, color: { rgb: '0F5132' } },
               fill: { fgColor: { rgb: 'ECFDF5' } },
-              alignment: { horizontal: C === 0 || C >= 3 ? 'center' : 'left', vertical: 'center' },
+              alignment: { horizontal: C === 2 ? 'right' : (C === 0 || C >= 3 ? 'center' : 'left'), vertical: 'center' },
               border: {
                 top: { style: 'medium', color: { rgb: '0F5132' } },
                 bottom: { style: 'double', color: { rgb: '0F5132' } },
@@ -1589,7 +1593,7 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
           <thead className="text-[10px] font-bold text-slate-400 uppercase bg-slate-50/50 border-b">
             <tr>
               <th className="p-3">Dòng xe (Model)</th>
-              <th className="p-3">Trạng thái sản xuất</th>
+              <th className="p-3 text-right">Số lượng lắp ráp</th>
               <th className="p-3 text-center">Tổng lỗi ghi nhận</th>
               <th className="p-3 text-center text-indigo-700">Lỗi PQC</th>
               <th className="p-3 text-center text-blue-700">Lỗi OQC</th>
@@ -1616,10 +1620,8 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
                       <td className="p-3 font-extrabold text-slate-800 text-sm">
                         {item.name} {isExpanded ? '▼' : '▶'}
                       </td>
-                      <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] ${item.status === 'Đang sản xuất' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
-                          {item.status}
-                        </span>
+                      <td className="p-3 text-right font-mono font-bold text-slate-700">
+                        {item.assemblyQty.toLocaleString('vi-VN')}
                       </td>
                       <td className="p-3 text-center font-extrabold">{item.totalErrors}</td>
                       <td className="p-3 text-center text-indigo-700">{item.pqcRecords.length}</td>
