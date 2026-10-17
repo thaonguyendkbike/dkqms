@@ -391,6 +391,7 @@ interface QualityInspectionRecordsProps {
   ptspTasks?: PTSPTask[];
   defects?: MarketDefect[];
   capas?: CAPA[];
+  setCapas?: React.Dispatch<React.SetStateAction<CAPA[]>> | ((capas: CAPA[]) => void);
   setViewDetailModal?: (modal: { type: string; data: any } | null) => void;
   models?: any[];
   monthlyPlans?: MonthlyPlan[];
@@ -1682,6 +1683,7 @@ export default function QualityInspectionRecords({
   ptspTasks = [],
   defects = [],
   capas = [],
+  setCapas,
   setViewDetailModal,
   models = [],
   monthlyPlans = [],
@@ -2250,7 +2252,7 @@ export default function QualityInspectionRecords({
     };
     
     setCustomDefectAnalyses(updated);
-    localStorage.setItem('dk_custom_defect_analyses', JSON.stringify(updated));
+    safeStorage.setItem('dk_custom_defect_analyses', JSON.stringify(updated));
 
     // Async server side backup - only sync to Firestore if there is a real Google Firebase login session
     if (auth.currentUser) {
@@ -2263,11 +2265,97 @@ export default function QualityInspectionRecords({
       .catch((err: any) => {
         console.error("Lỗi đồng bộ phân tích lỗi tùy chỉnh lên Cloud Firestore:", err);
       });
-    } else {
-      console.log("[Local Storage Sync]: Phiên làm việc offline/chuyển quyền hoạt động. Đã lưu phân tích lỗi cục bộ.");
     }
 
-    alert(`Đã lưu Đánh giá và Ban hành Chỉ thị Khắc phục Lỗi (CAPA) khẩn cấp thành công!\nHệ thống QMS DKBike đã đồng bộ và thông báo tới: "${draftOwner}".`);
+    // Ghi nhận dữ liệu và ban hành hồ sơ CAPA thực tế vào hệ thống CAPA
+    let currentCapas: CAPA[] = Array.isArray(capas) && capas.length > 0 ? [...capas] : [];
+    if (currentCapas.length === 0) {
+      try {
+        const saved = localStorage.getItem('dk_capas');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) currentCapas = parsed;
+        }
+      } catch (e) {
+        console.warn("Lỗi đọc dk_capas:", e);
+      }
+    }
+
+    let maxNum = 0;
+    currentCapas.forEach(c => {
+      if (!c) return;
+      const idStr = c.id || c.CAPAID || '';
+      const match = idStr.match(/CAPA-2026-(\d+)/);
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    });
+    const nextCapaId = `CAPA-2026-${String(maxNum + 1).padStart(3, '0')}`;
+
+    const priorityVal = (draftSeverity.toLowerCase().includes('nguy hại') || draftSeverity.toLowerCase().includes('critical'))
+      ? 'Khẩn cấp'
+      : (draftSeverity.toLowerCase().includes('nghiêm trọng') ? 'Cao' : 'Trung bình');
+
+    const newCapaItem: CAPA = {
+      id: nextCapaId,
+      CAPAID: nextCapaId,
+      title: `[OQC KCS] Khắc phục lỗi ${selectedDashboardDefect.name} trên dòng xe ${selectedDashboardDefect.modelName}`,
+      Issue: `Khuyết phẩm "${selectedDashboardDefect.name}" ghi nhận ${selectedDashboardDefect.count} xe trên dòng xe ${selectedDashboardDefect.modelName}.${draftImpact ? ` Đánh giá ảnh hưởng: ${draftImpact}` : ''}`,
+      issue: `Khuyết phẩm "${selectedDashboardDefect.name}" ghi nhận ${selectedDashboardDefect.count} xe trên dòng xe ${selectedDashboardDefect.modelName}.${draftImpact ? ` Đánh giá ảnh hưởng: ${draftImpact}` : ''}`,
+      source: 'OQC / Test vận hành',
+      assignee: draftOwner || 'Tổ trưởng QA/QC',
+      Owner: draftOwner || 'Tổ trưởng QA/QC',
+      owner: draftOwner || 'Tổ trưởng QA/QC',
+      targetDate: draftDue || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      DueDate: draftDue || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      dueDate: draftDue || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      status: 'Mở',
+      Status: 'Mở',
+      rootCause: draftRootCause || 'Đang phân tích nguyên nhân cốt lõi tại dây chuyền KCS',
+      RootCause: draftRootCause || 'Đang phân tích nguyên nhân cốt lõi tại dây chuyền KCS',
+      actions: draftEmergency || 'Chỉ đạo dừng dây chuyền hiệu chỉnh và rà soát lỗi',
+      Correction: draftEmergency || 'Chỉ đạo dừng dây chuyền hiệu chỉnh và rà soát lỗi',
+      correction: draftEmergency || 'Chỉ đạo dừng dây chuyền hiệu chỉnh và rà soát lỗi',
+      CorrectiveAction: draftEmergency || 'Chỉ đạo dừng dây chuyền hiệu chỉnh và rà soát lỗi',
+      correctiveAction: draftEmergency || 'Chỉ đạo dừng dây chuyền hiệu chỉnh và rà soát lỗi',
+      PreventiveAction: draftPreventative || 'Ban hành quy trình kiểm soát tiêu chuẩn chống lỗi tái diễn',
+      preventiveAction: draftPreventative || 'Ban hành quy trình kiểm soát tiêu chuẩn chống lỗi tái diễn',
+      locationOfOrigin: 'Xưởng Lắp ráp / KCS Thành phẩm',
+      locationDetail: `Công đoạn KCS - Dòng xe ${selectedDashboardDefect.modelName}`,
+      priority: priorityVal,
+      modelName: selectedDashboardDefect.modelName,
+      supplierName: '',
+      isRepeated: selectedDashboardDefect.count > 1,
+      Effectiveness: 'Chưa đánh giá',
+      effectiveness: 'Chưa đánh giá',
+      images: []
+    };
+
+    const updatedCapas = [newCapaItem, ...currentCapas];
+
+    if (setCapas) {
+      setCapas(updatedCapas);
+    }
+    safeStorage.setItem('dk_capas', JSON.stringify(updatedCapas));
+    safeStorage.setItem('dk_capas_is_dirty', 'true');
+
+    if (typeof (window as any).syncToServer === 'function') {
+      (window as any).syncToServer('dk_capas', updatedCapas);
+    }
+
+    if (auth.currentUser) {
+      const docRefCapas = doc(db, 'dk_db_sync', 'dk_capas');
+      setDoc(docRefCapas, sanitizeFirestorePayload({
+        data: updatedCapas,
+        updatedBy: auth.currentUser?.email || 'System Public Session',
+        updatedAt: new Date().toISOString()
+      })).catch((err: any) => {
+        console.error("Lỗi đồng bộ CAPA mới lên Cloud Firestore:", err);
+      });
+    }
+
+    alert(`Đã lưu Đánh giá và Ban hành Thành công Hồ sơ CAPA ${nextCapaId}!\n- Khuyết phẩm: ${selectedDashboardDefect.name}\n- Dòng xe: ${selectedDashboardDefect.modelName}\n- Phụ trách xử lý: "${draftOwner}"\n- Dữ liệu đã được ghi thêm vào phân hệ Quản lý CAPA và đồng bộ lên CSDL.`);
     setSelectedDashboardDefect(null);
   };
   const [iqcSearch, setIqcSearch] = useState('');
@@ -9982,84 +10070,61 @@ export default function QualityInspectionRecords({
               
               const currentMonthStr = isWeekFilterActive ? `Tuần ${selectedWeek} - Tháng ${targetMonth}` : `Tháng ${targetMonth}`;
 
-              let targetAssembled = 7200;
+              // 1. Tính toán sản lượng lắp ráp cho thẻ Dashboard đầu tiên:
+              // - Nếu bộ lọc chọn 1 tháng: chỉ để số lượng xe đã lắp ráp của tổng tháng
+              // - Nếu không lọc tháng (tất cả các tháng): để tổng số lượng năm
+              const isMonthFiltered = oqcFilterMonth !== 'All';
+              const targetYearNum = oqcFilterYear !== 'All' ? parseInt(oqcFilterYear, 10) : targetYear;
 
-              if (isWeekFilterActive) {
-                let activeWeeklyPlans = weeklyPlans;
-                if (!activeWeeklyPlans || activeWeeklyPlans.length === 0) {
-                  try {
-                    const saved = localStorage.getItem('dk_weekly_plans');
-                    if (saved) activeWeeklyPlans = JSON.parse(saved);
-                  } catch (e) {}
-                }
-                if (!activeWeeklyPlans) activeWeeklyPlans = [];
+              let card1AssembledCount = 0;
+              let card1Title = '';
+              let card1Subtext = '';
 
-                const planForWeek = activeWeeklyPlans.find(p => 
-                  p.week === selectedWeek && 
-                  p.month === targetMonth && 
-                  p.year === targetYear
-                );
-
-                let foundValue: number | null = null;
-                if (planForWeek && planForWeek.targets) {
-                  const lrTarget = planForWeek.targets.find(t => {
-                    const contentLower = t.content.toLowerCase();
-                    return (
-                      (contentLower.includes('lắp ráp') || contentLower.includes('lap rap')) &&
-                      (contentLower.includes('số lượng') || contentLower.includes('so luong') || contentLower.includes('sl') || t.unit.toLowerCase() === 'xe')
-                    );
-                  }) || planForWeek.targets.find(t => {
-                    const contentLower = t.content.toLowerCase();
-                    return contentLower.includes('lắp ráp') || contentLower.includes('lap rap');
-                  });
-
-                  if (lrTarget) {
-                    const parsed = parseInt(String(lrTarget.targetValue).replace(/[^0-9]/g, ''), 10);
-                    if (parsed && parsed > 0) {
-                      foundValue = parsed;
+              if (isMonthFiltered) {
+                const selMonth = parseInt(oqcFilterMonth, 10);
+                card1Title = `Tiến độ lắp ráp Tháng ${selMonth}`;
+                card1Subtext = `Tổng SL xe lắp ráp Tháng ${selMonth}/${targetYearNum}`;
+                card1AssembledCount = oqcRecords.filter(r => {
+                  let rMonth = (r.month && !isNaN(Number(r.month))) ? Number(r.month) : null;
+                  let rYear = (r.year && !isNaN(Number(r.year))) ? Number(r.year) : null;
+                  if ((rMonth === null || rYear === null) && r.date) {
+                    const std = standardizeDate(r.date);
+                    if (std && std.includes('-')) {
+                      const parts = std.split('-');
+                      if (rYear === null && parts[0]) rYear = parseInt(parts[0], 10);
+                      if (rMonth === null && parts[1]) rMonth = parseInt(parts[1], 10);
                     }
                   }
-                }
-                targetAssembled = foundValue !== null ? foundValue : 1800;
+                  const matchMonth = rMonth === selMonth;
+                  const matchYear = oqcFilterYear !== 'All' ? (rYear === targetYearNum) : true;
+                  const matchModel = oqcFilterModel !== 'All' ? (
+                    r.model === oqcFilterModel || 
+                    getCleanModelName(r) === oqcFilterModel ||
+                    (r.model && r.model.toLowerCase().includes(oqcFilterModel.toLowerCase()))
+                  ) : true;
+                  return matchMonth && matchYear && matchModel;
+                }).length;
               } else {
-                let activeMonthlyPlans = monthlyPlans;
-                if (!activeMonthlyPlans || activeMonthlyPlans.length === 0) {
-                  try {
-                    const saved = localStorage.getItem('dk_monthly_plans');
-                    if (saved) activeMonthlyPlans = JSON.parse(saved);
-                  } catch (e) {}
-                }
-                if (!activeMonthlyPlans) activeMonthlyPlans = [];
-
-                const planForMonth = activeMonthlyPlans.find(p => 
-                  p.month === targetMonth && 
-                  p.year === targetYear
-                );
-
-                let foundValue: number | null = null;
-                if (planForMonth && planForMonth.targets) {
-                  const lrTarget = planForMonth.targets.find(t => {
-                    const contentLower = t.content.toLowerCase();
-                    return (
-                      (contentLower.includes('lắp ráp') || contentLower.includes('lap rap')) &&
-                      (contentLower.includes('số lượng') || contentLower.includes('so luong') || contentLower.includes('sl') || t.unit.toLowerCase() === 'xe')
-                    );
-                  }) || planForMonth.targets.find(t => {
-                    const contentLower = t.content.toLowerCase();
-                    return contentLower.includes('lắp ráp') || contentLower.includes('lap rap');
-                  });
-
-                  if (lrTarget) {
-                    const parsed = parseInt(String(lrTarget.targetValue).replace(/[^0-9]/g, ''), 10);
-                    if (parsed && parsed > 0) {
-                      foundValue = parsed;
+                card1Title = `Tiến độ lắp ráp Năm ${targetYearNum}`;
+                card1Subtext = `Tổng SL xe lắp ráp cả Năm ${targetYearNum}`;
+                card1AssembledCount = oqcRecords.filter(r => {
+                  let rYear = (r.year && !isNaN(Number(r.year))) ? Number(r.year) : null;
+                  if (rYear === null && r.date) {
+                    const std = standardizeDate(r.date);
+                    if (std && std.includes('-')) {
+                      const parts = std.split('-');
+                      if (parts[0]) rYear = parseInt(parts[0], 10);
                     }
                   }
-                }
-                targetAssembled = foundValue !== null ? foundValue : 7200;
+                  const matchYear = rYear ? (rYear === targetYearNum) : true;
+                  const matchModel = oqcFilterModel !== 'All' ? (
+                    r.model === oqcFilterModel || 
+                    getCleanModelName(r) === oqcFilterModel ||
+                    (r.model && r.model.toLowerCase().includes(oqcFilterModel.toLowerCase()))
+                  ) : true;
+                  return matchYear && matchModel;
+                }).length;
               }
-
-              const targetProgress = targetAssembled > 0 ? Math.min(100, Math.round((liveLapRapTotal / targetAssembled) * 100)) : 0;
 
               const lastDayDate = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
               const daysRemaining = lastDayDate - today.getDate();
@@ -10220,23 +10285,32 @@ export default function QualityInspectionRecords({
 
                   {/* 1. TOP CARDS GRID */}
                   <div className="grid grid-cols-2 md:grid-cols-6 gap-2.5 sm:gap-4 animate-in slide-in-from-top-1 px-0.5">
-                    {/* TIẾN ĐỘ LẮP RÁP THÁNG HIỆN TẠI */}
+                    {/* TIẾN ĐỘ LẮP RÁP (TỔNG THÁNG HOẶC TỔNG NĂM) */}
                     <div className="col-span-2 md:col-span-2 bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
                       <div className="flex justify-between items-start select-none">
                         <div>
-                          <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider">Tiến độ lắp ráp {currentMonthStr}</h4>
-                          <span className="text-2xl sm:text-3xl font-black text-rose-500 font-mono block mt-1">{targetProgress}%</span>
+                          <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider">
+                            {card1Title}
+                          </h4>
+                          <div className="flex items-baseline gap-1.5 mt-1">
+                            <span className="text-2xl sm:text-4xl lg:text-[38px] font-black text-blue-600 font-mono tracking-tight leading-none">
+                              {card1AssembledCount.toLocaleString()}
+                            </span>
+                            <span className="text-xs sm:text-sm font-bold text-slate-500 font-sans">
+                              xe
+                            </span>
+                          </div>
                         </div>
-                        <button type="button" className="text-slate-350 hover:text-slate-500 p-1 transition cursor-pointer">
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
+                        <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                          <CheckCircle2 className="w-5 h-5 text-blue-500" />
+                        </div>
                       </div>
-                      <div className="space-y-2 mt-3 sm:mt-4 select-none">
-                        <div className="relative w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div className="absolute top-0 left-0 h-full rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${targetProgress}%` }} />
-                        </div>
-                        <span className="text-[9.5px] sm:text-[10.5px] font-bold text-slate-550 block">
-                          Hiện tại <strong className="text-slate-800 font-mono">{currentAssembled.toLocaleString()}</strong> | Mục tiêu <strong className="text-slate-800 font-mono">{targetAssembled.toLocaleString()}</strong>
+                      <div className="mt-3 sm:mt-4 select-none pt-2 border-t border-slate-100 flex items-center justify-between text-[9.5px] sm:text-[10.5px]">
+                        <span className="font-bold text-slate-500">
+                          {card1Subtext}
+                        </span>
+                        <span className="font-black text-blue-600 font-mono bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200/40">
+                          {isMonthFiltered ? `Tháng ${oqcFilterMonth}` : `Năm ${targetYearNum}`}
                         </span>
                       </div>
                     </div>
@@ -10250,7 +10324,7 @@ export default function QualityInspectionRecords({
                         </button>
                       </div>
                       <div className="flex flex-col items-center justify-center p-1 sm:p-2 mb-1 select-none">
-                        <div className="bg-blue-500 text-white font-black text-lg sm:text-2xl w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center font-mono shadow-md shadow-blue-100/50 transition-all duration-500">
+                        <div className="bg-blue-500 text-white font-black text-xl sm:text-3xl lg:text-[32px] w-11 h-11 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center font-mono shadow-md shadow-blue-100/50 transition-all duration-500">
                           {daysRemaining}
                         </div>
                         <span className="text-[8.5px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mt-1 sm:mt-1.5 font-sans">Ngày</span>
@@ -10262,16 +10336,13 @@ export default function QualityInspectionRecords({
                       <div className="flex justify-between items-start select-none">
                         <div>
                           <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">SL xe theo LSX</h4>
-                          <span className="inline-flex items-center gap-1 bg-amber-50 text-[8px] sm:text-[9px] font-black text-amber-600 border border-amber-200/40 px-1.5 py-0.5 rounded-lg mt-1 select-none shrink-0">
-                            ✧ Smart LSX
-                          </span>
                         </div>
                         <button type="button" className="text-slate-350 hover:text-slate-500 p-1 transition cursor-pointer">
                           <MoreVertical className="w-4 h-4" />
                         </button>
                       </div>
                       <div className="mt-3 sm:mt-4 select-none">
-                        <span className="text-xl sm:text-3xl font-black text-red-500 font-mono block tracking-tight">{lsxVal.toLocaleString()}</span>
+                        <span className="text-2xl sm:text-4xl lg:text-[38px] font-black text-red-500 font-mono block tracking-tight leading-none">{lsxVal.toLocaleString()}</span>
                       </div>
                     </div>
 
@@ -10280,16 +10351,13 @@ export default function QualityInspectionRecords({
                       <div className="flex justify-between items-start select-none">
                         <div>
                           <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">SL xe lắp ráp</h4>
-                          <span className="inline-flex items-center gap-1 bg-amber-50 text-[8px] sm:text-[9px] font-black text-amber-600 border border-amber-200/40 px-1.5 py-0.5 rounded-lg mt-1 select-none shrink-0">
-                            ✦ Smart ráp
-                          </span>
                         </div>
                         <button type="button" className="text-slate-350 hover:text-slate-500 p-1 transition cursor-pointer">
                           <MoreVertical className="w-4 h-4" />
                         </button>
                       </div>
                       <div className="mt-3 sm:mt-4 select-none">
-                        <span className="text-xl sm:text-3xl font-black text-amber-500 font-mono block tracking-tight">{laprapVal.toLocaleString()}</span>
+                        <span className="text-2xl sm:text-4xl lg:text-[38px] font-black text-amber-500 font-mono block tracking-tight leading-none">{laprapVal.toLocaleString()}</span>
                       </div>
                     </div>
 
@@ -10298,16 +10366,13 @@ export default function QualityInspectionRecords({
                       <div className="flex justify-between items-start select-none">
                         <div>
                           <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">SL xe đạt lần 1</h4>
-                          <span className="inline-flex items-center gap-1 bg-blue-50 text-[8px] sm:text-[9px] font-black text-blue-600 border border-blue-200/40 px-1.5 py-0.5 rounded-lg mt-1 select-none shrink-0">
-                            ✦ Smart Đạt
-                          </span>
                         </div>
                         <button type="button" className="text-slate-355 hover:text-slate-505 p-1 transition cursor-pointer">
                           <MoreVertical className="w-4 h-4" />
                         </button>
                       </div>
                       <div className="mt-3 sm:mt-4 select-none">
-                        <span className="text-xl sm:text-3xl font-black text-sky-500 font-mono block tracking-tight">{datVal.toLocaleString()}</span>
+                        <span className="text-2xl sm:text-4xl lg:text-[38px] font-black text-sky-500 font-mono block tracking-tight leading-none">{datVal.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>

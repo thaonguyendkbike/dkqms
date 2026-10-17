@@ -22668,6 +22668,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
               ptspTasks={ptspTasks}
               defects={defects}
               capas={capas}
+              setCapas={setCapas}
               setViewDetailModal={setViewDetailModal}
               models={models}
               monthlyPlans={monthlyPlans}
