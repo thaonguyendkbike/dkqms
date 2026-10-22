@@ -1963,6 +1963,72 @@ export function App() {
     return String(idVal);
   };
 
+  // =========================================================================
+  // BẢO VỆ XÓA LIÊN THIẾT BỊ CHO BÁO CÁO NGÀY (dk_daily_logs)
+  // Ghi nhớ danh sách ID đã từng có trên Cloud để phân biệt:
+  //  - Bản ghi mới tạo cục bộ chưa kịp đẩy lên Cloud (phải giữ lại)
+  //  - Bản ghi đã bị máy/tài khoản khác xóa trên Cloud (không được hồi sinh)
+  // Dùng tiền tố 'qms_' (không phải 'dk_') để không bị quét đẩy lên Cloud như một phân hệ.
+  // =========================================================================
+  const DAILY_LOGS_KNOWN_SERVER_IDS_KEY = 'qms_daily_logs_known_server_ids';
+  const DAILY_LOGS_REMOTE_DELETED_IDS_KEY = 'qms_daily_logs_remote_deleted_ids';
+
+  const readDailyLogsIdSet = (storageKey: string): Set<string> => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      const arr = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(arr) ? arr.map((x: any) => String(x)) : []);
+    } catch (e) {
+      return new Set();
+    }
+  };
+
+  const registerDailyLogsServerSnapshot = (serverList: any[]) => {
+    // Không ghi nhận khi Cloud trả về rỗng (mất quyền / lỗi mạng) để tránh coi toàn bộ là đã xóa
+    if (!Array.isArray(serverList) || serverList.length === 0) return;
+    try {
+      const currentIds = serverList.map((item, idx) => getItemId(item, 'dk_daily_logs', idx));
+      const currentSet = new Set(currentIds);
+      const prevKnown = readDailyLogsIdSet(DAILY_LOGS_KNOWN_SERVER_IDS_KEY);
+      const remoteDeleted = readDailyLogsIdSet(DAILY_LOGS_REMOTE_DELETED_IDS_KEY);
+      let changed = false;
+      prevKnown.forEach((id) => {
+        if (!currentSet.has(id) && !remoteDeleted.has(id)) {
+          remoteDeleted.add(id);
+          changed = true;
+        }
+      });
+      // Bản ghi xuất hiện lại trên Cloud (được khôi phục có chủ đích) -> gỡ khỏi danh sách đã xóa
+      currentSet.forEach((id) => {
+        if (remoteDeleted.has(id)) {
+          remoteDeleted.delete(id);
+          changed = true;
+        }
+      });
+      if (changed) {
+        safeStorage.setItem(DAILY_LOGS_REMOTE_DELETED_IDS_KEY, JSON.stringify(Array.from(remoteDeleted).slice(-2000)));
+      }
+      safeStorage.setItem(DAILY_LOGS_KNOWN_SERVER_IDS_KEY, JSON.stringify(currentIds));
+    } catch (e) {
+      console.warn('[Daily Logs Known IDs Warning]:', e);
+    }
+  };
+
+  const pruneRemotelyDeletedDailyLogs = (list: any[], serverList: any[]): any[] => {
+    if (!Array.isArray(list) || list.length === 0) return list;
+    const remoteDeleted = readDailyLogsIdSet(DAILY_LOGS_REMOTE_DELETED_IDS_KEY);
+    if (remoteDeleted.size === 0) return list;
+    const serverIds = new Set((Array.isArray(serverList) ? serverList : []).map((item, idx) => getItemId(item, 'dk_daily_logs', idx)));
+    const pruned = list.filter((item, idx) => {
+      const id = getItemId(item, 'dk_daily_logs', idx);
+      return !(remoteDeleted.has(id) && !serverIds.has(id));
+    });
+    if (pruned.length !== list.length) {
+      console.log(`[Daily Logs Remote Delete Protection]: Bỏ ${list.length - pruned.length} bản ghi đã bị xóa trên Cloud từ máy khác (không hồi sinh).`);
+    }
+    return pruned;
+  };
+
   const cleanAndSortObject = (obj: any): any => {
     if (obj === null || obj === undefined) return null;
     if (Array.isArray(obj)) {
@@ -2844,10 +2910,16 @@ export function App() {
   }, [syncLoaded, firebaseUser, conflictKeys]);
 
   const syncToServer = (key: string, data: any) => {
-    // 1. Remote update protection: If state change was triggered by receiving data from Firestore server, skip sync completely!
+    // 1. Remote update protection: Chỉ bỏ qua nếu dữ liệu trùng khớp hoàn toàn với dữ liệu vừa nhận từ máy chủ Firestore
     if (isRemoteUpdateRef.current[key]) {
+      const serverSerialized = lastSyncedValues.current[key];
+      const serializedCheck = JSON.stringify(data);
+      if (isFunctionallyIdentical(serializedCheck, serverSerialized, key)) {
+        isRemoteUpdateRef.current[key] = false;
+        return;
+      }
+      // Dữ liệu khác với máy chủ -> Người dùng thao tác thực tế -> Tuyệt đối không được bỏ qua!
       isRemoteUpdateRef.current[key] = false;
-      return;
     }
 
     const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
@@ -2960,7 +3032,7 @@ export function App() {
 
     syncDebounceTimer.current = setTimeout(() => {
       triggerCloudSynchronization();
-    }, 3000);
+    }, 800);
   };
 
   const getUnsyncedChanges = () => {
@@ -3417,6 +3489,29 @@ export function App() {
     };
   }, [syncLoaded, syncToServer]);
 
+  // Tự động giải phóng và đẩy ngay lập tức mọi hàng đợi đồng bộ (Sync Flush) khi chuyển tab, khóa màn hình hoặc đóng trình duyệt
+  useEffect(() => {
+    const handleFlushSync = () => {
+      if (Object.keys(pendingSyncBuffer.current).length > 0) {
+        if (syncDebounceTimer.current) clearTimeout(syncDebounceTimer.current);
+        triggerCloudSynchronization();
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        handleFlushSync();
+      }
+    };
+    window.addEventListener('beforeunload', handleFlushSync);
+    window.addEventListener('pagehide', handleFlushSync);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('beforeunload', handleFlushSync);
+      window.removeEventListener('pagehide', handleFlushSync);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
+
   // Perform startup full database load and migration from client local storage / Firestore
   useEffect(() => {
     // Scan localStorage for any keys marked as dirty from a previous offline session
@@ -3865,9 +3960,24 @@ export function App() {
         safeStorage.setItem('dk_ecos', JSON.stringify(serverData.dk_ecos));
       }
       if (serverData.dk_daily_logs !== undefined && Array.isArray(serverData.dk_daily_logs)) {
-        const sanitized = sanitizeDailyLogs(serverData.dk_daily_logs);
+        const localSaved = safeStorage.getItem('dk_daily_logs') || localStorage.getItem('dk_daily_logs');
+        let localParsed: any[] = [];
+        try { localParsed = localSaved ? JSON.parse(localSaved) : []; } catch (e) { }
+        const isDailyLogsDirty = localStorage.getItem('dk_daily_logs_is_dirty') === 'true';
+
+        let mergedDailyLogs: any[] = serverData.dk_daily_logs;
+        if (localParsed.length > 0) {
+          mergedDailyLogs = smartMergeArrays(serverData.dk_daily_logs, localParsed, 'dk_daily_logs');
+        }
+        const sanitized = sanitizeDailyLogs(mergedDailyLogs);
         setDailyLogs(sanitized);
         safeStorage.setItem('dk_daily_logs', JSON.stringify(sanitized));
+
+        if (isDailyLogsDirty || (localParsed.length > serverData.dk_daily_logs.length)) {
+          localStorage.setItem('dk_daily_logs_is_dirty', 'true');
+          if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
+          syncToServer('dk_daily_logs', sanitized);
+        }
       }
       if (serverData.dk_iqc_records !== undefined && Array.isArray(serverData.dk_iqc_records)) {
         setIqcRecords(serverData.dk_iqc_records);
@@ -4045,7 +4155,7 @@ export function App() {
                   return !serverIds.has(itemId) && !deletedSet.has(itemId);
                 });
                 if (missingLocalItems.length > 0 && list.length > 0) {
-                  console.log(`[${key} Race Protection]: Preserving ${missingLocalItems.length} local records not yet present on Firestore server.`);
+                  console.log(`[${key} Race Protection]: Preserving and auto-syncing ${missingLocalItems.length} local records not yet present on Firestore server.`);
                   finalDisplayData = [...list, ...missingLocalItems];
 
                   // Ensure any merged data is properly sanitized and deduplicated to prevent list bloating
@@ -4054,6 +4164,15 @@ export function App() {
                   } else if (key === 'dk_defects' && Array.isArray(finalDisplayData)) {
                     finalDisplayData = sanitizeDefects(finalDisplayData);
                   }
+
+                  // Tự động giải cứu và đồng bộ ngay các bản ghi cục bộ chưa có trên Cloud sang các thiết bị khác (như điện thoại)
+                  try {
+                    localStorage.setItem(`${key}_is_dirty`, 'true');
+                    if (localDirtyKeys.current) {
+                      localDirtyKeys.current.add(key);
+                    }
+                    syncToServer(key, finalDisplayData);
+                  } catch (e) { }
                 }
               }
             } catch (e) {
@@ -4115,6 +4234,7 @@ export function App() {
 
           // Mark state update as remote update from Firestore server to prevent triggerCloudSynchronization echo loop
           isRemoteUpdateRef.current[key] = true;
+          setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
 
           // Dispatch to state
           if (key === 'dk_tasks') setTasks(finalDisplayData);
@@ -4331,6 +4451,7 @@ export function App() {
 
           if (key === 'dk_oqc_records') {
             isRemoteUpdateRef.current[key] = true;
+            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
             setOqcRecords(finalDisplayData);
           }
 
@@ -4384,6 +4505,7 @@ export function App() {
           safeStorage.setItem(key, JSON.stringify(list));
           try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) { }
           isRemoteUpdateRef.current[key] = true;
+          setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
           if (key === 'dk_staff') {
             const cleaned = list.map((s: any) => {
               if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
@@ -9123,6 +9245,9 @@ Lưu ý: Nếu không có yêu cầu thêm dữ liệu, đừng đính kèm kh�
 
                 const updatedDailyLogs = sanitizeDailyLogs([newLog, ...dailyLogs]);
                 setDailyLogs(updatedDailyLogs);
+                safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
+                safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+                if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
                 syncToServer('dk_daily_logs', updatedDailyLogs);
                 systemConfirmation = `✓ Trợ lý đã lập công việc báo cáo ngày: "${newLog.content}" và giao cho PIC: ${newLog.assignee}.`;
               }
@@ -9521,7 +9646,13 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     const updatedDailyLogs = sanitizeDailyLogs([autoDailyLog, ...dailyLogs]);
     setTasks(updatedTasks);
     setDailyLogs(updatedDailyLogs);
+    safeStorage.setItem('dk_tasks', JSON.stringify(updatedTasks));
+    safeStorage.setItem('dk_tasks_is_dirty', 'true');
+    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_tasks');
     syncToServer('dk_tasks', updatedTasks);
+    safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
+    safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
     syncToServer('dk_daily_logs', updatedDailyLogs);
     setTaskName('');
     setTaskAssignee('');
@@ -9547,6 +9678,9 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       trackDeletedId('dk_tasks', id);
       const updatedTasks = tasks.filter(t => t.id !== id);
       setTasks(updatedTasks);
+      safeStorage.setItem('dk_tasks', JSON.stringify(updatedTasks));
+      safeStorage.setItem('dk_tasks_is_dirty', 'true');
+      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_tasks');
       syncToServer('dk_tasks', updatedTasks);
 
       const updatedLogs = dailyLogs.filter(log => {
@@ -9555,6 +9689,9 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
         return !(logContent.includes(id) || logNote.includes(id));
       });
       setDailyLogs(updatedLogs);
+      safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedLogs));
+      safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
       syncToServer('dk_daily_logs', updatedLogs);
     }
   };
@@ -9794,6 +9931,8 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     const updatedDailyLogs = [newLog, ...dailyLogs];
     setDailyLogs(updatedDailyLogs);
     safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
+    safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
     syncToServer('dk_daily_logs', updatedDailyLogs);
     setNewLogContent('');
     setNewLogNote('');
@@ -9849,6 +9988,8 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     const updatedDailyLogs = [newLog, ...dailyLogs];
     setDailyLogs(updatedDailyLogs);
     safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
+    safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
     syncToServer('dk_daily_logs', updatedDailyLogs);
     setSqcLogAssignee('');
     setShowAddSqcLogModal(false);
@@ -9882,6 +10023,9 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       return dl;
     });
     setDailyLogs(updatedDailyLogs);
+    safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
+    safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
     syncToServer('dk_daily_logs', updatedDailyLogs);
   };
 
@@ -10717,6 +10861,8 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       const updatedDailyLogs = [{ ...newDailyLog, date: sanitizedFinalDate, deadline: sanitizedFinalDate }, ...dailyLogs];
       setDailyLogs(updatedDailyLogs);
       safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
+      safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
       syncToServer('dk_daily_logs', updatedDailyLogs);
       setNewWeekTaskContent('');
       setNewWeekTaskNotes('');
@@ -10758,6 +10904,9 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     };
     const updatedIqcRecords = [newRecord, ...iqcRecords];
     setIqcRecords(updatedIqcRecords);
+    safeStorage.setItem('dk_iqc_records', JSON.stringify(updatedIqcRecords));
+    safeStorage.setItem('dk_iqc_records_is_dirty', 'true');
+    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_iqc_records');
     syncToServer('dk_iqc_records', updatedIqcRecords);
     setShowAddIqcModal(false);
     setNewIqcContent('');
@@ -10816,6 +10965,9 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     };
     const updatedPqcRecords = [newRecord, ...pqcRecords];
     setPqcRecords(updatedPqcRecords);
+    safeStorage.setItem('dk_pqc_records', JSON.stringify(updatedPqcRecords));
+    safeStorage.setItem('dk_pqc_records_is_dirty', 'true');
+    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_pqc_records');
     syncToServer('dk_pqc_records', updatedPqcRecords);
     setShowAddPqcModal(false);
     setNewPqcFindings('');
@@ -10875,6 +11027,9 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     };
     const updatedOqcRecords = [newRecord, ...oqcRecords];
     setOqcRecords(updatedOqcRecords);
+    safeStorage.setItem('dk_oqc_records', JSON.stringify(updatedOqcRecords));
+    safeStorage.setItem('dk_oqc_records_is_dirty', 'true');
+    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_oqc_records');
     syncToServer('dk_oqc_records', updatedOqcRecords);
     setShowAddOqcModal(false);
     setNewOqcSerialNo('');
@@ -17560,6 +17715,9 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                                 if (log.id) trackDeletedId('dk_daily_logs', log.id);
                                                 trackDeletedId('dk_daily_logs', String(log.stt));
                                                 setDailyLogs(updated);
+                                                safeStorage.setItem('dk_daily_logs', JSON.stringify(updated));
+                                                safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+                                                if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
                                                 syncToServer('dk_daily_logs', updated);
                                               }
                                             }}
@@ -17924,6 +18082,9 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                           if (log.id) trackDeletedId('dk_daily_logs', log.id);
                                           trackDeletedId('dk_daily_logs', String(log.stt));
                                           setDailyLogs(updated);
+                                          safeStorage.setItem('dk_daily_logs', JSON.stringify(updated));
+                                          safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+                                          if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
                                           syncToServer('dk_daily_logs', updated);
                                         }
                                       }}
@@ -28596,6 +28757,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           return log;
                         });
                         safeStorage.setItem('dk_daily_logs', JSON.stringify(updated));
+                        safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+                        if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
                         syncToServer('dk_daily_logs', updated);
                         return updated;
                       });
@@ -28692,6 +28855,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       const updatedDailyLogs = sanitizeDailyLogs([editLogRecord, ...dailyLogs]);
                       setDailyLogs(updatedDailyLogs);
                       safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
+                      safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+                      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
                       syncToServer('dk_daily_logs', updatedDailyLogs);
                       break;
                     }
@@ -28752,6 +28917,9 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         return isMatch ? sanitizedData : dl;
                       });
                       setDailyLogs(updatedDailyLogs);
+                      safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
+                      safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+                      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
                       syncToServer('dk_daily_logs', updatedDailyLogs);
                       break;
                     }
