@@ -12367,6 +12367,7 @@ export default function QualityInspectionRecords({
                     <option value="Hà Khắc Việt">Hà Khắc Việt</option>
                     <option value="Hoàng Văn Phấn">Hoàng Văn Phấn</option>
                     <option value="Đoàn Anh Hùng">Đoàn Anh Hùng</option>
+                    <option value="Trần Thế Quảng">Trần Thế Quảng</option>
                   </select>
                 </div>
                 <div>
@@ -12557,6 +12558,7 @@ export default function QualityInspectionRecords({
                     <option value="Hoàng Văn Phấn">Hoàng Văn Phấn</option>
                     <option value="Hà Khắc Việt">Hà Khắc Việt</option>
                     <option value="Đoàn Anh Hùng">Đoàn Anh Hùng</option>
+                    <option value="Trần Thế Quảng">Trần Thế Quảng</option>
                   </select>
                 </div>
                 <div>
@@ -12746,6 +12748,7 @@ export default function QualityInspectionRecords({
                     <option value="Hoàng Văn Phấn">Hoàng Văn Phấn</option>
                     <option value="Hà Khắc Việt">Hà Khắc Việt</option>
                     <option value="Đoàn Anh Hùng">Đoàn Anh Hùng</option>
+                    <option value="Trần Thế Quảng">Trần Thế Quảng</option>
                   </select>
                 </div>
                 <div>
@@ -14137,6 +14140,7 @@ export default function QualityInspectionRecords({
                   >
                     <option value="Liễu Tùng Lâm">Liễu Tùng Lâm</option>
                     <option value="Lành Xuân Hải">Lành Xuân Hải</option>
+                    <option value="Trần Thế Quảng">Trần Thế Quảng</option>
                   </select>
                 </div>
                 <div>

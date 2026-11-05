@@ -3538,7 +3538,13 @@ export function App() {
           const docData = staffSnap.data();
           const list = Array.isArray(docData?.data) ? docData.data : (Array.isArray(docData) ? docData : []);
           if (list.length > 0) {
-            const cleanedStaff = list.map((s: any) => {
+            const merged = [...list];
+            INITIAL_STAFF.forEach(initStaff => {
+              if (!merged.some((s: any) => s && (s.id === initStaff.id || s.name === initStaff.name))) {
+                merged.push(initStaff);
+              }
+            });
+            const cleanedStaff = merged.map((s: any) => {
               if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
                 return { ...s, permission: 'edit' as const };
               }
@@ -3863,7 +3869,13 @@ export function App() {
 
       // Dispatch non-subcollection states to React
       if (serverData.dk_staff !== undefined && Array.isArray(serverData.dk_staff)) {
-        const cleanedStaff = serverData.dk_staff.map((s: any) => {
+        const merged = [...serverData.dk_staff];
+        INITIAL_STAFF.forEach(initStaff => {
+          if (!merged.some((s: any) => s && (s.id === initStaff.id || s.name === initStaff.name))) {
+            merged.push(initStaff);
+          }
+        });
+        const cleanedStaff = merged.map((s: any) => {
           if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
             return { ...s, permission: 'edit' as const };
           }
@@ -4989,7 +5001,13 @@ export function App() {
   const [customForms, setCustomForms] = useState<CustomForm[]>(() => getSavedState('dk_custom_forms', INITIAL_FORMS));
   const [staff, setStaff] = useState<QualityStaff[]>(() => {
     const rawList = getSavedState('dk_staff', INITIAL_STAFF);
-    return rawList.map(s => {
+    const merged = Array.isArray(rawList) ? [...rawList] : [];
+    INITIAL_STAFF.forEach(initStaff => {
+      if (!merged.some(s => s && (s.id === initStaff.id || s.name === initStaff.name))) {
+        merged.push(initStaff);
+      }
+    });
+    return merged.map(s => {
       if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
         return { ...s, permission: 'edit' as const };
       }
@@ -5007,7 +5025,13 @@ export function App() {
       if (!isMounted || !snap.exists()) return;
       const docData = snap.data();
       if (docData && Array.isArray(docData.data) && docData.data.length > 0) {
-        const cleaned = docData.data.map((s: any) => {
+        const mergedFromCloud = [...docData.data];
+        INITIAL_STAFF.forEach(initStaff => {
+          if (!mergedFromCloud.some((s: any) => s && (s.id === initStaff.id || s.name === initStaff.name))) {
+            mergedFromCloud.push(initStaff);
+          }
+        });
+        const cleaned = mergedFromCloud.map((s: any) => {
           if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
             return { ...s, permission: 'edit' as const };
           }
@@ -5026,7 +5050,13 @@ export function App() {
       if (!isMounted || !snap.exists()) return;
       const docData = snap.data();
       if (docData && Array.isArray(docData.data) && docData.data.length > 0) {
-        const cleaned = docData.data.map((s: any) => {
+        const mergedFromCloud = [...docData.data];
+        INITIAL_STAFF.forEach(initStaff => {
+          if (!mergedFromCloud.some((s: any) => s && (s.id === initStaff.id || s.name === initStaff.name))) {
+            mergedFromCloud.push(initStaff);
+          }
+        });
+        const cleaned = mergedFromCloud.map((s: any) => {
           if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
             return { ...s, permission: 'edit' as const };
           }
@@ -8808,7 +8838,8 @@ export function App() {
       "Đoàn Anh Hùng",
       "Liễu Tùng Lâm",
       "Lành Xuân Hải",
-      "Nguyễn Văn Diệm"
+      "Nguyễn Văn Diệm",
+      "Trần Thế Quảng"
     ];
 
     return engineerNames.map(name => {
@@ -19705,6 +19736,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                               <option value="Nguyễn Xuân Thao">Nguyễn Xuân Thao</option>
                                               <option value="Đoàn Anh Hùng">Đoàn Anh Hùng</option>
                                               <option value="Hà Khắc Việt">Hà Khắc Việt</option>
+                                              <option value="Hoàng Văn Phấn">Hoàng Văn Phấn</option>
+                                              <option value="Trần Thế Quảng">Trần Thế Quảng</option>
                                               <option value="Lê Hồng Phấn">Lê Hồng Phấn</option>
                                               <option value="Đỗ Văn Hùng">Đỗ Văn Hùng</option>
                                               <option value="Vương Kim Cương">Vương Kim Cương</option>
@@ -21013,6 +21046,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 <option value="Hà Khắc Việt">Hà Khắc Việt (OQC Lead)</option>
                                 <option value="Hoàng Văn Phấn">Hoàng Văn Phấn (PQC Supervisor)</option>
                                 <option value="Đoàn Anh Hùng">Đoàn Anh Hùng (IQC Specialist)</option>
+                                <option value="Trần Thế Quảng">Trần Thế Quảng (Nhân viên kỹ thuật)</option>
                               </select>
                             </div>
                             <div>
@@ -22559,6 +22593,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                           <option value="Nguyễn Xuân Thao">Nguyễn Xuân Thao</option>
                                           <option value="Đoàn Anh Hùng">Đoàn Anh Hùng</option>
                                           <option value="Hà Khắc Việt">Hà Khắc Việt</option>
+                                          <option value="Hoàng Văn Phấn">Hoàng Văn Phấn</option>
+                                          <option value="Trần Thế Quảng">Trần Thế Quảng</option>
                                           <option value="Lê Hồng Phấn">Lê Hồng Phấn</option>
                                           <option value="Đỗ Văn Hùng">Đỗ Văn Hùng</option>
                                           <option value="Vương Kim Cương">Vương Kim Cương</option>
@@ -23815,6 +23851,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             <option value="Nguyễn Xuân Thao">Nguyễn Xuân Thao</option>
                             <option value="Hà Khắc Việt">Hà Khắc Việt</option>
                             <option value="Hoàng Văn Phấn">Hoàng Văn Phấn</option>
+                            <option value="Trần Thế Quảng">Trần Thế Quảng</option>
                           </select>
                         </div>
                         <div>
@@ -23936,6 +23973,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             <option value="Hoàng Văn Phấn">Hoàng Văn Phấn</option>
                             <option value="Hà Khắc Việt">Hà Khắc Việt</option>
                             <option value="Đoàn Anh Hùng">Đoàn Anh Hùng</option>
+                            <option value="Trần Thế Quảng">Trần Thế Quảng</option>
                           </select>
                         </div>
                         <div>
@@ -32287,6 +32325,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       { id: 'STF-02', name: 'Hoàng Văn Phấn', role: 'SQC Engineer' },
                       { id: 'STF-03', name: 'Nguyễn Xuân Thao', role: 'QMS Lead' },
                       { id: 'STF-04', name: 'Liễu Tùng Lâm', role: 'QA Specialist' },
+                      { id: 'STF-15', name: 'Trần Thế Quảng', role: 'Nhân viên kỹ thuật' },
                     ]).map(s => {
                       const currentList = sqcLogAssignee ? sqcLogAssignee.split(',').map((x: string) => x.trim()).filter(Boolean) : [];
                       const isChecked = currentList.includes(s.name);
@@ -36753,12 +36792,18 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                   <label className="block text-[10px] font-bold text-slate-505 mb-1 uppercase tracking-wide">Nhân sự Chịu Trách Nhiệm</label>
                   <input
                     type="text"
+                    list="planTargetAssigneeList"
                     value={newPlanTargetAssignee}
                     onChange={(e) => setNewPlanTargetAssignee(e.target.value)}
-                    placeholder="Họ tên nhân sự (Ví dụ: Nguyễn Văn Hải)..."
+                    placeholder="Họ tên nhân sự (Ví dụ: Trần Thế Quảng)..."
                     className="w-full bg-slate-50 border border-slate-200 rounded p-2"
                     required
                   />
+                  <datalist id="planTargetAssigneeList">
+                    {staff.map(s => (
+                      <option key={s.id} value={s.name}>{s.name} ({s.role})</option>
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-505 mb-1 uppercase tracking-wide">Nhân sự Đồng phối hợp</label>

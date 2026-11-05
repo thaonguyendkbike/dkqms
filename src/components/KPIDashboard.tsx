@@ -1062,7 +1062,8 @@ export default function KPIDashboard({
       { id: 'STF-03', name: 'Hoàng Văn Phấn', role: 'Tổ trưởng Tổ kiểm soát chất lượng lắp ráp trong dây chuyền (PQC Line Supervisor)' },
       { id: 'STF-04', name: 'Đoàn Anh Hùng', role: 'Chuyên viên kiểm tra, xử lý linh kiện đầu vào DK, đầu vào dây chuyền' },
       { id: 'STF-05', name: 'Liễu Tùng Lâm', role: 'Sát hạch viên, nhân viên kiểm thử OQC (OQC Quality Assurance)' },
-      { id: 'STF-06', name: 'Lành Xuân Hải', role: 'Sát hạch viên, nhân viên kiểm thử OQC (OQC Quality Assurance)' }
+      { id: 'STF-06', name: 'Lành Xuân Hải', role: 'Sát hạch viên, nhân viên kiểm thử OQC (OQC Quality Assurance)' },
+      { id: 'STF-15', name: 'Trần Thế Quảng', role: 'Nhân viên kỹ thuật (QLCL)' }
     ];
     const targetStaff = staffList.find(s => s.id === skpiStaffId) || staffList[0];
 
@@ -2684,6 +2685,7 @@ export default function KPIDashboard({
                   <option value="Đoàn Anh Hùng">Đoàn Anh Hùng - Chuyên viên IQC</option>
                   <option value="Liễu Tùng Lâm">Liễu Tùng Lâm - Sát hạch OQC</option>
                   <option value="Lành Xuân Hải">Lành Xuân Hải - Sát hạch OQC</option>
+                  <option value="Trần Thế Quảng">Trần Thế Quảng - Nhân viên kỹ thuật</option>
                 </select>
               </div>
 
@@ -2772,6 +2774,7 @@ export default function KPIDashboard({
                     <option value="STF-04">Đoàn Anh Hùng - Chuyên viên IQC</option>
                     <option value="STF-05">Liễu Tùng Lâm - Nhân viên OQC</option>
                     <option value="STF-06">Lành Xuân Hải - Nhân viên OQC</option>
+                    <option value="STF-15">Trần Thế Quảng - Nhân viên kỹ thuật</option>
                   </select>
                 </div>
 

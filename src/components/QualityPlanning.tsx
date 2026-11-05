@@ -52,7 +52,8 @@ const DEFAULT_STAFF: QualityStaff[] = [
   { id: 'STF-04', name: 'Đoàn Anh Hùng', role: 'Chuyên viên kiểm tra linh kiện đầu vào IQC', email: 'anhhung.doan@dkbike.vn' },
   { id: 'STF-05', name: 'Liễu Tùng Lâm', role: 'Sát hạch viên, nhân viên kiểm thử OQC', email: 'tunglam.lieu@dkbike.vn' },
   { id: 'STF-06', name: 'Lành Xuân Hải', role: 'Sát hạch viên, nhân viên kiểm thử OQC', email: 'xuanhai.lanh@dkbike.vn' },
-  { id: 'STF-07', name: 'Nguyễn Văn Diệm', role: 'Kỹ sư giám sát quy trình, kiểm soát SQC/IQC Specialist', email: 'vandiem.nguyen@dkbike.vn' }
+  { id: 'STF-07', name: 'Nguyễn Văn Diệm', role: 'Kỹ sư giám sát quy trình, kiểm soát SQC/IQC Specialist', email: 'vandiem.nguyen@dkbike.vn' },
+  { id: 'STF-15', name: 'Trần Thế Quảng', role: 'Nhân viên kỹ thuật (QLCL)', email: 'thequang.tran@dkbike.vn' }
 ];
 
 // Các model sản xuất thực tế tại nhà máy DKBike
@@ -6634,6 +6635,8 @@ function ZoomedColumnContent({
           groupName = 'Phân Ban Kiểm Tra Đầu Ra (OQC)';
         } else if (assignee === 'Nguyễn Văn Diệm') {
           groupName = 'Phân Ban Giám Sát Quy Trình (SQC/IQC)';
+        } else if (assignee === 'Trần Thế Quảng') {
+          groupName = 'Nhân viên kỹ thuật (QLCL)';
         } else {
           groupName = 'Phân ban tác vụ khác / Chưa phân loại';
         }
