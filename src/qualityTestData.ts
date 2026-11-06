@@ -1,5 +1,22 @@
 import { SupplierProductionAudit } from './types';
 
+// Dòng linh kiện chi tiết trong 1 phiếu nhập kho Ecount (PNK)
+export interface IQCLineItem {
+  lineNo: number;
+  partCode: string;        // Mã mặt hàng Ecount
+  partName: string;        // Tên mặt hàng
+  spec?: string;           // Thông số
+  unit?: string;           // Đơn vị
+  qty: number;             // Số lượng nhập
+  aqlGroup?: string;       // Nhóm AQL (cùng tên khác màu gộp chung)
+  sampleQty: number;       // Số mẫu kiểm phân bổ cho dòng
+  failedQty: number;       // Số lỗi phát hiện
+  defectType?: string;     // Loại lỗi
+  defectDetail?: string;   // Mô tả lỗi
+  result: 'Đạt' | 'Lỗi';
+  imageUrls?: string[];    // Ảnh minh chứng (đã nén)
+}
+
 export interface IQCRecord {
   id: string;
   date: string;
@@ -17,6 +34,8 @@ export interface IQCRecord {
   imageUrl?: string;
   imageUrls?: string[];
   updatedAt?: string;
+  ecountVoucherNo?: string;  // Số phiếu Ecount (VD: PNK 11005)
+  items?: IQCLineItem[];     // Chi tiết từng dòng linh kiện (optional - phiếu cũ không có)
 }
 
 export interface PQCRecord {

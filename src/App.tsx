@@ -6,6 +6,7 @@
 import { useState, useMemo, memo, useCallback, FormEvent, useEffect, useRef, Fragment } from 'react';
 import { safeStorage, safeStorage as localStorage, sanitizeFirestorePayload, onSafeStorageReady } from './safeStorage';
 import { calculateAQLSample } from './utils/aqlUtils';
+import { exportIqcRecordToExcel, getAqlGroupName } from './utils/iqcLineItems';
 import XLSXStyle from 'xlsx-js-style';
 import {
   BarChart,
@@ -36449,14 +36450,29 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
               {/* 17. IQC RECORD TYPE */}
               {viewDetailModal.type === 'iqc_record' && (
                 <div className="space-y-4">
-                  <div className="bg-slate-900 p-4 rounded-xl text-white bg-gradient-to-r from-slate-900 to-indigo-950 flex justify-between items-center">
+                  <div className="bg-slate-900 p-4 rounded-xl text-white bg-gradient-to-r from-slate-900 to-indigo-950 flex flex-wrap justify-between items-center gap-2">
                     <div>
                       <span className="text-[10px] font-black tracking-widest text-indigo-300 uppercase font-mono">Phiếu Kiểm Tra Chất Lượng Linh Kiện Đầu Vào (IQC)</span>
-                      <p className="text-sm font-extrabold mt-1">{viewDetailModal.data.id} - {viewDetailModal.data.supplierName || 'NCC'}</p>
+                      <p className="text-sm font-extrabold mt-1">
+                        {viewDetailModal.data.id} - {viewDetailModal.data.supplierName || 'NCC'}
+                        {viewDetailModal.data.ecountVoucherNo && (
+                          <span className="ml-2 text-[11px] font-mono text-indigo-200">({viewDetailModal.data.ecountVoucherNo})</span>
+                        )}
+                      </p>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-black uppercase ${viewDetailModal.data.result === 'Đạt' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white animate-pulse'}`}>
-                      {viewDetailModal.data.result || (viewDetailModal.data.failedQty > 0 ? 'Lỗi' : 'Đạt')}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => exportIqcRecordToExcel(viewDetailModal.data)}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1 cursor-pointer shadow-xs"
+                        title="Tải phiếu kiểm tra IQC ra file Excel chuẩn in ấn"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5" /> Tải Excel phiếu
+                      </button>
+                      <span className={`px-3 py-1 rounded-full text-xs font-black uppercase ${viewDetailModal.data.result === 'Đạt' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white animate-pulse'}`}>
+                        {viewDetailModal.data.result || (viewDetailModal.data.failedQty > 0 ? 'Lỗi' : 'Đạt')}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
@@ -36504,6 +36520,55 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                       </p>
                     </div>
                   </div>
+
+                  {Array.isArray(viewDetailModal.data.items) && viewDetailModal.data.items.length > 0 && (
+                    <div className="bg-white rounded-xl border border-indigo-200 overflow-hidden">
+                      <div className="bg-indigo-50/80 px-3 py-2 border-b border-indigo-100 flex justify-between items-center">
+                        <span className="text-[10.5px] font-extrabold text-indigo-900 uppercase tracking-wide">
+                          Danh sách chi tiết linh kiện trong phiếu ({viewDetailModal.data.items.length} dòng)
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-600">
+                          Đạt: <b className="text-emerald-700">{viewDetailModal.data.items.filter((it: any) => (it.failedQty || 0) === 0).length}</b> · Lỗi: <b className="text-rose-600">{viewDetailModal.data.items.filter((it: any) => (it.failedQty || 0) > 0).length}</b>
+                        </span>
+                      </div>
+                      <div className="overflow-x-auto max-h-72">
+                        <table className="w-full text-[11px] border-collapse">
+                          <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-[9.5px] sticky top-0">
+                            <tr className="border-b border-slate-200">
+                              <th className="p-1.5 text-center w-8">#</th>
+                              <th className="p-1.5 text-left">Mã MH</th>
+                              <th className="p-1.5 text-left">Tên linh kiện</th>
+                              <th className="p-1.5 text-left">Nhóm AQL</th>
+                              <th className="p-1.5 text-right">SL</th>
+                              <th className="p-1.5 text-right">Mẫu</th>
+                              <th className="p-1.5 text-right">Lỗi</th>
+                              <th className="p-1.5 text-left">Chi tiết lỗi</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {viewDetailModal.data.items.map((it: any, idx: number) => {
+                              const isFail = (it.failedQty || 0) > 0;
+                              return (
+                                <tr key={it.id || idx} className={isFail ? 'bg-red-50/40' : ''}>
+                                  <td className="p-1.5 text-center font-mono text-slate-400">{idx + 1}</td>
+                                  <td className="p-1.5 font-mono font-bold text-slate-700">{it.itemCode || '---'}</td>
+                                  <td className="p-1.5 font-semibold text-slate-800">{it.itemName}</td>
+                                  <td className="p-1.5 text-[10px] text-indigo-700">{it.aqlGroupKey || getAqlGroupName(it.itemName || '')}</td>
+                                  <td className="p-1.5 text-right font-mono font-bold">{(it.totalQty || 0).toLocaleString('vi-VN')}</td>
+                                  <td className="p-1.5 text-right font-mono font-bold text-indigo-700">{(it.sampleQty || 0).toLocaleString('vi-VN')}</td>
+                                  <td className={`p-1.5 text-right font-mono font-bold ${isFail ? 'text-red-600' : 'text-emerald-700'}`}>{it.failedQty || 0}</td>
+                                  <td className="p-1.5 text-[10.5px] text-slate-700">
+                                    {it.defectType && <span className="font-bold text-red-700 mr-1">[{it.defectType}]</span>}
+                                    {it.defectDetail || (isFail ? 'Có lỗi' : 'Đạt')}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
 
                   {viewDetailModal.data.defectDetail && (
                     <div className="bg-rose-50/80 p-3.5 rounded-xl border border-rose-200 space-y-1">
