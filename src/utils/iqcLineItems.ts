@@ -348,16 +348,16 @@ export const exportIqcRecordToExcel = (record: IQCRecord) => {
 
   const infoStart = aoa.length;
   const infoPairs: [string, string, string, string][] = [
-    ['Mã phiếu IQC:', record.id, 'Ngày kiểm:', record.date],
-    ['Số phiếu Ecount:', record.ecountVoucherNo || extractEcountVoucherNo(record.content) || '-', 'Người kiểm:', record.checkedBy || ''],
-    ['Nhà cung cấp:', `${record.supplierName || ''} (${record.supplierId || ''})`, 'Kết quả phiếu:', sum.result === 'Đạt' ? 'ĐẠT' : 'KHÔNG ĐẠT'],
+    ['Mã phiếu IQC:', record.id, 'Ngày kiểm:', ''],
+    ['Số phiếu Ecount:', record.ecountVoucherNo || extractEcountVoucherNo(record.content) || '-', 'Người kiểm:', ''],
+    ['Nhà cung cấp:', `${record.supplierName || ''} (${record.supplierId || ''})`, 'Kết quả phiếu:', ''],
     ['Nội dung:', record.content || '', '', '']
   ];
   infoPairs.forEach((p, i) => {
-    const r = blank(); r[0] = p[0]; r[2] = p[1]; r[9] = p[2]; r[10] = p[3]; aoa.push(r);
+    const r = blank(); r[0] = p[0]; r[2] = p[1]; r[8] = p[2]; r[10] = p[3]; aoa.push(r);
     const ri = infoStart + i;
     mergeRow(ri, 0, 1);
-    if (i === 3) { mergeRow(ri, 2, 12); } else { mergeRow(ri, 2, 8); mergeRow(ri, 10, 12); }
+    if (i === 3) { mergeRow(ri, 2, 12); } else { mergeRow(ri, 2, 7); mergeRow(ri, 8, 9); mergeRow(ri, 10, 12); }
   });
   aoa.push(blank());
 
@@ -391,7 +391,7 @@ export const exportIqcRecordToExcel = (record: IQCRecord) => {
   aoa.push(blank());
   const conclRow = aoa.length;
   const cr = blank();
-  cr[0] = `KẾT LUẬN: ${sum.result === 'Đạt' ? 'LÔ HÀNG ĐẠT - ĐỒNG Ý NHẬP KHO' : `LÔ HÀNG KHÔNG ĐẠT - ${sum.failedLines} mã lỗi, tổng ${sum.failedQty} sp lỗi. Đề nghị xử lý: đổi trả / sửa chữa / nhận có điều kiện`}`;
+  cr[0] = 'KẾT LUẬN:';
   aoa.push(cr); mergeRow(conclRow, 0, 12);
   const noteRow = aoa.length;
   const nr = blank(); nr[0] = 'Ghi chú: ............................................................................................................................................................';
@@ -406,7 +406,7 @@ export const exportIqcRecordToExcel = (record: IQCRecord) => {
   aoa.push(ss); mergeRow(signSub, 0, 3); mergeRow(signSub, 4, 7); mergeRow(signSub, 8, 10); mergeRow(signSub, 11, 12);
   aoa.push(blank()); aoa.push(blank()); aoa.push(blank());
   const nameRow = aoa.length;
-  const nm = blank(); nm[0] = record.checkedBy || '';
+  const nm = blank(); nm[0] = '';
   aoa.push(nm); mergeRow(nameRow, 0, 3);
 
   const ws = XLSXStyle.utils.aoa_to_sheet(aoa);
@@ -436,9 +436,8 @@ export const exportIqcRecordToExcel = (record: IQCRecord) => {
       else if (r === 3) s = { font: font({ bold: true, sz: 16, color: { rgb: '0F172A' } }), alignment: { horizontal: 'center', vertical: 'center' } };
       else if (r === 4) s = { font: font({ italic: true, sz: 10, color: { rgb: '475569' } }), alignment: { horizontal: 'center', vertical: 'center' } };
       else if (r >= infoStart && r < infoStart + infoPairs.length) {
-        const isLabel = c === 0 || c === 9;
+        const isLabel = c === 0 || c === 8;
         s = { font: font({ bold: isLabel }), alignment: { vertical: 'center', wrapText: true } };
-        if (c === 10 && r === infoStart + 2) s.font = font({ bold: true, color: { rgb: sum.result === 'Đạt' ? '047857' : 'DC2626' } });
       } else if (r === tableHeaderRow) {
         s = { font: font({ bold: true, color: { rgb: 'FFFFFF' }, sz: 10 }), fill: { fgColor: { rgb: '1E40AF' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border };
       } else if (r >= firstDataRow && r < totalRow) {
