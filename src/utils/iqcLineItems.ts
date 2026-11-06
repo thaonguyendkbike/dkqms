@@ -37,41 +37,47 @@ export const getAqlGroupName = (partName: string): string => {
 
 const parseNum = (raw: string | undefined): number => {
   if (!raw) return 0;
-  const cleaned = String(raw).replace(/,/g, '').replace(/\s/g, '').trim();
+  let cleaned = String(raw).replace(/\s/g, '').trim();
+  cleaned = cleaned.replace(/\.00$/, '');
+  if (/^-?\d{1,3}(\.\d{3})+$/.test(cleaned)) {
+    cleaned = cleaned.replace(/\./g, '');
+  } else {
+    cleaned = cleaned.replace(/,/g, '');
+  }
   const n = parseFloat(cleaned);
   return isNaN(n) ? 0 : n;
 };
 
-const looksLikePartCode = (s: string): boolean => {
-  const v = (s || '').trim();
-  if (v.length < 5 || /\s/.test(v)) return false;
-  return /[A-Za-z]/.test(v) && /\d/.test(v) && /^[A-Za-z0-9\-_.\/]+$/.test(v);
-};
-
 /**
- * Phân tích bảng chi tiết mặt hàng copy từ màn "Điều chỉnh mua hàng" của Ecount.
- * Hỗ trợ có/không có dòng tiêu đề. Cột mặc định: Mã mặt hàng | Tên mặt hàng | Thông số | Đơn vị | Số lượng | ...
+ * Phân tích bảng chi tiết linh kiện trong phiếu copy/paste từ Ecount.
+ * Thứ tự cột chuẩn:
+ * Mã hàng | Tên mặt hàng | Đơn vị | Số lượng | Gia mua | Thành tiền | Ghi chú | Q. lý
+ * (Hỗ trợ cả trường hợp có hoặc không có dòng tiêu đề).
  */
 export const parseEcountVoucherDetail = (text: string): IQCLineItem[] => {
   if (!text || !text.trim()) return [];
   const lines = text.split(/\r?\n/);
   const items: IQCLineItem[] = [];
 
-  let header: { code: number; name: number; spec: number; unit: number; qty: number } | null = null;
+  let header: { code: number; name: number; unit: number; qty: number; spec: number } | null = null;
 
   for (const rawLine of lines) {
     if (!rawLine.trim()) continue;
-    const cols = rawLine.includes('\t') ? rawLine.split('\t').map(c => c.trim()) : rawLine.split(/\s{2,}/).map(c => c.trim());
+    const rawCols = rawLine.includes('\t')
+      ? rawLine.split('\t').map(c => c.replace(/\s+Fn$/i, '').trim())
+      : rawLine.split(/\s{2,}/).map(c => c.replace(/\s+Fn$/i, '').trim());
+    // Loại bỏ ô nút "Fn" độc lập của Ecount nếu có
+    const cols = rawCols.filter(c => c.toLowerCase() !== 'fn');
 
     const lower = cols.map(c => c.toLowerCase());
-    if (lower.some(c => c.includes('mã mặt hàng') || c.includes('tên mặt hàng'))) {
+    if (lower.some(c => c.includes('mã hàng') || c.includes('mã mặt hàng') || c.includes('tên mặt hàng'))) {
       const find = (pred: (c: string) => boolean) => lower.findIndex(pred);
       header = {
-        code: find(c => c.includes('mã mặt hàng') || c === 'mã hàng'),
-        name: find(c => c.includes('tên mặt hàng') || c === 'tên hàng'),
-        spec: find(c => c.includes('thông số') || c.includes('quy cách')),
+        code: find(c => c === 'mã hàng' || c.includes('mã mặt hàng') || c.includes('mã hàng')),
+        name: find(c => c.includes('tên mặt hàng') || c.includes('tên hàng')),
         unit: find(c => c.includes('đơn vị') || c === 'đvt'),
-        qty: find(c => c.includes('số lượng') || c === 'sl')
+        qty: find(c => c.includes('số lượng') || c === 'sl'),
+        spec: find(c => c.includes('ghi chú') || c.includes('thông số') || c.includes('quy cách'))
       };
       continue;
     }
@@ -80,24 +86,56 @@ export const parseEcountVoucherDetail = (text: string): IQCLineItem[] => {
     if (header && (header.code >= 0 || header.name >= 0)) {
       code = header.code >= 0 ? cols[header.code] || '' : '';
       name = header.name >= 0 ? cols[header.name] || '' : '';
-      spec = header.spec >= 0 ? cols[header.spec] || '' : '';
       unit = header.unit >= 0 ? cols[header.unit] || '' : '';
       qty = header.qty >= 0 ? parseNum(cols[header.qty]) : 0;
+      spec = header.spec >= 0 ? cols[header.spec] || '' : '';
     } else {
-      // Không có tiêu đề: tìm cột mã mặt hàng, các cột sau theo thứ tự mặc định Ecount
-      const ci = cols.findIndex(looksLikePartCode);
-      if (ci < 0) continue;
+      // Không có dòng tiêu đề: mặc định theo thứ tự chuẩn của anh Thao:
+      // [0] Mã hàng | [1] Tên mặt hàng | [2] Đơn vị | [3] Số lượng | [4] Gia mua | [5] Thành tiền | [6] Ghi chú | [7] Q. lý
+      let ci = 0;
+      while (ci < cols.length && !cols[ci]) ci++;
+      // Nếu cột đầu chỉ là STT (1, 2, 3...) và cột kế tiếp là Mã hàng
+      if (
+        /^\d{1,2}$/.test(cols[ci] || '') &&
+        cols.length >= ci + 5 &&
+        Boolean(cols[ci + 1]) &&
+        isNaN(Number(cols[ci + 3])) &&
+        parseNum(cols[ci + 4]) > 0
+      ) {
+        ci++;
+      }
+      if (ci >= cols.length) continue;
+
       code = cols[ci] || '';
       name = cols[ci + 1] || '';
-      spec = cols[ci + 2] || '';
-      unit = cols[ci + 3] || '';
-      qty = parseNum(cols[ci + 4]);
+
+      if (cols.length === ci + 3 && parseNum(cols[ci + 2]) > 0) {
+        // Trường hợp chỉ dán 3 cột: Mã hàng | Tên mặt hàng | Số lượng
+        unit = '';
+        qty = parseNum(cols[ci + 2]);
+      } else if (
+        parseNum(cols[ci + 3]) === 0 &&
+        Boolean(cols[ci + 3]) &&
+        isNaN(Number(cols[ci + 3])) &&
+        parseNum(cols[ci + 4]) > 0
+      ) {
+        // Trường hợp bảng có thêm cột Thông số trước Đơn vị: Mã | Tên | Thông số | Đơn vị | Số lượng
+        spec = cols[ci + 2] || '';
+        unit = cols[ci + 3] || '';
+        qty = parseNum(cols[ci + 4]);
+      } else {
+        // Thứ tự chuẩn: Mã hàng (0) | Tên mặt hàng (1) | Đơn vị (2) | Số lượng (3) | Gia mua (4) | Thành tiền (5) | Ghi chú (6) | Q. lý (7)
+        unit = cols[ci + 2] || '';
+        qty = parseNum(cols[ci + 3]);
+        spec = cols[ci + 6] || '';
+      }
     }
 
-    // Loại bỏ ký hiệu nút tìm kiếm ("Fn") Ecount dính kèm tên
     name = name.replace(/\s+Fn$/i, '').trim();
+    code = code.replace(/\s+Fn$/i, '').trim();
     if (!code && !name) continue;
-    if (/^(tổng|total)/i.test(code) || /^(tổng|total)/i.test(name)) continue;
+    if (/^(tổng|total|cộng)/i.test(code) || /^(tổng|total|cộng)/i.test(name)) continue;
+    if (qty <= 0 && !name) continue;
 
     items.push({
       lineNo: items.length + 1,

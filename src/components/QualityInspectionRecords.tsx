@@ -7900,10 +7900,11 @@ return (
                                   <thead className="bg-indigo-50 text-indigo-900 text-[9.5px] uppercase">
                                     <tr>
                                       <th className="p-1.5 w-8">#</th>
-                                      <th className="p-1.5 text-left">Mã mặt hàng</th>
+                                      <th className="p-1.5 text-left">Mã hàng</th>
                                       <th className="p-1.5 text-left">Tên mặt hàng</th>
+                                      <th className="p-1.5 text-center">Đơn vị</th>
                                       <th className="p-1.5 text-left">Nhóm AQL</th>
-                                      <th className="p-1.5 text-right">SL nhập</th>
+                                      <th className="p-1.5 text-right">Số lượng</th>
                                       <th className="p-1.5 text-right">Mẫu</th>
                                       <th className="p-1.5 text-right text-red-600">Lỗi</th>
                                       <th className="p-1.5 text-left">Loại lỗi / Mô tả</th>
@@ -7919,6 +7920,7 @@ return (
                                           <td className="p-1.5 text-center text-slate-400 font-mono">{k + 1}</td>
                                           <td className="p-1.5 font-mono text-slate-600">{it.partCode}</td>
                                           <td className="p-1.5 font-semibold text-slate-700">{it.partName}</td>
+                                          <td className="p-1.5 text-center text-slate-600">{it.unit || '-'}</td>
                                           <td className="p-1.5 text-indigo-700">{it.aqlGroup || getAqlGroupName(it.partName)}</td>
                                           <td className="p-1.5 text-right font-mono">{(Number(it.qty) || 0).toLocaleString('vi-VN')}</td>
                                           <td className="p-1.5 text-right font-mono text-indigo-700">{it.sampleQty}</td>

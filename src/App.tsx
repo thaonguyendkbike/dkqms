@@ -36536,10 +36536,11 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                           <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-[9.5px] sticky top-0">
                             <tr className="border-b border-slate-200">
                               <th className="p-1.5 text-center w-8">#</th>
-                              <th className="p-1.5 text-left">Mã MH</th>
-                              <th className="p-1.5 text-left">Tên linh kiện</th>
+                              <th className="p-1.5 text-left">Mã hàng</th>
+                              <th className="p-1.5 text-left">Tên mặt hàng</th>
+                              <th className="p-1.5 text-center">Đơn vị</th>
                               <th className="p-1.5 text-left">Nhóm AQL</th>
-                              <th className="p-1.5 text-right">SL</th>
+                              <th className="p-1.5 text-right">Số lượng</th>
                               <th className="p-1.5 text-right">Mẫu</th>
                               <th className="p-1.5 text-right">Lỗi</th>
                               <th className="p-1.5 text-left">Chi tiết lỗi</th>
@@ -36549,12 +36550,13 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                             {viewDetailModal.data.items.map((it: any, idx: number) => {
                               const isFail = (it.failedQty || 0) > 0;
                               return (
-                                <tr key={it.id || idx} className={isFail ? 'bg-red-50/40' : ''}>
+                                <tr key={it.lineNo || idx} className={isFail ? 'bg-red-50/40' : ''}>
                                   <td className="p-1.5 text-center font-mono text-slate-400">{idx + 1}</td>
-                                  <td className="p-1.5 font-mono font-bold text-slate-700">{it.itemCode || '---'}</td>
-                                  <td className="p-1.5 font-semibold text-slate-800">{it.itemName}</td>
-                                  <td className="p-1.5 text-[10px] text-indigo-700">{it.aqlGroupKey || getAqlGroupName(it.itemName || '')}</td>
-                                  <td className="p-1.5 text-right font-mono font-bold">{(it.totalQty || 0).toLocaleString('vi-VN')}</td>
+                                  <td className="p-1.5 font-mono font-bold text-slate-700">{it.partCode || '---'}</td>
+                                  <td className="p-1.5 font-semibold text-slate-800">{it.partName}</td>
+                                  <td className="p-1.5 text-center text-slate-600">{it.unit || '---'}</td>
+                                  <td className="p-1.5 text-[10px] text-indigo-700">{it.aqlGroup || getAqlGroupName(it.partName || '')}</td>
+                                  <td className="p-1.5 text-right font-mono font-bold">{(it.qty || 0).toLocaleString('vi-VN')}</td>
                                   <td className="p-1.5 text-right font-mono font-bold text-indigo-700">{(it.sampleQty || 0).toLocaleString('vi-VN')}</td>
                                   <td className={`p-1.5 text-right font-mono font-bold ${isFail ? 'text-red-600' : 'text-emerald-700'}`}>{it.failedQty || 0}</td>
                                   <td className="p-1.5 text-[10.5px] text-slate-700">

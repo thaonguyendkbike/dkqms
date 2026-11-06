@@ -36,7 +36,7 @@ const IqcLineItemsEditor: React.FC<IqcLineItemsEditorProps> = ({ items, onChange
   const applyPaste = (mode: 'replace' | 'append') => {
     const parsed = parseEcountVoucherDetail(pasteText);
     if (parsed.length === 0) {
-      alert('Không nhận diện được dòng linh kiện nào. Anh vui lòng copy bảng mặt hàng (gồm cột Mã mặt hàng, Tên mặt hàng, Số lượng) trong phiếu Ecount rồi dán lại.');
+      alert('Không nhận diện được dòng linh kiện nào. Anh vui lòng copy các dòng theo thứ tự: Mã hàng | Tên mặt hàng | Đơn vị | Số lượng | Gia mua | Thành tiền | Ghi chú | Q. lý rồi dán lại.');
       return;
     }
     const merged = mode === 'append' ? [...items, ...parsed] : parsed;
@@ -132,10 +132,13 @@ const IqcLineItemsEditor: React.FC<IqcLineItemsEditorProps> = ({ items, onChange
 
       {showPaste && (
         <div className="bg-white border border-dashed border-indigo-300 rounded-lg p-2 space-y-1.5">
+          <div className="text-[10px] font-bold text-indigo-800 bg-indigo-50/70 px-2 py-1 rounded border border-indigo-100">
+            Thứ tự cột chuẩn khi Copy/Paste: <span className="font-mono text-indigo-950">Mã hàng &rarr; Tên mặt hàng &rarr; Đơn vị &rarr; Số lượng &rarr; Gia mua &rarr; Thành tiền &rarr; Ghi chú &rarr; Q. lý</span>
+          </div>
           <textarea
             value={pasteText}
             onChange={e => setPasteText(e.target.value)}
-            placeholder={'Trên Ecount: mở phiếu mua hàng (Điều chỉnh mua hàng) → bôi đen bảng mặt hàng → Ctrl+C → dán vào đây (Ctrl+V).\nCột nhận diện: Mã mặt hàng | Tên mặt hàng | Thông số | Đơn vị | Số lượng ...'}
+            placeholder={'Bôi đen các dòng chi tiết linh kiện (có hoặc không có dòng tiêu đề) → Ctrl+C → dán vào đây (Ctrl+V).\nThứ tự cột: Mã hàng\tTên mặt hàng\tĐơn vị\tSố lượng\tGia mua\tThành tiền\tGhi chú\tQ. lý'}
             className="w-full h-24 text-[11px] font-mono border border-slate-200 rounded p-1.5 focus:outline-none focus:border-indigo-500"
           />
           <div className="flex justify-end gap-1.5">
@@ -154,14 +157,15 @@ const IqcLineItemsEditor: React.FC<IqcLineItemsEditorProps> = ({ items, onChange
       {items.length > 0 && (
         <>
           <div className="overflow-x-auto bg-white rounded-lg border border-slate-200">
-            <table className="w-full text-[11px] min-w-[860px]">
+            <table className="w-full text-[11px] min-w-[900px]">
               <thead className="bg-slate-100 text-slate-600 text-[10px] uppercase">
                 <tr>
                   <th className="p-1.5 w-7">#</th>
-                  <th className="p-1.5 text-left w-32">Mã mặt hàng</th>
+                  <th className="p-1.5 text-left w-28">Mã hàng</th>
                   <th className="p-1.5 text-left">Tên mặt hàng</th>
+                  <th className="p-1.5 text-center w-14">Đơn vị</th>
                   <th className="p-1.5 text-left w-36">Nhóm AQL</th>
-                  <th className="p-1.5 w-16">SL nhập</th>
+                  <th className="p-1.5 w-16">Số lượng</th>
                   <th className="p-1.5 w-14">Mẫu</th>
                   <th className="p-1.5 w-14 text-red-600">Lỗi</th>
                   <th className="p-1.5 text-left w-48">Loại lỗi / Mô tả</th>
@@ -187,8 +191,9 @@ const IqcLineItemsEditor: React.FC<IqcLineItemsEditorProps> = ({ items, onChange
                             updateLine(idx, autoGroup ? { partName: name, aqlGroup: getAqlGroupName(name) } : { partName: name }, autoGroup);
                           }}
                         />
-                        {(it.spec || it.unit) && <span className="text-[9px] text-slate-400">{[it.spec, it.unit].filter(Boolean).join(' · ')}</span>}
+                        {it.spec && <span className="text-[9px] text-slate-400 italic">Ghi chú: {it.spec}</span>}
                       </td>
+                      <td className="p-1"><input className={`${inputCls} text-center`} value={it.unit || ''} onChange={e => updateLine(idx, { unit: e.target.value })} placeholder="ĐVT" /></td>
                       <td className="p-1"><input className={`${inputCls} text-indigo-800`} value={it.aqlGroup || ''} onChange={e => updateLine(idx, { aqlGroup: e.target.value }, true)} title="Các dòng cùng nhóm sẽ gộp tổng SL để tính cỡ mẫu AQL" /></td>
                       <td className="p-1"><input type="number" min={0} className={`${inputCls} text-right font-mono font-bold`} value={it.qty} onChange={e => updateLine(idx, { qty: Number(e.target.value) }, true)} /></td>
                       <td className="p-1"><input type="number" min={0} className={`${inputCls} text-right font-mono text-indigo-800 bg-indigo-50/50`} value={it.sampleQty} onChange={e => updateLine(idx, { sampleQty: Number(e.target.value) })} /></td>
@@ -235,7 +240,7 @@ const IqcLineItemsEditor: React.FC<IqcLineItemsEditorProps> = ({ items, onChange
               </tbody>
               <tfoot className="bg-slate-50 font-bold text-[11px]">
                 <tr>
-                  <td colSpan={4} className="p-1.5 text-right text-slate-500 uppercase text-[10px]">Tổng phiếu</td>
+                  <td colSpan={5} className="p-1.5 text-right text-slate-500 uppercase text-[10px]">Tổng phiếu</td>
                   <td className="p-1.5 text-right font-mono">{sum.totalQty.toLocaleString('vi-VN')}</td>
                   <td className="p-1.5 text-right font-mono text-indigo-700">{sum.checkedQty.toLocaleString('vi-VN')}</td>
                   <td className="p-1.5 text-right font-mono text-red-600">{sum.failedQty.toLocaleString('vi-VN')}</td>
