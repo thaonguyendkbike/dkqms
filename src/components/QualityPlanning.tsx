@@ -3177,13 +3177,12 @@ export default function QualityPlanning({
 
     // =========================================================================
     // SHEET 3: GỘP TOÀN BỘ "KHU VỰC PHÂN BAN & QUẢN LÝ TÁC VỤ HÀNH ĐỘNG" (1 SHEET DUY NHẤT)
-    // Bao gồm 6 phân mục:
-    //   I.   Bảng Tác vụ Quản lý Chất lượng & Điều phối Đa thành viên (Tổng hợp)
-    //   II.  1. Công việc tồn đọng QMS (Backlogs)
-    //   III. 2. Biên bản khắc phục CAPA đang mở (Open CAPAs)
-    //   IV.  3. Dự án phát triển xe mới (PTSP)
-    //   V.   4. Kế hoạch phối hợp liên phòng ban (Coordinations)
-    //   VI.  5. Cải tiến kỹ thuật & Thay đổi vật liệu (ECO)
+    // Bao gồm 5 phân mục:
+    //   I.   Công việc tồn đọng QMS (Backlogs)
+    //   II.  Biên bản khắc phục CAPA đang mở (Open CAPAs)
+    //   III. Dự án phát triển xe mới (PTSP)
+    //   IV.  Kế hoạch phối hợp liên phòng ban (Coordinations)
+    //   V.   Cải tiến kỹ thuật & Thay đổi vật liệu (ECO)
     // =========================================================================
     const aoaData3: any[][] = [];
     const rowTracker3: any[] = [];
@@ -3219,7 +3218,7 @@ export default function QualityPlanning({
     rowTracker3.push({ type: 'main-title' });
     addMerge3(4, 0, 4, 7);
 
-    aoaData3.push([`Hành động thực thi chu kỳ: ${curPeriodLabel} | Tổng hợp Tác vụ QMS • Tồn đọng • CAPA mở • PTSP • Phối hợp liên ban • Cải tiến kỹ thuật (ECO)`, "", "", "", "", "", "", ""]);
+    aoaData3.push([`Hành động thực thi chu kỳ: ${curPeriodLabel} | Công việc tồn đọng • Biên bản CAPA mở • Phát triển xe mới (PTSP) • Phối hợp liên ban • Cải tiến kỹ thuật (ECO)`, "", "", "", "", "", "", ""]);
     rowTracker3.push({ type: 'main-subtitle' });
     addMerge3(5, 0, 5, 7);
 
@@ -3228,57 +3227,9 @@ export default function QualityPlanning({
     rowTracker3.push({ type: 'spacer' });
 
     // -------------------------------------------------------------------------
-    // PHẦN I: DANH SÁCH TỔNG HỢP CÁC TÁC VỤ CHẤT LƯỢNG & ĐIỀU PHỐI ĐA THÀNH VIÊN
+    // PHẦN I: CÔNG VIỆC TỒN ĐỌNG QMS (BACKLOGS)
     // -------------------------------------------------------------------------
-    aoaData3.push(["I. BẢNG TỔNG HỢP TÁC VỤ QUẢN LÝ CHẤT LƯỢNG & ĐIỀU PHỐI ĐA THÀNH VIÊN (QMS ACTIONS LIST)", "", "", "", "", "", "", ""]);
-    rowTracker3.push({ type: 'section-heading', bgColor: '0F172A' });
-    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
-
-    aoaData3.push(["STT", "Mã tác vụ", "Chi tiết nhiệm vụ hành động / Tác vụ khắc phục", "Người chịu trách nhiệm", "Thời hạn hoàn thành", "Mức độ ưu tiên", "Trạng thái thực thi", "Phân nhóm QMS"]);
-    rowTracker3.push({ type: 'table-header' });
-
-    const currentTasks = currentMonthTasks;
-
-    if (currentTasks.length === 0) {
-      aoaData3.push(["-", "Tuyệt vời! Không có tác vụ hay chỉ đạo hành động chất lượng nào chưa xử lý tồn đọng trong kỳ này.", "", "", "", "", "", ""]);
-      rowTracker3.push({ type: 'table-data-empty' });
-      addMerge3(aoaData3.length - 1, 1, aoaData3.length - 1, 7);
-    } else {
-      currentTasks.forEach((item, idx) => {
-        let sectionText = "Đang rà soát";
-        if (item.section === 'backlog') sectionText = "Tồn đọng / Sụt sạt (Backlog)";
-        else if (item.section === 'capa') sectionText = "Hành động CAPA khắc phục";
-        else if (item.section === 'ptsp') sectionText = "Phát triển mẫu xe mới (PTSP)";
-        else if (item.section === 'coordination') sectionText = "Phối hợp liên bộ phận";
-        else if (item.section === 'eco') sectionText = "Cải tiến kỹ thuật (ECO)";
-
-        const isCompleted = item.status === 'Completed' || item.status === 'Finished';
-        const isInProgress = item.status === 'In_Progress' || item.status === 'In Progress' || item.status === 'Developing';
-        const progressPct = isCompleted ? 100 : (isInProgress ? 50 : 0);
-        const statusText = isCompleted ? "Đã duyệt hoàn thành" : (isInProgress ? "Đang gá biện pháp" : "Chờ kích hoạt xử lý");
-
-        aoaData3.push([
-          idx + 1,
-          item.id,
-          item.title,
-          item.assignee,
-          item.deadline || "Chu kỳ",
-          item.priority,
-          statusText,
-          sectionText
-        ]);
-        rowTracker3.push({ type: 'table-data-log', pctVal: progressPct });
-      });
-    }
-
-    // Spacer
-    aoaData3.push(new Array(8).fill(""));
-    rowTracker3.push({ type: 'spacer' });
-
-    // -------------------------------------------------------------------------
-    // PHẦN II: 1. CÔNG VIỆC TỒN ĐỌNG QMS (BACKLOGS)
-    // -------------------------------------------------------------------------
-    aoaData3.push(["II. 1. CÔNG VIỆC TỒN ĐỌNG QMS CHƯA HOÀN THÀNH - ĐANG TRONG TIẾN TRÌNH (QMS BACKLOGS)", "", "", "", "", "", "", ""]);
+    aoaData3.push(["I. CÔNG VIỆC TỒN ĐỌNG QMS CHƯA HOÀN THÀNH - ĐANG TRONG TIẾN TRÌNH (QMS BACKLOGS)", "", "", "", "", "", "", ""]);
     rowTracker3.push({ type: 'section-heading', bgColor: '1E293B' });
     addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
@@ -3318,9 +3269,9 @@ export default function QualityPlanning({
     rowTracker3.push({ type: 'spacer' });
 
     // -------------------------------------------------------------------------
-    // PHẦN III: 2. BIÊN BẢN CAPA ĐANG MỞ (OPEN CAPAS)
+    // PHẦN II: BIÊN BẢN CAPA ĐANG MỞ (OPEN CAPAS)
     // -------------------------------------------------------------------------
-    aoaData3.push(["III. 2. DANH SÁCH BIÊN BẢN KHẮC PHỤC CAPA ĐANG MỞ (OPEN CAPAS - TIÊU CHUẨN ISO 9001:2015)", "", "", "", "", "", "", ""]);
+    aoaData3.push(["II. DANH SÁCH BIÊN BẢN KHẮC PHỤC CAPA ĐANG MỞ (OPEN CAPAS - TIÊU CHUẨN ISO 9001:2015)", "", "", "", "", "", "", ""]);
     rowTracker3.push({ type: 'section-heading', bgColor: '4C0519' });
     addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
@@ -3383,9 +3334,9 @@ export default function QualityPlanning({
     rowTracker3.push({ type: 'spacer' });
 
     // -------------------------------------------------------------------------
-    // PHẦN IV: 3. DỰ ÁN PHÁT TRIỂN XE MỚI (PTSP - NEW VEHICLES)
+    // PHẦN III: DỰ ÁN PHÁT TRIỂN XE MỚI (PTSP - NEW VEHICLES)
     // -------------------------------------------------------------------------
-    aoaData3.push(["IV. 3. DỰ ÁN PHÁT TRIỂN MẪU XE MỚI & TIẾN ĐỘ CHẠY MẪU HÀNG LOẠT (PTSP - R&D NEW VEHICLES)", "", "", "", "", "", "", ""]);
+    aoaData3.push(["III. DỰ ÁN PHÁT TRIỂN MẪU XE MỚI & TIẾN ĐỘ CHẠY MẪU HÀNG LOẠT (PTSP - R&D NEW VEHICLES)", "", "", "", "", "", "", ""]);
     rowTracker3.push({ type: 'section-heading', bgColor: '1E1B4B' });
     addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
@@ -3465,9 +3416,9 @@ export default function QualityPlanning({
     rowTracker3.push({ type: 'spacer' });
 
     // -------------------------------------------------------------------------
-    // PHẦN V: 4. KẾ HOẠCH PHỐI HỢP LIÊN PHÒNG BAN (COORDINATIONS)
+    // PHẦN IV: KẾ HOẠCH PHỐI HỢP LIÊN PHÒNG BAN (COORDINATIONS)
     // -------------------------------------------------------------------------
-    aoaData3.push(["V. 4. KẾ HOẠCH PHỐI HỢP LIÊN PHÒNG BAN & GIÁM SÁT SẢN XUẤT SONG HÀNH (COORDINATIONS)", "", "", "", "", "", "", ""]);
+    aoaData3.push(["IV. KẾ HOẠCH PHỐI HỢP LIÊN PHÒNG BAN & GIÁM SÁT SẢN XUẤT SONG HÀNH (COORDINATIONS)", "", "", "", "", "", "", ""]);
     rowTracker3.push({ type: 'section-heading', bgColor: '064E3B' });
     addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
@@ -3502,9 +3453,9 @@ export default function QualityPlanning({
     rowTracker3.push({ type: 'spacer' });
 
     // -------------------------------------------------------------------------
-    // PHẦN VI: 5. CẢI TIẾN KỸ THUẬT & THAY ĐỔI VẬT LIỆU (ECO)
+    // PHẦN V: CẢI TIẾN KỸ THUẬT & THAY ĐỔI VẬT LIỆU (ECO)
     // -------------------------------------------------------------------------
-    aoaData3.push(["VI. 5. DANH SÁCH CHI TIẾT CÁC CẢI TIẾN KỸ THUẬT & THAY ĐỔI VẬT LIỆU (ENGINEERING CHANGE ORDERS - ECO)", "", "", "", "", "", "", ""]);
+    aoaData3.push(["V. DANH SÁCH CHI TIẾT CÁC CẢI TIẾN KỸ THUẬT & THAY ĐỔI VẬT LIỆU (ENGINEERING CHANGE ORDERS - ECO)", "", "", "", "", "", "", ""]);
     rowTracker3.push({ type: 'section-heading', bgColor: '083344' });
     addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
