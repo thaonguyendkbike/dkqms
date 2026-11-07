@@ -2604,54 +2604,54 @@ export default function QualityPlanning({
 
           if (type === 'header-company') {
             cell.s = {
-              font: { name: "Arial", sz: 9, bold: true, color: { rgb: "475569" } },
-              alignment: { horizontal: "left", vertical: "center" }
+              font: { name: "Arial", sz: 9.5, bold: true, color: { rgb: "334155" } },
+              alignment: { horizontal: c >= 4 ? "center" : "left", vertical: "center", wrapText: true }
             };
           } else if (type === 'header-slogan') {
             cell.s = {
-              font: { name: "Arial", sz: 9, bold: true, color: { rgb: "1E293B" } },
-              alignment: { horizontal: c >= (columnsCount - 3) ? "center" : "left", vertical: "center" }
+              font: { name: "Arial", sz: 9.5, bold: true, color: { rgb: "1E293B" } },
+              alignment: { horizontal: c >= 4 ? "center" : "left", vertical: "center", wrapText: true }
             };
           } else if (type === 'header-meta') {
             cell.s = {
               font: { name: "Arial", sz: 8.5, italic: true, color: { rgb: "64748B" } },
-              alignment: { horizontal: c >= (columnsCount - 3) ? "center" : "left", vertical: "center" }
+              alignment: { horizontal: c >= 4 ? "center" : "left", vertical: "center", wrapText: true }
             };
           } else if (type === 'main-title') {
             cell.s = {
               font: { name: "Arial", sz: 14, bold: true, color: { rgb: COLOR_ACCENT } },
-              alignment: { horizontal: "center", vertical: "center" }
+              alignment: { horizontal: "center", vertical: "center", wrapText: true }
             };
           } else if (type === 'main-subtitle') {
             cell.s = {
               font: { name: "Arial", sz: 9.5, bold: true, italic: true, color: { rgb: "334155" } },
-              alignment: { horizontal: "center", vertical: "center" }
+              alignment: { horizontal: "center", vertical: "center", wrapText: true }
             };
           } else if (type === 'section-heading') {
             cell.s = {
-              fill: { fgColor: { rgb: COLOR_ACCENT } },
-              font: { name: "Arial", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
-              alignment: { horizontal: "left", vertical: "center", indent: 1 },
+              fill: { fgColor: { rgb: rowInfo?.bgColor || COLOR_ACCENT } },
+              font: { name: "Arial", sz: 10.5, bold: true, color: { rgb: "FFFFFF" } },
+              alignment: { horizontal: "left", vertical: "center", indent: 1, wrapText: true },
               border: cellBordersNormal
             };
           } else if (type === 'table-header') {
             cell.s = {
-              fill: { fgColor: { rgb: COLOR_BG_LIGHT } },
+              fill: { fgColor: { rgb: "E2E8F0" } },
               font: { name: "Arial", sz: 9.5, bold: true, color: { rgb: COLOR_ACCENT } },
               alignment: { horizontal: "center", vertical: "center", wrapText: true },
               border: cellBordersNormal
             };
           } else if (type === 'table-header-group') {
             cell.s = {
-              fill: { fgColor: { rgb: "E2E8F0" } },
-              font: { name: "Arial", sz: 9.5, bold: true, color: { rgb: COLOR_ACCENT } },
-              alignment: { horizontal: "left", vertical: "center", indent: 1 },
+              fill: { fgColor: { rgb: "EFF6FF" } },
+              font: { name: "Arial", sz: 9.5, bold: true, color: { rgb: "1E3A8A" } },
+              alignment: { horizontal: "left", vertical: "center", indent: 1, wrapText: true },
               border: cellBordersNormal
             };
           } else if (type === 'table-data-model-plan') {
             cell.s = {
               font: { name: "Arial", sz: 9.5 },
-              alignment: (c === 0 || c >= 2) ? { horizontal: "center", vertical: "center" } : { horizontal: "left", vertical: "center" },
+              alignment: (c === 0 || c >= 2) ? { horizontal: "center", vertical: "center", wrapText: true } : { horizontal: "left", vertical: "center", wrapText: true },
               border: cellBordersNormal
             };
             if (c === 1) {
@@ -2660,45 +2660,55 @@ export default function QualityPlanning({
           } else if (type === 'table-data-supplier-plan') {
             cell.s = {
               font: { name: "Arial", sz: 9.5 },
-              alignment: (c === 0 || c === columnsCount - 1) ? { horizontal: "center", vertical: "top" } : { horizontal: "left", vertical: "top", wrapText: true },
+              alignment: (c === 0 || c === 1 || c === columnsCount - 1) ? { horizontal: "center", vertical: "center", wrapText: true } : { horizontal: "left", vertical: "center", wrapText: true },
               border: cellBordersNormal
             };
+            if (c === columnsCount - 1 && rowInfo?.pctVal !== undefined) {
+              const val = rowInfo.pctVal;
+              cell.s.fill = { fgColor: { rgb: val === 100 ? "D1FAE5" : (val >= 50 ? "DBEAFE" : "FEF3C7") } };
+              cell.s.font = { name: "Arial", sz: 9.2, bold: true, color: { rgb: val === 100 ? "065F46" : (val >= 50 ? "1E40AF" : "92400E") } };
+            }
           } else if (type === 'table-data-plan-target') {
             cell.s = {
               font: { name: "Arial", sz: 9.5 },
-              alignment: (c === 0 || c === 1 || c === 3 || c === 5) ? { horizontal: "center", vertical: "top" } : { horizontal: "left", vertical: "top", wrapText: true },
+              alignment: (c === 0 || c === 1 || c === 3 || c === 4 || c === 5 || c === 6) ? { horizontal: "center", vertical: "center", wrapText: true } : { horizontal: "left", vertical: "center", wrapText: true },
               border: cellBordersNormal
             };
+            if (c === 6 && rowInfo?.pctVal !== undefined) {
+              const val = rowInfo.pctVal;
+              cell.s.fill = { fgColor: { rgb: val === 100 ? "D1FAE5" : "FEF3C7" } };
+              cell.s.font = { name: "Arial", sz: 9.2, bold: true, color: { rgb: val === 100 ? "065F46" : "92400E" } };
+            }
           } else if (type === 'table-data-log') {
             cell.s = {
               font: { name: "Arial", sz: 9.5 },
-              alignment: (c === 0 || c === 1 || c === 3 || c === 4 || c === 5 || c === 6 || c === 7) ? { horizontal: "center", vertical: "top" } : { horizontal: "left", vertical: "top", wrapText: true },
+              alignment: (c === 0 || c === 1 || c === 3 || c === 4 || c === 5 || c === 6 || c === 7) ? { horizontal: "center", vertical: "center", wrapText: true } : { horizontal: "left", vertical: "center", wrapText: true },
               border: cellBordersNormal
             };
             if (c === 6) {
               const val = rowInfo?.pctVal || 0;
-              cell.s.fill = { fgColor: { rgb: val === 100 ? "D1FAE5" : "FEF3C7" } };
-              cell.s.font = { name: "Arial", sz: 9.2, bold: true, color: { rgb: val === 100 ? "065F46" : "92400E" } };
+              cell.s.fill = { fgColor: { rgb: val === 100 ? "D1FAE5" : (val >= 50 ? "DBEAFE" : "FEF3C7") } };
+              cell.s.font = { name: "Arial", sz: 9.2, bold: true, color: { rgb: val === 100 ? "065F46" : (val >= 50 ? "1E40AF" : "92400E") } };
             }
           } else if (type === 'signature-label') {
             cell.s = {
               font: { name: "Arial", sz: 10, bold: true, color: { rgb: "0F172A" } },
-              alignment: { horizontal: "center", vertical: "center" }
+              alignment: { horizontal: "center", vertical: "center", wrapText: true }
             };
           } else if (type === 'signature-sub') {
             cell.s = {
               font: { name: "Arial", sz: 8.5, italic: true, color: { rgb: "64748B" } },
-              alignment: { horizontal: "center", vertical: "center" }
+              alignment: { horizontal: "center", vertical: "center", wrapText: true }
             };
           } else if (type === 'signature-name') {
             cell.s = {
               font: { name: "Arial", sz: 10.5, bold: true, color: { rgb: "0F172A" } },
-              alignment: { horizontal: "center", vertical: "center" }
+              alignment: { horizontal: "center", vertical: "center", wrapText: true }
             };
           } else if (type === 'table-data-empty') {
             cell.s = {
               font: { name: "Arial", sz: 9.5, italic: true, color: { rgb: "64748B" } },
-              alignment: { horizontal: "left", vertical: "center" },
+              alignment: { horizontal: c === 0 ? "center" : "left", vertical: "center", wrapText: true },
               border: cellBordersNormal
             };
           }
@@ -2710,15 +2720,17 @@ export default function QualityPlanning({
       const heights: any[] = [];
       for (let r = 0; r < rowTracker.length; r++) {
         const rType = rowTracker[r]?.type;
-        if (rType === 'header-company' || rType === 'header-slogan' || rType === 'header-meta') heights.push({ hpt: 18 });
-        else if (rType === 'spacer') heights.push({ hpt: 8 });
+        if (rType === 'header-company' || rType === 'header-slogan' || rType === 'header-meta') heights.push({ hpt: 19 });
+        else if (rType === 'spacer') heights.push({ hpt: 10 });
         else if (rType === 'main-title') heights.push({ hpt: 30 });
-        else if (rType === 'main-subtitle') heights.push({ hpt: 18 });
-        else if (rType === 'section-heading') heights.push({ hpt: 24 });
-        else if (rType === 'table-header') heights.push({ hpt: 26 });
-        else if (rType === 'table-header-group') heights.push({ hpt: 22 });
-        else if (rType === 'spacer-sig') heights.push({ hpt: 45 });
-        else if (rType === 'signature-label' || rType === 'signature-name') heights.push({ hpt: 20 });
+        else if (rType === 'main-subtitle') heights.push({ hpt: 20 });
+        else if (rType === 'section-heading') heights.push({ hpt: 26 });
+        else if (rType === 'table-header') heights.push({ hpt: 28 });
+        else if (rType === 'table-header-group') heights.push({ hpt: 23 });
+        else if (rType === 'table-data-empty') heights.push({ hpt: 24 });
+        else if (rType === 'spacer-sig') heights.push({ hpt: 48 });
+        else if (rType === 'signature-label' || rType === 'signature-name') heights.push({ hpt: 24 });
+        else if (rType === 'signature-sub') heights.push({ hpt: 18 });
         else {
           let maxLines = 1;
           const rowData = aoaData[r] || [];
@@ -2729,12 +2741,12 @@ export default function QualityPlanning({
               const explicitLines = str.split('\n');
               let lineCount = 0;
               explicitLines.forEach(l => {
-                lineCount += Math.max(1, Math.ceil(l.length / Math.max(8, cWidth - 2)));
+                lineCount += Math.max(1, Math.ceil(l.length / Math.max(8, cWidth - 3)));
               });
               if (lineCount > maxLines) maxLines = lineCount;
             }
           });
-          heights.push({ hpt: Math.min(160, Math.max(22, maxLines * 16)) });
+          heights.push({ hpt: Math.min(180, Math.max(24, maxLines * 16 + 6)) });
         }
       }
       ws['!rows'] = heights;
@@ -3164,7 +3176,14 @@ export default function QualityPlanning({
 
 
     // =========================================================================
-    // SHEET 3: BẢNG TÁC VỤ CHẤT LƯỢNG & PHÂN CÔNG HÀNH ĐỘNG
+    // SHEET 3: GỘP TOÀN BỘ "KHU VỰC PHÂN BAN & QUẢN LÝ TÁC VỤ HÀNH ĐỘNG" (1 SHEET DUY NHẤT)
+    // Bao gồm 6 phân mục:
+    //   I.   Bảng Tác vụ Quản lý Chất lượng & Điều phối Đa thành viên (Tổng hợp)
+    //   II.  1. Công việc tồn đọng QMS (Backlogs)
+    //   III. 2. Biên bản khắc phục CAPA đang mở (Open CAPAs)
+    //   IV.  3. Dự án phát triển xe mới (PTSP)
+    //   V.   4. Kế hoạch phối hợp liên phòng ban (Coordinations)
+    //   VI.  5. Cải tiến kỹ thuật & Thay đổi vật liệu (ECO)
     // =========================================================================
     const aoaData3: any[][] = [];
     const rowTracker3: any[] = [];
@@ -3174,7 +3193,7 @@ export default function QualityPlanning({
       merges3.push({ s: { r: sr, c: sc }, e: { r: er, c: ec } });
     }
 
-    // Company Header
+    // Company Header (8 cột: 0..3 bên trái, 4..7 bên phải)
     aoaData3.push(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT", "", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "", "", ""]);
     rowTracker3.push({ type: 'header-company' });
     addMerge3(0, 0, 0, 3);
@@ -3192,31 +3211,32 @@ export default function QualityPlanning({
     addMerge3(2, 4, 2, 7);
 
     // Spacer
-    aoaData3.push(["", "", "", "", "", "", "", ""]);
+    aoaData3.push(new Array(8).fill(""));
     rowTracker3.push({ type: 'spacer' });
 
-    // Title
-    aoaData3.push([`BẢNG TÁC VỤ QUẢN LÝ CHẤT LƯỢNG & ĐIỀU PHỐI ĐA THÀNH VIÊN`, "", "", "", "", "", "", ""]);
+    // Main Title & Subtitle
+    aoaData3.push(["KHU VỰC PHÂN BAN & QUẢN LÝ TÁC VỤ HÀNH ĐỘNG CHẤT LƯỢNG (QUALITY ACTIONS TRACKER)", "", "", "", "", "", "", ""]);
     rowTracker3.push({ type: 'main-title' });
     addMerge3(4, 0, 4, 7);
 
-    aoaData3.push([`Hành động thực thi chu kỳ: ${curPeriodLabel} | QMS Workboard`, "", "", "", "", "", "", ""]);
+    aoaData3.push([`Hành động thực thi chu kỳ: ${curPeriodLabel} | Tổng hợp Tác vụ QMS • Tồn đọng • CAPA mở • PTSP • Phối hợp liên ban • Cải tiến kỹ thuật (ECO)`, "", "", "", "", "", "", ""]);
     rowTracker3.push({ type: 'main-subtitle' });
     addMerge3(5, 0, 5, 7);
 
     // Spacer
-    aoaData3.push(["", "", "", "", "", "", "", ""]);
+    aoaData3.push(new Array(8).fill(""));
     rowTracker3.push({ type: 'spacer' });
 
-    // Section Header
-    aoaData3.push(["DANH SÁCH CHI TIẾT CÁC TÁC VỤ CHẤT LƯỢNG KHẮC PHỤC (QMS ACTIONS LIST)", "", "", "", "", "", "", ""]);
-    rowTracker3.push({ type: 'section-heading' });
+    // -------------------------------------------------------------------------
+    // PHẦN I: DANH SÁCH TỔNG HỢP CÁC TÁC VỤ CHẤT LƯỢNG & ĐIỀU PHỐI ĐA THÀNH VIÊN
+    // -------------------------------------------------------------------------
+    aoaData3.push(["I. BẢNG TỔNG HỢP TÁC VỤ QUẢN LÝ CHẤT LƯỢNG & ĐIỀU PHỐI ĐA THÀNH VIÊN (QMS ACTIONS LIST)", "", "", "", "", "", "", ""]);
+    rowTracker3.push({ type: 'section-heading', bgColor: '0F172A' });
     addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
     aoaData3.push(["STT", "Mã tác vụ", "Chi tiết nhiệm vụ hành động / Tác vụ khắc phục", "Người chịu trách nhiệm", "Thời hạn hoàn thành", "Mức độ ưu tiên", "Trạng thái thực thi", "Phân nhóm QMS"]);
     rowTracker3.push({ type: 'table-header' });
 
-    // Filter tasks for current period (dynamically synced to UI board tasks)
     const currentTasks = currentMonthTasks;
 
     if (currentTasks.length === 0) {
@@ -3230,6 +3250,7 @@ export default function QualityPlanning({
         else if (item.section === 'capa') sectionText = "Hành động CAPA khắc phục";
         else if (item.section === 'ptsp') sectionText = "Phát triển mẫu xe mới (PTSP)";
         else if (item.section === 'coordination') sectionText = "Phối hợp liên bộ phận";
+        else if (item.section === 'eco') sectionText = "Cải tiến kỹ thuật (ECO)";
 
         const isCompleted = item.status === 'Completed' || item.status === 'Finished';
         const isInProgress = item.status === 'In_Progress' || item.status === 'In Progress' || item.status === 'Developing';
@@ -3254,167 +3275,59 @@ export default function QualityPlanning({
     aoaData3.push(new Array(8).fill(""));
     rowTracker3.push({ type: 'spacer' });
 
-    // Section VI: Endorsement/Ký duyệt
-    aoaData3.push(["Người lập biểu mẫu (KCS xác thực)", "", "Trưởng phòng QLCL (Thẩm duyệt số liệu)", "", "Ban Giám Đốc Nhà Máy (Xác nhận thông báo)", "", "", ""]);
-    rowTracker3.push({ type: 'signature-label' });
-    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 1);
-    addMerge3(aoaData3.length - 1, 2, aoaData3.length - 1, 3);
-    addMerge3(aoaData3.length - 1, 4, aoaData3.length - 1, 7);
+    // -------------------------------------------------------------------------
+    // PHẦN II: 1. CÔNG VIỆC TỒN ĐỌNG QMS (BACKLOGS)
+    // -------------------------------------------------------------------------
+    aoaData3.push(["II. 1. CÔNG VIỆC TỒN ĐỌNG QMS CHƯA HOÀN THÀNH - ĐANG TRONG TIẾN TRÌNH (QMS BACKLOGS)", "", "", "", "", "", "", ""]);
+    rowTracker3.push({ type: 'section-heading', bgColor: '1E293B' });
+    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
-    aoaData3.push(["(Bản điện tử phê chuẩn)", "", "(Đã duyệt ký trực tuyến)", "", "(Hồ sơ lưu trữ tự động)", "", "", ""]);
-    rowTracker3.push({ type: 'signature-sub' });
-    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 1);
-    addMerge3(aoaData3.length - 1, 2, aoaData3.length - 1, 3);
-    addMerge3(aoaData3.length - 1, 4, aoaData3.length - 1, 7);
+    aoaData3.push(["STT", "Mã tác vụ", "Chi tiết công việc tồn đọng / Chỉ đạo hành động dở dang", "Người phụ trách", "Thời hạn hoàn thành", "Mức độ ưu tiên", "Trạng thái thực thi", "Phân nhóm QMS"]);
+    rowTracker3.push({ type: 'table-header' });
 
-    aoaData3.push(["", "", "", "", "", "", "", ""]);
-    rowTracker3.push({ type: 'spacer-sig' });
-    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 1);
-    addMerge3(aoaData3.length - 1, 2, aoaData3.length - 1, 3);
-    addMerge3(aoaData3.length - 1, 4, aoaData3.length - 1, 7);
+    const backlogTasksForExport = currentMonthTasks.filter(t => t.section === 'backlog' && t.status !== 'Completed' && t.status !== 'Finished' && !t.title.includes('[Tự động OQC]'));
 
-    aoaData3.push(["Chuyên viên QMS Core", "", "NGUYỄN XUÂN THAO", "", "BAN GIÁM ĐỐC DKBIKE", "", "", ""]);
-    rowTracker3.push({ type: 'signature-name' });
-    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 1);
-    addMerge3(aoaData3.length - 1, 2, aoaData3.length - 1, 3);
-    addMerge3(aoaData3.length - 1, 4, aoaData3.length - 1, 7);
-
-    const colWidths3 = [
-      { wch: 6 },
-      { wch: 15 },
-      { wch: 55 },
-      { wch: 22 },
-      { wch: 16 },
-      { wch: 14 },
-      { wch: 20 },
-      { wch: 25 }
-    ];
-    const ws3 = XLSXStyle.utils.aoa_to_sheet(aoaData3);
-    styleSheet(ws3, rowTracker3, 8);
-    ws3['!merges'] = merges3;
-    ws3['!cols'] = colWidths3;
-    setRowHeights(ws3, rowTracker3, aoaData3, colWidths3);
-
-    // ==========================================
-    // SHEET 4: CÔNG VIỆC TỒN ĐỌNG QMS (Công việc chưa đạt 100%)
-    // ==========================================
-    const aoaData4: any[][] = [];
-    const rowTracker4: any[] = [];
-    const merges4: any[] = [];
-    function addMerge4(sr: number, sc: number, er: number, ec: number) {
-      merges4.push({ s: { r: sr, c: sc }, e: { r: er, c: ec } });
-    }
-    aoaData4.push(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT", "", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "", ""]);
-    rowTracker4.push({ type: 'header-company' });
-    addMerge4(0, 0, 0, 3); addMerge4(0, 4, 0, 6);
-
-    aoaData4.push(["Phòng: Quản lý Chất lượng (QLCL) - DK QMS", "", "", "", "Độc lập - Tự do - Hạnh phúc", "", ""]);
-    rowTracker4.push({ type: 'header-slogan' });
-    addMerge4(1, 0, 1, 3); addMerge4(1, 4, 1, 6);
-
-    aoaData4.push([`Hệ thống tracking: BM-DKB-BACKLOGS-${selectedMonth}`, "", "", "", dateStrLoc, "", ""]);
-    rowTracker4.push({ type: 'header-meta' });
-    addMerge4(2, 0, 2, 3); addMerge4(2, 4, 2, 6);
-
-    aoaData4.push(["", "", "", "", "", "", ""]);
-    rowTracker4.push({ type: 'spacer' });
-
-    aoaData4.push([`BÁO CÁO TỔNG HỢP CÁC CÔNG VIỆC CHẤT LƯỢNG TỒN ĐỌNG CHƯA HOÀN THÀNH`, "", "", "", "", "", ""]);
-    rowTracker4.push({ type: 'main-title' });
-    addMerge4(4, 0, 4, 6);
-
-    aoaData4.push([`Chu kỳ tổng hợp: ${curPeriodLabel} | QMS Backlog Core`, "", "", "", "", "", ""]);
-    rowTracker4.push({ type: 'main-subtitle' });
-    addMerge4(5, 0, 5, 6);
-
-    aoaData4.push(["", "", "", "", "", "", ""]);
-    rowTracker4.push({ type: 'spacer' });
-
-    aoaData4.push(["DANH SÁCH CÁC TÁC VỤ QMS CHƯA HOÀN THÀNH - ĐANG TRONG TIẾN TRÌNH", "", "", "", "", "", ""]);
-    rowTracker4.push({ type: 'section-heading' });
-    addMerge4(aoaData4.length - 1, 0, aoaData4.length - 1, 6);
-
-    aoaData4.push(["STT", "Mã tác vụ", "Chi tiết công việc tồn đọng / Chỉ đạo hành động dở dang", "Người phụ trách", "Thời hạn hoàn thành", "Mức ưu tiên", "Phân nhóm QMS"]);
-    rowTracker4.push({ type: 'table-header' });
-
-    // Lọc công việc tồn đọng từ currentMonthTasks đã được tối ưu hóa đồng bộ trực quan với UI (loại bỏ các công việc [Tự động OQC] theo yêu cầu của anh Thao)
-    const backlogTasks = currentMonthTasks.filter(t => t.section === 'backlog' && t.status !== 'Completed' && t.status !== 'Finished' && !t.title.includes('[Tự động OQC]'));
-
-    if (backlogTasks.length === 0) {
-      aoaData4.push(["-", "Tuyệt vời! Không có công việc tồn đọng dở dang nào chưa đạt trong kỳ này.", "", "", "", "", ""]);
-      rowTracker4.push({ type: 'table-data-empty' });
-      addMerge4(aoaData4.length - 1, 1, aoaData4.length - 1, 6);
+    if (backlogTasksForExport.length === 0) {
+      aoaData3.push(["-", "Tuyệt vời! Không có công việc tồn đọng dở dang nào chưa đạt trong kỳ này.", "", "", "", "", "", ""]);
+      rowTracker3.push({ type: 'table-data-empty' });
+      addMerge3(aoaData3.length - 1, 1, aoaData3.length - 1, 7);
     } else {
-      backlogTasks.forEach((item, idx) => {
-        let grStr = "Tồn đọng chung";
-        if (item.section === 'backlog') grStr = "Tồn đọng sụt sạt";
-        else if (item.section === 'capa') grStr = "Hành động CAPA khắc phục";
-        else if (item.section === 'ptsp') grStr = "Phát triển xe mới (PTSP)";
-        else if (item.section === 'coordination') grStr = "Phối hợp liên ban";
+      backlogTasksForExport.forEach((item, idx) => {
+        let grStr = "Tồn đọng sụt sạt";
+        if (item.modelOrSupplier) grStr = `Tồn đọng (${item.modelOrSupplier})`;
 
-        aoaData4.push([
+        const isInProgress = item.status === 'In_Progress' || item.status === 'In Progress' || item.status === 'Developing';
+        const statusText = isInProgress ? "Đang xử lý dở dang" : "Chờ kích hoạt xử lý";
+
+        aoaData3.push([
           idx + 1,
           item.id,
           item.title,
           item.assignee,
           item.deadline || "Trong kỳ",
           item.priority,
+          statusText,
           grStr
         ]);
-        rowTracker4.push({ type: 'table-data-log', pctVal: 30 });
+        rowTracker3.push({ type: 'table-data-log', pctVal: isInProgress ? 50 : 0 });
       });
     }
 
-    const colWidths4 = [{ wch: 6 }, { wch: 15 }, { wch: 55 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 25 }];
-    const ws4 = XLSXStyle.utils.aoa_to_sheet(aoaData4);
-    styleSheet(ws4, rowTracker4, 7);
-    ws4['!merges'] = merges4;
-    ws4['!cols'] = colWidths4;
-    setRowHeights(ws4, rowTracker4, aoaData4, colWidths4);
+    // Spacer
+    aoaData3.push(new Array(8).fill(""));
+    rowTracker3.push({ type: 'spacer' });
 
-    // ==========================================
-    // SHEET 5: BIÊN BẢN CAPA MỞ
-    // ==========================================
-    const aoaData5: any[][] = [];
-    const rowTracker5: any[] = [];
-    const merges5: any[] = [];
-    function addMerge5(sr: number, sc: number, er: number, ec: number) {
-      merges5.push({ s: { r: sr, c: sc }, e: { r: er, c: ec } });
-    }
-    aoaData5.push(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT", "", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "", "", ""]);
-    rowTracker5.push({ type: 'header-company' });
-    addMerge5(0, 0, 0, 3); addMerge5(0, 4, 0, 7);
+    // -------------------------------------------------------------------------
+    // PHẦN III: 2. BIÊN BẢN CAPA ĐANG MỞ (OPEN CAPAS)
+    // -------------------------------------------------------------------------
+    aoaData3.push(["III. 2. DANH SÁCH BIÊN BẢN KHẮC PHỤC CAPA ĐANG MỞ (OPEN CAPAS - TIÊU CHUẨN ISO 9001:2015)", "", "", "", "", "", "", ""]);
+    rowTracker3.push({ type: 'section-heading', bgColor: '4C0519' });
+    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
-    aoaData5.push(["Phòng: Quản lý Chất lượng (QLCL) - DK QMS", "", "", "", "Độc lập - Tự do - Hạnh phúc", "", "", ""]);
-    rowTracker5.push({ type: 'header-slogan' });
-    addMerge5(1, 0, 1, 3); addMerge5(1, 4, 1, 7);
+    aoaData3.push(["STT", "Mã biên bản", "Mô tả sự cố / Vấn đề phát hiện", "Cán bộ chịu trách nhiệm", "Thời hạn hoàn thành", "Phân tích nguyên nhân cốt lõi", "Biện pháp khắc phục chi tiết", "Trạng thái thực thi"]);
+    rowTracker3.push({ type: 'table-header' });
 
-    aoaData5.push([`Hệ thống tracking: BM-DKB-CAPA-OPEN-${selectedMonth}`, "", "", "", dateStrLoc, "", "", ""]);
-    rowTracker5.push({ type: 'header-meta' });
-    addMerge5(2, 0, 2, 3); addMerge5(2, 4, 2, 7);
-
-    aoaData5.push(["", "", "", "", "", "", "", ""]);
-    rowTracker5.push({ type: 'spacer' });
-
-    aoaData5.push([`DANH SÁCH CÁC BIÊN BẢN KHẮC PHỤC CAPA ĐANG MỞ (OPEN CAPAS)`, "", "", "", "", "", "", ""]);
-    rowTracker5.push({ type: 'main-title' });
-    addMerge5(4, 0, 4, 7);
-
-    aoaData5.push([`Phòng ngừa rủi ro dứt điểm | Đáp ứng tiêu chuẩn đánh giá ISO 9001:2015`, "", "", "", "", "", "", ""]);
-    rowTracker5.push({ type: 'main-subtitle' });
-    addMerge5(5, 0, 5, 7);
-
-    aoaData5.push(["", "", "", "", "", "", "", ""]);
-    rowTracker5.push({ type: 'spacer' });
-
-    aoaData5.push(["HỒ SƠ SỰ CỐ ĐANG IN-PROCESS BIỆN PHÁP KHẮC PHỤC CAPA CHƯA ĐÓNG HỒ SƠ", "", "", "", "", "", "", ""]);
-    rowTracker5.push({ type: 'section-heading' });
-    addMerge5(aoaData5.length - 1, 0, aoaData5.length - 1, 7);
-
-    aoaData5.push(["STT", "Mã biên bản", "Mô tả sự cố / Vấn đề phát hiện", "Cán bộ chịu trách nhiệm", "Thời hạn hoàn thành", "Phân tích nguyên nhân cốt lõi", "Biện pháp khắc phục chi tiết", "Trạng thái thực thi"]);
-    rowTracker5.push({ type: 'table-header' });
-
-    let activeCapas = [];
+    let activeCapas: any[] = [];
     try {
       const savedCapasStr = localStorage.getItem('dk_capas');
       if (savedCapasStr) {
@@ -3446,12 +3359,12 @@ export default function QualityPlanning({
     } catch (_) {}
 
     if (activeCapas.length === 0) {
-      aoaData5.push(["-", "Tuyệt vời! Không có hồ sơ CAPA lỗi sụt sạt nào chưa xử lý dứt điểm trong kỳ này.", "", "", "", "", "", ""]);
-      rowTracker5.push({ type: 'table-data-empty' });
-      addMerge5(aoaData5.length - 1, 1, aoaData5.length - 1, 7);
+      aoaData3.push(["-", "Tuyệt vời! Không có hồ sơ CAPA lỗi sụt sạt nào chưa xử lý dứt điểm trong kỳ này.", "", "", "", "", "", ""]);
+      rowTracker3.push({ type: 'table-data-empty' });
+      addMerge3(aoaData3.length - 1, 1, aoaData3.length - 1, 7);
     } else {
       activeCapas.forEach((item, idx) => {
-        aoaData5.push([
+        aoaData3.push([
           idx + 1,
           item.CAPAID || item.id,
           item.Issue || item.title || "Sụt sạt lắp ráp",
@@ -3459,89 +3372,52 @@ export default function QualityPlanning({
           item.DueDate || item.targetDate || "Trong chu kỳ",
           item.RootCause || item.rootCause || "Chờ phân tích 5-Why",
           item.Correction || item.actions || item.CorrectiveAction || "Đang rà soát biện pháp",
-          item.Status || "Đang mở"
+          item.Status || item.status || "Đang mở"
         ]);
-        rowTracker5.push({ type: 'table-data-supplier-plan' });
+        rowTracker3.push({ type: 'table-data-supplier-plan', pctVal: 30 });
       });
     }
 
-    const colWidths5 = [{ wch: 6 }, { wch: 16 }, { wch: 42 }, { wch: 22 }, { wch: 16 }, { wch: 38 }, { wch: 48 }, { wch: 16 }];
-    const ws5 = XLSXStyle.utils.aoa_to_sheet(aoaData5);
-    styleSheet(ws5, rowTracker5, 8);
-    ws5['!merges'] = merges5;
-    ws5['!cols'] = colWidths5;
-    setRowHeights(ws5, rowTracker5, aoaData5, colWidths5);
+    // Spacer
+    aoaData3.push(new Array(8).fill(""));
+    rowTracker3.push({ type: 'spacer' });
 
-    // ==========================================
-    // SHEET 6: PHÁT TRIỂN XE MỚI (PTSP)
-    // ==========================================
-    const aoaData6: any[][] = [];
-    const rowTracker6: any[] = [];
-    const merges6: any[] = [];
-    function addMerge6(sr: number, sc: number, er: number, ec: number) {
-      merges6.push({ s: { r: sr, c: sc }, e: { r: er, c: ec } });
-    }
-    aoaData6.push(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT", "", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "", ""]);
-    rowTracker6.push({ type: 'header-company' });
-    addMerge6(0, 0, 0, 3); addMerge6(0, 4, 0, 6);
+    // -------------------------------------------------------------------------
+    // PHẦN IV: 3. DỰ ÁN PHÁT TRIỂN XE MỚI (PTSP - NEW VEHICLES)
+    // -------------------------------------------------------------------------
+    aoaData3.push(["IV. 3. DỰ ÁN PHÁT TRIỂN MẪU XE MỚI & TIẾN ĐỘ CHẠY MẪU HÀNG LOẠT (PTSP - R&D NEW VEHICLES)", "", "", "", "", "", "", ""]);
+    rowTracker3.push({ type: 'section-heading', bgColor: '1E1B4B' });
+    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
-    aoaData6.push(["Phòng: Quản lý Chất lượng (QLCL) - DK QMS", "", "", "", "Độc lập - Tự do - Hạnh phúc", "", ""]);
-    rowTracker6.push({ type: 'header-slogan' });
-    addMerge6(1, 0, 1, 3); addMerge6(1, 4, 1, 6);
+    aoaData3.push(["STT", "Mã nhiệm vụ", "Nội dung công việc phát triển / Chạy mẫu thử nghiệm xe mới", "Kỹ sư phụ trách", "Thời hạn hoàn thành", "Mức độ ưu tiên", "Trạng thái thực thi", "Dòng xe áp dụng"]);
+    rowTracker3.push({ type: 'table-header' });
 
-    aoaData6.push([`Hệ thống tracking: BM-DKB-PTSP-NEW-${selectedMonth}`, "", "", "", dateStrLoc, "", ""]);
-    rowTracker6.push({ type: 'header-meta' });
-    addMerge6(2, 0, 2, 3); addMerge6(2, 4, 2, 6);
+    const ptspTasksForExport = currentMonthTasks.filter(t => t.section === 'ptsp');
 
-    aoaData6.push(["", "", "", "", "", "", ""]);
-    rowTracker6.push({ type: 'spacer' });
-
-    aoaData6.push([`HỒ SƠ KHẢO SÁT & BÁO CÁO PHÁT TRIỂN MẪU XE MỚI (PTSP NEW VEHICLES)`, "", "", "", "", "", ""]);
-    rowTracker6.push({ type: 'main-title' });
-    addMerge6(4, 0, 4, 6);
-
-    aoaData6.push([`Kế hoạch thử nghiệm chạy thực nghiệm & kiểm định chất lượng | QMS Innovation`, "", "", "", "", "", ""]);
-    rowTracker6.push({ type: 'main-subtitle' });
-    addMerge6(5, 0, 5, 6);
-
-    aoaData6.push(["", "", "", "", "", "", ""]);
-    rowTracker6.push({ type: 'spacer' });
-
-    aoaData6.push(["DANH SÁCH DỰ ÁN PHÁT TRIỂN XE MỚI (PTSP) VÀ TIẾN ĐỘ CHẠY MẪU HÀNG LOẠT", "", "", "", "", "", ""]);
-    rowTracker6.push({ type: 'section-heading' });
-    addMerge6(aoaData6.length - 1, 0, aoaData6.length - 1, 6);
-
-    aoaData6.push(["STT", "Mã nhiệm vụ", "Nội dung công việc phát triển / Chạy mẫu thử nghiệm xe mới", "Kỹ sư phụ trách", "Thời hạn hoàn thành", "Mức độ ưu tiên", "Trạng thái thực thi"]);
-    rowTracker6.push({ type: 'table-header' });
-
-    const ptspTasks = currentMonthTasks.filter(t => t.section === 'ptsp');
-
-    if (ptspTasks.length === 0) {
-      aoaData6.push(["-", "Chưa phát sinh công việc quản trị phát triển xe mới (PTSP) nào cần thực hiện trong kỳ kế hoạch này.", "", "", "", "", ""]);
-      rowTracker6.push({ type: 'table-data-empty' });
-      addMerge6(aoaData6.length - 1, 1, aoaData6.length - 1, 6);
+    if (ptspTasksForExport.length === 0) {
+      aoaData3.push(["-", "Chưa phát sinh công việc quản trị phát triển xe mới (PTSP) nào cần thực hiện trong kỳ kế hoạch này.", "", "", "", "", "", ""]);
+      rowTracker3.push({ type: 'table-data-empty' });
+      addMerge3(aoaData3.length - 1, 1, aoaData3.length - 1, 7);
     } else {
-      const groups: Record<string, QualityTask[]> = {};
-      ptspTasks.forEach(task => {
+      const ptspGroups: Record<string, QualityTask[]> = {};
+      ptspTasksForExport.forEach(task => {
         let model = (task.modelOrSupplier || '').trim();
         if (model.includes('|')) {
           model = model.split('|')[0].trim();
         }
         const groupName = model ? `Dòng xe mới ${model}` : 'Chung / Mẫu xe thử nghiệm khác';
-        if (!groups[groupName]) {
-          groups[groupName] = [];
+        if (!ptspGroups[groupName]) {
+          ptspGroups[groupName] = [];
         }
-        groups[groupName].push(task);
+        ptspGroups[groupName].push(task);
       });
 
-      // Sắp xếp các nhóm
-      const orderedKeys = Object.keys(groups).sort((a, b) => {
+      const orderedPtspKeys = Object.keys(ptspGroups).sort((a, b) => {
         if (a.startsWith('Chung')) return 1;
         if (b.startsWith('Chung')) return -1;
         return a.localeCompare(b, 'vi');
       });
 
-      // Sắp xếp các tác vụ trong nhóm theo deadline từ cũ đến mới
       const sortTasksByDeadline = (taskList: QualityTask[]) => {
         return [...taskList].sort((a, b) => {
           const dA = a.deadline || '';
@@ -3551,160 +3427,91 @@ export default function QualityPlanning({
           if (!dB) return -1;
           const dateA = new Date(dA).getTime();
           const dateB = new Date(dB).getTime();
-          const isAValid = !isNaN(dateA);
-          const isBValid = !isNaN(dateB);
-          if (isAValid && isBValid) {
-            return dateA - dateB;
-          }
+          if (!isNaN(dateA) && !isNaN(dateB)) return dateA - dateB;
           return dA.localeCompare(dB);
         });
       };
 
-      let stt = 1;
-      orderedKeys.forEach(groupKey => {
-        const sortedGroupTasks = sortTasksByDeadline(groups[groupKey]);
+      let sttPtsp = 1;
+      orderedPtspKeys.forEach(groupKey => {
+        const sortedGroupTasks = sortTasksByDeadline(ptspGroups[groupKey]);
         if (sortedGroupTasks.length > 0) {
-          // Thêm hàng Group Header
-          aoaData6.push([groupKey.toUpperCase(), "", "", "", "", "", ""]);
-          rowTracker6.push({ type: 'table-header-group' });
-          addMerge6(aoaData6.length - 1, 0, aoaData6.length - 1, 6);
+          aoaData3.push([groupKey.toUpperCase(), "", "", "", "", "", "", ""]);
+          rowTracker3.push({ type: 'table-header-group' });
+          addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
           sortedGroupTasks.forEach(item => {
-            aoaData6.push([
-              stt++,
+            const isCompleted = item.status === 'Completed';
+            let rawModel = (item.modelOrSupplier || '').trim();
+            if (rawModel.includes('|')) rawModel = rawModel.split('|')[0].trim();
+            aoaData3.push([
+              sttPtsp++,
               item.id,
               item.title,
               item.assignee,
               item.deadline || "Chu kỳ",
               item.priority,
-              item.status === 'Completed' ? "Đã đạt" : "Đang thực hiện"
+              isCompleted ? "Đã đạt" : "Đang thực hiện",
+              rawModel || "Mẫu xe mới"
             ]);
-            rowTracker6.push({ type: 'table-data-plan-target' });
+            rowTracker3.push({ type: 'table-data-log', pctVal: isCompleted ? 100 : 50 });
           });
         }
       });
     }
 
-    const colWidths6 = [{ wch: 6 }, { wch: 15 }, { wch: 55 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 20 }];
-    const ws6 = XLSXStyle.utils.aoa_to_sheet(aoaData6);
-    styleSheet(ws6, rowTracker6, 7);
-    ws6['!merges'] = merges6;
-    ws6['!cols'] = colWidths6;
-    setRowHeights(ws6, rowTracker6, aoaData6, colWidths6);
+    // Spacer
+    aoaData3.push(new Array(8).fill(""));
+    rowTracker3.push({ type: 'spacer' });
 
-    // ==========================================
-    // SHEET 7: PHỐI HỢP LIÊN BAN
-    // ==========================================
-    const aoaData7: any[][] = [];
-    const rowTracker7: any[] = [];
-    const merges7: any[] = [];
-    function addMerge7(sr: number, sc: number, er: number, ec: number) {
-      merges7.push({ s: { r: sr, c: sc }, e: { r: er, c: ec } });
-    }
-    aoaData7.push(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT", "", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "", ""]);
-    rowTracker7.push({ type: 'header-company' });
-    addMerge7(0, 0, 0, 3); addMerge7(0, 4, 0, 6);
+    // -------------------------------------------------------------------------
+    // PHẦN V: 4. KẾ HOẠCH PHỐI HỢP LIÊN PHÒNG BAN (COORDINATIONS)
+    // -------------------------------------------------------------------------
+    aoaData3.push(["V. 4. KẾ HOẠCH PHỐI HỢP LIÊN PHÒNG BAN & GIÁM SÁT SẢN XUẤT SONG HÀNH (COORDINATIONS)", "", "", "", "", "", "", ""]);
+    rowTracker3.push({ type: 'section-heading', bgColor: '064E3B' });
+    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
-    aoaData7.push(["Phòng: Quản lý Chất lượng (QLCL) - DK QMS", "", "", "", "Độc lập - Tự do - Hạnh phúc", "", ""]);
-    rowTracker7.push({ type: 'header-slogan' });
-    addMerge7(1, 0, 1, 3); addMerge7(1, 4, 1, 6);
+    aoaData3.push(["STT", "Mã nhiệm vụ", "Nội dung chỉ định phối hợp liên phòng ban", "Cán bộ chịu trách nhiệm chính", "Thời hạn thực thi", "Mức độ ưu tiên", "Trạng thái phối hợp", "Đơn vị / Tham chiếu"]);
+    rowTracker3.push({ type: 'table-header' });
 
-    aoaData7.push([`Hệ thống tracking: BM-DKB-COORDS-${selectedMonth}`, "", "", "", dateStrLoc, "", ""]);
-    rowTracker7.push({ type: 'header-meta' });
-    addMerge7(2, 0, 2, 3); addMerge7(2, 4, 2, 6);
+    const coordinationTasksForExport = currentMonthTasks.filter(t => t.section === 'coordination');
 
-    aoaData7.push(["", "", "", "", "", "", ""]);
-    rowTracker7.push({ type: 'spacer' });
-
-    aoaData7.push([`KẾ HOẠCH PHỐI HỢP LIÊN PHÒNG BAN & GIÁM SÁT SẢN XUẤT (COORDINATIONS)`, "", "", "", "", "", ""]);
-    rowTracker7.push({ type: 'main-title' });
-    addMerge7(4, 0, 4, 6);
-
-    aoaData7.push([`Chỉ đạo đồng hành liên thông giữa Công nghệ, Kho vận và phòng kiểm định QLCL | DKBike`, "", "", "", "", "", ""]);
-    rowTracker7.push({ type: 'main-subtitle' });
-    addMerge7(5, 0, 5, 6);
-
-    aoaData7.push(["", "", "", "", "", "", ""]);
-    rowTracker7.push({ type: 'spacer' });
-
-    aoaData7.push(["DANH SÁCH HOẠT ĐỘNG PHỐI HỢP LIÊN BAN VÀ BIỆN PHÁP CHẤT LƯỢNG SONG HÀNH", "", "", "", "", "", ""]);
-    rowTracker7.push({ type: 'section-heading' });
-    addMerge7(aoaData7.length - 1, 0, aoaData7.length - 1, 6);
-
-    aoaData7.push(["STT", "Mã nhiệm vụ", "Nội dung chỉ định phối hợp liên phòng ban", "Cán bộ chịu trách nhiệm chính", "Thời hạn thực thi", "Mức độ ưu tiên", "Trạng thái phối hợp"]);
-    rowTracker7.push({ type: 'table-header' });
-
-    const coordinationTasks = currentMonthTasks.filter(t => t.section === 'coordination');
-
-    if (coordinationTasks.length === 0) {
-      aoaData7.push(["-", "Không phát sinh nhiệm vụ phối hợp liên ban nào đặc biệt trong chu kỳ này.", "", "", "", "", ""]);
-      rowTracker7.push({ type: 'table-data-empty' });
-      addMerge7(aoaData7.length - 1, 1, aoaData7.length - 1, 6);
+    if (coordinationTasksForExport.length === 0) {
+      aoaData3.push(["-", "Không phát sinh nhiệm vụ phối hợp liên ban nào đặc biệt trong chu kỳ này.", "", "", "", "", "", ""]);
+      rowTracker3.push({ type: 'table-data-empty' });
+      addMerge3(aoaData3.length - 1, 1, aoaData3.length - 1, 7);
     } else {
-      coordinationTasks.forEach((item, idx) => {
-        aoaData7.push([
+      coordinationTasksForExport.forEach((item, idx) => {
+        const isCompleted = item.status === 'Completed' || item.status === 'Finished';
+        aoaData3.push([
           idx + 1,
           item.id,
           item.title,
           item.assignee,
           item.deadline || "Chu kỳ",
           item.priority,
-          item.status === 'Completed' ? "Đã đạt" : "Đang thực hiện"
+          isCompleted ? "Đã đạt" : "Đang thực hiện",
+          item.modelOrSupplier || "Liên phòng ban"
         ]);
-        rowTracker7.push({ type: 'table-data-log', pctVal: item.status === 'Completed' ? 100 : 50 });
+        rowTracker3.push({ type: 'table-data-log', pctVal: isCompleted ? 100 : 50 });
       });
     }
 
-    const colWidths7 = [{ wch: 6 }, { wch: 15 }, { wch: 55 }, { wch: 22 }, { wch: 16 }, { wch: 14 }, { wch: 20 }];
-    const ws7 = XLSXStyle.utils.aoa_to_sheet(aoaData7);
-    styleSheet(ws7, rowTracker7, 7);
-    ws7['!merges'] = merges7;
-    ws7['!cols'] = colWidths7;
-    setRowHeights(ws7, rowTracker7, aoaData7, colWidths7);
+    // Spacer
+    aoaData3.push(new Array(8).fill(""));
+    rowTracker3.push({ type: 'spacer' });
 
-    // ==========================================
-    // SHEET 8: CẢI TIẾN KỸ THUẬT (ECO)
-    // ==========================================
-    const aoaData8: any[][] = [];
-    const rowTracker8: any[] = [];
-    const merges8: any[] = [];
-    function addMerge8(sr: number, sc: number, er: number, ec: number) {
-      merges8.push({ s: { r: sr, c: sc }, e: { r: er, c: ec } });
-    }
-    aoaData8.push(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT", "", "", "", "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "", "", ""]);
-    rowTracker8.push({ type: 'header-company' });
-    addMerge8(0, 0, 0, 3); addMerge8(0, 4, 0, 7);
+    // -------------------------------------------------------------------------
+    // PHẦN VI: 5. CẢI TIẾN KỸ THUẬT & THAY ĐỔI VẬT LIỆU (ECO)
+    // -------------------------------------------------------------------------
+    aoaData3.push(["VI. 5. DANH SÁCH CHI TIẾT CÁC CẢI TIẾN KỸ THUẬT & THAY ĐỔI VẬT LIỆU (ENGINEERING CHANGE ORDERS - ECO)", "", "", "", "", "", "", ""]);
+    rowTracker3.push({ type: 'section-heading', bgColor: '083344' });
+    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
-    aoaData8.push(["Phòng: Quản lý Chất lượng (QLCL) - DK QMS", "", "", "", "Độc lập - Tự do - Hạnh phúc", "", "", ""]);
-    rowTracker8.push({ type: 'header-slogan' });
-    addMerge8(1, 0, 1, 3); addMerge8(1, 4, 1, 7);
+    aoaData3.push(["STT", "Mã ECO / ECR", "Nội dung cải tiến kỹ thuật / Thay đổi vật liệu", "Mảng cải tiến", "Dòng xe áp dụng", "Kỹ sư đề đạt", "Ngày thử nghiệm áp dụng", "Trạng thái"]);
+    rowTracker3.push({ type: 'table-header' });
 
-    aoaData8.push([`Hệ thống tracking: BM-DKB-ECO-NEW-${selectedMonth}`, "", "", "", dateStrLoc, "", "", ""]);
-    rowTracker8.push({ type: 'header-meta' });
-    addMerge8(2, 0, 2, 3); addMerge8(2, 4, 2, 7);
-
-    aoaData8.push(["", "", "", "", "", "", "", ""]);
-    rowTracker8.push({ type: 'spacer' });
-
-    aoaData8.push([`TỔNG HỢP CÁC PHÁT KIẾN CẢI TIẾN KỸ THUẬT (ENGINEERING CHANGE ORDERS - ECO)`, "", "", "", "", "", "", ""]);
-    rowTracker8.push({ type: 'main-title' });
-    addMerge8(4, 0, 4, 7);
-
-    aoaData8.push([`Theo dõi thực thi cải tiến, cải tiến công nghệ, khuôn mẫu ráp dây chuyền DKBike`, "", "", "", "", "", "", ""]);
-    rowTracker8.push({ type: 'main-subtitle' });
-    addMerge8(5, 0, 5, 7);
-
-    aoaData8.push(["", "", "", "", "", "", "", ""]);
-    rowTracker8.push({ type: 'spacer' });
-
-    aoaData8.push(["DANH SÁCH CHI TIẾT CÁC CẢI TIẾN KỸ THUẬT ECO / ĐÁNH GIÁ SẢN LƢỢNG THỰC ĐỊA", "", "", "", "", "", "", ""]);
-    rowTracker8.push({ type: 'section-heading' });
-    addMerge8(8, 0, 8, 7);
-
-    aoaData8.push(["STT", "Mã ECO / ECR", "Nội dung cải tiến kỹ thuật / Thay đổi vật liệu", "Mảng cải tiến", "Dòng xe áp dụng", "Kỹ sư đề đạt", "Ngày thử nghiệm áp dụng", "Trạng thái"]);
-    rowTracker8.push({ type: 'table-header' });
-
-    let activeEcos = [];
+    let activeEcos: any[] = [];
     try {
       const savedEcosStr = localStorage.getItem('dk_ecos');
       if (savedEcosStr) {
@@ -3715,13 +3522,14 @@ export default function QualityPlanning({
       }
     } catch (_) {}
 
-    if (ecoTasks.length === 0) {
-      aoaData8.push(["-", "Không có hoạt động hay hồ sơ thay đổi kỹ thuật ECO nào phát sinh trong kỳ kế hoạch này.", "", "", "", "", "", ""]);
-      rowTracker8.push({ type: 'table-data-empty' });
-      addMerge8(aoaData8.length - 1, 1, aoaData8.length - 1, 7);
+    const ecoTasksForExport = currentMonthTasks.filter(t => t.section === 'eco');
+
+    if (ecoTasksForExport.length === 0) {
+      aoaData3.push(["-", "Không có hoạt động hay hồ sơ thay đổi kỹ thuật ECO nào phát sinh trong kỳ kế hoạch này.", "", "", "", "", "", ""]);
+      rowTracker3.push({ type: 'table-data-empty' });
+      addMerge3(aoaData3.length - 1, 1, aoaData3.length - 1, 7);
     } else {
-      // Resolve all tasks first
-      const resolvedList = ecoTasks.map(task => {
+      const resolvedList = ecoTasksForExport.map(task => {
         let ecrId = task.id;
         let content = task.title;
         let category = "Cải tiến kỹ thuật";
@@ -3756,65 +3564,54 @@ export default function QualityPlanning({
         };
       });
 
-      // Group by model
-      const groups: Record<string, typeof resolvedList> = {};
+      const ecoGroups: Record<string, typeof resolvedList> = {};
       resolvedList.forEach(item => {
         const m = item.model;
         const groupName = (m && m !== "Toàn bộ") ? `Dòng xe ${m}` : 'Chung / Áp dụng toàn bộ';
-        if (!groups[groupName]) {
-          groups[groupName] = [];
+        if (!ecoGroups[groupName]) {
+          ecoGroups[groupName] = [];
         }
-        groups[groupName].push(item);
+        ecoGroups[groupName].push(item);
       });
 
-      // Sort group keys
-      const orderedKeys = Object.keys(groups).sort((a, b) => {
+      const orderedEcoKeys = Object.keys(ecoGroups).sort((a, b) => {
         if (a.startsWith('Chung')) return 1;
         if (b.startsWith('Chung')) return -1;
         return a.localeCompare(b, 'vi');
       });
 
-      // Date parser helper for ascending chronological sorting
       const parseDateToTime = (str: string) => {
         if (!str) return Infinity;
         const clean = str.trim();
         const dmy = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
-        if (dmy) {
-          return new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1])).getTime();
-        }
+        if (dmy) return new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1])).getTime();
         const ymd = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-        if (ymd) {
-          return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])).getTime();
-        }
+        if (ymd) return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])).getTime();
         const t = Date.parse(clean);
         return isNaN(t) ? Infinity : t;
       };
 
-      // Sort tasks within each group from oldest to newest
       const sortTasksByApplyDate = (list: typeof resolvedList) => {
         return [...list].sort((a, b) => {
           const tA = parseDateToTime(a.applyDate);
           const tB = parseDateToTime(b.applyDate);
-          if (tA !== tB) {
-            return tA - tB;
-          }
+          if (tA !== tB) return tA - tB;
           return a.applyDate.localeCompare(b.applyDate);
         });
       };
 
-      let stt = 1;
-      orderedKeys.forEach(groupKey => {
-        const sortedGroupTasks = sortTasksByApplyDate(groups[groupKey]);
+      let sttEco = 1;
+      orderedEcoKeys.forEach(groupKey => {
+        const sortedGroupTasks = sortTasksByApplyDate(ecoGroups[groupKey]);
         if (sortedGroupTasks.length > 0) {
-          // Add group header row
-          aoaData8.push([groupKey.toUpperCase(), "", "", "", "", "", "", ""]);
-          rowTracker8.push({ type: 'table-header-group' });
-          addMerge8(aoaData8.length - 1, 0, aoaData8.length - 1, 7);
+          aoaData3.push([groupKey.toUpperCase(), "", "", "", "", "", "", ""]);
+          rowTracker3.push({ type: 'table-header-group' });
+          addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 7);
 
-          // Add each item in group
           sortedGroupTasks.forEach(item => {
-            aoaData8.push([
-              stt++,
+            const isApplied = item.statusStr.toLowerCase().includes('đã áp dụng') || item.statusStr.toLowerCase().includes('hoàn thành');
+            aoaData3.push([
+              sttEco++,
               item.ecrId,
               item.content,
               item.category,
@@ -3823,31 +3620,66 @@ export default function QualityPlanning({
               item.applyDate,
               item.statusStr
             ]);
-            rowTracker8.push({ type: 'table-data-supplier-plan' });
+            rowTracker3.push({ type: 'table-data-supplier-plan', pctVal: isApplied ? 100 : 50 });
           });
         }
       });
     }
 
-    const colWidths8 = [{ wch: 6 }, { wch: 16 }, { wch: 48 }, { wch: 22 }, { wch: 18 }, { wch: 22 }, { wch: 16 }, { wch: 18 }];
-    const ws8 = XLSXStyle.utils.aoa_to_sheet(aoaData8);
-    styleSheet(ws8, rowTracker8, 8);
-    ws8['!merges'] = merges8;
-    ws8['!cols'] = colWidths8;
-    setRowHeights(ws8, rowTracker8, aoaData8, colWidths8);
+    // Spacer
+    aoaData3.push(new Array(8).fill(""));
+    rowTracker3.push({ type: 'spacer' });
+
+    // -------------------------------------------------------------------------
+    // KHỐI CHỮ KÝ PHÊ DUYỆT CUỐI TRANG (Độ rộng gộp cột 0..1 = 36 ký tự, không mất chữ)
+    // -------------------------------------------------------------------------
+    aoaData3.push(["Người lập biểu mẫu (KCS xác thực)", "", "Trưởng phòng QLCL (Thẩm duyệt số liệu)", "", "", "Ban Giám Đốc Nhà Máy (Xác nhận thông báo)", "", ""]);
+    rowTracker3.push({ type: 'signature-label' });
+    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 1);
+    addMerge3(aoaData3.length - 1, 2, aoaData3.length - 1, 4);
+    addMerge3(aoaData3.length - 1, 5, aoaData3.length - 1, 7);
+
+    aoaData3.push(["(Bản điện tử phê chuẩn)", "", "(Đã duyệt ký trực tuyến)", "", "", "(Hồ sơ lưu trữ tự động)", "", ""]);
+    rowTracker3.push({ type: 'signature-sub' });
+    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 1);
+    addMerge3(aoaData3.length - 1, 2, aoaData3.length - 1, 4);
+    addMerge3(aoaData3.length - 1, 5, aoaData3.length - 1, 7);
+
+    aoaData3.push(["", "", "", "", "", "", "", ""]);
+    rowTracker3.push({ type: 'spacer-sig' });
+    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 1);
+    addMerge3(aoaData3.length - 1, 2, aoaData3.length - 1, 4);
+    addMerge3(aoaData3.length - 1, 5, aoaData3.length - 1, 7);
+
+    aoaData3.push(["Chuyên viên QMS Core", "", "NGUYỄN XUÂN THAO", "", "", "BAN GIÁM ĐỐC DKBIKE", "", ""]);
+    rowTracker3.push({ type: 'signature-name' });
+    addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 1);
+    addMerge3(aoaData3.length - 1, 2, aoaData3.length - 1, 4);
+    addMerge3(aoaData3.length - 1, 5, aoaData3.length - 1, 7);
+
+    const colWidths3 = [
+      { wch: 8 },
+      { wch: 28 },
+      { wch: 58 },
+      { wch: 26 },
+      { wch: 22 },
+      { wch: 36 },
+      { wch: 44 },
+      { wch: 28 }
+    ];
+    const ws3 = XLSXStyle.utils.aoa_to_sheet(aoaData3);
+    styleSheet(ws3, rowTracker3, 8);
+    ws3['!merges'] = merges3;
+    ws3['!cols'] = colWidths3;
+    setRowHeights(ws3, rowTracker3, aoaData3, colWidths3);
 
     // ==========================================
-    // SAVE WORKBOOK (Đầy đủ 8 tabs đúng như anh Thao thiết kế)
+    // SAVE WORKBOOK (3 Sheets: Lắp ráp & Cung ứng | Kế hoạch QMS Auto | Bảng Tác vụ QMS)
     // ==========================================
     const wb = XLSXStyle.utils.book_new();
     XLSXStyle.utils.book_append_sheet(wb, ws1, "Lắp ráp & Cung ứng");
     XLSXStyle.utils.book_append_sheet(wb, ws2, "Kế hoạch QMS Auto");
     XLSXStyle.utils.book_append_sheet(wb, ws3, "Bảng Tác vụ QMS");
-    XLSXStyle.utils.book_append_sheet(wb, ws4, "Công việc tồn đọng QMS");
-    XLSXStyle.utils.book_append_sheet(wb, ws5, "Biên bản CAPA mở");
-    XLSXStyle.utils.book_append_sheet(wb, ws6, "Phát triển xe mới PTSP");
-    XLSXStyle.utils.book_append_sheet(wb, ws7, "Phối hợp liên ban");
-    XLSXStyle.utils.book_append_sheet(wb, ws8, "Cải tiến kỹ thuật (ECO)");
     XLSXStyle.writeFile(wb, `DKBike_KE_HOACH_QMS_${planningMode === 'weekly' ? `TUAN_${selectedWeek}` : `THANG_${selectedMonth}`}_${selectedYear}.xlsx`);
   };
 
