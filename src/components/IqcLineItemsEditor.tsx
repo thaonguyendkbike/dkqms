@@ -36,7 +36,7 @@ const IqcLineItemsEditor: React.FC<IqcLineItemsEditorProps> = ({ items, onChange
   const applyPaste = (mode: 'replace' | 'append') => {
     const parsed = parseEcountVoucherDetail(pasteText);
     if (parsed.length === 0) {
-      alert('Không nhận diện được dòng linh kiện nào. Anh vui lòng copy các dòng theo thứ tự: Mã hàng | Tên mặt hàng | Đơn vị | Số lượng | Gia mua | Thành tiền | Ghi chú | Q. lý rồi dán lại.');
+      alert('Không nhận diện được dòng linh kiện nào. Anh vui lòng copy các dòng theo thứ tự: STT | Mã hàng | Tên mặt hàng | Đơn vị | Số lượng | Gia mua | Thành tiền | Ghi chú | Q. lý rồi dán lại.');
       return;
     }
     const merged = mode === 'append' ? [...items, ...parsed] : parsed;
@@ -133,12 +133,12 @@ const IqcLineItemsEditor: React.FC<IqcLineItemsEditorProps> = ({ items, onChange
       {showPaste && (
         <div className="bg-white border border-dashed border-indigo-300 rounded-lg p-2 space-y-1.5">
           <div className="text-[10px] font-bold text-indigo-800 bg-indigo-50/70 px-2 py-1 rounded border border-indigo-100">
-            Thứ tự cột chuẩn khi Copy/Paste: <span className="font-mono text-indigo-950">Mã hàng &rarr; Tên mặt hàng &rarr; Đơn vị &rarr; Số lượng &rarr; Gia mua &rarr; Thành tiền &rarr; Ghi chú &rarr; Q. lý</span>
+            Thứ tự cột chuẩn khi Copy/Paste: <span className="font-mono text-indigo-950">STT &rarr; Mã hàng &rarr; Tên mặt hàng &rarr; Đơn vị &rarr; Số lượng &rarr; Gia mua &rarr; Thành tiền &rarr; Ghi chú &rarr; Q. lý</span> <span className="text-slate-500 font-normal">(Tự động bỏ mã L777777777 Chi phí khác)</span>
           </div>
           <textarea
             value={pasteText}
             onChange={e => setPasteText(e.target.value)}
-            placeholder={'Bôi đen các dòng chi tiết linh kiện (có hoặc không có dòng tiêu đề) → Ctrl+C → dán vào đây (Ctrl+V).\nThứ tự cột: Mã hàng\tTên mặt hàng\tĐơn vị\tSố lượng\tGia mua\tThành tiền\tGhi chú\tQ. lý'}
+            placeholder={'Bôi đen các dòng chi tiết linh kiện (có hoặc không có dòng tiêu đề) → Ctrl+C → dán vào đây (Ctrl+V).\nThứ tự cột: STT\tMã hàng\tTên mặt hàng\tĐơn vị\tSố lượng\tGia mua\tThành tiền\tGhi chú\tQ. lý'}
             className="w-full h-24 text-[11px] font-mono border border-slate-200 rounded p-1.5 focus:outline-none focus:border-indigo-500"
           />
           <div className="flex justify-end gap-1.5">

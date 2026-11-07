@@ -48,11 +48,21 @@ const parseNum = (raw: string | undefined): number => {
   return isNaN(n) ? 0 : n;
 };
 
+/** Kiểm tra dòng chi phí khác trên phiếu Ecount (mã L777777777 / Chi phí khác) cần loại bỏ tự động */
+export const isExcludedEcountExpenseLine = (code: string, name: string): boolean => {
+  const c = (code || '').trim().toUpperCase();
+  const n = (name || '').trim().toLowerCase();
+  if (c === 'L777777777' || c.startsWith('L7777777')) return true;
+  if (n.includes('l777777777')) return true;
+  if (n.startsWith('chi phí khác')) return true;
+  return false;
+};
+
 /**
  * Phân tích bảng chi tiết linh kiện trong phiếu copy/paste từ Ecount.
  * Thứ tự cột chuẩn:
- * Mã hàng | Tên mặt hàng | Đơn vị | Số lượng | Gia mua | Thành tiền | Ghi chú | Q. lý
- * (Hỗ trợ cả trường hợp có hoặc không có dòng tiêu đề).
+ * STT | Mã hàng | Tên mặt hàng | Đơn vị | Số lượng | Gia mua | Thành tiền | Ghi chú | Q. lý
+ * (Hỗ trợ cả trường hợp có hoặc không có cột STT / dòng tiêu đề, và tự động xóa mã L777777777 Chi phí khác).
  */
 export const parseEcountVoucherDetail = (text: string): IQCLineItem[] => {
   if (!text || !text.trim()) return [];
@@ -68,6 +78,11 @@ export const parseEcountVoucherDetail = (text: string): IQCLineItem[] => {
       : rawLine.split(/\s{2,}/).map(c => c.replace(/\s+Fn$/i, '').trim());
     // Loại bỏ ô nút "Fn" độc lập của Ecount nếu có
     const cols = rawCols.filter(c => c.toLowerCase() !== 'fn');
+
+    // Bỏ qua dòng lẻ nếu tiêu đề "Số\nthứ tự" bị ngắt dòng khi copy
+    if (cols.length === 1 && /^(số|stt|số thứ tự|thứ tự)$/i.test(cols[0])) {
+      continue;
+    }
 
     const lower = cols.map(c => c.toLowerCase());
     if (lower.some(c => c.includes('mã hàng') || c.includes('mã mặt hàng') || c.includes('tên mặt hàng'))) {
@@ -91,17 +106,11 @@ export const parseEcountVoucherDetail = (text: string): IQCLineItem[] => {
       spec = header.spec >= 0 ? cols[header.spec] || '' : '';
     } else {
       // Không có dòng tiêu đề: mặc định theo thứ tự chuẩn của anh Thao:
-      // [0] Mã hàng | [1] Tên mặt hàng | [2] Đơn vị | [3] Số lượng | [4] Gia mua | [5] Thành tiền | [6] Ghi chú | [7] Q. lý
+      // [0] STT | [1] Mã hàng | [2] Tên mặt hàng | [3] Đơn vị | [4] Số lượng | [5] Gia mua | [6] Thành tiền | [7] Ghi chú | [8] Q. lý
       let ci = 0;
       while (ci < cols.length && !cols[ci]) ci++;
-      // Nếu cột đầu chỉ là STT (1, 2, 3...) và cột kế tiếp là Mã hàng
-      if (
-        /^\d{1,2}$/.test(cols[ci] || '') &&
-        cols.length >= ci + 5 &&
-        Boolean(cols[ci + 1]) &&
-        isNaN(Number(cols[ci + 3])) &&
-        parseNum(cols[ci + 4]) > 0
-      ) {
+      // Nếu cột đầu là STT (1, 2, 3, ..., 10, ...) và cột kế tiếp là Mã hàng
+      if (/^\d+$/.test(cols[ci] || '') && cols.length >= ci + 4 && Boolean(cols[ci + 1])) {
         ci++;
       }
       if (ci >= cols.length) continue;
@@ -110,7 +119,7 @@ export const parseEcountVoucherDetail = (text: string): IQCLineItem[] => {
       name = cols[ci + 1] || '';
 
       if (cols.length === ci + 3 && parseNum(cols[ci + 2]) > 0) {
-        // Trường hợp chỉ dán 3 cột: Mã hàng | Tên mặt hàng | Số lượng
+        // Trường hợp chỉ dán: [STT] | Mã hàng | Tên mặt hàng | Số lượng
         unit = '';
         qty = parseNum(cols[ci + 2]);
       } else if (
@@ -119,12 +128,12 @@ export const parseEcountVoucherDetail = (text: string): IQCLineItem[] => {
         isNaN(Number(cols[ci + 3])) &&
         parseNum(cols[ci + 4]) > 0
       ) {
-        // Trường hợp bảng có thêm cột Thông số trước Đơn vị: Mã | Tên | Thông số | Đơn vị | Số lượng
+        // Trường hợp bảng có thêm cột Thông số trước Đơn vị: [STT] | Mã | Tên | Thông số | Đơn vị | Số lượng
         spec = cols[ci + 2] || '';
         unit = cols[ci + 3] || '';
         qty = parseNum(cols[ci + 4]);
       } else {
-        // Thứ tự chuẩn: Mã hàng (0) | Tên mặt hàng (1) | Đơn vị (2) | Số lượng (3) | Gia mua (4) | Thành tiền (5) | Ghi chú (6) | Q. lý (7)
+        // Thứ tự chuẩn: [STT] | Mã hàng (ci) | Tên mặt hàng (ci+1) | Đơn vị (ci+2) | Số lượng (ci+3) | Gia mua (ci+4) | Thành tiền (ci+5) | Ghi chú (ci+6) | Q. lý (ci+7)
         unit = cols[ci + 2] || '';
         qty = parseNum(cols[ci + 3]);
         spec = cols[ci + 6] || '';
@@ -135,6 +144,8 @@ export const parseEcountVoucherDetail = (text: string): IQCLineItem[] => {
     code = code.replace(/\s+Fn$/i, '').trim();
     if (!code && !name) continue;
     if (/^(tổng|total|cộng)/i.test(code) || /^(tổng|total|cộng)/i.test(name)) continue;
+    // Tự động xóa dòng mã L777777777 - Chi phí khác (thuế, thuê xe, bốc xếp ...)
+    if (isExcludedEcountExpenseLine(code, name)) continue;
     if (qty <= 0 && !name) continue;
 
     items.push({
@@ -195,8 +206,9 @@ export const getIqcAqlGroups = (items: IQCLineItem[]): IqcAqlGroupInfo[] => {
 
 /** Tính lại cỡ mẫu AQL theo nhóm (cùng tên khác màu gộp tổng SL), phân bổ mẫu về từng dòng theo tỉ lệ SL */
 export const recalcIqcItemsAql = (items: IQCLineItem[]): IQCLineItem[] => {
-  const groups = getIqcAqlGroups(items);
-  const result = items.map(it => ({ ...it }));
+  const cleanItems = items.filter(it => !isExcludedEcountExpenseLine(it.partCode, it.partName));
+  const groups = getIqcAqlGroups(cleanItems);
+  const result = cleanItems.map(it => ({ ...it }));
 
   groups.forEach(g => {
     const members = result.filter(it => (it.aqlGroup || getAqlGroupName(it.partName) || it.partCode || `Dòng ${it.lineNo}`).trim() === g.group);
