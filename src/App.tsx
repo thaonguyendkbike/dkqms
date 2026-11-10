@@ -154,6 +154,7 @@ export function getNextCapaId(currentCapas: any[]): string {
 }
 
 export function trackDeletedId(key: string, id: string): void {
+  if (!id) return;
   try {
     const deletedKey = `${key}_deleted_ids`;
     const current = localStorage.getItem(deletedKey);
@@ -168,6 +169,24 @@ export function trackDeletedId(key: string, id: string): void {
     localStorage.setItem(`${key}_is_dirty`, 'true');
   } catch (e) {
     console.error("[trackDeletedId Error]:", e);
+  }
+}
+
+export function trackDeletedIdsBatch(key: string, ids: string[]): void {
+  if (!Array.isArray(ids) || ids.length === 0) return;
+  try {
+    const deletedKey = `${key}_deleted_ids`;
+    const current = localStorage.getItem(deletedKey);
+    const parsed = current ? JSON.parse(current) : [];
+    const set = new Set<string>(Array.isArray(parsed) ? parsed : []);
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      if (id) set.add(String(id));
+    }
+    localStorage.setItem(deletedKey, JSON.stringify(Array.from(set)));
+    localStorage.setItem(`${key}_is_dirty`, 'true');
+  } catch (e) {
+    console.error("[trackDeletedIdsBatch Error]:", e);
   }
 }
 
@@ -1900,7 +1919,8 @@ export function App() {
   }, []);
 
   const [lastSyncErrorMsg, setLastSyncErrorMsg] = useState('');
-  const isFirebaseQuotaExceeded = useRef(localStorage.getItem('dk_firebase_quota_exceeded') === 'true');
+  const isFirebaseQuotaExceeded = useRef(false);
+  try { localStorage.removeItem('dk_firebase_quota_exceeded'); } catch (e) { }
   const unsubscribes = useRef<(() => void)[]>([]);
 
   // Buffer and timer references for highly-efficient 800ms debounced Cloud synchronization
@@ -2028,6 +2048,76 @@ export function App() {
       console.log(`[Daily Logs Remote Delete Protection]: Bỏ ${list.length - pruned.length} bản ghi đã bị xóa trên Cloud từ máy khác (không hồi sinh).`);
     }
     return pruned;
+  };
+
+  // =========================================================================
+  // BẢO VỆ XÓA LIÊN THIẾT BỊ CHO DỮ LIỆU OQC / KCS (dk_oqc_records)
+  // Chống hồi sinh các xe đã xóa (đặc biệt là lô xe "Chưa có LSX") khi mở nhiều máy
+  // =========================================================================
+  const OQC_KNOWN_SERVER_IDS_KEY = 'qms_oqc_known_server_ids';
+  const OQC_REMOTE_DELETED_IDS_KEY = 'qms_oqc_remote_deleted_ids';
+
+  const readOqcIdSet = (storageKey: string): Set<string> => {
+    try {
+      const raw = safeStorage.getItem(storageKey) || localStorage.getItem(storageKey);
+      const arr = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(arr) ? arr.map((x: any) => String(x)) : []);
+    } catch (e) {
+      return new Set();
+    }
+  };
+
+  const registerOqcServerSnapshot = (serverList: any[], serverDeletedIds?: string[]) => {
+    if (!Array.isArray(serverList) || serverList.length === 0) return;
+    try {
+      const currentIds: string[] = [];
+      const currentSet = new Set<string>();
+      serverList.forEach((item, idx) => {
+        const canonicalId = getItemId(item, 'dk_oqc_records', idx);
+        if (canonicalId) {
+          currentIds.push(canonicalId);
+          currentSet.add(canonicalId);
+        }
+        if (item?.id) {
+          currentSet.add(String(item.id));
+        }
+      });
+
+      const prevKnown = readOqcIdSet(OQC_KNOWN_SERVER_IDS_KEY);
+      const remoteDeleted = readOqcIdSet(OQC_REMOTE_DELETED_IDS_KEY);
+      let changed = false;
+
+      if (Array.isArray(serverDeletedIds)) {
+        serverDeletedIds.forEach((delId) => {
+          const s = String(delId || '');
+          if (s && !currentSet.has(s) && !remoteDeleted.has(s)) {
+            remoteDeleted.add(s);
+            changed = true;
+          }
+        });
+      }
+
+      prevKnown.forEach((id) => {
+        if (!currentSet.has(id) && !remoteDeleted.has(id)) {
+          remoteDeleted.add(id);
+          changed = true;
+        }
+      });
+
+      currentSet.forEach((id) => {
+        if (remoteDeleted.has(id)) {
+          remoteDeleted.delete(id);
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        safeStorage.setItem(OQC_REMOTE_DELETED_IDS_KEY, JSON.stringify(Array.from(remoteDeleted).slice(-15000)));
+      }
+      safeStorage.setItem(OQC_KNOWN_SERVER_IDS_KEY, JSON.stringify(currentIds));
+    } catch (e) {
+      console.warn('[OQC Known IDs Warning]:', e);
+    }
   };
 
   const cleanAndSortObject = (obj: any): any => {
@@ -2206,19 +2296,22 @@ export function App() {
       const delStr = localStorage.getItem(deletedKey);
       if (delStr) {
         const arr = JSON.parse(delStr);
-        if (Array.isArray(arr)) deletedSet = new Set(arr);
+        if (Array.isArray(arr)) deletedSet = new Set(arr.map((x: any) => String(x)));
       }
     } catch (e) { }
+
+    const remoteDeletedSet = key === 'dk_oqc_records' ? readOqcIdSet(OQC_REMOTE_DELETED_IDS_KEY) : new Set<string>();
 
     const mergedMap = new Map<string, any>();
 
     // 1. Xử lý các bản ghi từ Server
     serverOrderedIds.forEach((id) => {
-      if (deletedSet.has(id)) {
+      const sItem = serverMap.get(id);
+      const sRawId = sItem?.id ? String(sItem.id) : '';
+      if (deletedSet.has(id) || (sRawId && deletedSet.has(sRawId))) {
         // Bản ghi đã bị xóa có chủ đích -> không khôi phục
         return;
       }
-      const sItem = serverMap.get(id);
       const lItem = localMap.get(id);
 
       if (lItem) {
@@ -2233,9 +2326,19 @@ export function App() {
     // 2. Xử lý các bản ghi tạo mới ở Local lúc offline
     const localNewItems: any[] = [];
     localOrderedIds.forEach((id) => {
-      if (!mergedMap.has(id) && !deletedSet.has(id)) {
+      if (!mergedMap.has(id)) {
         const lItem = localMap.get(id);
-        if (lItem) {
+        const lRawId = lItem?.id ? String(lItem.id) : '';
+        const isMissingLsxGhost =
+          key === 'dk_oqc_records' &&
+          (!lItem?.lsx || !String(lItem.lsx).trim() || String(lItem.lsx).trim() === 'Chưa có LSX');
+        const isDeleted =
+          deletedSet.has(id) ||
+          (lRawId && deletedSet.has(lRawId)) ||
+          remoteDeletedSet.has(id) ||
+          (lRawId && remoteDeletedSet.has(lRawId)) ||
+          isMissingLsxGhost;
+        if (lItem && !isDeleted) {
           mergedMap.set(id, lItem);
           localNewItems.push(lItem);
         }
@@ -2550,13 +2653,13 @@ export function App() {
 
     // EXCEEDED QUOTA OFFLINE SANDBOX FALLBACK: Keep things extremely safe and silent. No Firebase write attempts to avoid console errors & lag
     if (isFirebaseQuotaExceeded.current) {
-      console.warn("[Local Quota Exceeded Sync]: Firebase write quota is currently exceeded. Writing silently to localStorage.");
+      console.warn("[Local Quota Exceeded Sync]: Firebase write quota is currently exceeded. Writing silently to safeStorage.");
       dirtyKeys.forEach((key) => {
         const val = dirtyItems[key];
         const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
         if (!isMetadataKey) {
-          localStorage.setItem(key, JSON.stringify(val));
-          localStorage.setItem(`${key}_is_dirty`, 'true');
+          safeStorage.setItem(key, JSON.stringify(val));
+          try { localStorage.setItem(`${key}_is_dirty`, 'true'); } catch (e) { }
           if (key === 'dk_capas') {
             const relationalCapas = (val || []).map((c: any) => ({
               CAPAID: c.CAPAID || c.id,
@@ -2574,7 +2677,7 @@ export function App() {
               modelName: c.modelName || '',
               imageUrl: c.imageUrl || ''
             }));
-            localStorage.setItem('dk_qms_capas', JSON.stringify(relationalCapas));
+            try { localStorage.setItem('dk_qms_capas', JSON.stringify(relationalCapas)); } catch (e) { }
           }
         }
       });
@@ -2582,15 +2685,15 @@ export function App() {
       return;
     }
 
-    // ANONYMOUS/OFFLINE SANDBOX MODE: If no Google Firebase user session is active, save changes to localStorage locally
+    // ANONYMOUS/OFFLINE SANDBOX MODE: If no Google Firebase user session is active, save changes locally via safeStorage
     if (!auth.currentUser) {
-      console.log("[Local Storage Sync]: Phiên làm việc offline/chuyển quyền hoạt động. Đang cập nhật localStorage cục bộ (giữ cờ_is_dirty = true để đồng bộ khi online).");
+      console.log("[Local Storage Sync]: Phiên làm việc offline/chuyển quyền hoạt động. Đang cập nhật safeStorage cục bộ (giữ cờ_is_dirty = true để đồng bộ khi online).");
       dirtyKeys.forEach((key) => {
         const val = dirtyItems[key];
         const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
         if (!isMetadataKey) {
-          localStorage.setItem(key, JSON.stringify(val));
-          localStorage.setItem(`${key}_is_dirty`, 'true'); // Giữ dirty=true để khi auth đăng nhập thật sẽ đồng bộ lên đám mây
+          safeStorage.setItem(key, JSON.stringify(val));
+          try { localStorage.setItem(`${key}_is_dirty`, 'true'); } catch (e) { } // Giữ dirty=true để khi auth đăng nhập thật sẽ đồng bộ lên đám mây
           if (key === 'dk_capas') {
             const relationalCapas = (val || []).map((c: any) => ({
               CAPAID: c.CAPAID || c.id,
@@ -2608,7 +2711,7 @@ export function App() {
               modelName: c.modelName || '',
               imageUrl: c.imageUrl || ''
             }));
-            localStorage.setItem('dk_qms_capas', JSON.stringify(relationalCapas));
+            try { localStorage.setItem('dk_qms_capas', JSON.stringify(relationalCapas)); } catch (e) { }
           }
         }
       });
@@ -2699,7 +2802,29 @@ export function App() {
             }
           }
 
-          // Meta document tracking chunks
+          // Collect deleted IDs to broadcast to other devices via meta doc
+          let mergedDeletedIds: string[] = [];
+          if (key === 'dk_oqc_records') {
+            try {
+              const currentIdsSet = new Set<string>();
+              currentList.forEach((item: any, idx: number) => {
+                currentIdsSet.add(getItemId(item, 'dk_oqc_records', idx));
+                if (item?.id) currentIdsSet.add(String(item.id));
+              });
+              const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
+              const localDelArr = localDelRaw ? JSON.parse(localDelRaw) : [];
+              const remoteDelSet = readOqcIdSet(OQC_REMOTE_DELETED_IDS_KEY);
+              if (Array.isArray(localDelArr)) {
+                localDelArr.forEach((d: any) => {
+                  const s = String(d || '');
+                  if (s && !currentIdsSet.has(s)) remoteDelSet.add(s);
+                });
+              }
+              mergedDeletedIds = Array.from(remoteDelSet).filter(id => !currentIdsSet.has(id)).slice(-6000);
+            } catch (e) { }
+          }
+
+          // Meta document tracking chunks & cross-device deleted tombstones
           ops.push({
             type: 'set',
             ref: docRef,
@@ -2707,6 +2832,7 @@ export function App() {
               isChunked: true,
               chunkCount: totalChunks,
               totalRecords: currentList.length,
+              deletedIds: mergedDeletedIds,
               updatedBy: email,
               updatedAt: timestamp
             }
@@ -2777,44 +2903,54 @@ export function App() {
 
       console.log(`[Batch Cloud Sync]: Đã đồng bộ thành công ${dirtyKeys.length} khóa lên Firestore`);
 
-      // CẬP NHẬT LOGIC LOCALSTORAGE: Đã ghi thành công lên Firestore Server -> giải phóng cờ bẩn an toàn
+      // CẬP NHẬT LOGIC SAFE STORAGE & LOCALSTORAGE: Đã ghi thành công lên Firestore Server -> giải phóng cờ bẩn an toàn
       dirtyKeys.forEach((key) => {
-        const val = dirtyItems[key];
-        localStorage.setItem(`${key}_is_dirty`, 'false');
-        localStorage.setItem(`${key}_deleted_ids`, JSON.stringify([]));
-        if (localDirtyKeys.current) {
-          localDirtyKeys.current.delete(key);
-        }
-
-        const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
-        if (!isMetadataKey) {
-          localStorage.setItem(key, JSON.stringify(val));
-          const syncTime = new Date().toISOString();
-          localStorage.setItem(`${key}_last_synced_at`, syncTime);
-          serverTimestamps.current[key] = syncTime;
-          if (key === 'dk_capas') {
-            const relationalCapas = (val || []).map((c: any) => ({
-              CAPAID: c.CAPAID || c.id,
-              Issue: c.title || c.Issue || 'Lỗi rắc cắm / sườn khung bavia mộc',
-              RootCause: c.rootCause || c.RootCause || 'Chưa hoàn tất phân tích 5-Why',
-              Correction: c.actions || c.Correction || 'Kiểm soát dải phân tán lắp ráp',
-              CorrectiveAction: c.actions || c.CorrectiveAction || 'Sửa khuôn dập gờ chống va đập',
-              PreventiveAction: c.actions || c.PreventiveAction || 'Tiêu chuẩn hóa quy tắc gá dưỡng đầu chuyền',
-              Owner: c.assignee || c.Owner || 'Nguyễn Xuân Thao',
-              DueDate: c.targetDate || c.DueDate || '2026-06-15',
-              Status: c.status === 'Đóng' || c.status === 'Đã đóng' ? 'Đã đóng' : 'Mở',
-              Effectiveness: 'Chưa đánh giá',
-              isRepeated: !!c.isRepeated,
-              supplierName: c.supplierName || '',
-              modelName: c.modelName || '',
-              imageUrl: c.imageUrl || ''
-            }));
-            localStorage.setItem('dk_qms_capas', JSON.stringify(relationalCapas));
+        try {
+          const val = dirtyItems[key];
+          localStorage.setItem(`${key}_is_dirty`, 'false');
+          if (key === 'dk_oqc_records' && Array.isArray(val)) {
+            const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
+            const localDelArr = localDelRaw ? JSON.parse(localDelRaw) : [];
+            registerOqcServerSnapshot(val, Array.isArray(localDelArr) ? localDelArr : []);
           }
+          localStorage.setItem(`${key}_deleted_ids`, JSON.stringify([]));
+          if (localDirtyKeys.current) {
+            localDirtyKeys.current.delete(key);
+          }
+
+          const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
+          const serializedVal = JSON.stringify(val);
+          if (!isMetadataKey) {
+            safeStorage.setItem(key, serializedVal);
+            const syncTime = new Date().toISOString();
+            localStorage.setItem(`${key}_last_synced_at`, syncTime);
+            serverTimestamps.current[key] = syncTime;
+            if (key === 'dk_capas') {
+              const relationalCapas = (val || []).map((c: any) => ({
+                CAPAID: c.CAPAID || c.id,
+                Issue: c.title || c.Issue || 'Lỗi rắc cắm / sườn khung bavia mộc',
+                RootCause: c.rootCause || c.RootCause || 'Chưa hoàn tất phân tích 5-Why',
+                Correction: c.actions || c.Correction || 'Kiểm soát dải phân tán lắp ráp',
+                CorrectiveAction: c.actions || c.CorrectiveAction || 'Sửa khuôn dập gờ chống va đập',
+                PreventiveAction: c.actions || c.PreventiveAction || 'Tiêu chuẩn hóa quy tắc gá dưỡng đầu chuyền',
+                Owner: c.assignee || c.Owner || 'Nguyễn Xuân Thao',
+                DueDate: c.targetDate || c.DueDate || '2026-06-15',
+                Status: c.status === 'Đóng' || c.status === 'Đã đóng' ? 'Đã đóng' : 'Mở',
+                Effectiveness: 'Chưa đánh giá',
+                isRepeated: !!c.isRepeated,
+                supplierName: c.supplierName || '',
+                modelName: c.modelName || '',
+                imageUrl: c.imageUrl || ''
+              }));
+              localStorage.setItem('dk_qms_capas', JSON.stringify(relationalCapas));
+            }
+          }
+          // Update baseline after successful sync
+          lastSyncedValues.current[key] = serializedVal;
+          lastSeenValues.current[key] = serializedVal;
+        } catch (postSyncErr) {
+          console.warn(`[Post-Sync Local Cleanup Warning for ${key}]:`, postSyncErr);
         }
-        // Update baseline after successful sync
-        lastSyncedValues.current[key] = JSON.stringify(val);
-        lastSeenValues.current[key] = JSON.stringify(val);
       });
 
       clearTimeout(safetyTimeout);
@@ -2835,7 +2971,7 @@ export function App() {
       console.error("[Debounced Cloud Sync Error]:", err);
       // Đánh dấu lại các khóa bị lỗi là dirty để có thể thử lại lúc khác hoặc chặn bị ghi đè thô bạo
       dirtyKeys.forEach((key) => {
-        localStorage.setItem(`${key}_is_dirty`, 'true');
+        try { localStorage.setItem(`${key}_is_dirty`, 'true'); } catch (e) { }
         if (localDirtyKeys.current) {
           localDirtyKeys.current.add(key); // Đánh dấu lại bẩn trong bộ nhớ trong khi lỗi
         }
@@ -2846,13 +2982,11 @@ export function App() {
       setLastSyncErrorMsg(errMsg);
 
       const isQuota = err?.code === 'resource-exhausted' ||
-        errMsg.toLowerCase().includes('quota exceeded') ||
         errMsg.toLowerCase().includes('resource has been exhausted') ||
         errMsg.toLowerCase().includes('daily limit exceeded');
 
       if (isQuota) {
         isFirebaseQuotaExceeded.current = true;
-        localStorage.setItem('dk_firebase_quota_exceeded', 'true');
         setQuotaExceededModalOpen(true);
       }
     }
@@ -2868,7 +3002,7 @@ export function App() {
         Object.keys(localStorage).forEach((key) => {
           if (key.startsWith('dk_') && !key.endsWith('_is_dirty') && !key.endsWith('_last_synced_at') && !key.endsWith('_deleted_ids') && key !== 'dk_current_user') {
             const isExplicitlyDirty = localStorage.getItem(`${key}_is_dirty`) === 'true';
-            const localSaved = localStorage.getItem(key);
+            const localSaved = safeStorage.getItem(key) || localStorage.getItem(key);
             let hasUnsyncedData = false;
             if (localSaved) {
               try {
@@ -2894,7 +3028,7 @@ export function App() {
       if (dirtyKeysList.length > 0) {
         console.log("[Startup Sync]: Tự động quét và đẩy các phân hệ dữ liệu cục bộ chưa lên Cloud:", dirtyKeysList);
         dirtyKeysList.forEach((key) => {
-          const localSaved = localStorage.getItem(key);
+          const localSaved = safeStorage.getItem(key) || localStorage.getItem(key);
           if (localSaved) {
             try {
               const parsed = JSON.parse(localSaved);
@@ -2911,11 +3045,13 @@ export function App() {
   }, [syncLoaded, firebaseUser, conflictKeys]);
 
   const syncToServer = (key: string, data: any) => {
+    const isChunkedKey = CHUNKED_KEYS.includes(key);
+
     // 1. Remote update protection: Chỉ bỏ qua nếu dữ liệu trùng khớp hoàn toàn với dữ liệu vừa nhận từ máy chủ Firestore
     if (isRemoteUpdateRef.current[key]) {
       const serverSerialized = lastSyncedValues.current[key];
       const serializedCheck = JSON.stringify(data);
-      if (isFunctionallyIdentical(serializedCheck, serverSerialized, key)) {
+      if (isChunkedKey ? serializedCheck === serverSerialized : isFunctionallyIdentical(serializedCheck, serverSerialized, key)) {
         isRemoteUpdateRef.current[key] = false;
         return;
       }
@@ -2942,7 +3078,7 @@ export function App() {
         console.log(`[Startup Pre-Sync Buffer] User-driven change captured for ${key} during loading. Preserving change locally and marking dirty.`);
         if (!isMetadataKey) {
           try {
-            localStorage.setItem(key, serialized);
+            safeStorage.setItem(key, serialized);
             localStorage.setItem(`${key}_is_dirty`, 'true');
             if (localDirtyKeys.current) {
               localDirtyKeys.current.add(key);
@@ -2956,10 +3092,10 @@ export function App() {
       return;
     }
 
-    // AUTO-DETECT DELETED RECORD IDs
-    if (Array.isArray(data)) {
+    // AUTO-DETECT DELETED RECORD IDs (Skip for massive CHUNKED_KEYS like dk_oqc_records since OQC delete actions call trackDeletedId/trackDeletedIdsBatch directly)
+    if (Array.isArray(data) && !isChunkedKey) {
       try {
-        const previousStored = lastSeenValues.current[key] || lastSyncedValues.current[key] || localStorage.getItem(key);
+        const previousStored = lastSeenValues.current[key] || lastSyncedValues.current[key] || safeStorage.getItem(key) || localStorage.getItem(key);
         if (previousStored) {
           const prevArray = JSON.parse(previousStored);
           if (Array.isArray(prevArray)) {
@@ -2980,8 +3116,9 @@ export function App() {
     lastSeenValues.current[key] = serialized;
 
     // Check if functionally identical to what is already on the Firestore server
+    // For massive CHUNKED_KEYS (dk_oqc_records), use fast string equality here since triggerCloudSynchronization already diffs per 500-record chunk
     const serverSerialized = lastSyncedValues.current[key];
-    if (isFunctionallyIdentical(serialized, serverSerialized, key)) {
+    if (isChunkedKey ? serialized === serverSerialized : isFunctionallyIdentical(serialized, serverSerialized, key)) {
       // Clean up dirty flags if they were set, since we are now in perfect sync with the server
       if (localStorage.getItem(`${key}_is_dirty`) === 'true') {
         localStorage.setItem(`${key}_is_dirty`, 'false');
@@ -2992,10 +3129,10 @@ export function App() {
       return;
     }
 
-    // SAVE TO LOCAL STORAGE IMMEDIATELY FOR ROBUST OFFLINE RESILIENCE & INTERPRETATION SAFETY
+    // SAVE TO SAFE STORAGE IMMEDIATELY FOR ROBUST OFFLINE RESILIENCE & INTERPRETATION SAFETY
     if (!isMetadataKey) {
       try {
-        localStorage.setItem(key, serialized);
+        safeStorage.setItem(key, serialized);
         localStorage.setItem(`${key}_is_dirty`, 'true'); // Đánh dấu là chưa đồng bộ ngay khi người dùng chỉnh sửa cục bộ
         if (localDirtyKeys.current) {
           localDirtyKeys.current.add(key); // Đánh dấu bẩn trong bộ nhớ trong
@@ -4390,6 +4527,7 @@ export function App() {
 
           if (key === 'dk_oqc_records') {
             assembledList = deduplicateOqcRecords(assembledList);
+            registerOqcServerSnapshot(assembledList, Array.isArray(metaData?.deletedIds) ? metaData.deletedIds : []);
           }
 
           let localParsedCount = 0;
@@ -4413,17 +4551,38 @@ export function App() {
           let finalDisplayData = assembledList;
 
           if (parsedLocalData.length > 0 && assembledList.length > 0) {
-            // Khi cả local và Cloud đều có dữ liệu: Luôn HỢP NHẤT THÔNG MINH để bảo toàn 100% dữ liệu ngày mới từ máy người dùng
-            try {
-              finalDisplayData = smartMergeArrays(assembledList, parsedLocalData, key);
-            } catch (e) {
-              console.error(`[Smart Merge Error] for ${key}:`, e);
-              finalDisplayData = parsedLocalData.length >= assembledList.length ? parsedLocalData : assembledList;
-            }
-            if (isDirty || finalDisplayData.length > assembledList.length) {
-              localStorage.setItem(`${key}_is_dirty`, 'true');
-              localDirtyKeys.current.add(key);
-              pendingSyncBuffer.current[key] = finalDisplayData;
+            if (!isDirty && key === 'dk_oqc_records') {
+              // Máy hiện tại không có thay đổi bẩn chưa đồng bộ -> Nhận chuẩn 100% danh sách từ Cloud (tránh hồi sinh các xe đã xóa ở máy khác)
+              let localDelSet = new Set<string>();
+              try {
+                const delStr = localStorage.getItem(`${key}_deleted_ids`);
+                if (delStr) {
+                  const arr = JSON.parse(delStr);
+                  if (Array.isArray(arr)) localDelSet = new Set(arr.map((x: any) => String(x)));
+                }
+              } catch (e) { }
+              if (localDelSet.size > 0) {
+                finalDisplayData = assembledList.filter((item, idx) => {
+                  const cid = getItemId(item, key, idx);
+                  const rid = item?.id ? String(item.id) : '';
+                  return !localDelSet.has(cid) && (!rid || !localDelSet.has(rid));
+                });
+              } else {
+                finalDisplayData = assembledList;
+              }
+            } else {
+              // Máy hiện tại đang có thay đổi bẩn (isDirty) -> Hợp nhất thông minh nhưng loại bỏ các xe đã xóa từ xa
+              try {
+                finalDisplayData = smartMergeArrays(assembledList, parsedLocalData, key);
+              } catch (e) {
+                console.error(`[Smart Merge Error] for ${key}:`, e);
+                finalDisplayData = assembledList;
+              }
+              if (isDirty) {
+                localStorage.setItem(`${key}_is_dirty`, 'true');
+                localDirtyKeys.current.add(key);
+                pendingSyncBuffer.current[key] = finalDisplayData;
+              }
             }
           } else if (localParsedCount > 0 && assembledList.length === 0) {
             // Local có dữ liệu nhưng server rỗng: Giữ 100% dữ liệu local và đánh dấu đồng bộ lên Cloud
@@ -7798,25 +7957,32 @@ export function App() {
 
   useEffect(() => {
     // Overwrite protection: If local state has few records (< 500) but IndexedDB/safeStorage already has more records, restore them instead of wiping them out!
-    const currentSavedStr = safeStorage.getItem('dk_oqc_records');
-    if (currentSavedStr && oqcRecords.length < 500) {
-      try {
-        const parsed = JSON.parse(currentSavedStr);
-        if (Array.isArray(parsed) && parsed.length > oqcRecords.length) {
-          console.warn(`[OQC Overwrite Protection] Blocked small state (${oqcRecords.length}) from overwriting large saved dataset (${parsed.length}). Merging saved records.`);
-          if (oqcRecords.length > 0) {
-            const merged = smartMergeArrays(parsed, oqcRecords, 'dk_oqc_records');
-            setOqcRecords(deduplicateOqcRecords(merged));
-          } else {
-            setOqcRecords(deduplicateOqcRecords(parsed));
+    if (oqcRecords.length < 500) {
+      const currentSavedStr = safeStorage.getItem('dk_oqc_records');
+      if (currentSavedStr) {
+        try {
+          const parsed = JSON.parse(currentSavedStr);
+          if (Array.isArray(parsed) && parsed.length > oqcRecords.length) {
+            console.warn(`[OQC Overwrite Protection] Blocked small state (${oqcRecords.length}) from overwriting large saved dataset (${parsed.length}). Merging saved records.`);
+            if (oqcRecords.length > 0) {
+              const merged = smartMergeArrays(parsed, oqcRecords, 'dk_oqc_records');
+              setOqcRecords(deduplicateOqcRecords(merged));
+            } else {
+              setOqcRecords(deduplicateOqcRecords(parsed));
+            }
+            return;
           }
-          return;
-        }
-      } catch (e) { }
+        } catch (e) { }
+      }
     }
 
     if (oqcRecords.length === 0) {
       // TUYỆT ĐỐI KHÔNG ghi đè mảng rỗng [] vào safeStorage khi state chưa nạp xong
+      return;
+    }
+
+    // Skip redundant 500ms stringify + syncToServer when saveOqcRecordsOptimized already handled persistence & debounced cloud sync
+    if (Date.now() - ((window as any).__oqcManagedSaveTs || 0) < 3000) {
       return;
     }
 

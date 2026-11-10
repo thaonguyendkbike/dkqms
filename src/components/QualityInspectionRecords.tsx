@@ -55,7 +55,7 @@ import {
 } from 'lucide-react';
 import { IQCRecord, PQCRecord, OQCRecord, OqcColorChangeRecord, OqcPartCodeItem, INITIAL_OQC_PART_CODES } from '../qualityTestData';
 import { safeStorage } from '../safeStorage';
-import { trackDeletedId } from '../App';
+import { trackDeletedId, trackDeletedIdsBatch } from '../App';
 import { compressImageFile } from '../imageCompressor';
 import IqcLineItemsEditor from './IqcLineItemsEditor';
 import { IQCLineItem } from '../qualityTestData';
@@ -1711,33 +1711,12 @@ export default function QualityInspectionRecords({
 
   // High-Performance Zero-Latency Optimistic State Overrides for KCS Station
   const [localOqcOverrides, setLocalOqcOverrides] = useState<Record<string, Partial<OQCRecord>>>({});
-
-  // Auto reconcile local overrides when global oqcRecords updates
-  useEffect(() => {
-    if (Object.keys(localOqcOverrides).length === 0) return;
-    setLocalOqcOverrides(prev => {
-      let changed = false;
-      const next = { ...prev };
-      for (const id in next) {
-        const globalRec = oqcRecords.find(r => r.id === id);
-        if (globalRec) {
-          const override = next[id];
-          if (
-            (!override.status || override.status === globalRec.status) &&
-            (override.defectDetail === undefined || override.defectDetail === globalRec.defectDetail) &&
-            (override.rootCause === undefined || override.rootCause === globalRec.rootCause)
-          ) {
-            delete next[id];
-            changed = true;
-          }
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [oqcRecords]);
+  const pendingOqcOverridesRef = useRef<Record<string, Partial<OQCRecord>>>({});
+  const pendingOqcSerialOverridesRef = useRef<Record<string, Partial<OQCRecord>>>({});
+  const pendingOverrideCommitTimerRef = useRef<any>(null);
 
   // High-Performance Zero-Latency Save Helper for OQC Quick Pass / Defect Entry
-  // Immediate UI (<1ms) & LocalStorage (<5ms) save; Debounced 3s Batch Cloud Push
+  // Immediate UI (<1ms) & LocalStorage (<5ms) save; Debounced Batch Cloud Push
   const asyncOqcSaveTimer = useRef<any>(null);
   const latestOqcRecordsRef = useRef<OQCRecord[]>(oqcRecords);
 
@@ -1745,7 +1724,100 @@ export default function QualityInspectionRecords({
     latestOqcRecordsRef.current = oqcRecords;
   }, [oqcRecords]);
 
+  const saveOqcRecordsOptimized = useCallback((updated: OQCRecord[], immediateCloudSync: boolean = false) => {
+    try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
+    (window as any).__oqcManagedSaveTs = Date.now();
+    latestOqcRecordsRef.current = updated;
+
+    // 1. Ghi bộ nhớ và IndexedDB ngay lập tức (không trì hoãn để tránh mất dữ liệu khi F5/reload)
+    safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+
+    // 2. Cập nhật State tức thì
+    setOqcRecords(updated);
+
+    // 3. Đẩy Cloud (ngay lập tức khi xóa xe, hoặc gom sau 2 GIÂY không thao tác khi bấm Đạt/Lỗi)
+    if (asyncOqcSaveTimer.current) {
+      clearTimeout(asyncOqcSaveTimer.current);
+      asyncOqcSaveTimer.current = null;
+    }
+    if (immediateCloudSync) {
+      if (typeof (window as any).syncToServer === 'function') {
+        (window as any).syncToServer('dk_oqc_records', updated);
+      }
+    } else {
+      const OQC_CLOUD_SYNC_DELAY_MS = 2000;
+      asyncOqcSaveTimer.current = setTimeout(() => {
+        if (typeof (window as any).syncToServer === 'function') {
+          console.log("⏰ [Cloud Sync Engine] Tiến hành đẩy dữ liệu KCS lên Cloud Firestore.");
+          (window as any).syncToServer('dk_oqc_records', latestOqcRecordsRef.current);
+        }
+      }, OQC_CLOUD_SYNC_DELAY_MS);
+    }
+  }, [setOqcRecords]);
+
+  const commitPendingOqcOverrides = useCallback((immediateCloud: boolean = false) => {
+    if (pendingOverrideCommitTimerRef.current) {
+      clearTimeout(pendingOverrideCommitTimerRef.current);
+      pendingOverrideCommitTimerRef.current = null;
+    }
+    const byId = pendingOqcOverridesRef.current;
+    const bySerial = pendingOqcSerialOverridesRef.current;
+    const hasIdOverrides = Object.keys(byId).length > 0;
+    const hasSerialOverrides = Object.keys(bySerial).length > 0;
+    if (!hasIdOverrides && !hasSerialOverrides) return;
+
+    pendingOqcOverridesRef.current = {};
+    pendingOqcSerialOverridesRef.current = {};
+
+    const currentList = latestOqcRecordsRef.current;
+    const updated = currentList.map(r => {
+      const idMatch = r.id ? byId[r.id] : undefined;
+      if (idMatch) {
+        return { ...r, ...idMatch };
+      }
+      if (hasSerialOverrides && r.serialNo) {
+        const sMatch = bySerial[r.serialNo.trim().toUpperCase()];
+        if (sMatch) {
+          return { ...r, ...sMatch };
+        }
+      }
+      return r;
+    });
+
+    setLocalOqcOverrides({});
+    saveOqcRecordsOptimized(updated, immediateCloud);
+  }, [saveOqcRecordsOptimized]);
+
+  const applyKcsRecordOverride = useCallback((record: OQCRecord, override: Partial<OQCRecord>) => {
+    const mergedOverride = {
+      ...(record.id ? pendingOqcOverridesRef.current[record.id] : undefined),
+      ...override
+    };
+    if (record.id) {
+      pendingOqcOverridesRef.current[record.id] = mergedOverride;
+      setLocalOqcOverrides(prev => ({
+        ...prev,
+        [record.id]: { ...record, ...(prev[record.id] || {}), ...mergedOverride }
+      }));
+    }
+    if (record.serialNo) {
+      const cleanSerial = record.serialNo.trim().toUpperCase();
+      if (cleanSerial) {
+        pendingOqcSerialOverridesRef.current[cleanSerial] = mergedOverride;
+      }
+    }
+    try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
+
+    if (pendingOverrideCommitTimerRef.current) {
+      clearTimeout(pendingOverrideCommitTimerRef.current);
+    }
+    pendingOverrideCommitTimerRef.current = setTimeout(() => {
+      commitPendingOqcOverrides(false);
+    }, 600);
+  }, [commitPendingOqcOverrides]);
+
   const flushOqcSaveToCloud = useCallback(() => {
+    commitPendingOqcOverrides(true);
     if (asyncOqcSaveTimer.current) {
       clearTimeout(asyncOqcSaveTimer.current);
       asyncOqcSaveTimer.current = null;
@@ -1756,11 +1828,11 @@ export default function QualityInspectionRecords({
         (window as any).syncToServer('dk_oqc_records', currentList);
       }
     }
-  }, []);
+  }, [commitPendingOqcOverrides]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (asyncOqcSaveTimer.current) {
+      if (pendingOverrideCommitTimerRef.current || asyncOqcSaveTimer.current) {
         flushOqcSaveToCloud();
       }
     };
@@ -1769,30 +1841,13 @@ export default function QualityInspectionRecords({
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('pagehide', handleBeforeUnload);
+      if (pendingOverrideCommitTimerRef.current) {
+        commitPendingOqcOverrides(false);
+      }
     };
-  }, [flushOqcSaveToCloud]);
+  }, [flushOqcSaveToCloud, commitPendingOqcOverrides]);
 
   const asyncLocalStorageTimer = useRef<NodeJS.Timeout | null>(null);
-
-  const saveOqcRecordsOptimized = useCallback((updated: OQCRecord[]) => {
-    try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
-
-    // 1. Ghi bộ nhớ và IndexedDB ngay lập tức (không trì hoãn để tránh mất dữ liệu khi F5/reload)
-    safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-
-    // 2. Cập nhật State tức thì
-    setOqcRecords(updated);
-
-    // 3. Gom đẩy Cloud ngầm sau 2 GIÂY không thao tác (Debounced Batch Push = 2000ms)
-    const OQC_CLOUD_SYNC_DELAY_MS = 2000;
-    if (asyncOqcSaveTimer.current) clearTimeout(asyncOqcSaveTimer.current);
-    asyncOqcSaveTimer.current = setTimeout(() => {
-      if (typeof (window as any).syncToServer === 'function') {
-        console.log("⏰ [Cloud Sync Engine] Tiến hành đẩy dữ liệu KCS lên Cloud Firestore.");
-        (window as any).syncToServer('dk_oqc_records', updated);
-      }
-    }, OQC_CLOUD_SYNC_DELAY_MS);
-  }, [setOqcRecords]);
 
   // Safe IQC persistence helper
   const saveIqcRecords = useCallback((updated: IQCRecord[]) => {
@@ -2628,6 +2683,15 @@ export default function QualityInspectionRecords({
     }
   };
 
+  // OQC Sub-view state — hoisted before guarded useMemo hooks that depend on it
+  const [oqcSubView, setOqcSubView] = useState<'station' | 'handover' | 'part_codes' | 'dashboard'>('station');
+
+  useEffect(() => {
+    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'station') {
+      commitPendingOqcOverrides(false);
+    }
+  }, [qcMainSubTab, oqcSubView, commitPendingOqcOverrides]);
+
   // Compute unique dynamic values for selects with useMemo
   const uniqueIqcSuppliers = useMemo(() => Array.from(new Set(iqcRecords.map(r => r.supplierName ? r.supplierName.trim() : ''))).filter(Boolean), [iqcRecords]);
   const uniquePqcModels = useMemo(() => Array.from(new Set(pqcRecords.map(r => r.model ? r.model.trim() : ''))).filter(Boolean), [pqcRecords]);
@@ -2638,9 +2702,12 @@ export default function QualityInspectionRecords({
       if (c && c.trim()) set.add(c.trim());
     }
     return Array.from(set);
-  }, [oqcRecords]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oqcRecords.length]);
 
+  const uniqueOqcDatesCacheRef = useRef<string[]>([]);
   const uniqueOqcDates = useMemo(() => {
+    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'dashboard') return uniqueOqcDatesCacheRef.current;
     const set = new Set<string>();
     for (let i = 0; i < oqcRecords.length; i++) {
       const r = oqcRecords[i];
@@ -2667,7 +2734,7 @@ export default function QualityInspectionRecords({
       set.add(stdDate);
     }
 
-    return Array.from(set).sort((a, b) => {
+    const sorted = Array.from(set).sort((a, b) => {
       const pA = a.split('/');
       const pB = b.split('/');
       const da = parseInt(pA[0], 10) || 1;
@@ -2680,7 +2747,9 @@ export default function QualityInspectionRecords({
       if (ma !== mb) return mb - ma;
       return db - da;
     });
-  }, [oqcRecords, oqcFilterMonth, oqcFilterYear]);
+    uniqueOqcDatesCacheRef.current = sorted;
+    return sorted;
+  }, [qcMainSubTab, oqcSubView, oqcRecords, oqcFilterMonth, oqcFilterYear]);
 
   // Tự động đặt lại bộ lọc Ngày về Tất cả nếu Ngày đã chọn không thuộc Tháng/Năm mới chọn
   React.useEffect(() => {
@@ -2696,7 +2765,8 @@ export default function QualityInspectionRecords({
       if (m && !isNaN(Number(m))) set.add(Number(m));
     }
     return Array.from(set).sort((a, b) => a - b);
-  }, [oqcRecords]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oqcRecords.length]);
 
   const uniqueOqcYears = useMemo(() => {
     const set = new Set<number>();
@@ -2705,7 +2775,8 @@ export default function QualityInspectionRecords({
       if (y && !isNaN(Number(y))) set.add(Number(y));
     }
     return Array.from(set).sort((a, b) => a - b);
-  }, [oqcRecords]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oqcRecords.length]);
 
   // Unique inspection dates for KCS Line Station (sorted)
   const uniqueKcsDates = useMemo(() => {
@@ -2727,7 +2798,8 @@ export default function QualityInspectionRecords({
       if (ma !== mb) return mb - ma;
       return db - da;
     });
-  }, [oqcRecords]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oqcRecords.length]);
 
   const uniqueKcsMonths = useMemo(() => {
     const set = new Set<number>();
@@ -2741,7 +2813,8 @@ export default function QualityInspectionRecords({
     });
     const arr = Array.from(set).sort((a, b) => a - b);
     return arr.length > 0 ? arr : Array.from({ length: 12 }, (_, i) => i + 1);
-  }, [oqcRecords]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oqcRecords.length]);
 
   const uniqueKcsYears = useMemo(() => {
     const set = new Set<number>();
@@ -2755,7 +2828,8 @@ export default function QualityInspectionRecords({
     });
     const arr = Array.from(set).sort((a, b) => b - a);
     return arr.length > 0 ? arr : [2026];
-  }, [oqcRecords]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oqcRecords.length]);
 
   // Unique LSX list & fast O(1) count map for OQC Line Station
   const { uniqueOqcLsxs, oqcLsxCountsMap } = useMemo(() => {
@@ -2770,7 +2844,8 @@ export default function QualityInspectionRecords({
       uniqueOqcLsxs: list,
       oqcLsxCountsMap: countsMap
     };
-  }, [oqcRecords]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oqcRecords.length]);
 
   // Cached global OQC counts — single pass, avoids inline .filter() on 31K records every render
   const oqcGlobalCounts = useMemo(() => {
@@ -2859,11 +2934,22 @@ export default function QualityInspectionRecords({
     safeStorage.setItem('dk_oqc_part_codes', JSON.stringify(list));
   };
 
+  // O(1) Map lookup for Part Codes (replaces O(M) .find() across 35,794 records)
+  const oqcPartCodesMap = useMemo(() => {
+    const map = new Map<string, OqcPartCodeItem>();
+    for (let i = 0; i < oqcPartCodes.length; i++) {
+      const p = oqcPartCodes[i];
+      if (p && p.partCode) {
+        map.set(p.partCode.trim().toUpperCase(), p);
+      }
+    }
+    return map;
+  }, [oqcPartCodes]);
+
   const lookupPartCode = useCallback((code: string): OqcPartCodeItem | null => {
     if (!code) return null;
-    const clean = code.trim().toUpperCase();
-    return oqcPartCodes.find(p => p.partCode.trim().toUpperCase() === clean) || null;
-  }, [oqcPartCodes]);
+    return oqcPartCodesMap.get(code.trim().toUpperCase()) || null;
+  }, [oqcPartCodesMap]);
 
   const getCleanModelName = useCallback((r: { model?: string; color?: string; partCode?: string }): string => {
     // 1. Authoritative lookup from partCode dictionary if available
@@ -3055,8 +3141,8 @@ export default function QualityInspectionRecords({
   const filteredOqcCacheRef = useRef<OQCRecord[]>([]);
 
   const filteredOqc = useMemo(() => {
-    // Guard: Only recompute when OQC tab is active (Tối ưu 1)
-    if (qcMainSubTab !== 'oqc') return filteredOqcCacheRef.current;
+    // Guard: Only recompute when OQC Dashboard sub-view is active
+    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'dashboard') return filteredOqcCacheRef.current;
 
     const sLower = oqcSearch.trim().toLowerCase();
     const isWeekAll = oqcFilterWeek === 'All';
@@ -3137,12 +3223,7 @@ export default function QualityInspectionRecords({
 
     filteredOqcCacheRef.current = res;
     return res;
-  }, [qcMainSubTab, oqcRecords, oqcSearch, oqcFilterModel, oqcFilterColor, oqcFilterDate, oqcFilterMonth, oqcFilterYear, oqcFilterWeek, getCleanModelName]);
-
-
-
-  // OQC Sub-view state — hoisted before guarded useMemo hooks that depend on it
-  const [oqcSubView, setOqcSubView] = useState<'station' | 'handover' | 'part_codes' | 'dashboard'>('station');
+  }, [qcMainSubTab, oqcSubView, oqcRecords, oqcSearch, oqcFilterModel, oqcFilterColor, oqcFilterDate, oqcFilterMonth, oqcFilterYear, oqcFilterWeek, getCleanModelName]);
 
   // Performance: Cache ref for guarded useMemo (Tối ưu 1)
   const oqcDashboardStatsCacheRef = useRef<any>({
@@ -3351,11 +3432,6 @@ export default function QualityInspectionRecords({
         newR = { ...newR, partCode: '' };
         isChanged = true;
       }
-      // Dọn dẹp LSX gán mặc định nếu bản ghi bị gán cùng TEM-GEN trong quá khứ
-      if (r.partCode === 'TEM-GEN' && r.lsx === '26-10') {
-        newR = { ...newR, lsx: '' };
-        isChanged = true;
-      }
       if (isChanged) {
         hasDirtyModel = true;
         return newR;
@@ -3373,9 +3449,11 @@ export default function QualityInspectionRecords({
         (window as any).syncToServer('dk_oqc_records', cleaned);
       }
     }
-  }, [oqcRecords, getCleanModelName, setOqcRecords]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oqcRecords.length, getCleanModelName, setOqcRecords]);
 
-  const uniqueOqcModels = useMemo(() => Array.from(new Set(oqcRecords.map(r => getCleanModelName(r)).filter(Boolean))).sort(), [oqcRecords, getCleanModelName]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const uniqueOqcModels = useMemo(() => Array.from(new Set(oqcRecords.map(r => getCleanModelName(r)).filter(Boolean))).sort(), [oqcRecords.length, getCleanModelName]);
 
   // Performance: Cache ref for guarded useMemo (Tối ưu 1)
   const defectModelTokenCountsCacheRef = useRef<{ [model: string]: { [token: string]: number } }>({});
@@ -3984,28 +4062,7 @@ export default function QualityInspectionRecords({
       filtered.push(r);
     }
 
-    // Sắp xếp xe mới nhất lên đầu (theo ngày giảm dần, giờ/thời gian cập nhật giảm dần)
-    // Đảm bảo các xe nghiệm thu hôm nay luôn hiện ngay tại Trang 1 cho người dùng thấy
-    filtered.sort((a, b) => {
-      const dateA = a.date || '';
-      const dateB = b.date || '';
-      if (dateA !== dateB) {
-        const partsA = dateA.split('/');
-        const partsB = dateB.split('/');
-        const da = parseInt(partsA[0], 10) || 1;
-        const ma = parseInt(partsA[1], 10) || 1;
-        const ya = parseInt(partsA[2], 10) || 2020;
-        const db = parseInt(partsB[0], 10) || 1;
-        const mb = parseInt(partsB[1], 10) || 1;
-        const yb = parseInt(partsB[2], 10) || 2020;
-        if (ya !== yb) return yb - ya;
-        if (ma !== mb) return mb - ma;
-        if (da !== db) return db - da;
-      }
-      const timeA = a.updatedAt || a.createdAt || a.checkTime || '';
-      const timeB = b.updatedAt || b.createdAt || b.checkTime || '';
-      return timeB.localeCompare(timeA);
-    });
+    // Giữ nguyên thứ tự bản ghi trong LSX / danh sách để tránh nhảy dòng và lag khi bấm Đạt/Lỗi hoặc ghi lỗi
 
     const totalCars = filtered.length;
     const yieldRate = totalCars > 0 ? Math.round((passedCount / totalCars) * 100) : 100;
@@ -8357,20 +8414,7 @@ return (
               checkedBy: 'Liễu Tùng Lâm'
             };
 
-            if (record.id) {
-              setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
-            }
-
-            setTimeout(() => {
-              const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
-              const updated = oqcRecords.map(r => {
-                if (r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial)) {
-                  return { ...r, ...override };
-                }
-                return r;
-              });
-              saveOqcRecordsOptimized(updated);
-            }, 80);
+            applyKcsRecordOverride(record, override);
           };
 
           const handleUpdateDefectNote = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
@@ -8391,23 +8435,7 @@ return (
               updatedAt: new Date().toISOString()
             };
 
-            // Change 1: removed flushSync blocking
-            if (record.id) {
-              setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
-            }
-
-            setTimeout(() => {
-              const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
-              const updated = [...oqcRecords];
-              const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
-              if (index !== -1) {
-                updated[index] = {
-                  ...updated[index],
-                  ...override
-                };
-              }
-              saveOqcRecordsOptimized(updated);
-            }, 80);
+            applyKcsRecordOverride(record, override);
           };
 
           const handleQuickFail = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
@@ -8443,33 +8471,21 @@ return (
               checkedBy: 'Liễu Tùng Lâm'
             };
 
-            // Change 1: removed flushSync blocking
-            if (record.id) {
-              setLocalOqcOverrides(prev => ({ ...prev, [record.id]: { ...record, ...override } }));
-            }
-
-            setTimeout(() => {
-              const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
-              const updated = [...oqcRecords];
-              const index = updated.findIndex(r => r.id === record.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
-              if (index !== -1) {
-                updated[index] = {
-                  ...updated[index],
-                  ...override
-                };
-              }
-              saveOqcRecordsOptimized(updated);
-            }, 80);
+            applyKcsRecordOverride(record, override);
           };
 
           const handleDeleteCar = (record: OQCRecord) => {
             if (!window.confirm(`Xóa xe Sêri ${record.serialNo} khỏi hệ thống?`)) return;
-            if (record.id) {
-              trackDeletedId('dk_oqc_records', record.id);
-            }
+            commitPendingOqcOverrides(false);
+            const idsToTrack: string[] = [];
+            if (record.id) idsToTrack.push(record.id);
             const targetSerial = record.serialNo ? record.serialNo.trim().toUpperCase() : '';
-            const updated = oqcRecords.filter(r => r.id !== record.id && (!targetSerial || !r.serialNo || r.serialNo.trim().toUpperCase() !== targetSerial));
-            saveOqcRecordsOptimized(updated);
+            if (targetSerial) {
+              idsToTrack.push(`OQC-${targetSerial.replace(/[\/\s.#$\[\]]/g, '_')}`);
+            }
+            trackDeletedIdsBatch('dk_oqc_records', idsToTrack);
+            const updated = latestOqcRecordsRef.current.filter(r => r.id !== record.id && (!targetSerial || !r.serialNo || r.serialNo.trim().toUpperCase() !== targetSerial));
+            saveOqcRecordsOptimized(updated, true);
           };
 
           const handleBatchPassAllPending = () => {
@@ -8787,9 +8803,23 @@ return (
                       type="button"
                       onClick={() => {
                         if (window.confirm(`⚠️ ANH THAO XÁC NHẬN: Bạn có chắc chắn muốn XÓA HÀNG LOẠT ${selectedOqcIds.length} xe KCS đã chọn khỏi CSDL không?\nHành động này sẽ cập nhật tức thì lên Cloud.`)) {
-                          selectedOqcIds.forEach(id => trackDeletedId('dk_oqc_records', id));
-                          const updated = oqcRecords.filter(r => !selectedOqcIds.includes(r.id));
-                          saveOqcRecordsOptimized(updated);
+                          commitPendingOqcOverrides(false);
+                          const selectedSet = new Set(selectedOqcIds);
+                          const idsToTrack: string[] = [...selectedOqcIds];
+                          const updated: OQCRecord[] = [];
+                          const currentList = latestOqcRecordsRef.current;
+                          for (let i = 0; i < currentList.length; i++) {
+                            const r = currentList[i];
+                            if (selectedSet.has(r.id)) {
+                              if (r.serialNo) {
+                                idsToTrack.push(`OQC-${r.serialNo.trim().toUpperCase().replace(/[\/\s.#$\[\]]/g, '_')}`);
+                              }
+                            } else {
+                              updated.push(r);
+                            }
+                          }
+                          trackDeletedIdsBatch('dk_oqc_records', idsToTrack);
+                          saveOqcRecordsOptimized(updated, true);
                           setSelectedOqcIds([]);
                           alert(`✓ Đã xóa thành công ${selectedOqcIds.length} xe KCS đã chọn!`);
                         }
@@ -17817,12 +17847,12 @@ return (
               onClick={() => {
                 const unique = Array.from(new Set(selectedModalDefects.filter(Boolean)));
                 const updatedStr = unique.join(', ');
-                const targetSerial = activeMultiDefectModalRecord.serialNo ? activeMultiDefectModalRecord.serialNo.trim().toUpperCase() : '';
                 const now = new Date();
                 const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-                const nowDate = now.toLocaleDateString('vi-VN');
-                const nowMonth = now.getMonth() + 1;
-                const nowYear = now.getFullYear();
+                const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
+                const dateParts = nowDate.split('/');
+                const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
+                const nowYear = Number(dateParts[2]) || now.getFullYear();
 
                 const override: Partial<OQCRecord> = unique.length === 0 ? {
                   status: 'Đạt' as const,
@@ -17831,7 +17861,8 @@ return (
                   checkTime: nowTime,
                   date: nowDate,
                   month: nowMonth,
-                  year: nowYear
+                  year: nowYear,
+                  updatedAt: new Date().toISOString()
                 } : {
                   status: 'Lỗi' as const,
                   defectDetail: updatedStr,
@@ -17839,28 +17870,15 @@ return (
                   checkTime: nowTime,
                   date: nowDate,
                   month: nowMonth,
-                  year: nowYear
+                  year: nowYear,
+                  updatedAt: new Date().toISOString()
                 };
 
-                // Change 1: removed flushSync blocking
-                if (activeMultiDefectModalRecord.id) {
-                  setLocalOqcOverrides(prev => ({ ...prev, [activeMultiDefectModalRecord.id]: { ...activeMultiDefectModalRecord, ...override } }));
-                  setActiveMultiDefectModalRecord(null);
-                } else {
-                  setActiveMultiDefectModalRecord(null);
+                const targetRec = activeMultiDefectModalRecord;
+                setActiveMultiDefectModalRecord(null);
+                if (targetRec) {
+                  applyKcsRecordOverride(targetRec, override);
                 }
-
-                setTimeout(() => {
-                  const updated = [...oqcRecords];
-                  const index = updated.findIndex(r => r.id === activeMultiDefectModalRecord.id || (targetSerial && r.serialNo && r.serialNo.trim().toUpperCase() === targetSerial));
-                  if (index !== -1) {
-                    updated[index] = {
-                      ...updated[index],
-                      ...override
-                    };
-                  }
-                  saveOqcRecordsOptimized(updated);
-                }, 80);
               }}
               className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-rose-600/30 transition cursor-pointer active:scale-95 text-center"
             >
