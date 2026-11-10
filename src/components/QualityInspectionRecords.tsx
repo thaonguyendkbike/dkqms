@@ -1922,7 +1922,7 @@ export default function QualityInspectionRecords({
       ? ({ ...record, ...pendingOqcOverridesRef.current[record.id] } as OQCRecord)
       : record;
     const locked = isKcsDateTimeLocked(currentEffective);
-    const safeOverride: Partial<OQCRecord> = locked
+    const safeOverride: Partial<OQCRecord> = (locked && override.status !== 'Chưa kiểm tra')
       ? {
           ...override,
           checkTime: currentEffective.checkTime,
@@ -8634,11 +8634,30 @@ return (
             }
           };
 
-          const handleClearAllDefectsFromCar = (record: OQCRecord) => {
-            handleQuickPass(record);
-          };
-
           const handleQuickPass = (record: OQCRecord) => {
+            const currentOverride = record.id ? localOqcOverrides[record.id] : undefined;
+            const currentStatus = currentOverride?.status || record.status;
+
+            // Bấm lại lần 2 khi xe đang ĐẠT -> trở về trạng thái Chưa kiểm tra
+            if (currentStatus === 'Đạt') {
+              if (isKcsDateTimeLocked(record)) {
+                alert('Xe này đã hoàn thành kiểm tra từ ngày trước và đã khóa, không thể hủy trạng thái!');
+                return;
+              }
+              const override: Partial<OQCRecord> = {
+                status: 'Chưa kiểm tra' as const,
+                defectDetail: '',
+                rootCause: '',
+                failedCount: 0,
+                checkTime: '',
+                date: '',
+                updatedAt: new Date().toISOString(),
+                checkedBy: ''
+              };
+              applyKcsRecordOverride(record, override);
+              return;
+            }
+
             const now = new Date();
             const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
             const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
@@ -8686,6 +8705,29 @@ return (
           };
 
           const handleQuickFail = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
+            const currentOverride = record.id ? localOqcOverrides[record.id] : undefined;
+            const currentStatus = currentOverride?.status || record.status;
+
+            // Bấm lại lần 2 khi xe đang LỖI -> trở về trạng thái Chưa kiểm tra
+            if (currentStatus === 'Lỗi') {
+              if (isKcsDateTimeLocked(record)) {
+                alert('Xe này đã hoàn thành kiểm tra từ ngày trước và đã khóa, không thể hủy trạng thái!');
+                return;
+              }
+              const override: Partial<OQCRecord> = {
+                status: 'Chưa kiểm tra' as const,
+                defectDetail: '',
+                rootCause: '',
+                failedCount: 0,
+                checkTime: '',
+                date: '',
+                updatedAt: new Date().toISOString(),
+                checkedBy: ''
+              };
+              applyKcsRecordOverride(record, override);
+              return;
+            }
+
             const now = new Date();
             const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
             const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
@@ -9184,7 +9226,7 @@ return (
                                         ? 'bg-emerald-600 text-white border border-emerald-700 shadow-xs'
                                         : 'bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-200'
                                       }`}
-                                    title="Đánh dấu xe ĐẠT nghiệm thu KCS tức thì"
+                                    title={isPassed ? "Bấm lại để hủy ĐẠT, chuyển về Chưa kiểm tra" : "Đánh dấu xe ĐẠT nghiệm thu KCS"}
                                   >
                                     ✓ Đạt
                                   </button>
@@ -9195,7 +9237,7 @@ return (
                                         ? 'bg-rose-600 text-white border border-rose-700 shadow-xs'
                                         : 'bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200'
                                       }`}
-                                    title="Đánh dấu xe LỖI nghiệm thu KCS tức thì"
+                                    title={isFailed ? "Bấm lại để hủy LỖI, chuyển về Chưa kiểm tra" : "Đánh dấu xe LỖI nghiệm thu KCS"}
                                   >
                                     🔴 Lỗi
                                   </button>
@@ -9221,17 +9263,6 @@ return (
                                       </button>
                                     </span>
                                   ))}
-
-                                  {carDefects.length > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleClearAllDefectsFromCar(r)}
-                                      className="text-[10px] bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold px-1.5 py-0.5 rounded border border-rose-300 transition cursor-pointer shrink-0"
-                                      title="Xóa sạch toàn bộ lỗi của xe này và đặt lại thành Đạt"
-                                    >
-                                      🧹 Xóa hết
-                                    </button>
-                                  )}
 
                                   <div className="flex items-center gap-1 flex-1 min-w-[130px]">
                                     <AutocompleteInput
