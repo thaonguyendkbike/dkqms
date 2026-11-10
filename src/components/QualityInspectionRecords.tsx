@@ -1857,10 +1857,34 @@ export default function QualityInspectionRecords({
     saveOqcRecordsOptimized(updated, immediateCloud);
   }, [saveOqcRecordsOptimized]);
 
+  // Kiểm tra xe đã bấm Đạt/Lỗi và đã kết thúc ngày kiểm tra đó chưa (O(1) tức thì, không chạy tác vụ nền)
+  const isKcsDateTimeLocked = useCallback((record: OQCRecord | null | undefined, todayDateStr?: string): boolean => {
+    if (!record) return false;
+    if (record.status !== 'Đạt' && record.status !== 'Lỗi') return false;
+    const recDate = record.date ? standardizeDate(String(record.date).trim()) : '';
+    if (!recDate) return false;
+    const today = todayDateStr || standardizeDate(new Date().toLocaleDateString('vi-VN'));
+    return recDate !== today;
+  }, []);
+
   const applyKcsRecordOverride = useCallback((record: OQCRecord, override: Partial<OQCRecord>) => {
+    const currentEffective = (record.id && pendingOqcOverridesRef.current[record.id])
+      ? ({ ...record, ...pendingOqcOverridesRef.current[record.id] } as OQCRecord)
+      : record;
+    const locked = isKcsDateTimeLocked(currentEffective);
+    const safeOverride: Partial<OQCRecord> = locked
+      ? {
+          ...override,
+          checkTime: currentEffective.checkTime,
+          date: currentEffective.date,
+          month: currentEffective.month,
+          year: currentEffective.year
+        }
+      : override;
+
     const mergedOverride = {
       ...(record.id ? pendingOqcOverridesRef.current[record.id] : undefined),
-      ...override
+      ...safeOverride
     };
     if (record.id) {
       pendingOqcOverridesRef.current[record.id] = mergedOverride;
@@ -1890,7 +1914,7 @@ export default function QualityInspectionRecords({
     pendingOverrideCommitTimerRef.current = setTimeout(() => {
       commitPendingOqcOverrides(false);
     }, 1000);
-  }, [commitPendingOqcOverrides]);
+  }, [commitPendingOqcOverrides, isKcsDateTimeLocked]);
 
   const flushOqcSaveToCloud = useCallback(() => {
     commitPendingOqcOverrides(true);
@@ -4230,10 +4254,25 @@ export default function QualityInspectionRecords({
   }, [oqcHandoverList]);
 
   const saveHandoverList = (list: any[]) => {
-    setHandoverScannedList(list);
-    safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(list));
+    // Ghi nhận chính xác các ID/Serial bị xóa để smartMergeArrays không hồi sinh khi đồng bộ
     try {
-      localStorage.setItem('dk_oqc_handover_list', JSON.stringify(list));
+      const nextIds = new Set(list.map((item: any) => String(item?.id || item?.serialNo || '')));
+      const removedIds: string[] = [];
+      handoverScannedList.forEach((oldItem: any) => {
+        const oid = String(oldItem?.id || '');
+        const oSerial = String(oldItem?.serialNo || '');
+        if (oid && !nextIds.has(oid)) removedIds.push(oid);
+        if (oSerial && !list.some((x: any) => String(x?.serialNo || '') === oSerial)) {
+          removedIds.push(oSerial);
+        }
+      });
+      if (removedIds.length > 0) {
+        trackDeletedIdsBatch('dk_oqc_handover_list', removedIds);
+      }
+    } catch (e) { }
+
+    setHandoverScannedList(list);
+    try {
       localStorage.setItem('dk_oqc_handover_list_is_dirty', 'true');
     } catch (e) { }
     if (setOqcHandoverList) {
@@ -4241,6 +4280,9 @@ export default function QualityInspectionRecords({
     }
     if (typeof (window as any).syncToServer === 'function') {
       (window as any).syncToServer('dk_oqc_handover_list', list);
+    } else {
+      safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(list));
+      try { localStorage.setItem('dk_oqc_handover_list', JSON.stringify(list)); } catch (e) { }
     }
     if (list.length === 0 && typeof (window as any).triggerCloudSynchronization === 'function') {
       (window as any).triggerCloudSynchronization();
@@ -5616,23 +5658,33 @@ const commitOqcImport = (finalParsed: OQCRecord[], isReplaceAll: boolean) => {
 
       if (newRec) {
         updatedCount++;
-        // GHI ĐÈ ƯU TIÊN 100% CÁC TRƯỜNG DỮ LIỆU TỪ FILE EXCEL
+        const oldHasResult = oldRec.status === 'Đạt' || oldRec.status === 'Lỗi';
+        const newHasResult = newRec.status === 'Đạt' || newRec.status === 'Lỗi';
+        const keepOldResult = oldHasResult && !newHasResult;
+        const lockedDateTime = isKcsDateTimeLocked(oldRec);
+
+        // Nếu dữ liệu mới chưa có thông tin Đạt/Lỗi thì ưu tiên giữ dữ liệu Đạt/Lỗi cũ đã có;
+        // đồng thời nếu xe cũ đã khóa giờ/ngày kiểm tra (sau khi kết thúc ngày kiểm) thì giữ nguyên giờ/ngày cũ.
         updatedExistingRecords.push({
           ...oldRec,
-          status: newRec.status,
-          defectDetail: newRec.defectDetail,
-          failedCount: newRec.failedCount,
-          rootCause: newRec.rootCause,
+          status: keepOldResult ? oldRec.status : newRec.status,
+          defectDetail: keepOldResult ? oldRec.defectDetail : newRec.defectDetail,
+          failedCount: keepOldResult ? oldRec.failedCount : newRec.failedCount,
+          rootCause: keepOldResult ? oldRec.rootCause : newRec.rootCause,
+          defectCauseDetail: keepOldResult ? oldRec.defectCauseDetail : (newRec.defectCauseDetail || oldRec.defectCauseDetail),
+          evaluation: keepOldResult ? oldRec.evaluation : (newRec.evaluation || oldRec.evaluation),
+          treatment: keepOldResult ? oldRec.treatment : (newRec.treatment || oldRec.treatment),
+          checkedBy: keepOldResult ? oldRec.checkedBy : (newRec.checkedBy || oldRec.checkedBy),
           model: newRec.model || oldRec.model,
           color: newRec.color || oldRec.color,
           lsx: newRec.lsx || oldRec.lsx,
           partCode: (newRec.partCode && newRec.partCode !== 'TEM-GEN') ? newRec.partCode : (oldRec.partCode === 'TEM-GEN' ? '' : (oldRec.partCode || newRec.partCode || '')),
           chassisNo: newRec.chassisNo || oldRec.chassisNo,
           engineNo: newRec.engineNo || oldRec.engineNo,
-          date: newRec.date || oldRec.date,
-          month: newRec.month || oldRec.month,
-          year: newRec.year || oldRec.year,
-          checkTime: newRec.checkTime || oldRec.checkTime || '08:30'
+          date: (keepOldResult || lockedDateTime) ? oldRec.date : (newRec.date || oldRec.date),
+          month: (keepOldResult || lockedDateTime) ? oldRec.month : (newRec.month || oldRec.month),
+          year: (keepOldResult || lockedDateTime) ? oldRec.year : (newRec.year || oldRec.year),
+          checkTime: (keepOldResult || lockedDateTime) ? (oldRec.checkTime || '08:30') : (newRec.checkTime || oldRec.checkTime || '08:30')
         });
         if (newRec.serialNo) matchedImportedSerials.add(newRec.serialNo.trim().toUpperCase());
       } else {
@@ -8508,16 +8560,17 @@ return (
             const dateParts = nowDate.split('/');
             const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
             const nowYear = Number(dateParts[2]) || now.getFullYear();
+            const locked = isKcsDateTimeLocked(record, nowDate);
 
             const override: Partial<OQCRecord> = {
               status: 'Đạt' as const,
               defectDetail: '',
               rootCause: '',
               failedCount: 0,
-              checkTime: nowTime,
-              date: nowDate,
-              month: nowMonth,
-              year: nowYear,
+              checkTime: locked ? record.checkTime : nowTime,
+              date: locked ? record.date : nowDate,
+              month: locked ? record.month : nowMonth,
+              year: locked ? record.year : nowYear,
               updatedAt: new Date().toISOString(),
               checkedBy: 'Liễu Tùng Lâm'
             };
@@ -8532,14 +8585,15 @@ return (
             const dateParts = nowDate.split('/');
             const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
             const nowYear = Number(dateParts[2]) || now.getFullYear();
+            const locked = isKcsDateTimeLocked(record, nowDate);
 
             const override: Partial<OQCRecord> = {
               defectDetail: defectDetail,
               rootCause: typeof rootCause === 'string' ? rootCause : (record.rootCause || ''),
-              checkTime: nowTime,
-              date: nowDate,
-              month: nowMonth,
-              year: nowYear,
+              checkTime: locked ? record.checkTime : nowTime,
+              date: locked ? record.date : nowDate,
+              month: locked ? record.month : nowMonth,
+              year: locked ? record.year : nowYear,
               updatedAt: new Date().toISOString()
             };
 
@@ -8553,6 +8607,7 @@ return (
             const dateParts = nowDate.split('/');
             const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
             const nowYear = Number(dateParts[2]) || now.getFullYear();
+            const locked = isKcsDateTimeLocked(record, nowDate);
 
             const isClear = !defectDetail || !defectDetail.trim();
             const override: Partial<OQCRecord> = isClear ? {
@@ -8560,10 +8615,10 @@ return (
               defectDetail: '',
               rootCause: '',
               failedCount: 0,
-              checkTime: nowTime,
-              date: nowDate,
-              month: nowMonth,
-              year: nowYear,
+              checkTime: locked ? record.checkTime : nowTime,
+              date: locked ? record.date : nowDate,
+              month: locked ? record.month : nowMonth,
+              year: locked ? record.year : nowYear,
               updatedAt: new Date().toISOString(),
               checkedBy: 'Liễu Tùng Lâm'
             } : {
@@ -8571,10 +8626,10 @@ return (
               defectDetail: defectDetail,
               rootCause: rootCause || '',
               failedCount: 1,
-              checkTime: nowTime,
-              date: nowDate,
-              month: nowMonth,
-              year: nowYear,
+              checkTime: locked ? record.checkTime : nowTime,
+              date: locked ? record.date : nowDate,
+              month: locked ? record.month : nowMonth,
+              year: locked ? record.year : nowYear,
               updatedAt: new Date().toISOString(),
               checkedBy: 'Liễu Tùng Lâm'
             };
@@ -9157,8 +9212,16 @@ return (
                               {/* Check Time & Date */}
                               <td className="px-3 py-2.5 text-center">
                                 {r.checkTime || r.date ? (
-                                  <div className="text-[10.5px] font-mono leading-tight">
-                                    <strong className="text-blue-900 block font-black">{r.checkTime || '--:--'}</strong>
+                                  <div
+                                    className="text-[10.5px] font-mono leading-tight"
+                                    title={isKcsDateTimeLocked(r) ? 'Giờ và ngày kiểm tra đã khóa sau khi kết thúc ngày kiểm' : undefined}
+                                  >
+                                    <strong className="text-blue-900 block font-black">
+                                      {r.checkTime || '--:--'}
+                                      {isKcsDateTimeLocked(r) && (
+                                        <span className="ml-0.5 text-[9px] text-amber-600" title="Đã khóa giờ & ngày kiểm tra">🔒</span>
+                                      )}
+                                    </strong>
                                     <span className="text-slate-400 text-[9.5px]">{r.date}</span>
                                   </div>
                                 ) : (
@@ -9584,11 +9647,14 @@ return (
                     const raw = handoverScanInput.trim();
                     if (!raw) return;
                     const serial = raw.toUpperCase();
-                    const found = oqcRecords.find(r =>
+                    const rawFound = latestOqcRecordsRef.current.find(r =>
                       (r.serialNo && r.serialNo.trim().toUpperCase() === serial) ||
                       (r.chassisNo && r.chassisNo.trim().toUpperCase() === serial) ||
                       (r.engineNo && r.engineNo.trim().toUpperCase() === serial)
                     );
+                    const found = rawFound
+                      ? (rawFound.id && localOqcOverrides[rawFound.id] ? localOqcOverrides[rawFound.id] : rawFound)
+                      : undefined;
 
                     // Lookup in master part codes if found has partCode
                     const pCode = found ? ((found.partCode && found.partCode !== 'TEM-GEN') ? found.partCode : '') : '';
@@ -9615,6 +9681,14 @@ return (
                     const filtered = handoverScannedList.filter(x => x.serialNo.toUpperCase() !== (found ? found.serialNo.toUpperCase() : serial));
                     saveHandoverList([newItem, ...filtered]);
                     setHandoverScanInput('');
+                    if (handoverFilterDate !== 'All' && handoverFilterDate !== currentDateStr) {
+                      setHandoverFilterDate(currentDateStr);
+                    }
+                    playScanBeep(!found || found.status === 'Lỗi');
+                    setTimeout(() => {
+                      const el = document.getElementById('handover-barcode-scanner-input') as HTMLInputElement | null;
+                      if (el) el.focus();
+                    }, 10);
                   }}
                   className="flex items-center gap-2 flex-1 min-w-[280px] max-w-lg"
                 >
@@ -13411,10 +13485,15 @@ return (
                   return;
                 }
 
-                // Merge with existing oqcRecords with diff checking
+                // Merge with existing oqcRecords with O(1) Map lookup & smart preservation of existing Đạt/Lỗi results
                 const existingMap = new Map<string, OQCRecord>();
                 oqcRecords.forEach(r => {
                   if (r.serialNo) existingMap.set(r.serialNo.trim().toUpperCase(), r);
+                });
+
+                const newRecordsMap = new Map<string, OQCRecord>();
+                newRecords.forEach(n => {
+                  if (n.serialNo) newRecordsMap.set(n.serialNo.trim().toUpperCase(), n);
                 });
 
                 let addedCount = 0;
@@ -13424,26 +13503,51 @@ return (
                 const norm = (v: any) => String(v ?? '').trim().toLowerCase();
                 const updatedRecords = oqcRecords.map(oldRec => {
                   const key = (oldRec.serialNo || '').trim().toUpperCase();
-                  const newRec = newRecords.find(n => n.serialNo.trim().toUpperCase() === key);
+                  const newRec = key ? newRecordsMap.get(key) : undefined;
                   if (newRec) {
+                    const oldHasResult = oldRec.status === 'Đạt' || oldRec.status === 'Lỗi';
+                    const newHasResult = newRec.status === 'Đạt' || newRec.status === 'Lỗi';
+                    const keepOldResult = oldHasResult && !newHasResult;
+                    const lockedDateTime = isKcsDateTimeLocked(oldRec);
+
+                    // Không để giá trị fallback mặc định ('DK Gogo', 'Đen') khi Nạp LSX ghi đè mất Model/Màu thực tế đã có của xe cũ
+                    const isFallbackModel = newRec.model === 'DK Gogo' && oldRec.model && oldRec.model !== 'DK Gogo';
+                    const isFallbackColor = newRec.color === 'Đen' && oldRec.color && oldRec.color !== 'Đen';
+                    const nextModel = isFallbackModel ? oldRec.model : (newRec.model || oldRec.model);
+                    const nextColor = isFallbackColor ? oldRec.color : (newRec.color || oldRec.color);
+                    const nextStatus = keepOldResult ? oldRec.status : (newHasResult ? newRec.status : oldRec.status);
+                    const nextDefect = keepOldResult ? oldRec.defectDetail : (newHasResult ? newRec.defectDetail : oldRec.defectDetail);
+                    const nextRootCause = keepOldResult ? oldRec.rootCause : (newHasResult ? (newRec.rootCause || oldRec.rootCause) : oldRec.rootCause);
+
                     let hasDiff = false;
                     if (newRec.lsx && norm(oldRec.lsx) !== norm(newRec.lsx)) hasDiff = true;
-                    if (newRec.model && norm(oldRec.model) !== norm(newRec.model)) hasDiff = true;
-                    if (newRec.color && norm(oldRec.color) !== norm(newRec.color)) hasDiff = true;
+                    if (nextModel && norm(oldRec.model) !== norm(nextModel)) hasDiff = true;
+                    if (nextColor && norm(oldRec.color) !== norm(nextColor)) hasDiff = true;
                     if (newRec.partCode && norm(oldRec.partCode) !== norm(newRec.partCode)) hasDiff = true;
                     if (newRec.chassisNo && norm(oldRec.chassisNo) !== norm(newRec.chassisNo)) hasDiff = true;
                     if (newRec.engineNo && norm(oldRec.engineNo) !== norm(newRec.engineNo)) hasDiff = true;
+                    if (norm(oldRec.status) !== norm(nextStatus)) hasDiff = true;
+                    if (norm(oldRec.defectDetail) !== norm(nextDefect)) hasDiff = true;
 
                     if (hasDiff) {
                       updatedCount++;
                       return {
                         ...oldRec,
                         lsx: newRec.lsx || oldRec.lsx,
-                        model: newRec.model || oldRec.model,
-                        color: newRec.color || oldRec.color,
+                        model: nextModel,
+                        color: nextColor,
                         partCode: newRec.partCode || oldRec.partCode,
                         chassisNo: newRec.chassisNo || oldRec.chassisNo,
                         engineNo: newRec.engineNo || oldRec.engineNo,
+                        status: nextStatus,
+                        defectDetail: nextDefect,
+                        failedCount: keepOldResult ? oldRec.failedCount : (newHasResult ? newRec.failedCount : oldRec.failedCount),
+                        rootCause: nextRootCause,
+                        defectCauseDetail: keepOldResult ? oldRec.defectCauseDetail : (newHasResult ? (newRec.defectCauseDetail || oldRec.defectCauseDetail) : oldRec.defectCauseDetail),
+                        checkTime: (keepOldResult || lockedDateTime) ? oldRec.checkTime : (newRec.checkTime || oldRec.checkTime),
+                        date: (keepOldResult || lockedDateTime) ? oldRec.date : (newRec.date || oldRec.date),
+                        month: (keepOldResult || lockedDateTime) ? oldRec.month : (newRec.month || oldRec.month),
+                        year: (keepOldResult || lockedDateTime) ? oldRec.year : (newRec.year || oldRec.year),
                         updatedAt: new Date().toISOString()
                       };
                     } else {
@@ -13616,8 +13720,24 @@ return (
               const existingIndex = oqcRecords.findIndex(r => r.serialNo.trim().toUpperCase() === serial.toUpperCase());
               let updated: OQCRecord[];
               if (existingIndex > -1) {
+                const oldRec = oqcRecords[existingIndex];
+                const oldHasResult = oldRec.status === 'Đạt' || oldRec.status === 'Lỗi';
+                const lockedDateTime = isKcsDateTimeLocked(oldRec);
                 updated = [...oqcRecords];
-                updated[existingIndex] = { ...updated[existingIndex], ...newRec, updatedAt: nowIso };
+                updated[existingIndex] = {
+                  ...oldRec,
+                  ...newRec,
+                  status: oldHasResult ? oldRec.status : newRec.status,
+                  defectDetail: oldHasResult ? oldRec.defectDetail : newRec.defectDetail,
+                  failedCount: oldHasResult ? oldRec.failedCount : newRec.failedCount,
+                  rootCause: oldHasResult ? oldRec.rootCause : newRec.rootCause,
+                  checkedBy: oldHasResult ? oldRec.checkedBy : newRec.checkedBy,
+                  checkTime: (oldHasResult || lockedDateTime) ? oldRec.checkTime : newRec.checkTime,
+                  date: (oldHasResult || lockedDateTime) ? oldRec.date : newRec.date,
+                  month: (oldHasResult || lockedDateTime) ? oldRec.month : newRec.month,
+                  year: (oldHasResult || lockedDateTime) ? oldRec.year : newRec.year,
+                  updatedAt: nowIso
+                };
               } else {
                 updated = [newRec, ...oqcRecords];
               }
@@ -13771,26 +13891,41 @@ return (
               const scanDateStr = standardizeDate(now.toLocaleDateString('vi-VN'));
               const scanTimeStr = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 
+              // Tạo bảng băm O(1) cho toàn bộ xe OQC (kèm localOqcOverrides mới nhất) để dán hàng trăm sêri tức thì
+              const handoverOqcLookupMap = new Map<string, OQCRecord>();
+              const currentOqcList = latestOqcRecordsRef.current;
+              const currentOverrides = localOqcOverrides;
+              for (let i = 0; i < currentOqcList.length; i++) {
+                const rawRec = currentOqcList[i];
+                const rec = (rawRec.id && currentOverrides[rawRec.id]) ? currentOverrides[rawRec.id] : rawRec;
+                if (rec.serialNo) handoverOqcLookupMap.set(rec.serialNo.trim().toUpperCase(), rec);
+                if (rec.chassisNo) handoverOqcLookupMap.set(rec.chassisNo.trim().toUpperCase(), rec);
+                if (rec.engineNo) handoverOqcLookupMap.set(rec.engineNo.trim().toUpperCase(), rec);
+              }
+
               lines.forEach(line => {
                 const parts = line.includes('\t') ? line.split('\t') : (line.includes(',') ? line.split(',') : [line]);
                 const serial = parts[0].trim().toUpperCase();
                 if (!serial) return;
                 if (existingSerials.has(serial)) return;
-                existingSerials.add(serial);
 
-                const found = oqcRecords.find(r =>
-                  (r.serialNo && r.serialNo.trim().toUpperCase() === serial) ||
-                  (r.chassisNo && r.chassisNo.trim().toUpperCase() === serial) ||
-                  (r.engineNo && r.engineNo.trim().toUpperCase() === serial)
-                );
+                const found = handoverOqcLookupMap.get(serial);
+                const resolvedSerial = found && found.serialNo ? found.serialNo.trim().toUpperCase() : serial;
+                if (existingSerials.has(resolvedSerial)) return;
+                existingSerials.add(serial);
+                existingSerials.add(resolvedSerial);
+
+                const pCode = found ? ((found.partCode && found.partCode !== 'TEM-GEN') ? found.partCode : '') : '';
+                const matchedPart = lookupPartCode(pCode);
+
                 newItems.push({
                   id: `HO-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
                   serialNo: found ? found.serialNo : serial,
                   chassisNo: found ? (found.chassisNo || '--') : '--',
                   engineNo: found ? (found.engineNo || '--') : '--',
-                  partCode: found ? ((found.partCode && found.partCode !== 'TEM-GEN') ? found.partCode : '') : '',
-                  model: found ? (found.model || 'Chưa rõ') : 'Chưa có trong OQC',
-                  color: found ? (found.color || 'Chưa rõ') : 'Chưa rõ',
+                  partCode: pCode,
+                  model: found ? (found.model || (matchedPart ? matchedPart.model : 'Chưa rõ')) : (matchedPart ? matchedPart.model : 'Chưa có trong OQC'),
+                  color: found ? (found.color || (matchedPart ? matchedPart.color : 'Chưa rõ')) : (matchedPart ? matchedPart.color : 'Chưa rõ'),
                   lsx: found ? (found.lsx || 'Ngoại bảng') : 'Ngoại bảng',
                   status: found ? (found.status || 'Chưa kiểm tra') : 'Chưa có dữ liệu KCS',
                   checkTime: found ? (found.checkTime || '--:--') : '--:--',

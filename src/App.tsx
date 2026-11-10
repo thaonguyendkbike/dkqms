@@ -1930,8 +1930,49 @@ export function App() {
   const lastSeenValues = useRef<Record<string, string>>({});
   const initialStateValues = useRef<Record<string, string>>({});
   const serverTimestamps = useRef<Record<string, string>>({});
+  const lastLocalWriteTimestamps = useRef<Record<string, string>>({});
   const isRemoteUpdateRef = useRef<Record<string, boolean>>({});
   const lastSyncedChunkHashes = useRef<Record<string, string>>({});
+
+  // Hàm chuẩn hóa thứ tự thuộc tính của bản ghi OQC trước khi băm (hash) và chia chunk 500 xe,
+  // đảm bảo chỉ những chunk thực sự có thay đổi mới được đẩy lên Firestore (1 chunk thay vì 72 chunks)
+  const minifyOqcChunkRecord = (r: any) => {
+    if (!r || typeof r !== 'object') return r;
+    const clean: any = {
+      id: r.id || `OQC-${(r.serialNo || '').trim().toUpperCase()}`,
+      serialNo: r.serialNo,
+      model: r.model,
+      color: r.color,
+      status: r.status || 'Đạt',
+      date: r.date,
+      month: r.month,
+      year: r.year,
+      lsx: r.lsx,
+      partCode: r.partCode
+    };
+    if (r.chassisNo) clean.chassisNo = r.chassisNo;
+    if (r.engineNo) clean.engineNo = r.engineNo;
+    if (r.checkedBy) clean.checkedBy = r.checkedBy;
+    if (r.updatedAt) clean.updatedAt = r.updatedAt;
+    if (r.createdAt) clean.createdAt = r.createdAt;
+    if (r.imageUrl) clean.imageUrl = r.imageUrl;
+    if (r.passFlag !== undefined) clean.passFlag = r.passFlag;
+    if (r.oldColor) clean.oldColor = r.oldColor;
+    if (r.oldModel) clean.oldModel = r.oldModel;
+    if (r.isColorChanged) clean.isColorChanged = true;
+    if (r.isStatusChanged) clean.isStatusChanged = true;
+    if (r.colorChangeDate) clean.colorChangeDate = r.colorChangeDate;
+    if (r.failedCount && r.failedCount > 0) clean.failedCount = r.failedCount;
+    if (r.defectDetail && String(r.defectDetail).trim()) clean.defectDetail = String(r.defectDetail).trim();
+    if (r.rootCause && String(r.rootCause).trim()) clean.rootCause = String(r.rootCause).trim();
+    if (r.defectCauseDetail && String(r.defectCauseDetail).trim()) clean.defectCauseDetail = String(r.defectCauseDetail).trim();
+    if (r.evaluation && String(r.evaluation).trim()) clean.evaluation = String(r.evaluation).trim();
+    if (r.treatment && String(r.treatment).trim()) clean.treatment = String(r.treatment).trim();
+    if (r.checkTime && r.checkTime !== '08:30') clean.checkTime = r.checkTime;
+    if (r.totalLlr && r.totalLlr !== 1) clean.totalLlr = r.totalLlr;
+    if (r.totalLsr) clean.totalLsr = r.totalLsr;
+    return clean;
+  };
   const [conflictKeys, setConflictKeys] = useState<string[]>([]);
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [resolvingConflicts, setResolvingConflicts] = useState(false);
@@ -2236,6 +2277,35 @@ export function App() {
         }
       }
     });
+
+    // Quy tắc bảo vệ đặc thù cho phân hệ OQC / Trạm KCS (dk_oqc_records):
+    // 1) Nếu 1 bên đã có kết quả kiểm tra ('Đạt' hoặc 'Lỗi') và bên kia mới chỉ 'Chưa kiểm tra', ưu tiên giữ dữ liệu đã kiểm tra.
+    // 2) Nếu xe đã được bấm 'Đạt' hoặc 'Lỗi' ở một ngày trước đó (đã kết thúc ngày kiểm), khóa cố định giờ và ngày kiểm tra.
+    if (key === 'dk_oqc_records') {
+      const isInspected = (st: any) => st === 'Đạt' || st === 'Lỗi';
+      const sInspected = isInspected(serverItem.status);
+      const lInspected = isInspected(localItem.status);
+      const inspectionFields = ['status', 'defectDetail', 'failedCount', 'rootCause', 'defectCauseDetail', 'evaluation', 'treatment', 'checkTime', 'date', 'month', 'year', 'checkedBy'];
+
+      if (sInspected && !lInspected) {
+        inspectionFields.forEach((f) => {
+          if (serverItem[f] !== undefined) mergedItem[f] = serverItem[f];
+        });
+      } else if (lInspected && !sInspected) {
+        inspectionFields.forEach((f) => {
+          if (localItem[f] !== undefined) mergedItem[f] = localItem[f];
+        });
+      }
+
+      const todayStr = standardizeDate(new Date().toLocaleDateString('vi-VN'));
+      const sDateStd = serverItem.date ? standardizeDate(String(serverItem.date).trim()) : '';
+      if (sInspected && sDateStd && sDateStd !== todayStr) {
+        mergedItem.date = serverItem.date;
+        if (serverItem.checkTime) mergedItem.checkTime = serverItem.checkTime;
+        if (serverItem.month) mergedItem.month = serverItem.month;
+        if (serverItem.year) mergedItem.year = serverItem.year;
+      }
+    }
 
     // Cập nhật timestamp chuẩn cho bản ghi hợp nhất (giữ nguyên mốc cũ nếu không có sửa đổi thực sự)
     const maxTime = Math.max(serverTime || 0, localTime || 0);
@@ -2739,43 +2809,9 @@ export function App() {
         if (CHUNKED_KEYS.includes(key)) {
           // Process massive dataset into high-efficiency minified chunked documents (500 records/chunk)
           const rawList = Array.isArray(val) ? val : [];
-          const currentList = rawList.map((r: any) => {
-            if (!r || typeof r !== 'object') return r;
-            const clean: any = {
-              id: r.id || `OQC-${(r.serialNo || '').trim().toUpperCase()}`,
-              serialNo: r.serialNo,
-              model: r.model,
-              color: r.color,
-              status: r.status || 'Đạt',
-              date: r.date,
-              month: r.month,
-              year: r.year,
-              lsx: r.lsx,
-              partCode: r.partCode
-            };
-            if (r.chassisNo) clean.chassisNo = r.chassisNo;
-            if (r.engineNo) clean.engineNo = r.engineNo;
-            if (r.checkedBy) clean.checkedBy = r.checkedBy;
-            if (r.updatedAt) clean.updatedAt = r.updatedAt;
-            if (r.createdAt) clean.createdAt = r.createdAt;
-            if (r.imageUrl) clean.imageUrl = r.imageUrl;
-            if (r.passFlag !== undefined) clean.passFlag = r.passFlag;
-            if (r.oldColor) clean.oldColor = r.oldColor;
-            if (r.oldModel) clean.oldModel = r.oldModel;
-            if (r.isColorChanged) clean.isColorChanged = true;
-            if (r.isStatusChanged) clean.isStatusChanged = true;
-            if (r.colorChangeDate) clean.colorChangeDate = r.colorChangeDate;
-            if (r.failedCount && r.failedCount > 0) clean.failedCount = r.failedCount;
-            if (r.defectDetail && String(r.defectDetail).trim()) clean.defectDetail = String(r.defectDetail).trim();
-            if (r.rootCause && String(r.rootCause).trim()) clean.rootCause = String(r.rootCause).trim();
-            if (r.defectCauseDetail && String(r.defectCauseDetail).trim()) clean.defectCauseDetail = String(r.defectCauseDetail).trim();
-            if (r.evaluation && String(r.evaluation).trim()) clean.evaluation = String(r.evaluation).trim();
-            if (r.treatment && String(r.treatment).trim()) clean.treatment = String(r.treatment).trim();
-            if (r.checkTime && r.checkTime !== '08:30') clean.checkTime = r.checkTime;
-            if (r.totalLlr && r.totalLlr !== 1) clean.totalLlr = r.totalLlr;
-            if (r.totalLsr) clean.totalLsr = r.totalLsr;
-            return clean;
-          });
+          const currentList = rawList.map(minifyOqcChunkRecord);
+          lastLocalWriteTimestamps.current[key] = timestamp;
+          serverTimestamps.current[key] = timestamp;
 
           const CHUNK_SIZE = 500;
           const totalChunks = Math.ceil(currentList.length / CHUNK_SIZE) || 1;
@@ -2922,9 +2958,9 @@ export function App() {
           const serializedVal = JSON.stringify(val);
           if (!isMetadataKey) {
             safeStorage.setItem(key, serializedVal);
-            const syncTime = new Date().toISOString();
-            localStorage.setItem(`${key}_last_synced_at`, syncTime);
-            serverTimestamps.current[key] = syncTime;
+            localStorage.setItem(`${key}_last_synced_at`, timestamp);
+            serverTimestamps.current[key] = timestamp;
+            lastLocalWriteTimestamps.current[key] = timestamp;
             if (key === 'dk_capas') {
               const relationalCapas = (val || []).map((c: any) => ({
                 CAPAID: c.CAPAID || c.id,
@@ -4493,6 +4529,18 @@ export function App() {
           const localSaved = localStorage.getItem(key);
           const isDirty = localDirtyKeys.current.has(key) || localStorage.getItem(`${key}_is_dirty`) === 'true';
 
+          // Bỏ qua sự kiện dội ngược (Echo) từ chính thao tác ghi của máy hiện tại để tránh tải lại toàn bộ 72 chunks (72 reads)
+          if (
+            listenersInitialized >= totalListeners &&
+            (docSnap.metadata.hasPendingWrites ||
+              (serverTime && (serverTime === lastLocalWriteTimestamps.current[key] || serverTime === serverTimestamps.current[key])))
+          ) {
+            if (serverTime) {
+              serverTimestamps.current[key] = serverTime;
+            }
+            return;
+          }
+
           if (conflictKeys.includes(key)) {
             console.log(`[Chunked onSnapshot]: Phân hệ '${key}' đang có xung đột chưa giải quyết. Tạm dừng gộp.`);
             return;
@@ -4512,7 +4560,6 @@ export function App() {
                   const cd = res.value.data();
                   if (cd && Array.isArray(cd.data)) {
                     assembledList = assembledList.concat(cd.data);
-                    lastSyncedChunkHashes.current[`${key}_chunk_${cIdx}`] = JSON.stringify(cd.data);
                   }
                 } else {
                   console.error(`[Chunk Fetch Error] Failed to load chunk ${cIdx}:`, res.reason);
@@ -4528,6 +4575,17 @@ export function App() {
           if (key === 'dk_oqc_records') {
             assembledList = deduplicateOqcRecords(assembledList);
             registerOqcServerSnapshot(assembledList, Array.isArray(metaData?.deletedIds) ? metaData.deletedIds : []);
+          }
+
+          // Lưu mã băm (hash) chuẩn hóa theo từng chunk 500 bản ghi để khi thao tác Đạt/Lỗi chỉ đẩy đúng 1 chunk thay đổi
+          if (assembledList.length > 0) {
+            const CHUNK_SIZE = 500;
+            const minifiedForHash = key === 'dk_oqc_records' ? assembledList.map(minifyOqcChunkRecord) : assembledList;
+            const totalLoadedChunks = Math.ceil(minifiedForHash.length / CHUNK_SIZE) || 1;
+            for (let cIdx = 0; cIdx < totalLoadedChunks; cIdx++) {
+              const cSlice = minifiedForHash.slice(cIdx * CHUNK_SIZE, (cIdx + 1) * CHUNK_SIZE);
+              lastSyncedChunkHashes.current[`${key}_chunk_${cIdx}`] = JSON.stringify(cSlice);
+            }
           }
 
           let localParsedCount = 0;
@@ -4604,7 +4662,8 @@ export function App() {
           }
 
           const serialized = JSON.stringify(finalDisplayData);
-          lastSyncedValues.current[key] = JSON.stringify(assembledList);
+          const assembledSerialized = JSON.stringify(assembledList);
+          lastSyncedValues.current[key] = assembledSerialized;
           lastSeenValues.current[key] = serialized;
           safeStorage.setItem(key, serialized);
           if (serverTime) {
@@ -4613,7 +4672,9 @@ export function App() {
           }
 
           if (isDirty) {
-            const isIdentical = isFunctionallyIdentical(serialized, JSON.stringify(assembledList), key);
+            const isIdentical = CHUNKED_KEYS.includes(key)
+              ? serialized === assembledSerialized
+              : isFunctionallyIdentical(serialized, assembledSerialized, key);
             if (isIdentical) {
               try { localStorage.setItem(`${key}_is_dirty`, 'false'); } catch (e) { }
               localDirtyKeys.current.delete(key);
@@ -4645,12 +4706,11 @@ export function App() {
         unsubscribes.current.push(unsub);
       });
 
-      // Set up real-time onSnapshot listeners for standalone documents (Staff, Color Changes, Part codes, Audits, etc.)
+      // Set up real-time onSnapshot listeners for standalone documents (Staff, Part codes, Audits, etc.)
+      // Lưu ý: dk_oqc_color_changes và dk_oqc_handover_list đã có listener chuyên biệt bên dưới, không đăng ký trùng ở đây
       const STANDARD_DOC_SYNC_KEYS = [
         'dk_staff',
-        'dk_oqc_color_changes',
         'dk_oqc_part_codes',
-        'dk_oqc_handover_list',
         'dk_supplier_production_audits',
         'dk_models'
       ];
@@ -7599,9 +7659,14 @@ export function App() {
       }
       const d = snap.data();
       if (d && Array.isArray(d.data)) {
+        const serialized = JSON.stringify(d.data);
+        lastSyncedValues.current['dk_oqc_handover_list'] = serialized;
+        lastSeenValues.current['dk_oqc_handover_list'] = serialized;
+        isRemoteUpdateRef.current['dk_oqc_handover_list'] = true;
+        setTimeout(() => { isRemoteUpdateRef.current['dk_oqc_handover_list'] = false; }, 800);
         setOqcHandoverList(d.data);
-        safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(d.data));
-        try { localStorage.setItem('dk_oqc_handover_list', JSON.stringify(d.data)); } catch (e) { }
+        safeStorage.setItem('dk_oqc_handover_list', serialized);
+        try { localStorage.setItem('dk_oqc_handover_list', serialized); } catch (e) { }
       }
     }).catch(err => {
       console.warn("[Global Handover Fetch Notice]:", err?.message || err);
@@ -7616,9 +7681,14 @@ export function App() {
       }
       const d = snap.data();
       if (d && Array.isArray(d.data)) {
+        const serialized = JSON.stringify(d.data);
+        lastSyncedValues.current['dk_oqc_handover_list'] = serialized;
+        lastSeenValues.current['dk_oqc_handover_list'] = serialized;
+        isRemoteUpdateRef.current['dk_oqc_handover_list'] = true;
+        setTimeout(() => { isRemoteUpdateRef.current['dk_oqc_handover_list'] = false; }, 800);
         setOqcHandoverList(d.data);
-        safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(d.data));
-        try { localStorage.setItem('dk_oqc_handover_list', JSON.stringify(d.data)); } catch (e) { }
+        safeStorage.setItem('dk_oqc_handover_list', serialized);
+        try { localStorage.setItem('dk_oqc_handover_list', serialized); } catch (e) { }
         try { window.dispatchEvent(new CustomEvent('dk_handover_updated', { detail: d.data })); } catch (e) { }
       }
     }, (err) => {
