@@ -1164,6 +1164,12 @@ const AutocompleteInput = React.memo(function AutocompleteInput({
   const [highlightIndex, setHighlightIndex] = useState(-1);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const onChangeRef = React.useRef(onChange);
+  const onCommitRef = React.useRef(onCommit);
+  const onFocusRef = React.useRef(onFocus);
+  onChangeRef.current = onChange;
+  onCommitRef.current = onCommit;
+  onFocusRef.current = onFocus;
 
   React.useEffect(() => {
     setLocalValue(value || '');
@@ -1177,6 +1183,7 @@ const AutocompleteInput = React.memo(function AutocompleteInput({
       .replace(/[đĐ]/g, 'd');
 
   const filteredOptions = useMemo(() => {
+    if (!isOpen) return [];
     if (!localValue || !localValue.trim()) return options.slice(0, 10);
     const normQuery = normalize(localValue.trim());
     const queryTokens = normQuery.split(/\s+/).filter(Boolean);
@@ -1186,13 +1193,13 @@ const AutocompleteInput = React.memo(function AutocompleteInput({
         return queryTokens.every(token => normOpt.includes(token));
       })
       .slice(0, 10);
-  }, [localValue, options]);
+  }, [isOpen, localValue, options]);
 
   const handleSelect = (opt: string) => {
     if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
     setLocalValue(opt);
-    onChange(opt);
-    if (onCommit) onCommit(opt);
+    onChangeRef.current(opt);
+    if (onCommitRef.current) onCommitRef.current(opt);
     setIsOpen(false);
     setHighlightIndex(-1);
   };
@@ -1204,8 +1211,8 @@ const AutocompleteInput = React.memo(function AutocompleteInput({
     blurTimerRef.current = setTimeout(() => {
       setIsOpen(false);
       if (localValue !== value) {
-        onChange(localValue);
-        if (onCommit) onCommit(localValue);
+        onChangeRef.current(localValue);
+        if (onCommitRef.current) onCommitRef.current(localValue);
       }
     }, 150);
   };
@@ -1228,15 +1235,15 @@ const AutocompleteInput = React.memo(function AutocompleteInput({
           handleSelect(filteredOptions[highlightIndex]);
         } else {
           setIsOpen(false);
-          onChange(localValue);
-          if (onCommit) onCommit(localValue);
+          onChangeRef.current(localValue);
+          if (onCommitRef.current) onCommitRef.current(localValue);
         }
       } else if (e.key === 'Escape') {
         setIsOpen(false);
       }
     } else if (e.key === 'Enter') {
-      onChange(localValue);
-      if (onCommit) onCommit(localValue);
+      onChangeRef.current(localValue);
+      if (onCommitRef.current) onCommitRef.current(localValue);
     }
   };
 
@@ -1257,7 +1264,7 @@ const AutocompleteInput = React.memo(function AutocompleteInput({
         onBlur={handleBlur}
         onFocus={() => {
           setIsOpen(true);
-          if (onFocus) onFocus();
+          if (onFocusRef.current) onFocusRef.current();
         }}
         onKeyDown={handleKeyDown}
         className={className}
@@ -1288,7 +1295,14 @@ const AutocompleteInput = React.memo(function AutocompleteInput({
       )}
     </div>
   );
-});
+}, (prev, next) =>
+  prev.value === next.value &&
+  prev.placeholder === next.placeholder &&
+  prev.disabled === next.disabled &&
+  prev.className === next.className &&
+  prev.options === next.options &&
+  prev.id === next.id
+);
 
 // ========== MODULE-LEVEL CONSTANTS & UTILITIES FOR KCS STATION (Change 2: avoid recreation every render) ==========
 
@@ -1718,22 +1732,76 @@ export default function QualityInspectionRecords({
   // High-Performance Zero-Latency Save Helper for OQC Quick Pass / Defect Entry
   // Immediate UI (<1ms) & LocalStorage (<5ms) save; Debounced Batch Cloud Push
   const asyncOqcSaveTimer = useRef<any>(null);
+  const asyncOqcStorageTimer = useRef<any>(null);
   const latestOqcRecordsRef = useRef<OQCRecord[]>(oqcRecords);
 
   useEffect(() => {
     latestOqcRecordsRef.current = oqcRecords;
   }, [oqcRecords]);
 
+  // Recover any pending micro-overrides if user refreshed (F5) within the 1000ms batch window
+  const hasRecoveredPendingOverridesRef = useRef(false);
+  useEffect(() => {
+    if (hasRecoveredPendingOverridesRef.current || !oqcRecords || oqcRecords.length === 0) return;
+    hasRecoveredPendingOverridesRef.current = true;
+    try {
+      const rawPending = safeStorage.getItem('dk_oqc_pending_overrides');
+      if (!rawPending) return;
+      const parsed = JSON.parse(rawPending);
+      const byId = parsed?.byId || {};
+      const bySerial = parsed?.bySerial || {};
+      const hasId = Object.keys(byId).length > 0;
+      const hasSerial = Object.keys(bySerial).length > 0;
+      if (!hasId && !hasSerial) {
+        safeStorage.removeItem('dk_oqc_pending_overrides');
+        return;
+      }
+      let changed = false;
+      const merged = oqcRecords.map(r => {
+        const idMatch = r.id ? byId[r.id] : undefined;
+        if (idMatch) {
+          changed = true;
+          return { ...r, ...idMatch };
+        }
+        if (hasSerial && r.serialNo) {
+          const sMatch = bySerial[r.serialNo.trim().toUpperCase()];
+          if (sMatch) {
+            changed = true;
+            return { ...r, ...sMatch };
+          }
+        }
+        return r;
+      });
+      safeStorage.removeItem('dk_oqc_pending_overrides');
+      if (changed) {
+        latestOqcRecordsRef.current = merged;
+        setOqcRecords(merged);
+        safeStorage.setItem('dk_oqc_records', JSON.stringify(merged));
+      }
+    } catch (e) { }
+  }, [oqcRecords, setOqcRecords]);
+
   const saveOqcRecordsOptimized = useCallback((updated: OQCRecord[], immediateCloudSync: boolean = false) => {
     try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
     (window as any).__oqcManagedSaveTs = Date.now();
     latestOqcRecordsRef.current = updated;
 
-    // 1. Ghi bộ nhớ và IndexedDB ngay lập tức (không trì hoãn để tránh mất dữ liệu khi F5/reload)
-    safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-
-    // 2. Cập nhật State tức thì
+    // 1. Cập nhật State tức thì (ưu tiên vẽ khung hình UI trước)
     setOqcRecords(updated);
+
+    // 2. Ghi bộ nhớ và IndexedDB qua safeStorage.setItem (tách nhịp 40ms khi thao tác thường để không cộng dồn JSON.stringify 12MB vào frame render của React)
+    if (asyncOqcStorageTimer.current) {
+      clearTimeout(asyncOqcStorageTimer.current);
+      asyncOqcStorageTimer.current = null;
+    }
+    if (immediateCloudSync) {
+      safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+    } else {
+      asyncOqcStorageTimer.current = setTimeout(() => {
+        asyncOqcStorageTimer.current = null;
+        safeStorage.setItem('dk_oqc_records', JSON.stringify(latestOqcRecordsRef.current));
+      }, 40);
+    }
 
     // 3. Đẩy Cloud (ngay lập tức khi xóa xe, hoặc gom sau 2 GIÂY không thao tác khi bấm Đạt/Lỗi)
     if (asyncOqcSaveTimer.current) {
@@ -1768,6 +1836,7 @@ export default function QualityInspectionRecords({
 
     pendingOqcOverridesRef.current = {};
     pendingOqcSerialOverridesRef.current = {};
+    safeStorage.removeItem('dk_oqc_pending_overrides');
 
     const currentList = latestOqcRecordsRef.current;
     const updated = currentList.map(r => {
@@ -1807,17 +1876,29 @@ export default function QualityInspectionRecords({
       }
     }
     try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
+    // Lưu tức thì bản ghi thay đổi nhỏ (< 1KB, tốn 0.05ms) qua safeStorage.setItem để bảo vệ 100% khi F5 ngay lập tức
+    try {
+      safeStorage.setItem('dk_oqc_pending_overrides', JSON.stringify({
+        byId: pendingOqcOverridesRef.current,
+        bySerial: pendingOqcSerialOverridesRef.current
+      }));
+    } catch (e) { }
 
     if (pendingOverrideCommitTimerRef.current) {
       clearTimeout(pendingOverrideCommitTimerRef.current);
     }
     pendingOverrideCommitTimerRef.current = setTimeout(() => {
       commitPendingOqcOverrides(false);
-    }, 600);
+    }, 1000);
   }, [commitPendingOqcOverrides]);
 
   const flushOqcSaveToCloud = useCallback(() => {
     commitPendingOqcOverrides(true);
+    if (asyncOqcStorageTimer.current) {
+      clearTimeout(asyncOqcStorageTimer.current);
+      asyncOqcStorageTimer.current = null;
+      safeStorage.setItem('dk_oqc_records', JSON.stringify(latestOqcRecordsRef.current));
+    }
     if (asyncOqcSaveTimer.current) {
       clearTimeout(asyncOqcSaveTimer.current);
       asyncOqcSaveTimer.current = null;
@@ -1832,7 +1913,7 @@ export default function QualityInspectionRecords({
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (pendingOverrideCommitTimerRef.current || asyncOqcSaveTimer.current) {
+      if (pendingOverrideCommitTimerRef.current || asyncOqcStorageTimer.current || asyncOqcSaveTimer.current) {
         flushOqcSaveToCloud();
       }
     };
@@ -1843,6 +1924,11 @@ export default function QualityInspectionRecords({
       window.removeEventListener('pagehide', handleBeforeUnload);
       if (pendingOverrideCommitTimerRef.current) {
         commitPendingOqcOverrides(false);
+      }
+      if (asyncOqcStorageTimer.current) {
+        clearTimeout(asyncOqcStorageTimer.current);
+        asyncOqcStorageTimer.current = null;
+        safeStorage.setItem('dk_oqc_records', JSON.stringify(latestOqcRecordsRef.current));
       }
     };
   }, [flushOqcSaveToCloud, commitPendingOqcOverrides]);
@@ -1884,13 +1970,14 @@ export default function QualityInspectionRecords({
     );
   }, [weeklyPlans]);
 
-  // Check if any error/defect exists in inspection databases (IQC, PQC, OQC)
+  // Check if any error/defect exists in inspection databases (IQC, PQC, OQC) — only used in supplier_monitoring tab
   const hasQualityErrorInSystem = useMemo(() => {
+    if (qcMainSubTab !== 'supplier_monitoring') return false;
     const hasIqcError = iqcRecords.some(r => r.result === 'Lỗi' || (r.failedQty !== undefined && r.failedQty > 0));
     const hasPqcError = pqcRecords.some(r => r.status === 'Đang cải tiến' || (r.findings && r.findings.toLowerCase().includes('lỗi')));
     const hasOqcError = oqcRecords.some(r => r.status === 'Lỗi' || (r.failedCount !== undefined && r.failedCount > 0));
     return hasIqcError || hasPqcError || hasOqcError;
-  }, [iqcRecords, pqcRecords, oqcRecords]);
+  }, [qcMainSubTab, iqcRecords, pqcRecords, oqcRecords]);
 
   const filterDailyLogsForSqc = useCallback((log: any) => {
     const content = (log.content || '').toLowerCase();
@@ -3986,57 +4073,43 @@ export default function QualityInspectionRecords({
   const [newCarColor, setNewCarColor] = useState('Trắng');
   const [oqcImportReplaceAll, setOqcImportReplaceAll] = useState(false);
 
-  // Fast & optimized KCS Station data pipeline (Single Pass O(N) calculation)
-  // Performance: Cache ref for guarded useMemo (Tối ưu 1)
-  const kcsStationStatsCacheRef = useRef<any>({
-    displayRecords: [], totalCars: 0, passedCars: 0, failedCars: 0, pendingCars: 0, yieldRate: 100
-  });
-
-  const kcsStationStats = useMemo(() => {
-    // Guard: Only recompute when KCS Station sub-view is active (Tối ưu 1)
-    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'station') return kcsStationStatsCacheRef.current;
+  // Fast & optimized 2-stage KCS Station data pipeline:
+  // Stage 1 (kcsBaseRecords): Filters by LSX, Month, Year, Date, Search — independent of localOqcOverrides & kcsStatusFilter!
+  // Clicking Đạt/Lỗi NEVER re-runs Stage 1 over 35,794 cars!
+  const kcsBaseRecordsCacheRef = useRef<OQCRecord[]>([]);
+  const kcsBaseRecords = useMemo(() => {
+    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'station') return kcsBaseRecordsCacheRef.current;
 
     const isAllLsx = kcsSelectedLsx === 'All';
     const cleanLsx = (kcsSelectedLsx || '').trim();
     const cleanSearch = kcsSearch.trim().toLowerCase();
     const hasSearch = cleanSearch.length > 0;
+    const isMonthAll = kcsFilterMonth === 'All';
+    const isYearAll = kcsFilterYear === 'All';
+    const isDateAll = kcsFilterDate === 'All';
+    const stdFilterDate = isDateAll ? '' : standardizeDate(kcsFilterDate);
 
-    let passedCount = 0;
-    let failedCount = 0;
-    let pendingCount = 0;
+    // Fast path: No base filters active at all -> return oqcRecords reference directly in O(1) time!
+    if (isAllLsx && isMonthAll && isYearAll && isDateAll && !hasSearch) {
+      kcsBaseRecordsCacheRef.current = oqcRecords;
+      return oqcRecords;
+    }
 
-    const filtered: OQCRecord[] = [];
-
+    const baseFiltered: OQCRecord[] = [];
     for (let i = 0; i < oqcRecords.length; i++) {
-      const rawR = oqcRecords[i];
-      const override = localOqcOverrides[rawR.id];
-      const r = override ? { ...rawR, ...override } : rawR;
+      const r = oqcRecords[i];
 
-      // 1. Status filter (Fastest check)
-      if (kcsStatusFilter !== 'All') {
-        if (kcsStatusFilter === 'Chưa kiểm tra' && (r.status === 'Đạt' || r.status === 'Lỗi')) continue;
-        if (kcsStatusFilter === 'Đạt' && r.status !== 'Đạt') continue;
-        if (kcsStatusFilter === 'Lỗi' && r.status !== 'Lỗi') continue;
-      }
-      // 2. LSX filter (Fast string equality)
+      // 1. LSX filter (Fast string equality)
       if (!isAllLsx) {
         const rLsx = (r.lsx && r.lsx.trim()) ? r.lsx.trim() : 'Chưa có LSX';
-        if (rLsx !== cleanLsx) {
-          continue;
-        }
+        if (rLsx !== cleanLsx) continue;
       }
-      // 3. Month & Year filters (Fast primitive check)
-      if (kcsFilterMonth !== 'All' && String(r.month) !== kcsFilterMonth) {
-        continue;
-      }
-      if (kcsFilterYear !== 'All' && String(r.year) !== kcsFilterYear) {
-        continue;
-      }
-      // 4. Date filter (Cached standardizeDate)
-      if (kcsFilterDate !== 'All' && standardizeDate(r.date || '') !== standardizeDate(kcsFilterDate)) {
-        continue;
-      }
-      // 5. Search text
+      // 2. Month & Year filters (Fast primitive check)
+      if (!isMonthAll && String(r.month) !== kcsFilterMonth) continue;
+      if (!isYearAll && String(r.year) !== kcsFilterYear) continue;
+      // 3. Date filter (Hoisted stdFilterDate + cached standardizeDate)
+      if (!isDateAll && standardizeDate(r.date || '') !== stdFilterDate) continue;
+      // 4. Search text
       if (hasSearch) {
         const matchSerial = (r.serialNo || '').toLowerCase().includes(cleanSearch);
         const matchChassis = (r.chassisNo || '').toLowerCase().includes(cleanSearch);
@@ -4050,7 +4123,42 @@ export default function QualityInspectionRecords({
         }
       }
 
-      // Single-pass count
+      baseFiltered.push(r);
+    }
+
+    kcsBaseRecordsCacheRef.current = baseFiltered;
+    return baseFiltered;
+  }, [qcMainSubTab, oqcSubView, oqcRecords, kcsSelectedLsx, kcsFilterDate, kcsFilterMonth, kcsFilterYear, kcsSearch]);
+
+  // Stage 2 (kcsStationStats): Applies 0ms localOqcOverrides and kcsStatusFilter ONLY over kcsBaseRecords
+  const kcsStationStatsCacheRef = useRef<any>({
+    displayRecords: [], totalCars: 0, passedCars: 0, failedCars: 0, pendingCars: 0, yieldRate: 100
+  });
+
+  const kcsStationStats = useMemo(() => {
+    // Guard: Only recompute when KCS Station sub-view is active (Tối ưu 1)
+    if (qcMainSubTab !== 'oqc' || oqcSubView !== 'station') return kcsStationStatsCacheRef.current;
+
+    const hasOverrides = Object.keys(localOqcOverrides).length > 0;
+    const isStatusAll = kcsStatusFilter === 'All';
+
+    let passedCount = 0;
+    let failedCount = 0;
+    let pendingCount = 0;
+
+    const filtered: OQCRecord[] = [];
+
+    for (let i = 0; i < kcsBaseRecords.length; i++) {
+      const rawR = kcsBaseRecords[i];
+      const override = hasOverrides ? localOqcOverrides[rawR.id] : undefined;
+      const r = override ? { ...rawR, ...override } : rawR;
+
+      if (!isStatusAll) {
+        if (kcsStatusFilter === 'Chưa kiểm tra' && (r.status === 'Đạt' || r.status === 'Lỗi')) continue;
+        if (kcsStatusFilter === 'Đạt' && r.status !== 'Đạt') continue;
+        if (kcsStatusFilter === 'Lỗi' && r.status !== 'Lỗi') continue;
+      }
+
       if (r.status === 'Đạt') {
         passedCount++;
       } else if (r.status === 'Lỗi') {
@@ -4077,7 +4185,7 @@ export default function QualityInspectionRecords({
     };
     kcsStationStatsCacheRef.current = kcsResult;
     return kcsResult;
-  }, [qcMainSubTab, oqcSubView, oqcRecords, localOqcOverrides, kcsSelectedLsx, kcsFilterDate, kcsFilterMonth, kcsFilterYear, kcsStatusFilter, kcsSearch]);
+  }, [qcMainSubTab, oqcSubView, kcsBaseRecords, localOqcOverrides, kcsStatusFilter]);
 
   // Finished Goods Handover (Báo phẩm bàn giao kho) states
   const [handoverScanInput, setHandoverScanInput] = useState('');
@@ -8554,10 +8662,15 @@ return (
                     <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
-                      value={kcsSearch}
+                      value={kcsSearchLocal}
                       onChange={e => {
-                        setKcsSearch(e.target.value);
-                        setKcsCurrentPage(1);
+                        const val = e.target.value;
+                        setKcsSearchLocal(val);
+                        if (kcsSearchDebounceRef.current) clearTimeout(kcsSearchDebounceRef.current);
+                        kcsSearchDebounceRef.current = setTimeout(() => {
+                          setKcsSearch(val);
+                          setKcsCurrentPage(1);
+                        }, 180);
                       }}
                       placeholder="Tìm sêri, số khung, model..."
                       className="w-full pl-8 pr-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-slate-400 outline-hidden"
@@ -8603,15 +8716,17 @@ return (
                     {isKcsFilterExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
                   </button>
 
-                  {(kcsFilterDate !== 'All' || kcsFilterMonth !== 'All' || kcsFilterYear !== 'All' || kcsStatusFilter !== 'All' || kcsSearch !== '' || kcsSelectedLsx !== 'All') && (
+                  {(kcsFilterDate !== 'All' || kcsFilterMonth !== 'All' || kcsFilterYear !== 'All' || kcsStatusFilter !== 'All' || kcsSearch !== '' || kcsSearchLocal !== '' || kcsSelectedLsx !== 'All') && (
                     <button
                       type="button"
                       onClick={() => {
+                        if (kcsSearchDebounceRef.current) clearTimeout(kcsSearchDebounceRef.current);
                         setKcsFilterDate('All');
                         setKcsFilterMonth('All');
                         setKcsFilterYear('All');
                         setKcsStatusFilter('All');
                         setKcsSearch('');
+                        setKcsSearchLocal('');
                         setKcsSelectedLsx('All');
                         setKcsCurrentPage(1);
                       }}
@@ -8847,13 +8962,14 @@ return (
                           <th scope="col" className="px-2 py-2.5 text-center w-8 select-none">
                             <input
                               type="checkbox"
-                              checked={displayLsxRecords.length > 0 && displayLsxRecords.every(r => selectedOqcSet.has(r.id))}
+                              checked={displayLsxRecords.length > 0 && selectedOqcSet.size >= displayLsxRecords.length && displayLsxRecords.every(r => selectedOqcSet.has(r.id))}
                               onChange={e => {
                                 const allFilteredIds = displayLsxRecords.map(r => r.id).filter(Boolean);
                                 if (e.target.checked) {
                                   setSelectedOqcIds(prev => Array.from(new Set([...prev, ...allFilteredIds])));
                                 } else {
-                                  setSelectedOqcIds(prev => prev.filter(id => !allFilteredIds.includes(id)));
+                                  const removeSet = new Set(allFilteredIds);
+                                  setSelectedOqcIds(prev => prev.filter(id => !removeSet.has(id)));
                                 }
                               }}
                               className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"

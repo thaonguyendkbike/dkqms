@@ -7731,7 +7731,7 @@ export function App() {
     };
   }, []);
 
-  // Auto-recovery: Khôi phục danh sách xe đổi màu từ oqcRecords nếu dk_oqc_color_changes bị rỗng
+  // Auto-recovery: Khôi phục danh sách xe đổi màu từ oqcRecords nếu dk_oqc_color_changes bị rỗng (chỉ chạy khi số lượng xe thay đổi, không chạy mỗi lần bấm Đạt/Lỗi)
   useEffect(() => {
     if ((!oqcColorChanges || oqcColorChanges.length === 0) && Array.isArray(oqcRecords) && oqcRecords.length > 0) {
       const candidates = oqcRecords.filter(r => 
@@ -7772,7 +7772,8 @@ export function App() {
         syncToServer('dk_oqc_color_changes', recovered);
       }
     }
-  }, [oqcRecords, oqcColorChanges]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oqcRecords.length, oqcColorChanges?.length]);
 
   useEffect(() => {
     if (syncLoaded) {
