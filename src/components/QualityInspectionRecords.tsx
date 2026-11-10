@@ -9487,9 +9487,26 @@ return (
             const rowTracker: { type: string; isZebra?: boolean }[] = [];
             const merges: any[] = [];
 
+            // Model & Color summary for Part III
+            const modelCountMap: Record<string, number> = {};
+            const colorCountMap: Record<string, number> = {};
+            filteredHandoverList.forEach(item => {
+              const m = item.model || 'Chưa rõ';
+              modelCountMap[m] = (modelCountMap[m] || 0) + 1;
+
+              const c = getStandardColorWithPrefix(item.color, item.model, item.partCode, lookupPartCode);
+              colorCountMap[c] = (colorCountMap[c] || 0) + 1;
+            });
+            const modelSummaryList = Object.entries(modelCountMap)
+              .map(([model, count]) => ({ model, count }))
+              .sort((a, b) => b.count - a.count);
+            const colorSummaryList = Object.entries(colorCountMap)
+              .map(([color, count]) => ({ color, count }))
+              .sort((a, b) => b.count - a.count);
+
             const addRow = (row: any[], type: string, isZebra: boolean = false) => {
               const fullRow = [...row];
-              while (fullRow.length < 11) {
+              while (fullRow.length < 7) {
                 fullRow.push("");
               }
               aoaData.push(fullRow);
@@ -9497,110 +9514,123 @@ return (
               return aoaData.length - 1;
             };
 
-            // 1. Header Company & Title
+            // 1. Header Company & Title (Merged across 7 columns: A -> G)
             const r0 = addRow(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT - PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL)"], 'header-company');
-            merges.push({ s: { r: r0, c: 0 }, e: { r: r0, c: 10 } });
+            merges.push({ s: { r: r0, c: 0 }, e: { r: r0, c: 6 } });
 
             const r1 = addRow(["DKBike - Xe cho cả gia đình | Hệ thống Quản lý Chất lượng DK QMS"], 'header-department');
-            merges.push({ s: { r: r1, c: 0 }, e: { r: r1, c: 10 } });
+            merges.push({ s: { r: r1, c: 0 }, e: { r: r1, c: 6 } });
 
             const r2 = addRow(["BẢNG BÀN GIAO XE THÀNH PHẨM CHO BỘ PHẬN KHO"], 'header-title');
-            merges.push({ s: { r: r2, c: 0 }, e: { r: r2, c: 10 } });
+            merges.push({ s: { r: r2, c: 0 }, e: { r: r2, c: 6 } });
 
-            const r3 = addRow([`Ngày quét bàn giao: ${displayDate}   |   Tổng số lượng: ${filteredHandoverList.length} xe   |   Số dòng xe (Model): ${handoverModelSummary.length}`], 'header-date');
-            merges.push({ s: { r: r3, c: 0 }, e: { r: r3, c: 10 } });
+            const r3 = addRow([`Ngày quét bàn giao: ${displayDate}   |   Tổng số lượng: ${filteredHandoverList.length} xe   |   Số dòng xe (Model): ${modelSummaryList.length}`], 'header-date');
+            merges.push({ s: { r: r3, c: 0 }, e: { r: r3, c: 6 } });
 
             addRow([], 'empty');
 
-            // 2. Section 1: Summary by Model & Color
-            const rSec1 = addRow(["I. TỔNG HỢP SỐ LƯỢNG BÀN GIAO THEO DÒNG XE & MÀU SẮC"], 'section-header');
-            merges.push({ s: { r: rSec1, c: 0 }, e: { r: rSec1, c: 10 } });
+            // 2. PHẦN I: CHI TIẾT DANH SÁCH SỐ KHUNG / SERI BÀN GIAO (2 cột song song 50 xe/cột theo từng block 100 xe)
+            const rSec1 = addRow(["I. CHI TIẾT DANH SÁCH SỐ KHUNG / SERI BÀN GIAO"], 'section-header');
+            merges.push({ s: { r: rSec1, c: 0 }, e: { r: rSec1, c: 6 } });
 
-            addRow(["STT", "Dòng xe (Model)", "Màu sơn", "Số lượng bàn giao", "Ghi chú đối soát", "", "", "", "", "", ""], 'summary-header');
+            addRow(["STT", "Số Sêri (Tem ĐT)", "Màu Sắc", "", "STT", "Số Sêri (Tem ĐT)", "Màu Sắc"], 'detail-header');
 
-            handoverModelSummary.forEach((s, idx) => {
+            const totalCars = filteredHandoverList.length;
+            const numBlocks = Math.max(1, Math.ceil(totalCars / 100));
+
+            for (let b = 0; b < numBlocks; b++) {
+              if (b > 0) {
+                addRow([], 'empty');
+              }
+              for (let r = 0; r < 50; r++) {
+                const leftIdx = b * 100 + r;
+                const rightIdx = b * 100 + 50 + r;
+                const leftItem = leftIdx < totalCars ? filteredHandoverList[leftIdx] : null;
+                const rightItem = rightIdx < totalCars ? filteredHandoverList[rightIdx] : null;
+
+                const leftStt = leftIdx + 1;
+                const leftSerial = leftItem ? leftItem.serialNo : "";
+                const leftColor = leftItem
+                  ? getStandardColorWithPrefix(leftItem.color, leftItem.model, leftItem.partCode, lookupPartCode)
+                  : "";
+
+                const rightStt = rightIdx + 1;
+                const rightSerial = rightItem ? rightItem.serialNo : "";
+                const rightColor = rightItem
+                  ? getStandardColorWithPrefix(rightItem.color, rightItem.model, rightItem.partCode, lookupPartCode)
+                  : "";
+
+                addRow(
+                  [leftStt, leftSerial, leftColor, "", rightStt, rightSerial, rightColor],
+                  'detail-row',
+                  r % 2 === 1
+                );
+              }
+            }
+
+            // 9 dòng trống phân cách giữa Phần I và Phần II theo đúng mẫu
+            for (let i = 0; i < 9; i++) {
+              addRow([], 'empty');
+            }
+
+            // 3. PHẦN II: XÁC NHẬN BÀN GIAO & TIẾP NHẬN
+            const rSec2 = addRow(["II. XÁC NHẬN BÀN GIAO & TIẾP NHẬN"], 'section-header');
+            merges.push({ s: { r: rSec2, c: 0 }, e: { r: rSec2, c: 6 } });
+
+            addRow([], 'empty');
+            const rSigTitles = addRow([
+              "ĐẠI DIỆN PHÒNG QUẢN LÝ CHẤT LƯỢNG (BÀN GIAO)", "", "", "", "",
+              "ĐẠI DIỆN BỘ PHẬN KHO THÀNH PHẨM (TIẾP NHẬN)", ""
+            ], 'signature-title');
+            merges.push({ s: { r: rSigTitles, c: 0 }, e: { r: rSigTitles, c: 2 } });
+            merges.push({ s: { r: rSigTitles, c: 5 }, e: { r: rSigTitles, c: 6 } });
+
+            const rSigNotes = addRow([
+              "(Ký, ghi rõ họ tên và đóng dấu KCS)", "", "", "", "",
+              "(Ký, ghi rõ họ tên và kiểm đếm thực tế)", ""
+            ], 'signature-note');
+            merges.push({ s: { r: rSigNotes, c: 0 }, e: { r: rSigNotes, c: 2 } });
+            merges.push({ s: { r: rSigNotes, c: 5 }, e: { r: rSigNotes, c: 6 } });
+
+            // 6 dòng trống ký tên
+            for (let i = 0; i < 6; i++) {
+              addRow([], 'empty');
+            }
+
+            // 4. PHẦN III: BÁO CÁO TỔNG HỢP SỐ LƯỢNG BÀN GIAO THEO DÒNG XE & MÀU SẮC
+            const rSec3 = addRow(["III. BÁO CÁO TỔNG HỢP SỐ LƯỢNG BÀN GIAO THEO DÒNG XE & MÀU SẮC"], 'section-header');
+            merges.push({ s: { r: rSec3, c: 0 }, e: { r: rSec3, c: 6 } });
+
+            addRow(["STT", "Dòng xe (Model)", "Số lượng bàn giao", "", "STT", "Màu sơn", "Số lượng bàn giao"], 'summary-header');
+
+            const maxSummaryRows = Math.max(modelSummaryList.length, colorSummaryList.length);
+            for (let i = 0; i < maxSummaryRows; i++) {
+              const mItem = i < modelSummaryList.length ? modelSummaryList[i] : null;
+              const cItem = i < colorSummaryList.length ? colorSummaryList[i] : null;
+
               addRow([
-                idx + 1,
-                s.model,
-                s.color,
-                `${s.count} xe`,
+                mItem ? (i + 1) : "",
+                mItem ? mItem.model : "",
+                mItem ? mItem.count : "",
                 "",
-                "", "", "", "", "", ""
-              ], 'summary-row', idx % 2 === 1);
-            });
+                cItem ? (i + 1) : "",
+                cItem ? cItem.color : "",
+                cItem ? cItem.count : ""
+              ], 'summary-row', i % 2 === 1);
+            }
 
             const rTotal = addRow([
               "TỔNG CỘNG",
               "",
+              totalCars,
               "",
-              `${filteredHandoverList.length} xe`,
-              "Hoàn tất kiểm tra KCS",
-              "", "", "", "", "", ""
+              "",
+              "",
+              totalCars
             ], 'summary-total');
-            merges.push({ s: { r: rTotal, c: 0 }, e: { r: rTotal, c: 2 } });
+            merges.push({ s: { r: rTotal, c: 0 }, e: { r: rTotal, c: 1 } });
 
-            addRow([], 'empty');
-
-            // 3. Section 2: Detailed List of Handed-over Vehicles
-            const rSec2 = addRow(["II. CHI TIẾT DANH SÁCH SỐ KHUNG / SÊRI BÀN GIAO (ĐỐI SOÁT & ĐÓNG DẤU NHẬN)"], 'section-header');
-            merges.push({ s: { r: rSec2, c: 0 }, e: { r: rSec2, c: 10 } });
-
-            addRow([
-              "STT",
-              "Số Sêri (Tem ĐT)",
-              "Số Khung",
-              "Số Động Cơ",
-              "Mã Quy Cách",
-              "Dòng xe (Model)",
-              "Màu Sắc",
-              "Lệnh Sản Xuất",
-              "Ngày Quét",
-              "Giờ Kiểm KCS",
-              "Giờ Bàn Giao"
-            ], 'detail-header');
-
-            filteredHandoverList.forEach((item, idx) => {
-              addRow([
-                idx + 1,
-                item.serialNo,
-                item.chassisNo && item.chassisNo !== '--' ? item.chassisNo : '--',
-                item.engineNo && item.engineNo !== '--' ? item.engineNo : '--',
-                (item.partCode && item.partCode !== 'TEM-GEN') ? item.partCode : '--',
-                item.model,
-                getStandardColorWithPrefix(item.color, item.model, item.partCode, lookupPartCode),
-                item.lsx,
-                item.date || displayDate,
-                item.checkTime || '--:--',
-                item.scannedAt
-              ], 'detail-row', idx % 2 === 1);
-            });
-
-            addRow([], 'empty');
-
-            // 4. Section 3: Signature Block
-            const rSec3 = addRow(["III. XÁC NHẬN BÀN GIAO & TIẾP NHẬN"], 'section-header');
-            merges.push({ s: { r: rSec3, c: 0 }, e: { r: rSec3, c: 10 } });
-
-            addRow([], 'empty');
-            const rSigTitles = addRow([
-              "ĐẠI DIỆN PHÒNG QUẢN LÝ CHẤT LƯỢNG (BÀN GIAO)", "", "", "",
-              "ĐẠI DIỆN BỘ PHẬN KHO THÀNH PHẨM (TIẾP NHẬN)", "", "", "", "", "", ""
-            ], 'signature-title');
-            merges.push({ s: { r: rSigTitles, c: 0 }, e: { r: rSigTitles, c: 3 } });
-            merges.push({ s: { r: rSigTitles, c: 4 }, e: { r: rSigTitles, c: 10 } });
-
-            const rSigNotes = addRow([
-              "(Ký, ghi rõ họ tên và đóng dấu KCS)", "", "", "",
-              "(Ký, ghi rõ họ tên và kiểm đếm thực tế)", "", "", "", "", "", ""
-            ], 'signature-note');
-            merges.push({ s: { r: rSigNotes, c: 0 }, e: { r: rSigNotes, c: 3 } });
-            merges.push({ s: { r: rSigNotes, c: 4 }, e: { r: rSigNotes, c: 10 } });
-
-            for (let i = 0; i < 4; i++) {
-              addRow([], 'empty');
-            }
-
-            // Professional Styling Palette
+            // Professional Styling Palette matching sample file
             const PALETTE = {
               headerCompanyFill: "1E293B",   // Slate-800
               headerCompanyFont: "F8FAFC",   // Slate-50
@@ -9633,10 +9663,15 @@ return (
 
             // Apply Styles
             rowTracker.forEach((info, rIdx) => {
-              for (let cIdx = 0; cIdx <= 10; cIdx++) {
+              for (let cIdx = 0; cIdx <= 6; cIdx++) {
                 const cellRef = XLSXStyle.utils.encode_cell({ r: rIdx, c: cIdx });
                 if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
                 const cell = ws[cellRef];
+
+                // Column 3 is spacer column
+                if (cIdx === 3 && (info.type === 'detail-header' || info.type === 'detail-row' || info.type === 'summary-header' || info.type === 'summary-row' || info.type === 'summary-total')) {
+                  continue;
+                }
 
                 switch (info.type) {
                   case 'header-company':
@@ -9676,8 +9711,8 @@ return (
                       border: borderThin
                     };
                     break;
-                  case 'summary-header':
                   case 'detail-header':
+                  case 'summary-header':
                     cell.s = {
                       font: { name: 'Arial', sz: 10, bold: true, color: { rgb: PALETTE.thFont } },
                       fill: { fgColor: { rgb: PALETTE.thFill } },
@@ -9685,25 +9720,37 @@ return (
                       border: borderThin
                     };
                     break;
-                  case 'summary-row':
                   case 'detail-row':
                     cell.s = {
                       font: { name: 'Arial', sz: 9.5, color: { rgb: '1E293B' } },
                       fill: { fgColor: { rgb: info.isZebra ? PALETTE.zebraOdd : PALETTE.zebraEven } },
                       alignment: {
-                        horizontal: cIdx === 0 || cIdx === 8 || cIdx === 9 || cIdx === 10 ? 'center' : (cIdx === 3 ? 'center' : 'left'),
+                        horizontal: (cIdx === 0 || cIdx === 4) ? 'center' : 'left',
+                        vertical: 'center'
+                      },
+                      border: borderThin
+                    };
+                    break;
+                  case 'summary-row':
+                    cell.s = {
+                      font: { name: 'Arial', sz: 9.5, color: { rgb: '1E293B' } },
+                      fill: { fgColor: { rgb: info.isZebra ? PALETTE.zebraOdd : PALETTE.zebraEven } },
+                      alignment: {
+                        horizontal: (cIdx === 0 || cIdx === 4 || cIdx === 2 || cIdx === 6) ? 'center' : 'left',
                         vertical: 'center'
                       },
                       border: borderThin
                     };
                     break;
                   case 'summary-total':
-                    cell.s = {
-                      font: { name: 'Arial', sz: 10, bold: true, color: { rgb: PALETTE.totalFont } },
-                      fill: { fgColor: { rgb: PALETTE.totalFill } },
-                      alignment: { horizontal: 'center', vertical: 'center' },
-                      border: borderThin
-                    };
+                    if (cIdx === 0 || cIdx === 1 || cIdx === 2 || cIdx === 6) {
+                      cell.s = {
+                        font: { name: 'Arial', sz: 10, bold: true, color: { rgb: PALETTE.totalFont } },
+                        fill: { fgColor: { rgb: PALETTE.totalFill } },
+                        alignment: { horizontal: 'center', vertical: 'center' },
+                        border: borderThin
+                      };
+                    }
                     break;
                   case 'signature-title':
                     cell.s = {
@@ -9723,19 +9770,15 @@ return (
               }
             });
 
-            // Column Widths (11 columns)
+            // Column Widths (Exact match to sample file: 7 columns A -> G)
             ws['!cols'] = [
-              { wch: 6 },   // 0: STT
-              { wch: 18 },  // 1: Số Sêri
-              { wch: 22 },  // 2: Số Khung
-              { wch: 18 },  // 3: Số Động Cơ
-              { wch: 15 },  // 4: Mã Quy Cách
-              { wch: 22 },  // 5: Model
-              { wch: 16 },  // 6: Màu Sắc
-              { wch: 16 },  // 7: LSX
-              { wch: 14 },  // 8: Ngày Quét
-              { wch: 14 },  // 9: Giờ Kiểm KCS
-              { wch: 14 }   // 10: Giờ Bàn Giao
+              { wch: 7 },   // 0 (A): STT
+              { wch: 19 },  // 1 (B): Số Sêri (Tem ĐT) / Dòng xe (Model)
+              { wch: 31 },  // 2 (C): Màu Sắc / Số lượng bàn giao
+              { wch: 7 },   // 3 (D): Khoảng đệm (Spacer)
+              { wch: 8 },   // 4 (E): STT
+              { wch: 27 },  // 5 (F): Số Sêri (Tem ĐT) / Màu sơn
+              { wch: 31 }   // 6 (G): Màu Sắc / Số lượng bàn giao
             ];
 
             const safeDateStr = displayDate.replace(/\//g, '_');
