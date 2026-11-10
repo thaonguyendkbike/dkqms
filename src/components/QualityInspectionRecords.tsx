@@ -3398,7 +3398,6 @@ export default function QualityInspectionRecords({
     // Guard: Only recompute when OQC Dashboard sub-view is active (Tối ưu 1)
     if (qcMainSubTab !== 'oqc' || oqcSubView !== 'dashboard') return oqcDashboardStatsCacheRef.current;
 
-    const liveLapRapTotal = filteredOqc.length;
     let datVal = 0;
     let loiVal = 0;
     let chuaKiemVal = 0;
@@ -3448,12 +3447,16 @@ export default function QualityInspectionRecords({
       }
 
       if (modelName && modelName.toLowerCase() !== 'đạt' && modelName.toLowerCase() !== 'lỗi' && modelName.toLowerCase() !== 'chưa kiểm tra' && modelName.toLowerCase() !== 'pass' && modelName.toLowerCase() !== 'fail') {
-        liveModelsMap[modelName] = (liveModelsMap[modelName] || 0) + 1;
-
         if (!modelStatsMap[modelName]) {
           modelStatsMap[modelName] = { total: 0, passed: 0, failed: 0, pending: 0 };
         }
-        modelStatsMap[modelName].total++;
+
+        // Báo cáo sản lượng lắp ráp theo dòng xe: chỉ ghi nhận số lượng xe đã check (Đạt hoặc Lỗi)
+        if (isPassed || isFailed) {
+          liveModelsMap[modelName] = (liveModelsMap[modelName] || 0) + 1;
+          modelStatsMap[modelName].total++;
+        }
+
         if (isPassed) {
           modelStatsMap[modelName].passed++;
         } else if (isFailed) {
@@ -3481,7 +3484,9 @@ export default function QualityInspectionRecords({
     }
 
     const checkedTotal = datVal + loiVal;
-    const pieDatPercent = checkedTotal > 0 ? Math.round((datVal / checkedTotal) * 100) : (liveLapRapTotal > 0 ? Math.round((datVal / liveLapRapTotal) * 100) : 0);
+    // SL xe lắp ráp thực tế: Chỉ ghi nhận các xe đã check (Đạt hoặc Lỗi), xe chưa check coi là chưa lắp ráp (chờ kiểm tra)
+    const liveLapRapTotal = checkedTotal;
+    const pieDatPercent = checkedTotal > 0 ? Math.round((datVal / checkedTotal) * 100) : 0;
     const pieLoiPercent = checkedTotal > 0 ? Math.round((loiVal / checkedTotal) * 100) : 0;
 
     let activeBarData = Object.entries(liveModelsMap).map(([name, count]) => ({ name, count }))
@@ -5738,10 +5743,10 @@ const commitOqcImport = (finalParsed: OQCRecord[], isReplaceAll: boolean) => {
           partCode: effectivePartCode,
           chassisNo: newRec.chassisNo || oldRec.chassisNo,
           engineNo: newRec.engineNo || oldRec.engineNo,
-          date: (keepOldResult || lockedDateTime) ? oldRec.date : (newRec.date || oldRec.date),
+          date: (keepOldResult || lockedDateTime) ? oldRec.date : (newRec.date || (newRec.status === 'Chưa kiểm tra' ? '' : (oldRec.date || ''))),
           month: (keepOldResult || lockedDateTime) ? oldRec.month : (newRec.month || oldRec.month),
           year: (keepOldResult || lockedDateTime) ? oldRec.year : (newRec.year || oldRec.year),
-          checkTime: (keepOldResult || lockedDateTime) ? (oldRec.checkTime || '08:30') : (newRec.checkTime || oldRec.checkTime || '08:30')
+          checkTime: (keepOldResult || lockedDateTime) ? (oldRec.checkTime || '') : (newRec.checkTime || (newRec.status === 'Chưa kiểm tra' ? '' : (oldRec.checkTime || '')))
         });
         if (newRec.serialNo) matchedImportedSerials.add(newRec.serialNo.trim().toUpperCase());
       } else {
@@ -5759,7 +5764,14 @@ const commitOqcImport = (finalParsed: OQCRecord[], isReplaceAll: boolean) => {
         const colorVal = matched
           ? (matched.nameWithColor || (matched.model && matched.color ? `${matched.model} - ${matched.color}` : matched.color))
           : getStandardColorWithPrefix(newRec.color, modelVal, newRec.partCode, lookupPartCode);
-        brandNewRecords.push({ ...newRec, model: modelVal, color: colorVal });
+        const isPending = !newRec.status || newRec.status === 'Chưa kiểm tra';
+        brandNewRecords.push({
+          ...newRec,
+          model: modelVal,
+          color: colorVal,
+          checkTime: isPending ? '' : (newRec.checkTime || ''),
+          date: isPending ? '' : (newRec.date || '')
+        });
         addedCount++;
       }
     });
@@ -6161,6 +6173,12 @@ const handleImportOqcSubmit = (e: FormEvent) => {
         if (/^\d{1,2}:\d{2}/.test(potentialTime)) {
           checkTimeVal = potentialTime;
         }
+      }
+
+      // Nếu xe chưa kiểm tra: Không ghi nhận thời gian nạp (chờ kiểm tra thực tế)
+      if (statusVal === 'Chưa kiểm tra') {
+        checkTimeVal = '';
+        dateVal = '';
       }
 
       const totalLlrVal = Number(totalLlrColIdx !== -1 && cols[totalLlrColIdx] !== undefined ? cols[totalLlrColIdx] : (cols[16] || '')) || 1;
@@ -10483,6 +10501,10 @@ return (
             card1Title = `Tiến độ lắp ráp Tháng ${selMonth}`;
             card1Subtext = `Tổng SL xe lắp ráp Tháng ${selMonth}/${targetYearNum}`;
             card1AssembledCount = oqcRecords.filter(r => {
+              // Chỉ tính các xe đã thực tế kiểm tra (có giờ check hoặc trạng thái Đạt/Lỗi), xe chưa check coi là chưa lắp ráp
+              const isChecked = r.status === 'Đạt' || r.status === 'Lỗi' || Boolean(r.checkTime && r.checkTime !== '--:--' && r.checkTime !== '');
+              if (!isChecked) return false;
+
               let rMonth = (r.month && !isNaN(Number(r.month))) ? Number(r.month) : null;
               let rYear = (r.year && !isNaN(Number(r.year))) ? Number(r.year) : null;
               if ((rMonth === null || rYear === null) && r.date) {
@@ -10506,6 +10528,10 @@ return (
             card1Title = `Tiến độ lắp ráp Năm ${targetYearNum}`;
             card1Subtext = `Tổng SL xe lắp ráp cả Năm ${targetYearNum}`;
             card1AssembledCount = oqcRecords.filter(r => {
+              // Chỉ tính các xe đã thực tế kiểm tra (có giờ check hoặc trạng thái Đạt/Lỗi), xe chưa check coi là chưa lắp ráp
+              const isChecked = r.status === 'Đạt' || r.status === 'Lỗi' || Boolean(r.checkTime && r.checkTime !== '--:--' && r.checkTime !== '');
+              if (!isChecked) return false;
+
               let rYear = (r.year && !isNaN(Number(r.year))) ? Number(r.year) : null;
               if (rYear === null && r.date) {
                 const std = standardizeDate(r.date);
@@ -13509,19 +13535,29 @@ return (
                     statusVal = 'Lỗi';
                   }
 
-                  // Date & Time
-                  let timeVal = timeIdx !== -1 && cols[timeIdx] ? cols[timeIdx].trim() : '';
-                  let dateVal = todayStr;
-                  let mVal = todayMonth;
-                  let yVal = todayYear;
+                  // Date & Time:
+                  // Không cần ghi nhận thời gian nạp. Nếu chưa check Đạt/Lỗi thì để trống thời gian & ngày (coi như chưa lắp ráp, chờ kiểm tra).
+                  // Chỉ khi xe có sẵn kết quả Đạt/Lỗi thì mới ghi nhận ngày/giờ.
+                  let timeVal = '';
+                  let dateVal = '';
+                  let mVal: number = todayMonth;
+                  let yVal: number = todayYear;
 
-                  if (dayIdx !== -1 && cols[dayIdx]) {
-                    const d = cols[dayIdx].trim().padStart(2, '0');
-                    const m = monthIdx !== -1 && cols[monthIdx] ? cols[monthIdx].trim().padStart(2, '0') : todayMonth.toString().padStart(2, '0');
-                    const y = yearIdx !== -1 && cols[yearIdx] ? cols[yearIdx].trim() : todayYear.toString();
-                    dateVal = `${d}/${m}/${y}`;
-                    mVal = parseInt(m, 10) || todayMonth;
-                    yVal = parseInt(y, 10) || todayYear;
+                  const hasResultFromFile = statusVal === 'Đạt' || statusVal === 'Lỗi';
+                  if (hasResultFromFile) {
+                    timeVal = timeIdx !== -1 && cols[timeIdx] ? cols[timeIdx].trim() : '';
+                    dateVal = todayStr;
+                    mVal = todayMonth;
+                    yVal = todayYear;
+
+                    if (dayIdx !== -1 && cols[dayIdx]) {
+                      const d = cols[dayIdx].trim().padStart(2, '0');
+                      const m = monthIdx !== -1 && cols[monthIdx] ? cols[monthIdx].trim().padStart(2, '0') : todayMonth.toString().padStart(2, '0');
+                      const y = yearIdx !== -1 && cols[yearIdx] ? cols[yearIdx].trim() : todayYear.toString();
+                      dateVal = `${d}/${m}/${y}`;
+                      mVal = parseInt(m, 10) || todayMonth;
+                      yVal = parseInt(y, 10) || todayYear;
+                    }
                   }
 
                   newRecords.push({
@@ -13776,8 +13812,8 @@ return (
                 failedCount: 0,
                 rootCause: '',
                 lsx: newCarLsx.trim(),
-                checkTime: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false }),
-                date: todayStr,
+                checkTime: '',
+                date: '',
                 month: todayMonth,
                 year: todayYear,
                 totalLlr: 1,
@@ -17818,6 +17854,8 @@ return (
                 {(() => {
                   const filtered = oqcRecords.filter(r => {
                     if (!r.date) return false;
+                    const isChecked = r.status === 'Đạt' || r.status === 'Lỗi' || Boolean(r.checkTime && r.checkTime !== '--:--' && r.checkTime !== '');
+                    if (!isChecked) return false;
                     const info = getWeekAndMonthFromDate(r.date);
                     const matchesMonth = info.month === exportKcsMonth;
                     const matchesYear = info.year === exportKcsYear;
