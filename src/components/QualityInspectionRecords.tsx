@@ -105,6 +105,36 @@ export const isKnownModelString = (str: string): boolean => {
   return sLow.startsWith('dk ') || KNOWN_MODEL_KEYWORDS.some(k => sLow.includes(k));
 };
 
+// Chuẩn hóa tên màu sắc: Bóc tách loại bỏ tiền tố tên xe bị lặp lại (ví dụ "DK EZ3 _ App - Đen khói" -> "Đen khói")
+export const getCleanColorName = (rawColor: string | undefined, modelName?: string): string => {
+  if (!rawColor) return 'Tiêu chuẩn';
+  let c = String(rawColor).trim();
+  if (!c || c === '-' || c === '--') return 'Tiêu chuẩn';
+
+  if (c.includes(' - ') || c.includes('-')) {
+    const delim = c.includes(' - ') ? ' - ' : '-';
+    const parts = c.split(delim).map(p => p.trim());
+    if (parts.length >= 2) {
+      const prefix = parts[0];
+      const remainder = parts.slice(1).join(delim).trim();
+      const prefixLow = prefix.toLowerCase();
+      const modelLow = (modelName || '').trim().toLowerCase();
+
+      if (
+        (modelLow && prefixLow === modelLow) ||
+        prefixLow.startsWith('dk ') ||
+        isKnownModelString(prefix)
+      ) {
+        if (remainder && !isKnownModelString(remainder)) {
+          c = remainder;
+        }
+      }
+    }
+  }
+
+  return c;
+};
+
 export interface EcountRow {
   date: string;
   supplierCode: string;
@@ -5644,7 +5674,8 @@ const commitOqcImport = (finalParsed: OQCRecord[], isReplaceAll: boolean) => {
       if (r.id) finalParsedLookupMap.set(r.id.trim().toUpperCase().replace(/^OQC-/, ''), r);
     });
 
-    const updatedExistingRecords: OQCRecord[] = [];
+    const justUpdatedRecords: OQCRecord[] = [];
+    const untouchedRecords: OQCRecord[] = [];
     const matchedImportedSerials = new Set<string>();
 
     oqcRecords.forEach(oldRec => {
@@ -5662,10 +5693,12 @@ const commitOqcImport = (finalParsed: OQCRecord[], isReplaceAll: boolean) => {
         const newHasResult = newRec.status === 'Đạt' || newRec.status === 'Lỗi';
         const keepOldResult = oldHasResult && !newHasResult;
         const lockedDateTime = isKcsDateTimeLocked(oldRec);
+        const nextModel = newRec.model || oldRec.model;
+        const nextColor = getCleanColorName(newRec.color || oldRec.color, nextModel);
 
         // Nếu dữ liệu mới chưa có thông tin Đạt/Lỗi thì ưu tiên giữ dữ liệu Đạt/Lỗi cũ đã có;
         // đồng thời nếu xe cũ đã khóa giờ/ngày kiểm tra (sau khi kết thúc ngày kiểm) thì giữ nguyên giờ/ngày cũ.
-        updatedExistingRecords.push({
+        justUpdatedRecords.push({
           ...oldRec,
           status: keepOldResult ? oldRec.status : newRec.status,
           defectDetail: keepOldResult ? oldRec.defectDetail : newRec.defectDetail,
@@ -5675,8 +5708,8 @@ const commitOqcImport = (finalParsed: OQCRecord[], isReplaceAll: boolean) => {
           evaluation: keepOldResult ? oldRec.evaluation : (newRec.evaluation || oldRec.evaluation),
           treatment: keepOldResult ? oldRec.treatment : (newRec.treatment || oldRec.treatment),
           checkedBy: keepOldResult ? oldRec.checkedBy : (newRec.checkedBy || oldRec.checkedBy),
-          model: newRec.model || oldRec.model,
-          color: newRec.color || oldRec.color,
+          model: nextModel,
+          color: nextColor,
           lsx: newRec.lsx || oldRec.lsx,
           partCode: (newRec.partCode && newRec.partCode !== 'TEM-GEN') ? newRec.partCode : (oldRec.partCode === 'TEM-GEN' ? '' : (oldRec.partCode || newRec.partCode || '')),
           chassisNo: newRec.chassisNo || oldRec.chassisNo,
@@ -5688,7 +5721,7 @@ const commitOqcImport = (finalParsed: OQCRecord[], isReplaceAll: boolean) => {
         });
         if (newRec.serialNo) matchedImportedSerials.add(newRec.serialNo.trim().toUpperCase());
       } else {
-        updatedExistingRecords.push(oldRec);
+        untouchedRecords.push(oldRec);
       }
     });
 
@@ -5697,15 +5730,18 @@ const commitOqcImport = (finalParsed: OQCRecord[], isReplaceAll: boolean) => {
     finalParsed.forEach(newRec => {
       const sUpper = (newRec.serialNo || '').trim().toUpperCase();
       if (!matchedImportedSerials.has(sUpper)) {
-        brandNewRecords.push(newRec);
+        const cleanColor = getCleanColorName(newRec.color, newRec.model);
+        brandNewRecords.push({ ...newRec, color: cleanColor });
         addedCount++;
       }
     });
 
-    finalUpdatedList = [...brandNewRecords, ...updatedExistingRecords];
+    // Đưa toàn bộ các xe vừa thêm mới và xe vừa cập nhật lên đầu danh sách để hiển thị ngay ở Trang 1
+    finalUpdatedList = [...brandNewRecords, ...justUpdatedRecords, ...untouchedRecords];
   }
 
   // GHI ĐÈ AN TOÀN VÀO SAFE STORAGE & ĐẨY LÊN CLOUD FIREBASE
+  latestOqcRecordsRef.current = finalUpdatedList;
   setOqcRecords(finalUpdatedList);
   safeStorage.setItem('dk_oqc_records', JSON.stringify(finalUpdatedList));
   try {
@@ -5717,9 +5753,11 @@ const commitOqcImport = (finalParsed: OQCRecord[], isReplaceAll: boolean) => {
     (window as any).syncToServer('dk_oqc_records', finalUpdatedList);
   }
 
-  // Automatically reset LSX filter to 'All' so that all imported cars are immediately visible
-  const firstImportedLsx = finalParsed[0]?.lsx;
-  if (firstImportedLsx && kcsSelectedLsx !== 'All' && kcsSelectedLsx !== firstImportedLsx) {
+  // Tự động chuyển bộ lọc LSX sang đúng LSX của lô xe vừa nạp để hiển thị ngay trước mắt
+  const firstImportedLsx = finalParsed.find(r => r.lsx && !isLsxEmpty(r.lsx))?.lsx;
+  if (firstImportedLsx) {
+    setKcsSelectedLsx(firstImportedLsx);
+  } else {
     setKcsSelectedLsx('All');
   }
   setKcsCurrentPage(1);
@@ -5953,13 +5991,17 @@ const handleImportOqcSubmit = (e: FormEvent) => {
       let modelVal = rawModelCol;
       let colorVal = rawColorCol;
 
-      // If color contains "DK D2 - Ghi đen", split into Model and Color ONLY IF prefix is a known model name
-      if (colorVal.includes(' - ') || (colorVal.includes('-') && !modelVal)) {
+      // Bóc tách Model và Màu nếu chuỗi màu có dạng "DK EZ3 _ App - Đen khói" hoặc "DK S5 Pro - ghi khói"
+      if (colorVal.includes(' - ') || colorVal.includes('-')) {
         const delim = colorVal.includes(' - ') ? ' - ' : '-';
         const parts = colorVal.split(delim);
-        if (!modelVal && isKnownModelString(parts[0]) && !isColorOnlyString(parts[0])) {
-          modelVal = parts[0].trim();
-          colorVal = parts.slice(1).join(delim).trim();
+        if (parts.length >= 2) {
+          const prefix = parts[0].trim();
+          const remainder = parts.slice(1).join(delim).trim();
+          if (isKnownModelString(prefix) || prefix.toUpperCase().startsWith('DK ')) {
+            if (!modelVal) modelVal = prefix;
+            if (remainder && !isKnownModelString(remainder)) colorVal = remainder;
+          }
         }
       }
 
@@ -5968,7 +6010,7 @@ const handleImportOqcSubmit = (e: FormEvent) => {
         const matchedPart = lookupPartCode(partCodeVal);
         if (matchedPart) {
           modelVal = matchedPart.model;
-          if (!colorVal && matchedPart.color) colorVal = matchedPart.color;
+          if (!colorVal && matchedPart.color) colorVal = getCleanColorName(matchedPart.color, modelVal);
         }
       }
 
@@ -5991,7 +6033,7 @@ const handleImportOqcSubmit = (e: FormEvent) => {
         else modelVal = 'DK D2';
       }
 
-      if (!colorVal) colorVal = 'Tiêu chuẩn';
+      colorVal = getCleanColorName(colorVal, modelVal);
 
       // 3. DEFECT AND CAUSE EXTRACTION:
       let defectDetailVal = rawDefectCol;
@@ -9087,7 +9129,7 @@ return (
                                   </span>
                                 )}
                               </td>
-                              <td className="px-3 py-2 text-slate-600">{r.color}</td>
+                              <td className="px-3 py-2 text-slate-600">{getCleanColorName(r.color, r.model)}</td>
 
                               {/* KCS Action Cell: Instant 0ms Buttons */}
                               <td className="px-3 py-2 text-center">
@@ -9347,9 +9389,10 @@ return (
           const handoverModelSummary = (() => {
             const map: Record<string, { model: string; color: string; count: number }> = {};
             filteredHandoverList.forEach(item => {
-              const key = `${item.model}___${item.color}`;
+              const cleanColor = getCleanColorName(item.color, item.model);
+              const key = `${item.model}___${cleanColor}`;
               if (!map[key]) {
-                map[key] = { model: item.model, color: item.color, count: 0 };
+                map[key] = { model: item.model, color: cleanColor, count: 0 };
               }
               map[key].count++;
             });
@@ -9450,7 +9493,7 @@ return (
                 item.engineNo && item.engineNo !== '--' ? item.engineNo : '--',
                 (item.partCode && item.partCode !== 'TEM-GEN') ? item.partCode : '--',
                 item.model,
-                item.color,
+                getCleanColorName(item.color, item.model),
                 item.lsx,
                 item.date || displayDate,
                 item.checkTime || '--:--',
@@ -9630,7 +9673,7 @@ return (
           const handleCopyHandoverTextLocal = () => {
             if (filteredHandoverList.length === 0) return;
             const headers = "STT\tSố Sêri (Tem ĐT)\tSố Khung\tSố Động Cơ\tMã Quy Cách\tDòng xe (Model)\tMàu Sắc\tLệnh Sản Xuất\tNgày Quét\tGiờ Bàn Giao";
-            const rows = filteredHandoverList.map((item, i) => `${i + 1}\t${item.serialNo}\t${item.chassisNo || '--'}\t${item.engineNo || '--'}\t${(item.partCode && item.partCode !== 'TEM-GEN') ? item.partCode : '--'}\t${item.model}\t${item.color}\t${item.lsx}\t${item.date || ''}\t${item.scannedAt}`).join('\n');
+            const rows = filteredHandoverList.map((item, i) => `${i + 1}\t${item.serialNo}\t${item.chassisNo || '--'}\t${item.engineNo || '--'}\t${(item.partCode && item.partCode !== 'TEM-GEN') ? item.partCode : '--'}\t${item.model}\t${getCleanColorName(item.color, item.model)}\t${item.lsx}\t${item.date || ''}\t${item.scannedAt}`).join('\n');
             const text = `${headers}\n${rows}`;
             navigator.clipboard.writeText(text).then(() => {
               alert(`Đã sao chép danh sách ${filteredHandoverList.length} xe bàn giao vào clipboard!`);
@@ -9663,14 +9706,18 @@ return (
                     const currentDateStr = standardizeDate(now.toLocaleDateString('vi-VN'));
                     const currentTimeStr = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 
+                    const resolvedModel = found ? (found.model || (matchedPart ? matchedPart.model : 'Chưa rõ')) : (matchedPart ? matchedPart.model : 'Chưa có trong OQC');
+                    const rawColor = found ? (found.color || (matchedPart ? matchedPart.color : 'Chưa rõ')) : (matchedPart ? matchedPart.color : 'Chưa rõ');
+                    const cleanColor = getCleanColorName(rawColor, resolvedModel);
+
                     const newItem = {
                       id: `HO-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
                       serialNo: found ? found.serialNo : serial,
                       chassisNo: found ? (found.chassisNo || '--') : '--',
                       engineNo: found ? (found.engineNo || '--') : '--',
                       partCode: pCode,
-                      model: found ? (found.model || (matchedPart ? matchedPart.model : 'Chưa rõ')) : (matchedPart ? matchedPart.model : 'Chưa có trong OQC'),
-                      color: found ? (found.color || (matchedPart ? matchedPart.color : 'Chưa rõ')) : (matchedPart ? matchedPart.color : 'Chưa rõ'),
+                      model: resolvedModel,
+                      color: cleanColor,
                       lsx: found ? (found.lsx || 'Ngoại bảng') : 'Ngoại bảng',
                       status: found ? (found.status || 'Chưa kiểm tra') : 'Chưa có dữ liệu KCS',
                       checkTime: found ? (found.checkTime || '--:--') : '--:--',
@@ -9936,7 +9983,7 @@ return (
                             <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{item.engineNo || '--'}</td>
                             <td className="px-3 py-2 font-mono text-[11px] text-slate-500">{item.partCode}</td>
                             <td className="px-3 py-2 font-bold text-slate-850">{item.model}</td>
-                            <td className="px-3 py-2 text-slate-600">{item.color}</td>
+                            <td className="px-3 py-2 text-slate-600">{getCleanColorName(item.color, item.model)}</td>
                             <td className="px-3 py-2 font-mono text-slate-600">{item.lsx}</td>
                             <td className="px-3 py-2 text-center font-mono text-slate-500">{item.date || '--'}</td>
                             <td className="px-3 py-2 text-center font-mono text-slate-500">{item.scannedAt}</td>
@@ -10270,7 +10317,7 @@ return (
                               <td className="px-3 py-2 font-mono font-bold text-blue-700">{item.partCode}</td>
                               <td className="px-3 py-2 font-bold text-slate-900">{item.nameWithColor}</td>
                               <td className="px-3 py-2 text-slate-700">{item.model}</td>
-                              <td className="px-3 py-2 text-slate-600">{item.color}</td>
+                              <td className="px-3 py-2 text-slate-600">{getCleanColorName(item.color, item.model)}</td>
                               <td className="px-3 py-2 text-center font-mono text-[11px] text-slate-400">{item.updatedAt || '--'}</td>
                               <td className="px-3 py-2 text-center">
                                 <div className="flex items-center justify-center gap-1">
@@ -13377,7 +13424,7 @@ return (
                     modelVal = matchedPart.model || '';
                     // Nếu màu sắc chưa có từ dữ liệu dán, tự động điền Màu sắc từ Bảng mã xe
                     if (!colorVal && matchedPart.color) {
-                      colorVal = matchedPart.color;
+                      colorVal = getCleanColorName(matchedPart.color, modelVal);
                     }
                   }
 
@@ -13391,16 +13438,23 @@ return (
                     if (partialMatch) {
                       modelVal = partialMatch.model || '';
                       if (!colorVal && partialMatch.color) {
-                        colorVal = partialMatch.color;
+                        colorVal = getCleanColorName(partialMatch.color, modelVal);
                       }
                     }
                   }
 
-                  // Nếu màu sắc có dạng "Model - Màu" (Ví dụ: "DK D2 - Đỏ"), tách model và màu
-                  if (!modelVal && colorVal.includes(' - ')) {
-                    const colorParts = colorVal.split(' - ');
-                    modelVal = colorParts[0].trim();
-                    colorVal = colorParts.slice(1).join(' - ').trim();
+                  // Bóc tách Model và Màu nếu chuỗi màu có dạng "DK EZ3 _ App - Đen khói" hoặc "DK S5 Pro - ghi khói"
+                  if (colorVal.includes(' - ') || colorVal.includes('-')) {
+                    const delim = colorVal.includes(' - ') ? ' - ' : '-';
+                    const colorParts = colorVal.split(delim);
+                    if (colorParts.length >= 2) {
+                      const prefix = colorParts[0].trim();
+                      const remainder = colorParts.slice(1).join(delim).trim();
+                      if (isKnownModelString(prefix) || prefix.toUpperCase().startsWith('DK ')) {
+                        if (!modelVal) modelVal = prefix;
+                        if (remainder && !isKnownModelString(remainder)) colorVal = remainder;
+                      }
+                    }
                   }
 
                   // Fallback nhận diện Model theo tiền tố mã quy cách DKBike
@@ -13422,6 +13476,7 @@ return (
                     else modelVal = 'DK Gogo';
                   }
 
+                  colorVal = getCleanColorName(colorVal, modelVal);
                   if (!colorVal) {
                     colorVal = 'Đen';
                   }
@@ -13918,14 +13973,18 @@ return (
                 const pCode = found ? ((found.partCode && found.partCode !== 'TEM-GEN') ? found.partCode : '') : '';
                 const matchedPart = lookupPartCode(pCode);
 
+                const resolvedModel = found ? (found.model || (matchedPart ? matchedPart.model : 'Chưa rõ')) : (matchedPart ? matchedPart.model : 'Chưa có trong OQC');
+                const rawColor = found ? (found.color || (matchedPart ? matchedPart.color : 'Chưa rõ')) : (matchedPart ? matchedPart.color : 'Chưa rõ');
+                const cleanColor = getCleanColorName(rawColor, resolvedModel);
+
                 newItems.push({
                   id: `HO-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
                   serialNo: found ? found.serialNo : serial,
                   chassisNo: found ? (found.chassisNo || '--') : '--',
                   engineNo: found ? (found.engineNo || '--') : '--',
                   partCode: pCode,
-                  model: found ? (found.model || (matchedPart ? matchedPart.model : 'Chưa rõ')) : (matchedPart ? matchedPart.model : 'Chưa có trong OQC'),
-                  color: found ? (found.color || (matchedPart ? matchedPart.color : 'Chưa rõ')) : (matchedPart ? matchedPart.color : 'Chưa rõ'),
+                  model: resolvedModel,
+                  color: cleanColor,
                   lsx: found ? (found.lsx || 'Ngoại bảng') : 'Ngoại bảng',
                   status: found ? (found.status || 'Chưa kiểm tra') : 'Chưa có dữ liệu KCS',
                   checkTime: found ? (found.checkTime || '--:--') : '--:--',
@@ -14896,7 +14955,7 @@ return (
                       <td className="p-2 text-center font-bold text-slate-500 text-[11px]">{idx + 1}</td>
                       <td className="p-2 font-mono font-bold text-slate-800">{item.serialNo}</td>
                       <td className="p-2 font-medium text-slate-700">{item.model || '--'}</td>
-                      <td className="p-2 font-medium text-slate-600">{item.color || '--'}</td>
+                      <td className="p-2 font-medium text-slate-600">{getCleanColorName(item.color, item.model) || '--'}</td>
                       <td className="p-2 text-center">
                         <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${item.status === 'Đạt'
                             ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
