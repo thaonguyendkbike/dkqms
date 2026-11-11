@@ -121,6 +121,7 @@ import MachineryMaintenance from './components/MachineryMaintenance';
 import QMSWorkflowTab from './components/QMSWorkflowTab';
 import QualityPlanning, { getInitialQmsPlanningTasks } from './components/QualityPlanning';
 import ChatNoteTab from './components/ChatNoteTab';
+import OqcTvDashboard from './components/OqcTvDashboard';
 import { compressBase64String, compressImageFile } from './imageCompressor';
 
 // Firebase Integrations
@@ -14334,6 +14335,24 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
           </div>
         </div>
       </div>
+    );
+  }
+
+  // KIOSK MODE DÀNH RIÊNG CHO TIVI: Load siêu tốc, không render sidebar hay 50 modals thừa
+  const isTvRoute = typeof window !== 'undefined' && (
+    window.location.pathname === '/tv' ||
+    window.location.pathname === '/tv/' ||
+    window.location.pathname.startsWith('/tv') ||
+    new URLSearchParams(window.location.search).get('tv') === '1' ||
+    new URLSearchParams(window.location.search).get('tv') === 'true'
+  );
+
+  if (isTvRoute) {
+    return (
+      <OqcTvDashboard
+        oqcRecords={oqcRecords}
+        oqcHandoverList={oqcHandoverList}
+      />
     );
   }
 
