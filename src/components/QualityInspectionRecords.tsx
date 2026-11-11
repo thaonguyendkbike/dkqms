@@ -567,7 +567,8 @@ interface BarChartProps {
 
 function BarChartComponent({ data, onBarClick }: BarChartProps) {
   const peakVal = Math.max(...data.map(item => item.count), 0);
-  const maxVal = peakVal > 0 ? Math.ceil(peakVal / 20) * 20 : 100;
+  // Headroom 18% so tall bars never touch the top edge
+  const maxVal = peakVal > 0 ? Math.ceil((peakVal * 1.18) / 20) * 20 : 100;
 
   const tickStep = maxVal / 4;
   const yTicks = [
@@ -580,7 +581,7 @@ function BarChartComponent({ data, onBarClick }: BarChartProps) {
 
   return (
     <div className="overflow-x-auto pb-1">
-      <div className="flex flex-col h-[260px] min-w-[500px] lg:min-w-0 w-full pt-4 relative select-none font-sans">
+      <div className="flex flex-col h-[270px] min-w-[500px] lg:min-w-0 w-full pt-6 relative select-none font-sans">
         <div className="flex-1 relative">
           {/* Horizontal Gridlines */}
           <div className="absolute inset-0 flex flex-col justify-between">
@@ -598,6 +599,8 @@ function BarChartComponent({ data, onBarClick }: BarChartProps) {
           <div className="absolute inset-y-0 left-10 right-0 flex justify-around items-end z-10 bottom-[1px]">
             {data.map((item) => {
               const heightPerc = `${Math.min(100, Math.max(4, (item.count / maxVal) * 100))}%`;
+              const isTall = (item.count / maxVal) > 0.52;
+
               return (
                 <div
                   key={item.name}
@@ -616,8 +619,12 @@ function BarChartComponent({ data, onBarClick }: BarChartProps) {
                     </div>
                   </div>
 
-                  {/* Micro-interacting Tooltip */}
-                  <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-all bg-slate-900/95 text-white text-[10px] font-bold p-2.5 rounded-xl shadow-xl pointer-events-none whitespace-nowrap z-50 border border-slate-700">
+                  {/* Micro-interacting Tooltip with smart positioning so it is never clipped */}
+                  <div
+                    className={`absolute ${
+                      isTall ? 'top-10' : 'bottom-full mb-2'
+                    } opacity-0 group-hover:opacity-100 transition-all duration-200 bg-slate-900/95 text-white text-[10px] font-bold p-2.5 rounded-xl shadow-2xl pointer-events-none whitespace-nowrap z-50 border border-slate-700 backdrop-blur-md`}
+                  >
                     <span className="block font-black text-slate-400 uppercase tracking-widest text-[8px]">
                       Dòng xe (Model) - Click xem chi tiết
                     </span>
@@ -1803,6 +1810,7 @@ export default function QualityInspectionRecords({
   const [qcMainSubTab, setQcMainSubTab] = useState<'iqc' | 'pqc' | 'oqc' | 'color_change' | 'supplier_monitoring' | 'reports'>('iqc');
   const [selectedDashboardDefect, setSelectedDashboardDefect] = useState<{ name: string; count: number; modelName: string } | null>(null);
   const [oqcDetailModalModel, setOqcDetailModalModel] = useState<string | null>(null);
+  const [oqcDetailModalPage, setOqcDetailModalPage] = useState<number>(1);
   const [localZoomImage, setLocalZoomImage] = useState<string | null>(null);
   const [stackedMode, setStackedMode] = useState<'rate' | 'volume'>('volume');
 
@@ -10830,24 +10838,25 @@ return (
                 {/* TIẾN ĐỘ LẮP RÁP (TỔNG THÁNG HOẶC TỔNG NĂM) */}
                 <div className="col-span-2 md:col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
                   <div className="flex justify-between items-start select-none">
-                    <div>
-                      <h4 className="text-[9.5px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider">
-                        {card1Title}
-                      </h4>
-                      <div className="flex items-baseline gap-1.5 mt-1">
-                        <span className="text-2xl sm:text-3xl lg:text-[34px] font-black text-blue-600 tabular-nums tracking-tight leading-none">
-                          {card1AssembledCount.toLocaleString()}
-                        </span>
-                        <span className="text-xs sm:text-sm font-bold text-slate-500 font-sans">
-                          xe
-                        </span>
-                      </div>
-                    </div>
-                    <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
-                      <CheckCircle2 className="w-5 h-5 text-blue-500" />
+                    <h4 className="text-[9.5px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">
+                      {card1Title}
+                    </h4>
+                    <div className="p-1.5 bg-blue-50 text-blue-600 rounded-xl shrink-0 -mt-1">
+                      <CheckCircle2 className="w-4 h-4 text-blue-500" />
                     </div>
                   </div>
-                  <div className="mt-3 select-none pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                  <div className="mt-2 sm:mt-3 select-none">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl sm:text-3xl lg:text-[34px] font-black text-blue-600 tabular-nums tracking-tight leading-none">
+                        {card1AssembledCount.toLocaleString()}
+                      </span>
+                      <span className="text-xs sm:text-sm font-bold text-slate-500 font-sans">
+                        xe
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-bold text-slate-400 mt-1 block">xe lắp ráp thực tế</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] select-none">
                     <span className="font-bold text-slate-500 truncate" title={card1Subtext}>
                       {card1Subtext}
                     </span>
@@ -10969,7 +10978,13 @@ return (
                     </div>
                   </div>
                   <div className="flex-grow pt-2">
-                    <BarChartComponent data={activeBarData} onBarClick={setOqcDetailModalModel} />
+                    <BarChartComponent
+                      data={activeBarData}
+                      onBarClick={(model) => {
+                        setOqcDetailModalModel(model);
+                        setOqcDetailModalPage(1);
+                      }}
+                    />
                   </div>
                 </div>
               </div>
@@ -11060,7 +11075,10 @@ return (
                                     <div
                                       className="w-full bg-rose-500 hover:bg-rose-400 transition-all duration-305 flex flex-col items-center justify-center relative cursor-pointer shadow-inner shrink-0"
                                       style={{ height: `${failHeight}%` }}
-                                      onClick={() => setOqcDetailModalModel(item.model)}
+                                      onClick={() => {
+                                        setOqcDetailModalModel(item.model);
+                                        setOqcDetailModalPage(1);
+                                      }}
                                     >
                                       {showFailLabel && (
                                         <div className="text-[10px] text-white tabular-nums font-black tracking-tighter text-center leading-none">
@@ -11076,7 +11094,10 @@ return (
                                     <div
                                       className={`w-full bg-emerald-500 hover:bg-emerald-400 transition-all duration-305 flex flex-col items-center justify-center relative cursor-pointer shadow-inner shrink-0 ${item.failed === 0 ? 'rounded-t-xl' : 'rounded-t-none'}`}
                                       style={{ height: `${passHeight}%` }}
-                                      onClick={() => setOqcDetailModalModel(item.model)}
+                                      onClick={() => {
+                                        setOqcDetailModalModel(item.model);
+                                        setOqcDetailModalPage(1);
+                                      }}
                                     >
                                       {showPassLabel && (
                                         <div className="text-[10px] text-white tabular-nums font-black tracking-tighter text-center leading-none">
@@ -11132,7 +11153,10 @@ return (
                               className="text-[10px] font-black text-slate-500 uppercase truncate text-center leading-tight tracking-tight scale-90 cursor-pointer hover:text-blue-600 transition-colors"
                               style={{ width: `${Math.max(12, Math.min(18, 80 / modelStats.length))}%` }}
                               title={item.model}
-                              onClick={() => setOqcDetailModalModel(item.model)}
+                              onClick={() => {
+                                setOqcDetailModalModel(item.model);
+                                setOqcDetailModalPage(1);
+                              }}
                             >
                               {item.model.replace('DK ', '')}
                             </div>
@@ -17402,12 +17426,18 @@ return (
       );
     })()}
 
-    {/* MODAL: DANH SÁCH CHI TIẾT BẢN GHI THEO MODEL BIỂU ĐỒ SẢN LƯỢNG */}
+    {/* MODAL: DANH SÁCH CHI TIẾT BẢN GHI THEO MODEL BIỂU ĐỒ SẢN LƯỢNG (PHÂN TRANG 10 BẢN GHI/TRANG) */}
     {oqcDetailModalModel && (() => {
       const detailRecords = filteredOqc.filter(r => getCleanModelName(r) === oqcDetailModalModel || (r.model || 'Dòng khác') === oqcDetailModalModel);
+      const PAGE_SIZE = 10;
+      const totalPages = Math.max(1, Math.ceil(detailRecords.length / PAGE_SIZE));
+      const currentPage = Math.min(Math.max(1, oqcDetailModalPage), totalPages);
+      const startIndex = (currentPage - 1) * PAGE_SIZE;
+      const pagedRecords = detailRecords.slice(startIndex, startIndex + PAGE_SIZE);
+
       return (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-5xl w-full overflow-hidden text-xs flex flex-col font-sans max-h-[85vh] animate-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-5xl w-full overflow-hidden text-xs flex flex-col font-sans max-h-[88vh] animate-in zoom-in-95 duration-150">
 
             {/* Header */}
             <div className="bg-slate-900 text-white p-5 select-none relative flex justify-between items-center">
@@ -17417,7 +17447,7 @@ return (
                   <span className="text-[10px] font-black tracking-widest text-sky-400 uppercase">Hệ Thống QMS - Nhật Ký Bản Ghi Đã Nhập</span>
                 </div>
                 <h3 className="font-black text-slate-100 text-sm sm:text-base uppercase tracking-tight text-left">
-                  Danh Sách Bản Ghi KCS/OQC - {oqcDetailModalModel} ({detailRecords.length} xe)
+                  Danh Sách Bản Ghi KCS/OQC - {oqcDetailModalModel} ({detailRecords.length.toLocaleString()} xe)
                 </h3>
               </div>
               <button
@@ -17430,7 +17460,7 @@ return (
             </div>
 
             {/* Scrollable Container Body */}
-            <div className="p-6 overflow-y-auto max-h-[calc(85vh-120px)] space-y-4">
+            <div className="p-5 sm:p-6 overflow-y-auto max-h-[calc(88vh-130px)] space-y-4">
               {selectedOqcIds.length > 0 && (
                 <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-xl p-3 text-red-900 font-sans shadow-xs animate-in fade-in duration-200">
                   <div className="flex items-center gap-2">
@@ -17462,115 +17492,179 @@ return (
                   Chưa có bản ghi nào được nhập cho dòng xe {oqcDetailModalModel} khớp với điều kiện lọc hiện tại.
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-xl border border-slate-205">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-extrabold text-[10px] uppercase">
-                        <th className="p-3 w-10 text-center">
-                          <input
-                            type="checkbox"
-                            checked={detailRecords.length > 0 && detailRecords.every(r => selectedOqcIds.includes(r.id))}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                const allModelOqcIds = detailRecords.map(r => r.id);
-                                setSelectedOqcIds(prev => Array.from(new Set([...prev, ...allModelOqcIds])));
-                              } else {
-                                const allModelOqcIds = detailRecords.map(r => r.id);
-                                setSelectedOqcIds(prev => prev.filter(id => !allModelOqcIds.includes(id)));
-                              }
-                            }}
-                            className="rounded border-slate-300 text-indigo-650 focus:ring-indigo-500 cursor-pointer accent-indigo-650"
-                          />
-                        </th>
-                        <th className="p-3 w-12 text-center">STT</th>
-                        <th className="p-3">Số khung / máy</th>
-                        <th className="p-3">Mã linh kiện / LSX</th>
-                        <th className="p-3">Màu sắc</th>
-                        <th className="p-3">Trạng thái</th>
-                        <th className="p-3">Chi tiết khuyết tật</th>
-                        <th className="p-3">Đánh giá chung</th>
-                        <th className="p-3">KCS kiểm tra</th>
-                        <th className="p-3 text-center">Thời gian</th>
-                        <th className="p-3 w-16 text-center">Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {detailRecords.map((row, i) => {
-                        const isPassed = isOqcRecordPassed(row);
-                        return (
-                          <tr key={row.id} className="hover:bg-slate-50 transition font-medium">
-                            <td className="p-3 text-center">
-                              <input
-                                type="checkbox"
-                                checked={selectedOqcIds.includes(row.id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedOqcIds(prev => [...prev, row.id]);
-                                  } else {
-                                    setSelectedOqcIds(prev => prev.filter(id => id !== row.id));
-                                  }
-                                }}
-                                className="rounded border-slate-300 text-indigo-650 focus:ring-indigo-500 cursor-pointer accent-indigo-650"
-                              />
-                            </td>
-                            <td className="p-3 text-center text-slate-400 font-bold">{i + 1}</td>
-                            <td className="p-3 font-mono text-slate-800 font-bold">{row.serialNo || 'N/A'}</td>
-                            <td className="p-3 font-mono text-slate-500">
-                              <span className="block font-bold text-[11px] text-slate-700">{row.partCode || 'N/A'}</span>
-                              <span className="text-[10px] text-slate-400">LSX: {row.lsx || 'N/A'}</span>
-                            </td>
-                            <td className="p-3 font-bold text-slate-650">{row.color || 'N/A'}</td>
-                            <td className="p-3">
-                              {isPassed ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 text-emerald-750 border border-emerald-250">
-                                  ✓ ĐẠT (Passed)
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black bg-rose-50 text-rose-750 border border-rose-250">
-                                  ✗ LỖI
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-3 text-slate-700" style={{ maxWidth: '220px' }}>
-                              <div className="font-bold text-[11px] text-slate-805 leading-snug">{row.defectDetail || 'Không có khuyết điểm'}</div>
-                              {row.rootCause && (
-                                <div className="text-[10px] text-slate-400 mt-0.5">Nguyên nhân: {row.rootCause}</div>
-                              )}
-                            </td>
-                            <td className="p-3" style={{ maxWidth: '200px' }}>
-                              {row.evaluation ? (
-                                <div className="bg-amber-50 text-amber-800 p-2 rounded border border-amber-200 text-[10px] leading-snug">
-                                  <strong>Đánh giá:</strong> {row.evaluation}
-                                  {row.treatment && (
-                                    <span className="block mt-1 text-indigo-755 font-bold">
-                                      👉 {row.treatment}
-                                    </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-slate-400 italic text-[10px]">Chưa ghi nhận nhận xét</span>
-                              )}
-                            </td>
-                            <td className="p-3 text-slate-600 font-bold">{row.checkedBy || 'Trưởng nhóm QC'}</td>
-                            <td className="p-3 text-center font-mono text-[10px] text-slate-500 whitespace-nowrap">
-                              <div>{row.date || 'N/A'}</div>
-                              <div className="text-[9px] text-slate-400 mt-0.5">{row.checkTime || 'N/A'}</div>
-                            </td>
-                            <td className="p-3 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteOqcClick(row.id)}
-                                className="text-rose-650 hover:text-rose-800 p-1 cursor-pointer transition"
-                                title="Xóa bản ghi"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div className="space-y-3">
+                  <div className="overflow-x-auto rounded-xl border border-slate-205">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-extrabold text-[10px] uppercase">
+                          <th className="p-3 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              checked={pagedRecords.length > 0 && pagedRecords.every(r => selectedOqcIds.includes(r.id))}
+                              onChange={(e) => {
+                                const pageIds = pagedRecords.map(r => r.id);
+                                if (e.target.checked) {
+                                  setSelectedOqcIds(prev => Array.from(new Set([...prev, ...pageIds])));
+                                } else {
+                                  setSelectedOqcIds(prev => prev.filter(id => !pageIds.includes(id)));
+                                }
+                              }}
+                              title="Chọn tất cả bản ghi trên trang này"
+                              className="rounded border-slate-300 text-indigo-650 focus:ring-indigo-500 cursor-pointer accent-indigo-650"
+                            />
+                          </th>
+                          <th className="p-3 w-12 text-center">STT</th>
+                          <th className="p-3">Số khung / máy</th>
+                          <th className="p-3">Mã linh kiện / LSX</th>
+                          <th className="p-3">Màu sắc</th>
+                          <th className="p-3">Trạng thái</th>
+                          <th className="p-3">Chi tiết sai lỗi</th>
+                          <th className="p-3">Đánh giá chung</th>
+                          <th className="p-3">KCS kiểm tra</th>
+                          <th className="p-3 text-center">Thời gian</th>
+                          <th className="p-3 w-16 text-center">Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {pagedRecords.map((row, i) => {
+                          const isPassed = isOqcRecordPassed(row);
+                          const recordIndex = startIndex + i + 1;
+                          return (
+                            <tr key={row.id} className="hover:bg-slate-50 transition font-medium">
+                              <td className="p-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedOqcIds.includes(row.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedOqcIds(prev => [...prev, row.id]);
+                                    } else {
+                                      setSelectedOqcIds(prev => prev.filter(id => id !== row.id));
+                                    }
+                                  }}
+                                  className="rounded border-slate-300 text-indigo-650 focus:ring-indigo-500 cursor-pointer accent-indigo-650"
+                                />
+                              </td>
+                              <td className="p-3 text-center text-slate-400 font-bold tabular-nums">{recordIndex}</td>
+                              <td className="p-3 font-mono text-slate-800 font-bold">{row.serialNo || 'N/A'}</td>
+                              <td className="p-3 font-mono text-slate-500">
+                                <span className="block font-bold text-[11px] text-slate-700">{row.partCode || 'N/A'}</span>
+                                <span className="text-[10px] text-slate-400">LSX: {row.lsx || 'N/A'}</span>
+                              </td>
+                              <td className="p-3 font-bold text-slate-650">{row.color || 'N/A'}</td>
+                              <td className="p-3">
+                                {isPassed ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 text-emerald-750 border border-emerald-250">
+                                    ✓ ĐẠT (Passed)
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black bg-rose-50 text-rose-750 border border-rose-250">
+                                    ✗ LỖI
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3 text-slate-700" style={{ maxWidth: '220px' }}>
+                                <div className="font-bold text-[11px] text-slate-805 leading-snug">{row.defectDetail || 'Không có sai lỗi'}</div>
+                                {row.rootCause && (
+                                  <div className="text-[10px] text-slate-400 mt-0.5">Nguyên nhân: {row.rootCause}</div>
+                                )}
+                              </td>
+                              <td className="p-3" style={{ maxWidth: '200px' }}>
+                                {row.evaluation ? (
+                                  <div className="bg-amber-50 text-amber-800 p-2 rounded border border-amber-200 text-[10px] leading-snug">
+                                    <strong>Đánh giá:</strong> {row.evaluation}
+                                    {row.treatment && (
+                                      <span className="block mt-1 text-indigo-755 font-bold">
+                                        👉 {row.treatment}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 italic text-[10px]">Chưa ghi nhận nhận xét</span>
+                                )}
+                              </td>
+                              <td className="p-3 text-slate-600 font-bold">{row.checkedBy || 'Trưởng nhóm QC'}</td>
+                              <td className="p-3 text-center font-mono text-[10px] text-slate-500 whitespace-nowrap">
+                                <div>{row.date || 'N/A'}</div>
+                                <div className="text-[9px] text-slate-400 mt-0.5">{row.checkTime || 'N/A'}</div>
+                              </td>
+                              <td className="p-3 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteOqcClick(row.id)}
+                                  className="text-rose-650 hover:text-rose-800 p-1 cursor-pointer transition"
+                                  title="Xóa bản ghi"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Bar */}
+                  {totalPages > 1 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 select-none border-t border-slate-100">
+                      <div className="text-[11px] text-slate-500 font-medium">
+                        Hiển thị <strong className="text-slate-800 font-bold tabular-nums">{startIndex + 1}–{Math.min(startIndex + PAGE_SIZE, detailRecords.length)}</strong> trên tổng số <strong className="text-blue-600 font-black tabular-nums">{detailRecords.length.toLocaleString()}</strong> xe
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <button
+                          type="button"
+                          disabled={currentPage === 1}
+                          onClick={() => setOqcDetailModalPage(1)}
+                          className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-3xs"
+                          title="Về trang đầu"
+                        >
+                          «
+                        </button>
+                        <button
+                          type="button"
+                          disabled={currentPage === 1}
+                          onClick={() => setOqcDetailModalPage(prev => Math.max(1, prev - 1))}
+                          className="px-3 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-3xs flex items-center gap-1"
+                        >
+                          ‹ Trước
+                        </button>
+
+                        <div className="flex items-center gap-1 px-2 py-1 bg-slate-100 rounded-lg border border-slate-200 text-slate-700 font-bold text-xs">
+                          <span>Trang</span>
+                          <select
+                            value={currentPage}
+                            onChange={(e) => setOqcDetailModalPage(Number(e.target.value))}
+                            className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-blue-600 font-black tabular-nums cursor-pointer outline-none"
+                          >
+                            {Array.from({ length: totalPages }, (_, idx) => idx + 1).map(p => (
+                              <option key={p} value={p}>
+                                {p} / {totalPages}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={currentPage === totalPages}
+                          onClick={() => setOqcDetailModalPage(prev => Math.min(totalPages, prev + 1))}
+                          className="px-3 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-3xs flex items-center gap-1"
+                        >
+                          Sau ›
+                        </button>
+                        <button
+                          type="button"
+                          disabled={currentPage === totalPages}
+                          onClick={() => setOqcDetailModalPage(totalPages)}
+                          className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-3xs"
+                          title="Tới trang cuối"
+                        >
+                          »
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
