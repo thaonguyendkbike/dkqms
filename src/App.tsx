@@ -14349,10 +14349,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
 
   if (isTvRoute) {
     return (
-      <OqcTvDashboard
-        oqcRecords={oqcRecords}
-        oqcHandoverList={oqcHandoverList}
-      />
+      <div className="w-full h-full min-h-screen overflow-y-auto overflow-x-hidden bg-slate-900">
+        <OqcTvDashboard
+          oqcRecords={oqcRecords}
+          oqcHandoverList={oqcHandoverList}
+        />
+      </div>
     );
   }
 

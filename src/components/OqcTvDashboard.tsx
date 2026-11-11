@@ -10,7 +10,8 @@ import {
   CheckCheck,
   TrendingUp,
   AlertTriangle,
-  Clock
+  Clock,
+  Timer
 } from 'lucide-react';
 import { OQCRecord } from '../qualityTestData';
 import { safeStorage } from '../safeStorage';
@@ -44,9 +45,22 @@ function standardizeDateFast(dStr: string): string {
   return trimmed;
 }
 
+// Chuyển chuỗi giờ:phút thành số giây trong ngày
+function parseTimeToSeconds(timeStr?: string): number | null {
+  if (!timeStr) return null;
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return null;
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const seconds = match[3] ? parseInt(match[3], 10) : 0;
+  if (isNaN(hours) || isNaN(minutes)) return null;
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
 export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }: OqcTvDashboardProps) {
-  // Bộ lọc thời gian trên TV: 'all' (mặc định khớp 100% với dashboard chính) | 'year' | 'month' | 'today'
-  const [timeFilter, setTimeFilter] = useState<'all' | 'year' | 'month' | 'today'>('all');
+  // Bộ lọc thời gian trên TV: 'all' | 'year' | 'month' | 'today' | 'custom_date'
+  const [timeFilter, setTimeFilter] = useState<'all' | 'year' | 'month' | 'today' | 'custom_date'>('all');
+  const [customDate, setCustomDate] = useState<string>(''); // YYYY-MM-DD
   const [currentTime, setCurrentTime] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
@@ -103,6 +117,32 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
   const currentYear = now.getFullYear();
   const todayStr = `${String(currentDay).padStart(2, '0')}/${String(currentMonth).padStart(2, '0')}/${currentYear}`;
 
+  // Chuẩn hóa ngày chọn tùy chỉnh YYYY-MM-DD -> DD/MM/YYYY
+  const customDateStd = useMemo(() => {
+    if (!customDate) return '';
+    const p = customDate.split('-');
+    if (p.length === 3) return `${p[2].padStart(2, '0')}/${p[1].padStart(2, '0')}/${p[0]}`;
+    return '';
+  }, [customDate]);
+
+  // Cờ báo hiệu đang xem theo NGÀY (Hôm nay hoặc 1 ngày cụ thể)
+  const isDateFilterActive = timeFilter === 'today' || (timeFilter === 'custom_date' && Boolean(customDateStd));
+
+  // Cho phép cuộn trang trên điện thoại di động khi xem màn hình TV
+  useEffect(() => {
+    const origBodyOverflow = document.body.style.overflow;
+    const origHtmlOverflow = document.documentElement.style.overflow;
+    const origBodyHeight = document.body.style.height;
+    document.body.style.overflow = 'auto';
+    document.documentElement.style.overflow = 'auto';
+    document.body.style.height = 'auto';
+    return () => {
+      document.body.style.overflow = origBodyOverflow;
+      document.documentElement.style.overflow = origHtmlOverflow;
+      document.body.style.height = origBodyHeight;
+    };
+  }, []);
+
   // Tính số ngày còn lại trong tháng
   const daysInCurrentMonth = new Date(currentYear, currentMonth, 0).getDate();
   const daysRemaining = Math.max(0, daysInCurrentMonth - currentDay);
@@ -118,6 +158,9 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
     const modelPassedMap: Record<string, number> = {};
     const modelFailedMap: Record<string, number> = {};
     const defectCountMap: Record<string, number> = {};
+
+    // Thu thập mốc thời gian trong ngày để đo Takt Time
+    const dayCheckTimesInSec: number[] = [];
 
     // Tổng số lượng xe cả năm 2026 để hiển thị thẻ Tiến độ năm 2026
     let yearTotalAssembled = 0;
@@ -154,6 +197,8 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
       // Lọc theo bộ lọc thời gian
       if (timeFilter === 'today') {
         if (stdDate !== todayStr) continue;
+      } else if (timeFilter === 'custom_date') {
+        if (stdDate !== customDateStd) continue;
       } else if (timeFilter === 'month') {
         if (rMonth !== currentMonth || rYear !== currentYear) continue;
       } else if (timeFilter === 'year') {
@@ -171,6 +216,22 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
           loiCount++;
         } else {
           if (hasDefect) loiCount++; else datCount++;
+        }
+
+        // Thu thập thời gian ghi nhận lắp ráp/kiểm tra trong ngày để đo Takt Time
+        if (isDateFilterActive) {
+          let sec = parseTimeToSeconds(r.checkTime);
+          if (sec === null && (r.createdAt || r.updatedAt)) {
+            try {
+              const dt = new Date(r.updatedAt || r.createdAt);
+              if (!isNaN(dt.getTime())) {
+                sec = dt.getHours() * 3600 + dt.getMinutes() * 60 + dt.getSeconds();
+              }
+            } catch { }
+          }
+          if (sec !== null) {
+            dayCheckTimesInSec.push(sec);
+          }
         }
 
         const model = (r.model || 'Chưa rõ').trim();
@@ -216,6 +277,44 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
     const datRate = lapRapTotal > 0 ? ((datCount / lapRapTotal) * 100).toFixed(1) : '100';
     const loiRate = lapRapTotal > 0 ? ((loiCount / lapRapTotal) * 100).toFixed(1) : '0';
 
+    // Tính toán Takt Time dựa trên mốc thời gian đầu tiên và mới nhất trong ngày
+    let taktTimeDisplay = '--';
+    let taktTimeUnit = '';
+    let taktTimeSub = 'Chưa có mốc thời gian';
+    let taktEarliestStr = '--:--';
+    let taktLatestStr = '--:--';
+
+    if (dayCheckTimesInSec.length > 0) {
+      const minSec = Math.min(...dayCheckTimesInSec);
+      const maxSec = Math.max(...dayCheckTimesInSec);
+      const minH = String(Math.floor(minSec / 3600)).padStart(2, '0');
+      const minM = String(Math.floor((minSec % 3600) / 60)).padStart(2, '0');
+      const maxH = String(Math.floor(maxSec / 3600)).padStart(2, '0');
+      const maxM = String(Math.floor((maxSec % 3600) / 60)).padStart(2, '0');
+      taktEarliestStr = `${minH}:${minM}`;
+      taktLatestStr = `${maxH}:${maxM}`;
+
+      const totalSpanSec = maxSec - minSec;
+      const totalSpanMin = Math.round(totalSpanSec / 60);
+      const cars = lapRapTotal;
+
+      if (cars > 0 && totalSpanSec > 0) {
+        const taktSecPerCar = Math.round(totalSpanSec / cars);
+        if (taktSecPerCar < 60) {
+          taktTimeDisplay = `${taktSecPerCar}`;
+          taktTimeUnit = 'giây / xe';
+        } else {
+          taktTimeDisplay = (taktSecPerCar / 60).toFixed(1);
+          taktTimeUnit = 'phút / xe';
+        }
+        taktTimeSub = `${taktEarliestStr} ➔ ${taktLatestStr} (${totalSpanMin}p / ${cars} xe)`;
+      } else if (cars === 1 || minSec === maxSec) {
+        taktTimeDisplay = '1 xe';
+        taktTimeUnit = 'hoàn thành';
+        taktTimeSub = `Thời gian ghi nhận: ${taktEarliestStr}`;
+      }
+    }
+
     return {
       yearTotalAssembled,
       totalLsx,
@@ -225,9 +324,14 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
       datRate,
       loiRate,
       topModels,
-      topDefects
+      topDefects,
+      taktTimeDisplay,
+      taktTimeUnit,
+      taktTimeSub,
+      taktEarliestStr,
+      taktLatestStr
     };
-  }, [oqcRecords, timeFilter, todayStr, currentMonth, currentYear]);
+  }, [oqcRecords, timeFilter, todayStr, customDateStd, isDateFilterActive, currentMonth, currentYear]);
 
   // Đếm số lượng xe quét bàn giao tương ứng với bộ lọc thời gian
   const handoverCount = useMemo(() => {
@@ -237,6 +341,8 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
       const stdDate = item.date ? standardizeDateFast(item.date) : '';
       if (timeFilter === 'today') {
         if (stdDate !== todayStr) continue;
+      } else if (timeFilter === 'custom_date') {
+        if (stdDate !== customDateStd) continue;
       } else if (timeFilter === 'month') {
         if (stdDate) {
           const p = stdDate.split('/');
@@ -255,7 +361,7 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
       count++;
     }
     return count;
-  }, [localHandoverList, timeFilter, todayStr, currentMonth, currentYear]);
+  }, [localHandoverList, timeFilter, todayStr, customDateStd, currentMonth, currentYear]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -278,7 +384,7 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
   ];
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white font-sans flex flex-col p-3 sm:p-5 select-none antialiased">
+    <div className="min-h-screen w-full bg-slate-900 text-white font-sans flex flex-col p-3 sm:p-5 antialiased overflow-y-auto overflow-x-hidden">
       {/* ==================== HEADER KIOSK TIVI (ĐƠN GIẢN, GỌN GÀNG) ==================== */}
       <header className="flex flex-wrap items-center justify-between gap-3 pb-3 mb-4 border-b border-slate-700/80">
         <div className="flex items-center gap-3">
@@ -306,11 +412,14 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
 
         {/* Cụm điều khiển Tivi */}
         <div className="flex items-center gap-2">
-          {/* Bộ lọc thời gian: Tất cả (mặc định) | Năm 2026 | Tháng | Hôm nay */}
-          <div className="bg-slate-800 p-1 rounded-xl border border-slate-700 flex items-center gap-1">
+          {/* Bộ lọc thời gian: Tất cả (mặc định) | Năm 2026 | Tháng | Hôm nay | Lịch chọn ngày */}
+          <div className="bg-slate-800 p-1 rounded-xl border border-slate-700 flex flex-wrap items-center gap-1">
             <button
               type="button"
-              onClick={() => setTimeFilter('all')}
+              onClick={() => {
+                setTimeFilter('all');
+                setCustomDate('');
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                 timeFilter === 'all' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
               }`}
@@ -319,7 +428,10 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
             </button>
             <button
               type="button"
-              onClick={() => setTimeFilter('year')}
+              onClick={() => {
+                setTimeFilter('year');
+                setCustomDate('');
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                 timeFilter === 'year' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
               }`}
@@ -328,7 +440,10 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
             </button>
             <button
               type="button"
-              onClick={() => setTimeFilter('month')}
+              onClick={() => {
+                setTimeFilter('month');
+                setCustomDate('');
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                 timeFilter === 'month' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
               }`}
@@ -337,13 +452,39 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
             </button>
             <button
               type="button"
-              onClick={() => setTimeFilter('today')}
+              onClick={() => {
+                setTimeFilter('today');
+                setCustomDate('');
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                 timeFilter === 'today' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
               }`}
             >
               Hôm nay
             </button>
+
+            {/* Ô chọn ngày */}
+            <div className="flex items-center pl-1 border-l border-slate-700/80">
+              <input
+                type="date"
+                value={customDate}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setCustomDate(e.target.value);
+                    setTimeFilter('custom_date');
+                  } else {
+                    setCustomDate('');
+                    setTimeFilter('all');
+                  }
+                }}
+                className={`text-xs px-2 py-1 rounded-lg bg-slate-900 border transition cursor-pointer outline-none ${
+                  timeFilter === 'custom_date'
+                    ? 'border-blue-500 text-white font-bold'
+                    : 'border-slate-700 text-slate-400 hover:text-slate-200'
+                }`}
+                title="Chọn ngày cụ thể để xem Takt Time và tiến độ ngày đó"
+              />
+            </div>
           </div>
 
           {/* Đồng hồ to rõ trên TV */}
@@ -424,27 +565,55 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
           </div>
         </div>
 
-        {/* Thẻ 3: SL xe theo LSX */}
-        <div className="bg-slate-800/90 rounded-2xl border border-slate-700/80 p-4 sm:p-5 shadow-md flex flex-col justify-between min-h-[145px]">
-          <div className="flex justify-between items-start">
-            <span className="text-xs sm:text-sm font-black uppercase text-slate-400 tracking-wider">
-              SL Xe Theo LSX
-            </span>
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-          </div>
-          <div className="my-1.5">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-3xl sm:text-4xl lg:text-5xl font-black text-rose-400 tabular-nums tracking-tight">
-                {stats.totalLsx.toLocaleString()}
+        {/* Thẻ 3: SL xe theo LSX HOẶC TAKT TIME khi chọn ngày */}
+        {isDateFilterActive ? (
+          <div className="bg-slate-800/90 rounded-2xl border border-slate-700/80 p-4 sm:p-5 shadow-md flex flex-col justify-between min-h-[145px]">
+            <div className="flex justify-between items-start">
+              <span className="text-xs sm:text-sm font-black uppercase text-amber-400 tracking-wider">
+                Takt Time (Nhịp Xe)
               </span>
-              <span className="text-xs text-slate-400 font-bold">xe</span>
+              <Timer className="w-5 h-5 text-amber-400" />
             </div>
-            <span className="text-xs text-slate-400 font-bold block mt-0.5">kế hoạch trong lệnh</span>
+            <div className="my-1.5">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-3xl sm:text-4xl lg:text-5xl font-black text-amber-300 tabular-nums tracking-tight">
+                  {stats.taktTimeDisplay}
+                </span>
+                {stats.taktTimeUnit && (
+                  <span className="text-xs font-bold text-amber-400/90">{stats.taktTimeUnit}</span>
+                )}
+              </div>
+              <span className="text-xs text-slate-400 font-bold block mt-0.5 truncate" title={stats.taktTimeSub}>
+                {stats.taktTimeSub}
+              </span>
+            </div>
+            <div className="pt-2 border-t border-slate-700/60 flex justify-between text-xs text-slate-400 font-bold">
+              <span>Đầu - Cuối ngày</span>
+              <span className="text-amber-400 font-bold">{stats.taktEarliestStr} - {stats.taktLatestStr}</span>
+            </div>
           </div>
-          <div className="pt-2 border-t border-slate-700/60 text-xs text-slate-400 font-bold">
-            Theo lệnh sản xuất
+        ) : (
+          <div className="bg-slate-800/90 rounded-2xl border border-slate-700/80 p-4 sm:p-5 shadow-md flex flex-col justify-between min-h-[145px]">
+            <div className="flex justify-between items-start">
+              <span className="text-xs sm:text-sm font-black uppercase text-slate-400 tracking-wider">
+                SL Xe Theo LSX
+              </span>
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+            </div>
+            <div className="my-1.5">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-3xl sm:text-4xl lg:text-5xl font-black text-rose-400 tabular-nums tracking-tight">
+                  {stats.totalLsx.toLocaleString()}
+                </span>
+                <span className="text-xs text-slate-400 font-bold">xe</span>
+              </div>
+              <span className="text-xs text-slate-400 font-bold block mt-0.5">kế hoạch trong lệnh</span>
+            </div>
+            <div className="pt-2 border-t border-slate-700/60 text-xs text-slate-400 font-bold">
+              Theo lệnh sản xuất
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Thẻ 4: SL xe lắp ráp */}
         <div className="bg-slate-800/90 rounded-2xl border border-slate-700/80 p-4 sm:p-5 shadow-md flex flex-col justify-between min-h-[145px]">
