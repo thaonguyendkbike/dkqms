@@ -1,7 +1,7 @@
 import React, { useState, useEffect, FormEvent, useMemo, useCallback, useRef } from 'react';
 // flushSync removed (Change 1: replaced with regular setState for smoother UX)
 import XLSXStyle from 'xlsx-js-style';
-import html2canvas from 'html2canvas';
+import * as htmlToImage from 'html-to-image';
 import {
   Wrench,
   Plus,
@@ -6764,7 +6764,7 @@ const handleExportOqcCSV = () => {
   }
 };
 
-// Chụp ảnh toàn bộ trang Báo cáo & Đồ thị OQC và lưu vào Clipboard (kèm tải ảnh PNG)
+// Chụp ảnh toàn bộ trang Báo cáo & Đồ thị OQC và lưu vào Clipboard (hỗ trợ Tailwind v4 oklch)
 const handleCaptureOqcDashboard = async () => {
   const el = document.getElementById('oqc-dashboard-capture-area');
   if (!el) {
@@ -6775,52 +6775,54 @@ const handleCaptureOqcDashboard = async () => {
   setIsCapturingOqc(true);
 
   try {
-    // Đợi ngắn 150ms để DOM và font chữ ổn định
-    await new Promise(resolve => setTimeout(resolve, 150));
+    // Đợi 120ms để DOM ổn định
+    await new Promise(resolve => setTimeout(resolve, 120));
 
-    const canvas = await html2canvas(el, {
-      scale: 2, // 2x Retina cho độ phân giải siêu nét
-      useCORS: true,
-      allowTaint: true,
+    // Dùng html-to-image (Render qua SVG foreignObject của trình duyệt, tương thích 100% với oklch của Tailwind v4)
+    let blob = await htmlToImage.toBlob(el, {
+      pixelRatio: 2, // 2x Retina cho độ phân giải siêu nét
       backgroundColor: '#f8fafc',
-      logging: false,
-      windowWidth: Math.max(el.scrollWidth, 1280),
+      cacheBust: true,
     });
 
-    canvas.toBlob(async (blob) => {
-      if (!blob) {
-        setIsCapturingOqc(false);
-        alert('Không thể tạo file ảnh từ báo cáo!');
-        return;
-      }
+    if (!blob) {
+      const dataUrl = await htmlToImage.toPng(el, { pixelRatio: 2, backgroundColor: '#f8fafc', cacheBust: true });
+      const res = await fetch(dataUrl);
+      blob = await res.blob();
+    }
 
-      let copiedToClipboard = false;
-      try {
-        if (navigator.clipboard && (window as any).ClipboardItem) {
-          const item = new (window as any).ClipboardItem({ 'image/png': blob });
-          await navigator.clipboard.write([item]);
-          copiedToClipboard = true;
-        }
-      } catch (clipErr) {
-        console.warn('Lỗi ghi trực tiếp vào Clipboard:', clipErr);
-      }
-
+    if (!blob) {
       setIsCapturingOqc(false);
+      alert('Không thể tạo file ảnh từ báo cáo!');
+      return;
+    }
 
-      if (copiedToClipboard) {
-        alert('📸 ĐÃ CHỤP TOÀN BỘ BÁO CÁO & SAO CHÉP VÀO CLIPBOARD!\n\nAnh Thao chỉ cần nhấn phím Ctrl + V (hoặc Dán) trực tiếp vào Zalo, Chat, Word, hoặc Slide báo cáo.');
-      } else {
-        // Tự động tải ảnh PNG về máy nếu trình duyệt giới hạn quyền ghi Clipboard
-        const link = document.createElement('a');
-        const dateStr = new Date().toLocaleDateString('vi-VN').replace(/\//g, '-');
-        link.href = canvas.toDataURL('image/png');
-        link.download = `DK_QMS_BaoCao_OQC_${dateStr}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        alert('📸 ĐÃ CHỤP ẢNH TOÀN BỘ BÁO CÁO THÀNH CÔNG!\n\nẢnh đã được tải về máy của anh Thao (do trình duyệt đang hạn chế tự động dán ảnh vào Clipboard).');
+    let copiedToClipboard = false;
+    try {
+      if (navigator.clipboard && (window as any).ClipboardItem) {
+        const item = new (window as any).ClipboardItem({ 'image/png': blob });
+        await navigator.clipboard.write([item]);
+        copiedToClipboard = true;
       }
-    }, 'image/png');
+    } catch (clipErr) {
+      console.warn('Lỗi ghi trực tiếp vào Clipboard:', clipErr);
+    }
+
+    setIsCapturingOqc(false);
+
+    if (copiedToClipboard) {
+      alert('📸 ĐÃ CHỤP TOÀN BỘ BÁO CÁO & SAO CHÉP VÀO CLIPBOARD!\n\nAnh Thao chỉ cần nhấn phím Ctrl + V (hoặc Dán) trực tiếp vào Zalo, Chat, Word, hoặc Slide báo cáo.');
+    } else {
+      // Tự động tải ảnh PNG về máy nếu trình duyệt giới hạn quyền ghi Clipboard
+      const link = document.createElement('a');
+      const dateStr = new Date().toLocaleDateString('vi-VN').replace(/\//g, '-');
+      link.href = URL.createObjectURL(blob);
+      link.download = `DK_QMS_BaoCao_OQC_${dateStr}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      alert('📸 ĐÃ CHỤP ẢNH TOÀN BỘ BÁO CÁO THÀNH CÔNG!\n\nẢnh đã được tải về máy của anh Thao (do trình duyệt đang hạn chế tự động dán ảnh vào Clipboard).');
+    }
   } catch (err: any) {
     setIsCapturingOqc(false);
     console.error('Lỗi khi chụp ảnh báo cáo:', err);
@@ -7972,16 +7974,14 @@ return (
           </button>
         )}
         {qcMainSubTab === 'oqc' && (
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() => setShowAddOqcModal(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-              title="Thêm phiếu kiểm tra nghiệm thu KCS OQC mới"
-            >
-              <Plus className="w-3.5 h-3.5" /> Thêm Nghiệm Thu KCS
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddOqcModal(true)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 shrink-0"
+            title="Thêm phiếu kiểm tra nghiệm thu KCS OQC mới"
+          >
+            <Plus className="w-3.5 h-3.5" /> Thêm KCS
+          </button>
         )}
         {qcMainSubTab === 'color_change' && (
           <div className="flex items-center gap-2">
@@ -8030,16 +8030,16 @@ return (
               type="button"
               onClick={handleCaptureOqcDashboard}
               disabled={isCapturingOqc}
-              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 border border-emerald-600 disabled:opacity-50"
+              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 border border-emerald-600 disabled:opacity-50 shrink-0"
               title="Chụp toàn bộ trang Báo cáo & Đồ thị và sao chép trực tiếp vào Clipboard (Ctrl + V)"
             >
               <Camera className="w-3.5 h-3.5" />
-              {isCapturingOqc ? 'Đang chụp ảnh...' : 'Chụp ảnh Báo cáo'}
+              {isCapturingOqc ? 'Đang chụp...' : 'Chụp ảnh'}
             </button>
             <button
               type="button"
               onClick={handleExportOqcDashboardExcel}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 border border-indigo-500"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 border border-indigo-500 shrink-0"
               title="Xuất file Excel Báo Cáo Tổng Hợp Dashboard OQC theo đúng bộ lọc hiện tại"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" /> BC Dashboard
@@ -8047,10 +8047,10 @@ return (
             <button
               type="button"
               onClick={() => setShowTvModeModal(true)}
-              className="bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 border border-purple-600"
+              className="bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 border border-purple-600 shrink-0"
               title="Mở hướng dẫn kết nối Tivi & sao chép đường dẫn Deep Link cho Tivi"
             >
-              <Tv className="w-3.5 h-3.5" /> Chế độ TV
+              <Tv className="w-3.5 h-3.5" /> TV
             </button>
           </>
         )}
@@ -8071,13 +8071,13 @@ return (
               alert('Hồ sơ xuất Excel giám sát nhà cung cấp đang đồng bộ trực tiếp lên server.');
             }
           }}
-          className={`font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${qcMainSubTab === 'iqc'
+          className={`font-bold text-xs px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 shrink-0 ${qcMainSubTab === 'iqc'
               ? 'bg-blue-600 hover:bg-blue-700 text-white'
               : 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-500'
             }`}
-          title="Xuất dữ liệu hoặc mở popup kết xuất báo cáo"
+          title="Xuất dữ liệu theo đúng bộ lọc hiện tại"
         >
-          <Download className="w-3.5 h-3.5" /> {qcMainSubTab === 'reports' ? 'Xuất & In Báo Cáo' : qcMainSubTab === 'iqc' ? 'Xuất Excel' : 'Xuất Excel dữ liệu'}
+          <Download className="w-3.5 h-3.5" /> {qcMainSubTab === 'reports' ? 'Xuất & In BC' : 'Xuất Excel'}
         </button>
       </div>
     </div>
