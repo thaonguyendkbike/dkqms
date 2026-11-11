@@ -6317,9 +6317,19 @@ const handleExportOqcCSV = () => {
       if (kcsFilterYear && kcsFilterYear !== 'All') filters.push(`Năm: ${kcsFilterYear}`);
       if (kcsSearch && kcsSearch.trim()) filters.push(`Tìm kiếm: "${kcsSearch.trim()}"`);
       filterDescription = filters.length > 0 ? filters.join(' | ') : "Toàn bộ Trạm KCS";
-    } else if (filteredOqc && filteredOqc.length > 0 && (oqcSearch?.trim() || oqcFilterModel !== 'All' || oqcFilterColor !== 'All' || oqcFilterDate !== 'All' || oqcFilterStatus !== 'All' || oqcFilterMonth !== 'All' || oqcFilterYear !== 'All')) {
+    } else if (filteredOqc) {
+      // Khi ở OQC (bao gồm Dashboard, Báo phẩm bàn giao, Tra cứu), luôn xuất đúng theo tập bản ghi đã lọc
       targetRecords = filteredOqc;
-      filterDescription = "Dữ liệu theo bộ lọc chung OQC";
+      const filters: string[] = [];
+      if (oqcFilterDate !== 'All') filters.push(`Ngày ${oqcFilterDate}`);
+      else if (oqcFilterWeek !== 'All') filters.push(`Tuần ${oqcFilterWeek}`);
+      if (oqcFilterMonth !== 'All') filters.push(`Tháng ${oqcFilterMonth}`);
+      if (oqcFilterYear !== 'All') filters.push(`Năm ${oqcFilterYear}`);
+      if (oqcFilterModel !== 'All') filters.push(`Model ${oqcFilterModel}`);
+      if (oqcFilterStatus !== 'All') filters.push(`Trạng thái ${oqcFilterStatus}`);
+      if (oqcFilterColor !== 'All') filters.push(`Màu ${oqcFilterColor}`);
+      if (oqcSearch && oqcSearch.trim()) filters.push(`Tìm kiếm: "${oqcSearch.trim()}"`);
+      filterDescription = filters.length > 0 ? filters.join(' • ') : "Toàn bộ dữ liệu OQC";
     } else {
       targetRecords = oqcRecords;
     }
@@ -6622,6 +6632,227 @@ const handleExportOqcCSV = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+};
+
+// Xuất file Báo Cáo Dashboard OQC Tổng hợp theo bộ lọc hiện tại ra Excel
+const handleExportOqcDashboardExcel = () => {
+  try {
+    const {
+      liveLapRapTotal,
+      datVal,
+      loiVal,
+      pieDatPercent,
+      pieLoiPercent,
+      modelStats,
+      paretoItems
+    } = oqcDashboardStats;
+
+    const filterDesc = (() => {
+      const parts: string[] = [];
+      if (oqcFilterDate !== 'All') parts.push(`Ngày ${oqcFilterDate}`);
+      else if (oqcFilterWeek !== 'All') parts.push(`Tuần ${oqcFilterWeek}`);
+      if (oqcFilterMonth !== 'All') parts.push(`Tháng ${oqcFilterMonth}`);
+      if (oqcFilterYear !== 'All') parts.push(`Năm ${oqcFilterYear}`);
+      if (oqcFilterModel !== 'All') parts.push(`Model ${oqcFilterModel}`);
+      if (oqcSearch && oqcSearch.trim()) parts.push(`Từ khóa "${oqcSearch.trim()}"`);
+      return parts.length > 0 ? parts.join(' • ') : 'Toàn bộ kỳ dữ liệu';
+    })();
+
+    const now = new Date();
+    const exportTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} ngày ${now.toLocaleDateString('vi-VN')}`;
+    const lsxTotal = filteredOqc.length;
+    const assembleRate = lsxTotal > 0 ? ((liveLapRapTotal / lsxTotal) * 100).toFixed(1) : '100.0';
+
+    const aoaData: any[][] = [];
+    const rowTracker: { type: string; isZebra?: boolean }[] = [];
+    const merges: any[] = [];
+
+    const addRow = (row: any[], type: string, isZebra: boolean = false) => {
+      const fullRow = [...row];
+      while (fullRow.length < 8) {
+        fullRow.push("");
+      }
+      aoaData.push(fullRow);
+      rowTracker.push({ type, isZebra });
+    };
+
+    // Header thương hiệu chuẩn
+    addRow(["CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT", "", "", "", "", "", "", ""], "company");
+    merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } });
+
+    addRow(["PHÒNG QUẢN LÝ CHẤT LƯỢNG (DK QMS) — BÁO CÁO TỔNG HỢP KCS & THÀNH PHẨM (OQC)", "", "", "", "", "", "", ""], "dept");
+    merges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: 7 } });
+
+    addRow(["Thương hiệu: DKBike | Slogan: Xe cho cả gia đình | Tiêu chuẩn: ISO 9001:2015", "", "", "", "", "", "", ""], "meta");
+    merges.push({ s: { r: 2, c: 0 }, e: { r: 2, c: 7 } });
+
+    addRow([`Bộ lọc áp dụng: ${filterDesc} | Thời điểm xuất: ${exportTimeStr}`, "", "", "", "", "", "", ""], "filter");
+    merges.push({ s: { r: 3, c: 0 }, e: { r: 3, c: 7 } });
+
+    addRow([], "empty");
+
+    // PHẦN I: TỔNG HỢP CHỈ SỐ KPI CHẤT LƯỢNG
+    addRow(["I. TỔNG HỢP CÁC CHỈ SỐ KPI CHẤT LƯỢNG KCS (OQC DASHBOARD)", "", "", "", "", "", "", ""], "section_header");
+    merges.push({ s: { r: aoaData.length - 1, c: 0 }, e: { r: aoaData.length - 1, c: 7 } });
+
+    addRow(["STT", "Chỉ số KPI", "Số lượng", "Đơn vị", "Tỷ lệ (%)", "Mục tiêu chuẩn", "Đánh giá sơ bộ", "Ghi chú nghiệp vụ"], "table_header");
+    addRow([1, "Kế hoạch theo Lệnh Sản Xuất (LSX)", lsxTotal, "xe", "100%", "--", "Căn cứ theo LSX", "Tổng lượng xe nạp kiểm tra trong kỳ lọc"], "kpi_row");
+    addRow([2, "Sản lượng xe lắp ráp thực tế", liveLapRapTotal, "xe", `${assembleRate}%`, "≥ 95%", liveLapRapTotal >= lsxTotal ? "Đạt tiến độ" : "Đang thực hiện", "Xe đã check KCS hoàn thành"], "kpi_row");
+    addRow([3, "Nghiệm thu Đạt chuẩn lần 1 (FPY)", datVal, "xe", `${pieDatPercent}%`, "≥ 95.0%", pieDatPercent >= 95 ? "ĐẠT CHUẨN" : "CẦN CẢI THIỆN", "Xe hoàn hảo không sai lỗi"], "kpi_row");
+    addRow([4, "Xe phát sinh sai lỗi KCS", loiVal, "xe", `${pieLoiPercent}%`, "≤ 5.0%", loiVal === 0 ? "HOÀN HẢO" : "CẦN KHẮC PHỤC", "Xe cần sửa chữa trước xuất xưởng"], "kpi_row");
+
+    addRow([], "empty");
+
+    // PHẦN II: SẢN LƯỢNG & TỶ LỆ CHẤT LƯỢNG THEO TỪNG DÒNG XE
+    addRow([`II. BÁO CÁO SẢN LƯỢNG & CHẤT LƯỢNG THEO DÒNG XE (${modelStats.length} DÒNG XE LẮP RÁP)`, "", "", "", "", "", "", ""], "section_header");
+    merges.push({ s: { r: aoaData.length - 1, c: 0 }, e: { r: aoaData.length - 1, c: 7 } });
+
+    addRow(["STT", "Dòng xe (Model)", "Tổng kiểm tra (xe)", "Đạt chuẩn lần 1 (xe)", "Có sai lỗi (xe)", "Tỷ lệ Đạt (%)", "Tỷ lệ Lỗi (%)", "Xếp loại chất lượng"], "table_header");
+
+    let sumTotal = 0;
+    let sumPassed = 0;
+    let sumFailed = 0;
+
+    modelStats.forEach((m, idx) => {
+      sumTotal += m.total;
+      sumPassed += m.passed;
+      sumFailed += m.failed;
+      const rating = m.passRate >= 95 ? "Tốt (≥95%)" : m.passRate >= 85 ? "Khá (85-94%)" : "Cảnh báo (<85%)";
+      addRow([idx + 1, m.model, m.total, m.passed, m.failed, `${m.passRate}%`, `${m.failRate}%`, rating], "data_row", idx % 2 === 1);
+    });
+
+    const overallPassRate = sumTotal > 0 ? ((sumPassed / sumTotal) * 100).toFixed(1) : '100.0';
+    const overallFailRate = sumTotal > 0 ? ((sumFailed / sumTotal) * 100).toFixed(1) : '0.0';
+    addRow(["", "TỔNG CỘNG TẤT CẢ DÒNG XE", sumTotal, sumPassed, sumFailed, `${overallPassRate}%`, `${overallFailRate}%`, Number(overallPassRate) >= 95 ? "ĐẠT TIÊU CHUẨN" : "CHƯA ĐẠT"], "total_row");
+
+    addRow([], "empty");
+
+    // PHẦN III: PHÂN TÍCH SAI LỖI KCS TRỌNG ĐIỂM (NGUYÊN LÝ PARETO 80/20)
+    addRow([`III. ĐỊNH VỊ NHÓM SAI LỖI TRỌNG ĐIỂM — NGUYÊN LÝ PARETO 80/20 (${paretoItems.length} NHÓM LỖI)`, "", "", "", "", "", "", ""], "section_header");
+    merges.push({ s: { r: aoaData.length - 1, c: 0 }, e: { r: aoaData.length - 1, c: 7 } });
+
+    addRow(["STT", "Nhóm sai lỗi KCS", "Số xe bị lỗi (xe)", "Tỷ trọng đợt (%)", "% Lũy kế Pareto", "Dòng xe bị nhiều nhất", "Phân loại Pareto", "Chỉ đạo khắc phục (CAPA)"], "table_header");
+
+    if (paretoItems.length === 0) {
+      addRow(["-", "Không ghi nhận sai lỗi nào trong kỳ lọc dữ liệu hiện tại.", 0, "0%", "0%", "--", "Hoàn hảo", "Duy trì kiểm soát tốt"], "data_row");
+    } else {
+      paretoItems.forEach((p, idx) => {
+        const category = p.isVitalFew ? "★ Vital Few (Trọng điểm 80%)" : "Trivial Many (Thứ yếu)";
+        const action = p.isVitalFew ? "Ưu tiên xử lý khẩn cấp & lập phiếu CAPA" : "Theo dõi định kỳ";
+        addRow([idx + 1, p.name, p.count, `${p.percentage}%`, `${p.cumulativePercentage}%`, p.topModel || "DKBike", category, action], "data_row", idx % 2 === 1);
+      });
+    }
+
+    addRow([], "empty");
+
+    // PHẦN IV: KÝ XÁC NHẬN
+    addRow(["", "NGƯỜI LẬP BÁO CÁO", "", "", "", "TRƯỞNG PHÒNG QLCL", "", ""], "sign_title");
+    addRow(["", "(Ký & ghi rõ họ tên)", "", "", "", "(Ký & ghi rõ họ tên)", "", ""], "sign_sub");
+    addRow([], "sign_space");
+    addRow([], "sign_space");
+    addRow(["", "Bộ phận KCS / OQC", "", "", "", "Nguyễn Xuân Thao", "", ""], "sign_name");
+
+    // Xây dựng workbook XLSXStyle
+    const wb = XLSXStyle.utils.book_new();
+    const ws = XLSXStyle.utils.aoa_to_sheet(aoaData);
+
+    ws['!merges'] = merges;
+    ws['!cols'] = [
+      { wch: 6 },   // 0: STT
+      { wch: 34 },  // 1: Tên chỉ số / Model / Lỗi
+      { wch: 20 },  // 2: Số lượng / Tổng xe
+      { wch: 14 },  // 3: Đơn vị / Đạt lần 1
+      { wch: 16 },  // 4: Tỷ lệ % / Có sai lỗi
+      { wch: 22 },  // 5: Mục tiêu / % Đạt / Model top
+      { wch: 24 },  // 6: Đánh giá / Phân loại
+      { wch: 36 }   // 7: Ghi chú / Chỉ đạo CAPA
+    ];
+
+    // Styling các ô
+    const decodedRange = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1:H1');
+    for (let r = decodedRange.s.r; r <= decodedRange.e.r; r++) {
+      const rowInfo = rowTracker[r] || { type: "normal" };
+
+      for (let c = decodedRange.s.c; c <= decodedRange.e.c; c++) {
+        const cellRef = XLSXStyle.utils.encode_cell({ r, c });
+        if (!ws[cellRef]) continue;
+
+        let style: any = {
+          font: { name: 'Arial', sz: 10 },
+          alignment: { vertical: 'center', wrapText: true }
+        };
+
+        const borderThin = {
+          top: { style: 'thin', color: { rgb: 'D1D5DB' } },
+          bottom: { style: 'thin', color: { rgb: 'D1D5DB' } },
+          left: { style: 'thin', color: { rgb: 'D1D5DB' } },
+          right: { style: 'thin', color: { rgb: 'D1D5DB' } }
+        };
+
+        if (rowInfo.type === 'company') {
+          style.font = { name: 'Arial', sz: 12, bold: true, color: { rgb: '1E3A8A' } };
+          style.alignment = { horizontal: 'center', vertical: 'center' };
+        } else if (rowInfo.type === 'dept') {
+          style.font = { name: 'Arial', sz: 13, bold: true, color: { rgb: '1E293B' } };
+          style.alignment = { horizontal: 'center', vertical: 'center' };
+        } else if (rowInfo.type === 'meta') {
+          style.font = { name: 'Arial', sz: 9, italic: true, color: { rgb: '64748B' } };
+          style.alignment = { horizontal: 'center', vertical: 'center' };
+        } else if (rowInfo.type === 'filter') {
+          style.font = { name: 'Arial', sz: 9, bold: true, color: { rgb: '0F766E' } };
+          style.alignment = { horizontal: 'center', vertical: 'center' };
+        } else if (rowInfo.type === 'section_header') {
+          style.font = { name: 'Arial', sz: 11, bold: true, color: { rgb: 'FFFFFF' } };
+          style.fill = { fgColor: { rgb: '1E3A8A' } };
+          style.alignment = { horizontal: 'left', vertical: 'center' };
+        } else if (rowInfo.type === 'table_header') {
+          style.font = { name: 'Arial', sz: 9.5, bold: true, color: { rgb: '0F172A' } };
+          style.fill = { fgColor: { rgb: 'E2E8F0' } };
+          style.alignment = { horizontal: 'center', vertical: 'center' };
+          style.border = borderThin;
+        } else if (rowInfo.type === 'data_row' || rowInfo.type === 'kpi_row') {
+          style.border = borderThin;
+          if (rowInfo.isZebra) {
+            style.fill = { fgColor: { rgb: 'F8FAFC' } };
+          }
+          if (c === 0 || c === 3 || c === 4 || c === 5 || c === 6) {
+            style.alignment = { horizontal: 'center', vertical: 'center' };
+          } else if (c === 2) {
+            style.alignment = { horizontal: 'right', vertical: 'center' };
+            style.font = { name: 'Arial', sz: 10, bold: true };
+          }
+        } else if (rowInfo.type === 'total_row') {
+          style.font = { name: 'Arial', sz: 10, bold: true, color: { rgb: '1E3A8A' } };
+          style.fill = { fgColor: { rgb: 'FEF3C7' } };
+          style.border = borderThin;
+          if (c === 0 || c === 5 || c === 6 || c === 7) {
+            style.alignment = { horizontal: 'center', vertical: 'center' };
+          } else if (c === 2 || c === 3 || c === 4) {
+            style.alignment = { horizontal: 'right', vertical: 'center' };
+          }
+        } else if (rowInfo.type === 'sign_title') {
+          style.font = { name: 'Arial', sz: 10, bold: true };
+          style.alignment = { horizontal: 'center', vertical: 'center' };
+        } else if (rowInfo.type === 'sign_sub') {
+          style.font = { name: 'Arial', sz: 8.5, italic: true, color: { rgb: '64748B' } };
+          style.alignment = { horizontal: 'center', vertical: 'center' };
+        } else if (rowInfo.type === 'sign_name') {
+          style.font = { name: 'Arial', sz: 10, bold: true, color: { rgb: '1E3A8A' } };
+          style.alignment = { horizontal: 'center', vertical: 'center' };
+        }
+
+        ws[cellRef].s = style;
+      }
+    }
+
+    const safeDateStr = now.toLocaleDateString('vi-VN').replace(/\//g, '_');
+    const filename = `DKBike_Bao_Cao_Dashboard_OQC_${safeDateStr}.xlsx`;
+    XLSXStyle.utils.book_append_sheet(wb, ws, "Bao_Cao_Dashboard_OQC");
+    XLSXStyle.writeFile(wb, filename);
+  } catch (err: any) {
+    console.error("Lỗi xuất Excel Báo Cáo Dashboard OQC:", err);
+    alert("Đã xảy ra lỗi khi tạo file Excel Báo Cáo Dashboard. Vui lòng thử lại!");
   }
 };
 
@@ -7598,6 +7829,16 @@ return (
             className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-[11px] sm:text-xs px-2.5 py-1.5 rounded-lg transition shadow flex items-center gap-1.5 shadow-orange-200 animate-pulse cursor-pointer border border-orange-600"
           >
             <Plus className="w-3.5 h-3.5" /> Kích hoạt Giám sát NCC
+          </button>
+        )}
+        {qcMainSubTab === 'oqc' && oqcSubView === 'dashboard' && (
+          <button
+            type="button"
+            onClick={handleExportOqcDashboardExcel}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 border border-indigo-500"
+            title="Xuất file Excel Báo Cáo Tổng Hợp Dashboard OQC theo đúng bộ lọc hiện tại"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" /> BC Dashboard
           </button>
         )}
         <button
