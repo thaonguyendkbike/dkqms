@@ -8148,17 +8148,6 @@ return (
         <Users className="w-4 h-4 text-orange-600 animate-pulse" />
         <span>SQC ({supplierProductionAudits.length})</span>
       </button>
-      <button
-        id="subtab-btn-reports"
-        onClick={() => setQcMainSubTab('reports')}
-        className={`flex-1 py-2 sm:py-2.5 px-2.5 sm:px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-1.5 ${qcMainSubTab === 'reports'
-            ? 'bg-indigo-650 text-white shadow-sm border border-indigo-500'
-            : 'text-slate-600 hover:text-indigo-900 hover:bg-white/50'
-          }`}
-      >
-        <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
-        <span>Báo cáo chu kỳ</span>
-      </button>
     </div>
 
     {/* ==================== SUBTAB: IQC ==================== */}
@@ -8659,7 +8648,14 @@ return (
                           <td className="py-2 px-1.5 md:p-2.5 text-center font-semibold text-slate-600 whitespace-nowrap text-[10px] md:text-xs">{r.checkedBy}</td>
                           <td className="py-2 px-1.5 md:p-2.5 text-right font-bold text-red-650 font-mono whitespace-nowrap text-[10px] md:text-xs">{r.failedQty > 0 ? r.failedQty.toLocaleString('vi-VN') : '-'}</td>
                           <td className={`py-2 px-1.5 md:p-2.5 text-right font-bold font-mono whitespace-nowrap text-[10px] md:text-xs ${r.failedQty > 0 ? 'text-red-500' : 'text-slate-400'}`}>{r.defectRate}%</td>
-                          <td className="py-2 px-1.5 md:p-2.5 text-left font-bold text-slate-700 italic text-[10px] sm:text-[11px] md:text-xs break-words whitespace-normal line-clamp-2">{r.itemSummary || r.content}</td>
+                          <td className="py-2 px-1.5 md:p-2.5 text-left max-w-[200px] md:max-w-[280px]">
+                            <div
+                              className="text-[10px] sm:text-[11px] md:text-xs text-slate-700 font-semibold leading-snug line-clamp-3 break-words"
+                              title={r.itemSummary || r.content}
+                            >
+                              {r.itemSummary || r.content}
+                            </div>
+                          </td>
                           <td className="py-2 px-1.5 md:p-2.5 text-center">
                             <span className={`px-1.5 py-0.5 rounded text-[9px] md:text-[10px] font-extrabold uppercase whitespace-nowrap ${r.result === 'Đạt' ? 'bg-emerald-50 text-emerald-750' : 'bg-red-50 text-red-600 animate-pulse'}`}>
                               {r.result}
