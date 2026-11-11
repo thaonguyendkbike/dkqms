@@ -1304,7 +1304,11 @@ const AutocompleteInput = React.memo(function AutocompleteInput({
 
   const handleSelect = (opt: string) => {
     if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
-    setLocalValue(opt);
+    if (!value) {
+      setLocalValue('');
+    } else {
+      setLocalValue(opt);
+    }
     onChangeRef.current(opt);
     if (onCommitRef.current) onCommitRef.current(opt);
     setIsOpen(false);
@@ -1320,6 +1324,7 @@ const AutocompleteInput = React.memo(function AutocompleteInput({
       if (localValue !== value) {
         onChangeRef.current(localValue);
         if (onCommitRef.current) onCommitRef.current(localValue);
+        if (!value) setLocalValue('');
       }
     }, 150);
   };
@@ -1344,6 +1349,7 @@ const AutocompleteInput = React.memo(function AutocompleteInput({
           setIsOpen(false);
           onChangeRef.current(localValue);
           if (onCommitRef.current) onCommitRef.current(localValue);
+          if (!value) setLocalValue('');
         }
       } else if (e.key === 'Escape') {
         setIsOpen(false);
@@ -1351,6 +1357,7 @@ const AutocompleteInput = React.memo(function AutocompleteInput({
     } else if (e.key === 'Enter') {
       onChangeRef.current(localValue);
       if (onCommitRef.current) onCommitRef.current(localValue);
+      if (!value) setLocalValue('');
     }
   };
 
@@ -1445,11 +1452,11 @@ function kcsParseDefects(str?: string): string[] {
   return str
     .split(/[,;\n]/)
     .map(s => s.trim())
-    .filter(Boolean);
+    .filter(s => Boolean(s) && s.toLowerCase() !== 'lỗi kcs');
 }
 
 function kcsStringifyDefects(list: string[]): string {
-  const unique = Array.from(new Set(list.filter(Boolean)));
+  const unique = Array.from(new Set(list.map(s => s?.trim()).filter(s => Boolean(s) && s.toLowerCase() !== 'lỗi kcs')));
   return unique.join(', ');
 }
 
@@ -9125,21 +9132,75 @@ return (
 
           const handleAddDefectToCar = (record: OQCRecord, newDefect: string) => {
             if (!newDefect || !newDefect.trim()) return;
-            const current = parseDefects(record.defectDetail);
-            const updatedList = Array.from(new Set([...current, newDefect.trim()]));
+            const currentEffective = (record.id && pendingOqcOverridesRef.current[record.id])
+              ? ({ ...record, ...pendingOqcOverridesRef.current[record.id] } as OQCRecord)
+              : (record.id && localOqcOverrides[record.id])
+                ? ({ ...record, ...localOqcOverrides[record.id] } as OQCRecord)
+                : record;
+
+            const current = parseDefects(currentEffective.defectDetail);
+            const cleanedCurrent = current.filter(d => d && d.trim().toLowerCase() !== 'lỗi kcs');
+            const updatedList = Array.from(new Set([...cleanedCurrent, newDefect.trim()]));
             const updatedStr = stringifyDefects(updatedList);
-            handleQuickFail(record, updatedStr, record.rootCause || '');
+
+            const now = new Date();
+            const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
+            const dateParts = nowDate.split('/');
+            const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
+            const nowYear = Number(dateParts[2]) || now.getFullYear();
+            const locked = isKcsDateTimeLocked(record, nowDate);
+
+            const override: Partial<OQCRecord> = {
+              status: 'Lỗi' as const,
+              defectDetail: updatedStr,
+              rootCause: currentEffective.rootCause || '',
+              failedCount: 1,
+              checkTime: locked ? record.checkTime : (currentEffective.checkTime || nowTime),
+              date: locked ? record.date : (currentEffective.date || nowDate),
+              month: locked ? record.month : (currentEffective.month || nowMonth),
+              year: locked ? record.year : (currentEffective.year || nowYear),
+              updatedAt: new Date().toISOString(),
+              checkedBy: currentEffective.checkedBy || 'Liễu Tùng Lâm'
+            };
+
+            applyKcsRecordOverride(record, override);
           };
 
           const handleRemoveDefectFromCar = (record: OQCRecord, defectIndex: number) => {
-            const current = parseDefects(record.defectDetail);
+            const currentEffective = (record.id && pendingOqcOverridesRef.current[record.id])
+              ? ({ ...record, ...pendingOqcOverridesRef.current[record.id] } as OQCRecord)
+              : (record.id && localOqcOverrides[record.id])
+                ? ({ ...record, ...localOqcOverrides[record.id] } as OQCRecord)
+                : record;
+
+            const current = parseDefects(currentEffective.defectDetail);
             const updatedList = current.filter((_, idx) => idx !== defectIndex);
             const updatedStr = stringifyDefects(updatedList);
-            if (updatedList.length === 0) {
-              handleQuickPass(record);
-            } else {
-              handleQuickFail(record, updatedStr, record.rootCause || '');
-            }
+
+            const now = new Date();
+            const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
+            const dateParts = nowDate.split('/');
+            const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
+            const nowYear = Number(dateParts[2]) || now.getFullYear();
+            const locked = isKcsDateTimeLocked(record, nowDate);
+
+            // Xóa điểm lỗi: Giữ nguyên trạng thái Lỗi của xe (nút Lỗi vẫn luôn đỏ), tuyệt đối không tự động biến thành Đạt
+            const override: Partial<OQCRecord> = {
+              defectDetail: updatedStr,
+              status: 'Lỗi' as const,
+              failedCount: 1,
+              rootCause: currentEffective.rootCause || '',
+              checkTime: locked ? record.checkTime : (currentEffective.checkTime || nowTime),
+              date: locked ? record.date : (currentEffective.date || nowDate),
+              month: locked ? record.month : (currentEffective.month || nowMonth),
+              year: locked ? record.year : (currentEffective.year || nowYear),
+              updatedAt: new Date().toISOString(),
+              checkedBy: currentEffective.checkedBy || 'Liễu Tùng Lâm'
+            };
+
+            applyKcsRecordOverride(record, override);
           };
 
           const handleQuickPass = (record: OQCRecord) => {
@@ -9212,9 +9273,13 @@ return (
             applyKcsRecordOverride(record, override);
           };
 
-          const handleQuickFail = (record: OQCRecord, defectDetail: string, rootCause?: string) => {
-            const currentOverride = record.id ? localOqcOverrides[record.id] : undefined;
-            const currentStatus = currentOverride?.status || record.status;
+          const handleToggleFail = (record: OQCRecord) => {
+            const currentEffective = (record.id && pendingOqcOverridesRef.current[record.id])
+              ? ({ ...record, ...pendingOqcOverridesRef.current[record.id] } as OQCRecord)
+              : (record.id && localOqcOverrides[record.id])
+                ? ({ ...record, ...localOqcOverrides[record.id] } as OQCRecord)
+                : record;
+            const currentStatus = currentEffective.status;
 
             // Bấm lại lần 2 khi xe đang LỖI -> trở về trạng thái Chưa kiểm tra
             if (currentStatus === 'Lỗi') {
@@ -9244,32 +9309,60 @@ return (
             const nowYear = Number(dateParts[2]) || now.getFullYear();
             const locked = isKcsDateTimeLocked(record, nowDate);
 
-            const isClear = !defectDetail || !defectDetail.trim();
-            const override: Partial<OQCRecord> = isClear ? {
-              status: 'Đạt' as const,
-              defectDetail: '',
-              rootCause: '',
-              failedCount: 0,
-              checkTime: locked ? record.checkTime : nowTime,
-              date: locked ? record.date : nowDate,
-              month: locked ? record.month : nowMonth,
-              year: locked ? record.year : nowYear,
-              updatedAt: new Date().toISOString(),
-              checkedBy: 'Liễu Tùng Lâm'
-            } : {
+            // Bấm Lỗi: chuyển xe sang trạng thái Lỗi, giữ nguyên danh sách lỗi nếu đã có, TUYỆT ĐỐI KHÔNG tự thêm "Lỗi KCS"
+            const cleanedDefectDetail = currentEffective.defectDetail
+              ? currentEffective.defectDetail.replace(/\b[Ll]ỗi KCS\b/gi, '').trim().replace(/^,\s*|,\s*$/g, '')
+              : '';
+
+            const override: Partial<OQCRecord> = {
               status: 'Lỗi' as const,
-              defectDetail: defectDetail,
-              rootCause: rootCause || '',
+              defectDetail: cleanedDefectDetail,
+              rootCause: currentEffective.rootCause || '',
               failedCount: 1,
               checkTime: locked ? record.checkTime : nowTime,
               date: locked ? record.date : nowDate,
               month: locked ? record.month : nowMonth,
               year: locked ? record.year : nowYear,
               updatedAt: new Date().toISOString(),
-              checkedBy: 'Liễu Tùng Lâm'
+              checkedBy: currentEffective.checkedBy || 'Liễu Tùng Lâm'
             };
 
             applyKcsRecordOverride(record, override);
+          };
+
+          const handleUpdateRootCause = (record: OQCRecord, rootCause: string) => {
+            const currentEffective = (record.id && pendingOqcOverridesRef.current[record.id])
+              ? ({ ...record, ...pendingOqcOverridesRef.current[record.id] } as OQCRecord)
+              : (record.id && localOqcOverrides[record.id])
+                ? ({ ...record, ...localOqcOverrides[record.id] } as OQCRecord)
+                : record;
+
+            const now = new Date();
+            const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
+            const dateParts = nowDate.split('/');
+            const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
+            const nowYear = Number(dateParts[2]) || now.getFullYear();
+            const locked = isKcsDateTimeLocked(record, nowDate);
+
+            const targetStatus = currentEffective.status === 'Chưa kiểm tra' ? 'Lỗi' : currentEffective.status;
+
+            const override: Partial<OQCRecord> = {
+              rootCause: rootCause || '',
+              status: targetStatus,
+              failedCount: targetStatus === 'Lỗi' ? 1 : 0,
+              checkTime: locked ? record.checkTime : (currentEffective.checkTime || nowTime),
+              date: locked ? record.date : (currentEffective.date || nowDate),
+              month: locked ? record.month : (currentEffective.month || nowMonth),
+              year: locked ? record.year : (currentEffective.year || nowYear),
+              updatedAt: new Date().toISOString()
+            };
+
+            applyKcsRecordOverride(record, override);
+          };
+
+          const handleQuickFail = (record: OQCRecord, _defectDetail?: string, _rootCause?: string) => {
+            handleToggleFail(record);
           };
 
           const handleDeleteCar = (record: OQCRecord) => {
@@ -9740,7 +9833,7 @@ return (
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleQuickFail(r, r.defectDetail || 'Lỗi KCS')}
+                                    onClick={() => handleToggleFail(r)}
                                     className={`text-xs font-bold px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95 ${isFailed
                                         ? 'bg-rose-600 text-white border border-rose-700 shadow-xs'
                                         : 'bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200'
@@ -9822,7 +9915,7 @@ return (
                                     if (r.status === 'Đạt') {
                                       handleUpdateDefectNote(r, r.defectDetail || '', val);
                                     } else {
-                                      handleQuickFail(r, r.defectDetail || 'Lỗi KCS', val);
+                                      handleUpdateRootCause(r, val);
                                     }
                                   }}
                                   onChange={() => { }}
@@ -19027,29 +19120,20 @@ return (
                 const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
                 const nowYear = Number(dateParts[2]) || now.getFullYear();
 
-                const override: Partial<OQCRecord> = unique.length === 0 ? {
-                  status: 'Đạt' as const,
-                  defectDetail: '',
-                  failedCount: 0,
-                  checkTime: nowTime,
-                  date: nowDate,
-                  month: nowMonth,
-                  year: nowYear,
-                  updatedAt: new Date().toISOString()
-                } : {
-                  status: 'Lỗi' as const,
-                  defectDetail: updatedStr,
-                  failedCount: 1,
-                  checkTime: nowTime,
-                  date: nowDate,
-                  month: nowMonth,
-                  year: nowYear,
-                  updatedAt: new Date().toISOString()
-                };
-
                 const targetRec = activeMultiDefectModalRecord;
                 setActiveMultiDefectModalRecord(null);
                 if (targetRec) {
+                  const isFail = unique.length > 0 || targetRec.status === 'Lỗi';
+                  const override: Partial<OQCRecord> = {
+                    status: isFail ? ('Lỗi' as const) : ('Đạt' as const),
+                    defectDetail: updatedStr,
+                    failedCount: isFail ? 1 : 0,
+                    checkTime: nowTime,
+                    date: nowDate,
+                    month: nowMonth,
+                    year: nowYear,
+                    updatedAt: new Date().toISOString()
+                  };
                   applyKcsRecordOverride(targetRec, override);
                 }
               }}
