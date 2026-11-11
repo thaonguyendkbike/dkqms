@@ -10578,33 +10578,18 @@ return (
           const oqcCurrentFilterDesc = oqcFilterDescParts.length > 0 ? oqcFilterDescParts.join(' • ') : 'Toàn bộ dữ liệu hiện tại';
 
           const today = new Date();
-          let targetMonth = today.getMonth() + 1;
-          let targetYear = today.getFullYear();
+          const currentRealMonth = today.getMonth() + 1;
+          const currentRealYear = today.getFullYear();
+          const currentRealDate = today.getDate();
+
+          let targetMonth = currentRealMonth;
+          let targetYear = currentRealYear;
 
           if (oqcFilterMonth !== 'All') {
             targetMonth = parseInt(oqcFilterMonth, 10);
-          } else if (filteredOqc.length > 0) {
-            const monthCounts: Record<number, number> = {};
-            filteredOqc.forEach(r => {
-              if (r.month) monthCounts[r.month] = (monthCounts[r.month] || 0) + 1;
-            });
-            const sortedMonths = Object.keys(monthCounts).sort((a, b) => monthCounts[parseInt(b, 10)] - monthCounts[parseInt(a, 10)]);
-            if (sortedMonths.length > 0) {
-              targetMonth = parseInt(sortedMonths[0], 10);
-            }
           }
-
           if (oqcFilterYear !== 'All') {
             targetYear = parseInt(oqcFilterYear, 10);
-          } else if (filteredOqc.length > 0) {
-            const yearCounts: Record<number, number> = {};
-            filteredOqc.forEach(r => {
-              if (r.year) yearCounts[r.year] = (yearCounts[r.year] || 0) + 1;
-            });
-            const sortedYears = Object.keys(yearCounts).sort((a, b) => yearCounts[parseInt(b, 10)] - yearCounts[parseInt(a, 10)]);
-            if (sortedYears.length > 0) {
-              targetYear = parseInt(sortedYears[0], 10);
-            }
           }
 
           const isWeekFilterActive = oqcFilterWeek !== 'All' || oqcFilterDate !== 'All';
@@ -10676,8 +10661,16 @@ return (
             }).length;
           }
 
-          const lastDayDate = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-          const daysRemaining = lastDayDate - today.getDate();
+          // Tính số ngày còn lại theo thời gian thực tế:
+          let daysRemaining = 0;
+          const lastDayOfTarget = new Date(targetYearNum, targetMonth, 0).getDate();
+          if (targetYearNum < currentRealYear || (targetYearNum === currentRealYear && targetMonth < currentRealMonth)) {
+            daysRemaining = 0; // Đã kết thúc
+          } else if (targetYearNum === currentRealYear && targetMonth === currentRealMonth) {
+            daysRemaining = Math.max(0, lastDayOfTarget - currentRealDate);
+          } else {
+            daysRemaining = lastDayOfTarget;
+          }
 
           const lsxVal = filteredOqc.length;
           const laprapVal = liveLapRapTotal;
@@ -10877,7 +10870,9 @@ return (
                     <div className="bg-blue-500 text-white font-black text-xl sm:text-3xl w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center tabular-nums shadow-md shadow-blue-200 transition-all duration-500">
                       {daysRemaining}
                     </div>
-                    <span className="text-[9px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mt-1 font-sans">Ngày</span>
+                    <span className="text-[9px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mt-1 font-sans">
+                      {daysRemaining === 0 && (targetYearNum < currentRealYear || (targetYearNum === currentRealYear && targetMonth < currentRealMonth)) ? 'Đã hết kỳ' : 'Ngày'}
+                    </span>
                   </div>
                   <div className="pt-2 border-t border-slate-100 text-center select-none">
                     <span className="text-[10px] font-bold text-slate-500">Tháng {targetMonth}/{targetYearNum}</span>
