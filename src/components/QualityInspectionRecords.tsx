@@ -53,7 +53,11 @@ import {
   Layers,
   Save,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  Tv,
+  Maximize,
+  Minimize,
+  ExternalLink
 } from 'lucide-react';
 import { IQCRecord, PQCRecord, OQCRecord, OqcColorChangeRecord, OqcPartCodeItem, INITIAL_OQC_PART_CODES } from '../qualityTestData';
 import { safeStorage } from '../safeStorage';
@@ -2645,6 +2649,14 @@ export default function QualityInspectionRecords({
   const [pqcFilterWeek, setPqcFilterWeek] = useState<string>('All');
   const [oqcFilterWeek, setOqcFilterWeek] = useState<string>('All');
   const [isCapturingOqc, setIsCapturingOqc] = useState(false);
+  const [showTvModeModal, setShowTvModeModal] = useState(false);
+  const [isTvFullscreen, setIsTvFullscreen] = useState(false);
+  const [tvCurrentTime, setTvCurrentTime] = useState('');
+  const isTvMode = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const p = new URLSearchParams(window.location.search);
+    return p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1';
+  }, []);
 
   const [iqcCurrentPage, setIqcCurrentPage] = useState<number>(1);
   const [selectedIqcIds, setSelectedIqcIds] = useState<string[]>([]);
@@ -2900,7 +2912,35 @@ export default function QualityInspectionRecords({
   };
 
   // OQC Sub-view state — hoisted before guarded useMemo hooks that depend on it
-  const [oqcSubView, setOqcSubView] = useState<'station' | 'handover' | 'part_codes' | 'dashboard'>('station');
+  const [oqcSubView, setOqcSubView] = useState<'station' | 'handover' | 'part_codes' | 'dashboard'>(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const view = (p.get('view') || p.get('tab') || window.location.hash || '').toLowerCase();
+      if (view.includes('oqc-dashboard') || view.includes('oqc_dashboard') || view.includes('dashboard-oqc') || view.includes('oqc-bc')) {
+        return 'dashboard';
+      }
+    }
+    return 'station';
+  });
+
+  // Đồng hồ & Fullscreen status cho Chế độ TV
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const updateTime = () => {
+      const now = new Date();
+      setTvCurrentTime(now.toLocaleTimeString('vi-VN'));
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    const handleFullscreenChange = () => {
+      setIsTvFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   useEffect(() => {
     if (qcMainSubTab !== 'oqc' || oqcSubView !== 'station') {
@@ -8004,6 +8044,14 @@ return (
             >
               <FileSpreadsheet className="w-3.5 h-3.5" /> BC Dashboard
             </button>
+            <button
+              type="button"
+              onClick={() => setShowTvModeModal(true)}
+              className="bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 border border-purple-600"
+              title="Mở hướng dẫn kết nối Tivi & sao chép đường dẫn Deep Link cho Tivi"
+            >
+              <Tv className="w-3.5 h-3.5" /> Chế độ TV
+            </button>
           </>
         )}
         <button
@@ -11079,6 +11127,63 @@ return (
           return (
             <div className="space-y-6 animate-in fade-in duration-300">
 
+              {/* THANH ĐIỀU KHIỂN CHUYÊN DỤNG KHI MỞ TRÊN TIVI (KIOSK MODE) */}
+              {isTvMode && (
+                <div className="bg-gradient-to-r from-purple-900 via-indigo-950 to-slate-900 text-white p-3 sm:p-4 rounded-2xl border border-purple-500/40 shadow-lg flex flex-wrap items-center justify-between gap-3 animate-in fade-in select-none">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-500/30 rounded-xl border border-purple-400/40 text-purple-300">
+                      <Tv className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-sm uppercase tracking-wide">
+                          MÀN HÌNH GIÁM SÁT TIVI (KIOSK OQC)
+                        </span>
+                        <span className="bg-emerald-500/30 text-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-400/30 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                          REALTIME
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-purple-200/80 mt-0.5">
+                        Tự động hiển thị và cập nhật liên tục tiến độ xuất xưởng xe DKBike
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    {tvCurrentTime && (
+                      <div className="bg-black/40 px-3 py-1.5 rounded-xl border border-white/10 font-mono text-sm font-black text-amber-300 tracking-wider">
+                        ⏰ {tvCurrentTime}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!document.fullscreenElement) {
+                          document.documentElement.requestFullscreen().catch(() => {});
+                        } else {
+                          document.exitFullscreen().catch(() => {});
+                        }
+                      }}
+                      className="bg-white/15 hover:bg-white/25 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-white/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      title="Bật/Tắt chế độ toàn màn hình Tivi"
+                    >
+                      {isTvFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
+                      {isTvFullscreen ? 'Thu nhỏ' : 'Toàn màn hình (F11)'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.location.href = window.location.pathname;
+                      }}
+                      className="bg-red-500/20 hover:bg-red-500/30 text-red-200 border border-red-400/30 font-bold text-xs px-2.5 py-1.5 rounded-xl transition cursor-pointer active:scale-95"
+                      title="Thoát chế độ Tivi về giao diện làm việc thông thường"
+                    >
+                      ✕ Thoát TV
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* INTERACTIVE DASHBOARD FILTER BAR */}
               <div className="bg-slate-50 p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-2.5 sm:space-y-3">
                 <div className="flex justify-between items-center pb-2 border-b border-slate-200/40">
@@ -11120,6 +11225,15 @@ return (
                     >
                       <Camera className="w-3 h-3 text-emerald-600" />
                       {isCapturingOqc ? 'Đang chụp...' : 'Chụp ảnh'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowTvModeModal(true)}
+                      className="text-[9.5px] sm:text-[10px] px-2.5 py-1 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer active:scale-95 border bg-white text-purple-700 hover:bg-purple-50 border-purple-300"
+                      title="Mở hướng dẫn kết nối Tivi & sao chép link Tivi"
+                    >
+                      <Tv className="w-3 h-3 text-purple-600" />
+                      Chế độ TV
                     </button>
                     {(oqcFilterMonth !== 'All' || oqcFilterYear !== 'All' || oqcFilterDate !== 'All' || oqcFilterModel !== 'All' || oqcFilterWeek !== 'All' || oqcSearch !== '') && (
                       <button
@@ -18947,6 +19061,118 @@ return (
               className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
             >
               Hủy
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ==================== MODAL HƯỚNG DẪN KẾT NỐI TIVI & DEEP LINK ==================== */}
+    {showTvModeModal && (
+      <div className="fixed inset-0 z-[9999] bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+        <div className="bg-white rounded-3xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+          {/* Modal Header */}
+          <div className="bg-gradient-to-r from-purple-800 via-indigo-900 to-slate-900 text-white p-4 sm:p-5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-white/15 rounded-2xl border border-white/20">
+                <Tv className="w-6 h-6 text-purple-200 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-black tracking-wide uppercase">
+                  Hiển Thị OQC Dashboard Trên Tivi
+                </h3>
+                <p className="text-xs text-purple-200/80 mt-0.5">
+                  Đường dẫn trực tiếp (Deep Link) — Bỏ qua mọi thao tác menu phức tạp
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowTvModeModal(false)}
+              className="text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-xl transition cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Modal Body */}
+          <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-slate-700">
+            {/* Direct URL Box */}
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">
+                Đường dẫn trực tiếp cho trình duyệt Tivi:
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${typeof window !== 'undefined' ? window.location.origin + window.location.pathname : ''}?view=oqc-dashboard&tv=1`}
+                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-indigo-700 select-all focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const link = `${window.location.origin}${window.location.pathname}?view=oqc-dashboard&tv=1`;
+                    navigator.clipboard.writeText(link).then(() => {
+                      alert('✅ ĐÃ SAO CHÉP ĐƯỜNG DẪN TIVI VÀO BỘ NHỚ!\n\nAnh Thao có thể gửi qua Zalo hoặc dán vào trình duyệt Tivi.');
+                    });
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
+                >
+                  <Copy className="w-3.5 h-3.5" /> Sao chép link
+                </button>
+              </div>
+            </div>
+
+            {/* QR Code & Direct Open */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row items-center gap-4">
+              <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs shrink-0 text-center">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?view=oqc-dashboard&tv=1` : '')}`}
+                  alt="QR Code Tivi"
+                  className="w-28 h-28 mx-auto"
+                />
+                <span className="text-[10px] text-slate-400 font-bold block mt-1">Quét bằng camera điện thoại</span>
+              </div>
+              <div className="space-y-2 text-xs flex-1">
+                <h4 className="font-black text-slate-800 text-sm flex items-center gap-1.5">
+                  <QrCode className="w-4 h-4 text-purple-600" /> Quét mã hoặc Chiếu màn hình (Cast)
+                </h4>
+                <p className="text-slate-600 leading-relaxed text-[11.5px]">
+                  Anh có thể dùng Camera điện thoại quét mã QR để mở nhanh, sau đó bấm <strong>Chia sẻ màn hình (Smart View / AirPlay / Chromecast)</strong> thẳng lên Tivi mà không cần gõ phím trên điều khiển!
+                </p>
+                <a
+                  href={`${typeof window !== 'undefined' ? window.location.origin + window.location.pathname : ''}?view=oqc-dashboard&tv=1`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-bold hover:underline pt-1"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Mở thử giao diện Tivi trên tab mới
+                </a>
+              </div>
+            </div>
+
+            {/* 3 Steps Guide for Smart TV */}
+            <div className="border border-purple-100 bg-purple-50/50 p-4 rounded-2xl space-y-2 text-xs">
+              <h4 className="font-black text-purple-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                ✦ Hướng dẫn 3 bước cài đặt 1 lần duy nhất trên Tivi:
+              </h4>
+              <ol className="list-decimal list-inside space-y-1.5 text-slate-700 text-[11.5px] leading-relaxed">
+                <li><strong>Bước 1:</strong> Mở trình duyệt Web trên Tivi (LG WebOS, Samsung Tizen, Sony Android TV...) và nhập link trên <em>(hoặc quét QR bắn link lên Tivi)</em>.</li>
+                <li><strong>Bước 2:</strong> Bấm nút <strong>Lưu vào Dấu trang (Bookmark / Thêm vào màn hình chính)</strong> trên trình duyệt Tivi.</li>
+                <li><strong>Bước 3:</strong> Bấm nút <strong>Toàn màn hình</strong>. Từ ngày mai, mỗi khi bật Tivi chỉ cần mở Dấu trang là Dashboard sẽ tự động hiển thị tràn viền, tự làm mới liên tục!</li>
+              </ol>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setShowTvModeModal(false)}
+              className="bg-slate-700 hover:bg-slate-800 text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer"
+            >
+              Đã hiểu &amp; Đóng lại
             </button>
           </div>
         </div>

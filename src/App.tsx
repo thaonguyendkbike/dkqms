@@ -8236,7 +8236,16 @@ export function App() {
     });
   }, [suppliers, iqcRecords]);
 
-  const [qcMainSubTab, setQcMainSubTab] = useState<'iqc' | 'pqc' | 'oqc' | 'reports'>('iqc');
+  const [qcMainSubTab, setQcMainSubTab] = useState<'iqc' | 'pqc' | 'oqc' | 'reports'>(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const view = (p.get('view') || p.get('tab') || window.location.hash || '').toLowerCase();
+      if (view.includes('oqc') || view.includes('oqc-dashboard')) {
+        return 'oqc';
+      }
+    }
+    return 'iqc';
+  });
   const [iqcSearch, setIqcSearch] = useState('');
   const [pqcSearch, setPqcSearch] = useState('');
   const [oqcSearch, setOqcSearch] = useState('');
@@ -8322,6 +8331,13 @@ export function App() {
   // Active view state
   const [activeTab, setActiveTab] = useState<string>(() => {
     try {
+      if (typeof window !== 'undefined') {
+        const p = new URLSearchParams(window.location.search);
+        const view = (p.get('view') || p.get('tab') || window.location.hash || '').toLowerCase();
+        if (view.includes('oqc') || view.includes('oqc-dashboard')) {
+          return 'quality_inspection_records';
+        }
+      }
       const saved = localStorage.getItem('dk_active_tab');
       if (saved) return saved;
     } catch (e) { }
@@ -8329,10 +8345,37 @@ export function App() {
   });
   const [showSidebar, setShowSidebar] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1') {
+        return false;
+      }
       return window.innerWidth >= 768;
     }
     return true;
   });
+
+  // Tự động điều hướng Deep Link khi truy cập trực tiếp bằng URL (ví dụ trên Tivi hoặc Kiosk)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleUrlChange = () => {
+      const p = new URLSearchParams(window.location.search);
+      const view = (p.get('view') || p.get('tab') || window.location.hash || '').toLowerCase();
+      if (view.includes('oqc') || view.includes('oqc-dashboard')) {
+        setActiveTab('quality_inspection_records');
+        setQcMainSubTab('oqc');
+        if (p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1') {
+          setShowSidebar(false);
+        }
+      }
+    };
+    handleUrlChange();
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+    };
+  }, []);
 
   // State phục vụ các tính năng tương tác, tự động hóa & bộ lọc thông minh trên Dashboard
   const [ecoNoticeViewMode, setEcoNoticeViewMode] = useState<'card' | 'document'>('card');
