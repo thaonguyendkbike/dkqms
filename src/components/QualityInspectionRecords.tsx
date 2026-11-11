@@ -488,63 +488,73 @@ interface PieChartProps {
 function PieChartComponent({ datPercentage, loiPercentage, datCount, loiCount }: PieChartProps) {
   const radius = 55;
   const circumference = 2 * Math.PI * radius;
-  // Let's compute stroke offset for Dat (Green) slice starting at the end of Loi (Red) slice
   const datStroke = (datPercentage / 100) * circumference;
   const loiStroke = (loiPercentage / 100) * circumference;
-  const datOffset = circumference - datStroke;
 
   return (
-    <div className="relative flex items-center justify-center p-3 h-[240px]">
-      <svg width="220" height="220" viewBox="0 0 160 160" className="transform -rotate-90">
-        {/* Background track */}
-        <circle cx="80" cy="80" r={radius} fill="none" stroke="#f1f5f9" strokeWidth="20" />
+    <div className="flex flex-col items-center justify-center p-2 w-full h-full select-none">
+      <div className="relative flex items-center justify-center">
+        <svg width="200" height="200" viewBox="0 0 160 160" className="transform -rotate-90">
+          {/* Background track */}
+          <circle cx="80" cy="80" r={radius} fill="none" stroke="#f1f5f9" strokeWidth="18" />
 
-        {/* Lỗi (Red) slice */}
-        <circle
-          cx="80"
-          cy="80"
-          r={radius}
-          fill="none"
-          stroke="#ff4d4d"
-          strokeWidth="20"
-          strokeDasharray={circumference}
-          strokeDashoffset={0}
-          className="transition-all duration-500"
-        />
+          {/* Lỗi (Red) slice */}
+          <circle
+            cx="80"
+            cy="80"
+            r={radius}
+            fill="none"
+            stroke="#f43f5e"
+            strokeWidth="18"
+            strokeDasharray={circumference}
+            strokeDashoffset={0}
+            strokeLinecap="round"
+            className="transition-all duration-500"
+          />
 
-        {/* Đạt (Green) slice */}
-        <circle
-          cx="80"
-          cy="80"
-          r={radius}
-          fill="none"
-          stroke="#10b981"
-          strokeWidth="20"
-          strokeDasharray={circumference}
-          strokeDashoffset={loiStroke}
-          className="transition-all duration-500"
-        />
-      </svg>
+          {/* Đạt (Green) slice */}
+          <circle
+            cx="80"
+            cy="80"
+            r={radius}
+            fill="none"
+            stroke="#10b981"
+            strokeWidth="18"
+            strokeDasharray={circumference}
+            strokeDashoffset={loiStroke}
+            strokeLinecap="round"
+            className="transition-all duration-500"
+          />
+        </svg>
 
-      {/* Embedded central summary */}
-      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center pointer-events-none select-none">
-        <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block">Tổng xe lắp ráp</span>
-        <strong className="text-xl font-black text-slate-800 font-mono block">{(datCount + loiCount).toLocaleString()}</strong>
-        <span className="text-[10.5px] text-emerald-600 font-extrabold">{datPercentage}% Đạt</span>
+        {/* Embedded central summary */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none select-none">
+          <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block">Tổng lắp ráp</span>
+          <strong className="text-2xl font-black text-slate-800 tabular-nums tracking-tight block my-0.5">
+            {(datCount + loiCount).toLocaleString()}
+          </strong>
+          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-extrabold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+            {datPercentage}% Đạt Chuẩn
+          </span>
+        </div>
       </div>
 
-      {/* Floating indicators */}
-      <div className="absolute top-[16%] left-[4%] text-xs bg-white/95 border border-slate-200/80 shadow-md p-1.5 rounded-lg flex flex-col items-start select-none">
-        <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Đạt lần 1
-        </span>
-        <strong className="text-emerald-600 text-xs font-black font-mono mt-0.5">{datCount.toLocaleString()} ({datPercentage}%)</strong>
-      </div>
-      <div className="absolute bottom-[16%] right-[4%] text-xs bg-white/95 border border-slate-200/80 shadow-md p-1.5 rounded-lg flex flex-col items-end select-none">
-        <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" /> Nhóm Lỗi xe
-        </span>
-        <strong className="text-red-500 text-xs font-black font-mono mt-0.5">{loiCount.toLocaleString()} ({loiPercentage}%)</strong>
+      {/* Modern pill statistics indicator bar */}
+      <div className="flex flex-wrap items-center justify-center gap-2 mt-3 select-none">
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50/90 border border-emerald-200/80 shadow-3xs">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs" />
+          <span className="text-[10.5px] font-bold text-slate-600">Đạt lần 1:</span>
+          <strong className="text-emerald-700 font-black text-xs tabular-nums">
+            {datCount.toLocaleString()} ({datPercentage}%)
+          </strong>
+        </div>
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50/90 border border-rose-200/80 shadow-3xs">
+          <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-xs" />
+          <span className="text-[10.5px] font-bold text-slate-600">Có sai lỗi:</span>
+          <strong className="text-rose-600 font-black text-xs tabular-nums">
+            {loiCount.toLocaleString()} ({loiPercentage}%)
+          </strong>
+        </div>
       </div>
     </div>
   );
@@ -557,7 +567,6 @@ interface BarChartProps {
 
 function BarChartComponent({ data, onBarClick }: BarChartProps) {
   const peakVal = Math.max(...data.map(item => item.count), 0);
-  // Guarantee a minimum of 100 on the scale or dynamically increase to match maximum model counts
   const maxVal = peakVal > 0 ? Math.ceil(peakVal / 20) * 20 : 100;
 
   const tickStep = maxVal / 4;
@@ -570,66 +579,73 @@ function BarChartComponent({ data, onBarClick }: BarChartProps) {
   ];
 
   return (
-    <div className="flex flex-col h-[260px] w-full pt-4 relative select-none font-sans">
-      <div className="flex-1 relative">
-        {/* Horizontal Gridlines */}
-        <div className="absolute inset-0 flex flex-col justify-between">
-          {yTicks.map((tick) => (
-            <div key={tick} className="flex items-center w-full relative h-0">
-              <span className="text-[10px] text-slate-400 font-bold font-mono w-8 shrink-0 pb-1 select-none text-right pr-2">{tick}</span>
-              <div className="flex-1 border-t border-dashed border-slate-200/80" />
+    <div className="overflow-x-auto pb-1">
+      <div className="flex flex-col h-[260px] min-w-[500px] lg:min-w-0 w-full pt-4 relative select-none font-sans">
+        <div className="flex-1 relative">
+          {/* Horizontal Gridlines */}
+          <div className="absolute inset-0 flex flex-col justify-between">
+            {yTicks.map((tick) => (
+              <div key={tick} className="flex items-center w-full relative h-0">
+                <span className="text-[10px] text-slate-400 font-bold tabular-nums w-8 shrink-0 pb-1 select-none text-right pr-2">
+                  {tick}
+                </span>
+                <div className="flex-1 border-t border-dashed border-slate-200/80" />
+              </div>
+            ))}
+          </div>
+
+          {/* Vertical Bars Container */}
+          <div className="absolute inset-y-0 left-10 right-0 flex justify-around items-end z-10 bottom-[1px]">
+            {data.map((item) => {
+              const heightPerc = `${Math.min(100, Math.max(4, (item.count / maxVal) * 100))}%`;
+              return (
+                <div
+                  key={item.name}
+                  onClick={() => onBarClick?.(item.name)}
+                  className="flex flex-col items-center h-full justify-end group cursor-pointer relative"
+                  style={{ width: `${Math.max(4, Math.min(12, 85 / Math.max(data.length, 1)))}%` }}
+                >
+                  {/* Visual Gradient Blue Bar */}
+                  <div
+                    className="w-full bg-gradient-to-t from-blue-600 via-blue-500 to-sky-400 hover:from-blue-500 hover:to-sky-300 rounded-t-lg transition-all duration-300 flex flex-col justify-start items-center pt-2 relative shadow-xs group-hover:scale-105 active:scale-95 group-hover:shadow-md"
+                    style={{ height: heightPerc }}
+                  >
+                    {/* Floating count box inside top part of the bar */}
+                    <div className="bg-white/95 text-blue-700 font-black text-[10px] px-1.5 py-0.5 rounded-md shadow-xs scale-90 sm:scale-100 select-none tabular-nums tracking-tight">
+                      {item.count}
+                    </div>
+                  </div>
+
+                  {/* Micro-interacting Tooltip */}
+                  <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-all bg-slate-900/95 text-white text-[10px] font-bold p-2.5 rounded-xl shadow-xl pointer-events-none whitespace-nowrap z-50 border border-slate-700">
+                    <span className="block font-black text-slate-400 uppercase tracking-widest text-[8px]">
+                      Dòng xe (Model) - Click xem chi tiết
+                    </span>
+                    <span className="block text-[11px] text-white font-extrabold mt-0.5">{item.name}</span>
+                    <span className="text-sky-300 block tabular-nums font-bold mt-1 border-t border-slate-800 pt-1">
+                      Sản lượng: {item.count} xe
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* X-Axis Labels */}
+        <div className="flex justify-around items-center pl-10 pt-2 border-t border-slate-200 mt-1 select-none">
+          {data.map((item) => (
+            <div
+              key={item.name}
+              onClick={() => onBarClick?.(item.name)}
+              className="text-[10px] font-black text-slate-500 uppercase truncate text-center leading-tight tracking-tight scale-90 cursor-pointer hover:text-blue-600 transition-colors"
+              style={{ width: `${Math.max(4, Math.min(12, 85 / Math.max(data.length, 1)))}%` }}
+              title={item.name}
+            >
+              {item.name.replace('DK ', '')}
             </div>
           ))}
         </div>
-
-        {/* Vertical Bars Container */}
-        <div className="absolute inset-y-0 left-10 right-0 flex justify-around items-end z-10 bottom-[1px]">
-          {data.map((item, idx) => {
-            const heightPerc = `${Math.min(100, Math.max(4, (item.count / maxVal) * 100))}%`;
-            return (
-              <div
-                key={item.name}
-                onClick={() => onBarClick?.(item.name)}
-                className="flex flex-col items-center h-full justify-end group cursor-pointer relative"
-                style={{ width: '15%' }}
-              >
-
-                {/* Visual Blue Bar standing vertically */}
-                <div
-                  className="w-full bg-[#02a6ff] hover:bg-sky-400 rounded-t-lg transition-all duration-500 flex flex-col justify-start items-center pt-2.5 relative shadow-xs group-hover:scale-105 active:scale-95 group-hover:shadow-md"
-                  style={{ height: heightPerc }}
-                >
-                  {/* Floating count box inside top part of the bar */}
-                  <div className="bg-white/95 text-sky-655 font-black text-[10.5px] px-1.5 py-0.5 rounded shadow-sm scale-90 sm:scale-100 select-none font-mono tracking-tighter">
-                    {item.count}
-                  </div>
-                </div>
-
-                {/* Micro-interacting Tooltip */}
-                <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-all bg-slate-900 text-white text-[10px] font-bold p-2 rounded-xl shadow-lg pointer-events-none whitespace-nowrap z-50">
-                  <span className="block font-black text-slate-300 uppercase tracking-widest text-[8px]">Dòng xe (Model) - Click xem chi tiết</span>
-                  <span className="block text-[11px] text-white font-extrabold mt-0.5">{item.name}</span>
-                  <span className="text-sky-305 block font-mono mt-0.5 border-t border-slate-800 pt-0.5">Sản lượng: {item.count} xe (Bấm để xem danh sách)</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* X-Axis Labels */}
-      <div className="flex justify-around items-center pl-10 pt-2 border-t border-slate-200 mt-1 select-none">
-        {data.map((item) => (
-          <div
-            key={item.name}
-            onClick={() => onBarClick?.(item.name)}
-            className="text-[10px] font-black text-slate-500 uppercase truncate text-center leading-tight tracking-tight scale-90 cursor-pointer hover:text-[#02a6ff]"
-            style={{ width: '15%' }}
-            title={item.name}
-          >
-            {item.name.replace('DK ', '')}
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -644,42 +660,70 @@ interface ModelDefectCardProps {
 
 function ModelDefectCard({ modelName, defects, onDefectClick }: ModelDefectCardProps) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 hover:shadow-md transition-all duration-300 flex flex-col h-full bg-cover">
-      <div className="flex justify-between items-center border-b border-rose-50 pb-2.5 mb-3 select-none">
-        <h4 className="font-extrabold text-xs text-rose-500 font-mono tracking-tight uppercase flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-3xs p-4 hover:shadow-md transition-all duration-300 flex flex-col h-full">
+      <div className="flex justify-between items-center border-b border-slate-100 pb-2.5 mb-3 select-none">
+        <h4 className="font-extrabold text-xs text-slate-800 tracking-tight uppercase flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
           {modelName}
         </h4>
-        <button type="button" className="text-slate-300 hover:text-slate-500 rounded p-1 transition cursor-pointer">
-          <MoreVertical className="w-4 h-4" />
-        </button>
+        <span className="text-[10px] font-bold text-slate-400 font-sans">
+          Top {defects.length} lỗi
+        </span>
       </div>
       <div className="space-y-1.5 flex-1 flex flex-col justify-start">
         {defects.length === 0 ? (
-          <div className="py-12 text-center text-[11.5px] text-slate-400 italic font-medium my-auto select-none">
-            ✓ Không ghi nhận lỗi KCS
+          <div className="py-10 text-center text-xs text-emerald-600 font-semibold my-auto select-none bg-emerald-50/50 rounded-xl border border-emerald-100/60 p-3">
+            ✓ Không ghi nhận sai lỗi
           </div>
         ) : (
-          defects.map((defect, idx) => (
-            <div
-              key={defect.name}
-              onClick={() => onDefectClick?.(defect.name, defect.count)}
-              className="flex justify-between items-center px-2.5 py-2 rounded-xl bg-slate-50/60 border border-slate-100 hover:bg-rose-50/50 hover:border-rose-200 hover:text-rose-950 transition-all font-sans text-xs cursor-pointer active:scale-98 select-none"
-              title="Nhấp để xem biện pháp khắc phục & đánh giá"
-            >
-              <div className="flex items-center gap-2 min-w-0 pr-1.5">
-                <span className="flex items-center justify-center w-5 h-5 rounded-full text-white text-[10px] font-black bg-amber-500 shrink-0 font-mono shadow-xs select-none">
-                  {idx + 1}
-                </span>
-                <span className="text-slate-705 font-bold truncate tracking-wide text-[10.5px] uppercase group-hover:text-rose-900" title={defect.name}>
-                  {defect.name}
+          defects.map((defect, idx) => {
+            const isRank1 = idx === 0;
+            const isRank2 = idx === 1;
+
+            return (
+              <div
+                key={defect.name}
+                onClick={() => onDefectClick?.(defect.name, defect.count)}
+                className={`flex justify-between items-center px-2.5 py-2 rounded-xl border transition-all text-xs cursor-pointer active:scale-98 select-none ${
+                  isRank1
+                    ? 'bg-rose-50/50 border-rose-200 hover:bg-rose-100/60'
+                    : isRank2
+                    ? 'bg-amber-50/40 border-amber-200/70 hover:bg-amber-100/50'
+                    : 'bg-slate-50/70 border-slate-100 hover:bg-slate-100/80'
+                }`}
+                title="Nhấp để xem biện pháp khắc phục & đánh giá"
+              >
+                <div className="flex items-center gap-2 min-w-0 pr-1.5">
+                  <span
+                    className={`flex items-center justify-center w-5 h-5 rounded-full text-white text-[10px] font-black shrink-0 shadow-3xs select-none ${
+                      isRank1 ? 'bg-rose-500' : isRank2 ? 'bg-amber-500' : 'bg-slate-400'
+                    }`}
+                  >
+                    {idx + 1}
+                  </span>
+                  <span
+                    className={`font-bold truncate tracking-wide text-[11px] uppercase ${
+                      isRank1 ? 'text-rose-900' : isRank2 ? 'text-amber-950' : 'text-slate-700'
+                    }`}
+                    title={defect.name}
+                  >
+                    {defect.name}
+                  </span>
+                </div>
+                <span
+                  className={`font-black tabular-nums text-xs px-2 py-0.5 rounded-md border shrink-0 ${
+                    isRank1
+                      ? 'text-rose-700 bg-rose-100 border-rose-200'
+                      : isRank2
+                      ? 'text-amber-700 bg-amber-100 border-amber-200'
+                      : 'text-slate-600 bg-white border-slate-200'
+                  }`}
+                >
+                  {defect.count}
                 </span>
               </div>
-              <span className="text-red-500 font-black font-mono text-xs shadow-3xs px-2 py-0.5 rounded bg-red-50/50 border border-red-100/30 shrink-0">
-                {defect.count}
-              </span>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
@@ -754,15 +798,15 @@ function OqcParetoChartComponent({
               <span className="text-[10px] bg-emerald-100/80 text-emerald-800 font-extrabold uppercase px-2.5 py-0.5 rounded-full border border-emerald-200/60">
                 100% Đạt Chuẩn KCS
               </span>
-              <span className="text-[10px] text-slate-400 font-mono font-bold">
+              <span className="text-[10px] text-slate-400 font-bold">
                 {filterDescription}
               </span>
             </div>
             <h4 className="text-base font-black text-slate-800 uppercase tracking-tight">
-              Biểu đồ Pareto (80/20) — Không ghi nhận khuyết phẩm lắp ráp
+              Biểu đồ Pareto (80/20) — Không ghi nhận sai lỗi lắp ráp
             </h4>
             <p className="text-xs text-slate-600 leading-relaxed max-w-3xl">
-              Trong tập dữ liệu lọc hiện tại, toàn bộ <strong className="font-mono text-emerald-700 font-black">{totalInspected.toLocaleString()}</strong> xe kiểm định đều đạt tiêu chuẩn hoàn hảo ngay lần đầu nghiệm thu (First Time Right). Dây chuyền không phát sinh lỗi để lập biểu đồ Pareto.
+              Trong tập dữ liệu lọc hiện tại, toàn bộ <strong className="text-emerald-700 font-black tabular-nums">{totalInspected.toLocaleString()}</strong> xe kiểm định đều đạt tiêu chuẩn hoàn hảo ngay lần đầu nghiệm thu (First Time Right). Dây chuyền không phát sinh lỗi để lập biểu đồ Pareto.
             </p>
           </div>
         </div>
@@ -795,25 +839,25 @@ function OqcParetoChartComponent({
               <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
               Biểu đồ Pareto (80/20)
             </span>
-            <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-md border border-slate-200/60 font-mono">
+            <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-md border border-slate-200/60">
               ISO 9001:2015
             </span>
             <span className="text-[10px] bg-rose-50 text-rose-700 font-bold px-2 py-0.5 rounded-md border border-rose-200/60">
-              Động theo bộ lọc: <strong className="font-mono">{filterDescription}</strong>
+              Động theo bộ lọc: <strong>{filterDescription}</strong>
             </span>
           </div>
           <h3 className="text-sm sm:text-base font-black uppercase text-slate-800 tracking-tight flex items-center gap-2">
-            Phân tích Khuyết phẩm KCS (OQC) — Định vị Nhóm lỗi Trọng điểm (Vital Few)
+            Phân tích Sai lỗi KCS (OQC) — Định vị Nhóm lỗi Trọng điểm (Vital Few)
           </h3>
           <p className="text-[11px] text-slate-500 max-w-3xl leading-snug">
-            Phát hiện 80% rủi ro chất lượng đến từ 20% nhóm khuyết tật chính. Nhấp vào cột lỗi để xem phiếu chỉ đạo và biện pháp khắc phục (CAPA).
+            Phát hiện 80% rủi ro chất lượng đến từ 20% nhóm sai lỗi chính. Nhấp vào cột lỗi để xem phiếu chỉ đạo và biện pháp khắc phục (CAPA).
           </p>
         </div>
 
         {/* Display Limit Toggles */}
         <div className="flex items-center gap-2 shrink-0 self-end lg:self-center">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hiển thị:</span>
-          <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 text-[10.5px] font-extrabold font-mono">
+          <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 text-[10.5px] font-extrabold">
             <button
               type="button"
               onClick={() => setDisplayLimit(10)}
@@ -851,7 +895,7 @@ function OqcParetoChartComponent({
               <span className="w-2 h-2 rounded-xs bg-rose-500" />
               Tần suất lỗi (Số xe bị lỗi)
             </span>
-            <span className="text-rose-600 flex items-center gap-1 font-mono">
+            <span className="text-rose-600 flex items-center gap-1 font-bold">
               <TrendingUp className="w-3.5 h-3.5" />
               Tỷ lệ phần trăm lũy kế (%)
             </span>
@@ -859,7 +903,7 @@ function OqcParetoChartComponent({
 
           {/* Chart Core Canvas Area */}
           <div className="overflow-x-auto pb-2">
-            <div className="relative h-[290px] min-w-[540px] sm:min-w-0 bg-slate-50/70 border-b border-l border-slate-200 rounded-xl p-4 select-none">
+            <div className="relative h-[290px] min-w-[500px] lg:min-w-0 bg-slate-50/70 border-b border-l border-slate-200 rounded-xl p-4 select-none">
 
               {/* Background Gridlines & Right % Labels */}
               <div className="absolute inset-0 flex flex-col justify-between pointer-events-none p-4 pb-2 pr-12">
@@ -867,7 +911,7 @@ function OqcParetoChartComponent({
                   <div key={val} className="relative w-full flex items-center h-0">
                     <div className={`w-full border-t ${val === 80 ? 'border-rose-400 border-dashed border-t-2' : 'border-slate-200/60'}`} />
                     <span
-                      className={`absolute right-[-42px] text-[8.5px] font-mono font-bold select-none ${val === 80
+                      className={`absolute right-[-42px] text-[8.5px] tabular-nums font-bold select-none ${val === 80
                           ? 'text-rose-600 bg-rose-100/80 px-1 py-0.2 rounded border border-rose-200 font-extrabold'
                           : 'text-slate-400'
                         }`}
@@ -879,7 +923,7 @@ function OqcParetoChartComponent({
               </div>
 
               {/* Left Y-Axis Absolute Count Ticks */}
-              <div className="absolute left-1 inset-y-4 flex flex-col justify-between pointer-events-none text-[8.5px] font-mono font-bold text-slate-400 text-left select-none">
+              <div className="absolute left-1 inset-y-4 flex flex-col justify-between pointer-events-none text-[8.5px] tabular-nums font-bold text-slate-400 text-left select-none">
                 {yCountTicks.map((val, idx) => (
                   <span key={idx} className="leading-none">{val}</span>
                 ))}
@@ -932,7 +976,7 @@ function OqcParetoChartComponent({
                         />
                         {/* Cumulative Percentage Label */}
                         <span
-                          className={`absolute bottom-full mb-1 text-rose-700 font-mono select-none whitespace-nowrap transition-all duration-200 ${isHovered ? 'text-[10px] font-black scale-110 bg-white/95 px-1 rounded shadow-xs border border-rose-200' : 'text-[8.5px] font-bold'
+                          className={`absolute bottom-full mb-1 text-rose-700 tabular-nums select-none whitespace-nowrap transition-all duration-200 ${isHovered ? 'text-[10px] font-black scale-110 bg-white/95 px-1 rounded shadow-xs border border-rose-200' : 'text-[8.5px] font-bold'
                             }`}
                         >
                           {item.cumulativePercentage}%
@@ -956,7 +1000,7 @@ function OqcParetoChartComponent({
                       onMouseEnter={() => setHoveredIndex(idx)}
                       onMouseLeave={() => setHoveredIndex(null)}
                       onClick={() => onDefectClick?.(item.name, item.count, item.topModel)}
-                      title={`Bấm để xem & chỉ đạo khắc phục khuyết phẩm: ${item.name}`}
+                      title={`Bấm để xem & chỉ đạo khắc phục sai lỗi: ${item.name}`}
                     >
                       {/* Bar Column */}
                       <div
@@ -972,7 +1016,7 @@ function OqcParetoChartComponent({
                         style={{ height: `${barHeightPercent}%` }}
                       >
                         {/* Count Badge inside bar top */}
-                        <span className="bg-white/95 text-slate-800 font-mono font-black text-[9px] px-1 py-0.2 rounded shadow-2xs leading-none select-none">
+                        <span className="bg-white/95 text-slate-800 tabular-nums font-black text-[9px] px-1 py-0.2 rounded shadow-2xs leading-none select-none">
                           {item.count}
                         </span>
                       </div>
@@ -983,7 +1027,7 @@ function OqcParetoChartComponent({
                           }`}
                       >
                         <div className="flex items-center justify-between border-b border-slate-700 pb-1 mb-1.5">
-                          <span className="font-mono text-slate-400 text-[8.5px] uppercase font-bold">#{idx + 1} Khuyết phẩm KCS</span>
+                          <span className="text-slate-400 text-[8.5px] uppercase font-bold">#{idx + 1} Sai lỗi KCS</span>
                           <span className={`text-[8px] font-black uppercase px-1 rounded ${item.isVitalFew ? 'bg-rose-500/30 text-rose-300' : 'bg-indigo-500/30 text-indigo-300'}`}>
                             {item.isVitalFew ? 'Vital Few 80%' : 'Trivial Many'}
                           </span>
@@ -992,15 +1036,15 @@ function OqcParetoChartComponent({
                         <div className="space-y-0.5 font-sans text-[9.5px]">
                           <div className="flex justify-between">
                             <span className="text-slate-400">Số xe bị lỗi:</span>
-                            <strong className="text-rose-400 font-mono font-black">{item.count} xe</strong>
+                            <strong className="text-rose-400 tabular-nums font-black">{item.count} xe</strong>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-400">Tỷ trọng đợt:</span>
-                            <strong className="text-amber-400 font-mono font-bold">{item.percentage}%</strong>
+                            <strong className="text-amber-400 tabular-nums font-bold">{item.percentage}%</strong>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-400">Lũy kế Pareto:</span>
-                            <strong className="text-emerald-400 font-mono font-black">{item.cumulativePercentage}%</strong>
+                            <strong className="text-emerald-400 tabular-nums font-black">{item.cumulativePercentage}%</strong>
                           </div>
                           {item.topModel && (
                             <div className="flex justify-between border-t border-slate-800 pt-1 mt-1 text-[8.5px] text-slate-400">
@@ -1050,7 +1094,7 @@ function OqcParetoChartComponent({
                   </div>
                   <div className="mt-1 flex items-center justify-center">
                     <span
-                      className={`text-[8.5px] font-mono font-bold px-1.5 py-0.2 rounded-full leading-none ${item.isVitalFew
+                      className={`text-[8.5px] tabular-nums font-bold px-1.5 py-0.2 rounded-full leading-none ${item.isVitalFew
                           ? 'bg-rose-50 text-rose-600 border border-rose-200'
                           : 'bg-indigo-50 text-indigo-600 border border-indigo-200'
                         }`}
@@ -1076,11 +1120,11 @@ function OqcParetoChartComponent({
               </span>
               <span className="flex items-center gap-1.5 font-bold">
                 <span className="w-4 h-0.5 border-t-2 border-dashed border-rose-500 inline-block" />
-                <span className="text-slate-600 font-mono">Đường lũy kế (%)</span>
+                <span className="text-slate-600 font-bold">Đường lũy kế (%)</span>
               </span>
             </div>
-            <span className="text-slate-400 font-mono text-[9px]">
-              Tập mẫu: <strong>{totalBars}</strong> / {items.length} nhóm lỗi
+            <span className="text-slate-400 tabular-nums text-[9.5px]">
+              Tập mẫu: <strong className="text-slate-700">{totalBars}</strong> / {items.length} nhóm lỗi
             </span>
           </div>
 
@@ -1098,7 +1142,7 @@ function OqcParetoChartComponent({
                   Nhận Định Pareto &amp; QLCL
                 </h4>
               </div>
-              <span className="bg-rose-50 text-rose-700 text-[9px] font-mono font-extrabold px-2 py-0.5 rounded-full border border-rose-200">
+              <span className="bg-rose-50 text-rose-700 text-[9px] font-extrabold px-2 py-0.5 rounded-full border border-rose-200">
                 DKBIKE QMS
               </span>
             </div>
@@ -1107,18 +1151,18 @@ function OqcParetoChartComponent({
             <div className="grid grid-cols-2 gap-2.5">
               <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-3xs">
                 <span className="text-[9px] text-slate-400 uppercase font-black tracking-wider block">Tổng xe kiểm tra</span>
-                <strong className="text-base font-black text-slate-800 font-mono block mt-0.5">{totalInspected.toLocaleString()}</strong>
+                <strong className="text-base font-black text-slate-800 tabular-nums tracking-tight block mt-0.5">{totalInspected.toLocaleString()}</strong>
                 <span className="text-[8.5px] text-slate-500 font-bold block">Xe trong kỳ lọc</span>
               </div>
               <div className="bg-white p-2.5 rounded-xl border border-rose-100 shadow-3xs">
-                <span className="text-[9px] text-rose-500 uppercase font-black tracking-wider block">Tổng vụ khuyết phẩm</span>
-                <strong className="text-base font-black text-rose-600 font-mono block mt-0.5">{totalDefects.toLocaleString()}</strong>
+                <span className="text-[9px] text-rose-500 uppercase font-black tracking-wider block">Tổng vụ sai lỗi</span>
+                <strong className="text-base font-black text-rose-600 tabular-nums tracking-tight block mt-0.5">{totalDefects.toLocaleString()}</strong>
                 <span className="text-[8.5px] text-rose-600 font-bold block">{defectRate}% tỷ lệ lỗi</span>
               </div>
               <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-3xs col-span-2">
                 <div className="flex justify-between items-center">
                   <span className="text-[9px] text-slate-400 uppercase font-black tracking-wider">Nhóm lỗi trọng điểm (Vital Few)</span>
-                  <span className="text-rose-600 font-mono font-black text-xs">{vitalFewCount} / {items.length} nhóm</span>
+                  <span className="text-rose-600 tabular-nums font-black text-xs">{vitalFewCount} / {items.length} nhóm</span>
                 </div>
                 <div className="relative w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1.5">
                   <div
@@ -1127,7 +1171,7 @@ function OqcParetoChartComponent({
                   />
                 </div>
                 <span className="text-[8.5px] text-slate-500 font-bold mt-1 block">
-                  Chiếm tới <strong className="text-rose-600 font-mono">{vitalPercentage}%</strong> tổng số xe bị khuyết phẩm KCS
+                  Chiếm tới <strong className="text-rose-600 tabular-nums font-black">{vitalPercentage}%</strong> tổng số xe bị sai lỗi KCS
                 </span>
               </div>
             </div>
@@ -1138,19 +1182,19 @@ function OqcParetoChartComponent({
                 <div className="flex items-center justify-between text-[9px] font-black uppercase text-rose-600">
                   <span className="flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3 text-rose-600 animate-pulse" />
-                    Khuyết phẩm xuất hiện nhiều nhất (Top 1)
+                    Sai lỗi xuất hiện nhiều nhất (Top 1)
                   </span>
-                  <span className="font-mono bg-rose-200/60 text-rose-800 px-1.5 py-0.2 rounded font-extrabold">
+                  <span className="tabular-nums bg-rose-200/60 text-rose-800 px-1.5 py-0.2 rounded font-extrabold">
                     {top1.percentage}%
                   </span>
                 </div>
                 <h5 className="font-black text-slate-800 text-xs uppercase tracking-tight">
                   {top1.name}
                 </h5>
-                <div className="flex items-center justify-between text-[10px] text-slate-600 font-mono">
+                <div className="flex items-center justify-between text-[10px] text-slate-600 tabular-nums font-bold">
                   <span>Số xe lỗi: <strong className="text-rose-600 font-black">{top1.count} xe</strong></span>
                   {top1.topModel && (
-                    <span>Model: <strong className="text-slate-800">{top1.topModel}</strong></span>
+                    <span>Model: <strong className="text-slate-800 font-black">{top1.topModel}</strong></span>
                   )}
                 </div>
                 <button
@@ -1169,13 +1213,13 @@ function OqcParetoChartComponent({
                 <Sparkles className="w-3 h-3 text-indigo-500" /> Chỉ đạo điều hành QLCL DKBike
               </span>
               <p>
-                Áp dụng nguyên lý Pareto 80/20, anh Thao nên chỉ đạo Tổ KCS và Bộ phận Lắp ráp tập trung giải quyết triệt để <strong className="text-rose-600 font-black">{vitalFewCount} nhóm lỗi trọng điểm</strong> nêu trên. Việc này sẽ giúp triệt tiêu ngay <strong className="text-rose-600 font-mono font-black">{vitalPercentage}%</strong> các lỗi xe thành phẩm trước khi xuất xưởng.
+                Áp dụng nguyên lý Pareto 80/20, anh Thao nên chỉ đạo Tổ KCS và Bộ phận Lắp ráp tập trung giải quyết triệt để <strong className="text-rose-600 font-black">{vitalFewCount} nhóm lỗi trọng điểm</strong> nêu trên. Việc này sẽ giúp triệt tiêu ngay <strong className="text-rose-600 tabular-nums font-black">{vitalPercentage}%</strong> các lỗi xe thành phẩm trước khi xuất xưởng.
               </p>
             </div>
 
           </div>
 
-          <div className="pt-2 border-t border-slate-200/60 text-[9px] text-slate-400 font-mono text-center select-none">
+          <div className="pt-2 border-t border-slate-200/60 text-[9px] text-slate-400 text-center select-none">
             Công ty TNHH Xe điện DK Việt Nhật • Phòng QLCL (DK QMS)
           </div>
 
@@ -2510,8 +2554,8 @@ export default function QualityInspectionRecords({
       id: nextCapaId,
       CAPAID: nextCapaId,
       title: `[OQC KCS] Khắc phục lỗi ${selectedDashboardDefect.name} trên dòng xe ${selectedDashboardDefect.modelName}`,
-      Issue: `Khuyết phẩm "${selectedDashboardDefect.name}" ghi nhận ${selectedDashboardDefect.count} xe trên dòng xe ${selectedDashboardDefect.modelName}.${draftImpact ? ` Đánh giá ảnh hưởng: ${draftImpact}` : ''}`,
-      issue: `Khuyết phẩm "${selectedDashboardDefect.name}" ghi nhận ${selectedDashboardDefect.count} xe trên dòng xe ${selectedDashboardDefect.modelName}.${draftImpact ? ` Đánh giá ảnh hưởng: ${draftImpact}` : ''}`,
+      Issue: `Sai lỗi "${selectedDashboardDefect.name}" ghi nhận ${selectedDashboardDefect.count} xe trên dòng xe ${selectedDashboardDefect.modelName}.${draftImpact ? ` Đánh giá ảnh hưởng: ${draftImpact}` : ''}`,
+      issue: `Sai lỗi "${selectedDashboardDefect.name}" ghi nhận ${selectedDashboardDefect.count} xe trên dòng xe ${selectedDashboardDefect.modelName}.${draftImpact ? ` Đánh giá ảnh hưởng: ${draftImpact}` : ''}`,
       source: 'OQC / Test vận hành',
       assignee: draftOwner || 'Tổ trưởng QA/QC',
       Owner: draftOwner || 'Tổ trưởng QA/QC',
@@ -2564,7 +2608,7 @@ export default function QualityInspectionRecords({
       });
     }
 
-    alert(`Đã lưu Đánh giá và Ban hành Thành công Hồ sơ CAPA ${nextCapaId}!\n- Khuyết phẩm: ${selectedDashboardDefect.name}\n- Dòng xe: ${selectedDashboardDefect.modelName}\n- Phụ trách xử lý: "${draftOwner}"\n- Dữ liệu đã được ghi thêm vào phân hệ Quản lý CAPA và đồng bộ lên CSDL.`);
+    alert(`Đã lưu Đánh giá và Ban hành Thành công Hồ sơ CAPA ${nextCapaId}!\n- Sai lỗi: ${selectedDashboardDefect.name}\n- Dòng xe: ${selectedDashboardDefect.modelName}\n- Phụ trách xử lý: "${draftOwner}"\n- Dữ liệu đã được ghi thêm vào phân hệ Quản lý CAPA và đồng bộ lên CSDL.`);
     setSelectedDashboardDefect(null);
   };
   const [iqcSearch, setIqcSearch] = useState('');
@@ -10782,16 +10826,16 @@ return (
               </div>
 
               {/* 1. TOP CARDS GRID */}
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-2.5 sm:gap-4 animate-in slide-in-from-top-1 px-0.5">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 animate-in slide-in-from-top-1 px-0.5">
                 {/* TIẾN ĐỘ LẮP RÁP (TỔNG THÁNG HOẶC TỔNG NĂM) */}
-                <div className="col-span-2 md:col-span-2 bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                <div className="col-span-2 md:col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
                   <div className="flex justify-between items-start select-none">
                     <div>
-                      <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider">
+                      <h4 className="text-[9.5px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider">
                         {card1Title}
                       </h4>
                       <div className="flex items-baseline gap-1.5 mt-1">
-                        <span className="text-2xl sm:text-4xl lg:text-[38px] font-black text-blue-600 font-mono tracking-tight leading-none">
+                        <span className="text-2xl sm:text-3xl lg:text-[34px] font-black text-blue-600 tabular-nums tracking-tight leading-none">
                           {card1AssembledCount.toLocaleString()}
                         </span>
                         <span className="text-xs sm:text-sm font-bold text-slate-500 font-sans">
@@ -10803,102 +10847,106 @@ return (
                       <CheckCircle2 className="w-5 h-5 text-blue-500" />
                     </div>
                   </div>
-                  <div className="mt-3 sm:mt-4 select-none pt-2 border-t border-slate-100 flex items-center justify-between text-[9.5px] sm:text-[10.5px]">
-                    <span className="font-bold text-slate-500">
+                  <div className="mt-3 select-none pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                    <span className="font-bold text-slate-500 truncate" title={card1Subtext}>
                       {card1Subtext}
                     </span>
-                    <span className="font-black text-blue-600 font-mono bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200/40">
+                    <span className="font-black text-blue-600 tabular-nums bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200/40 shrink-0 ml-1">
                       {isMonthFiltered ? `Tháng ${oqcFilterMonth}` : `Năm ${targetYearNum}`}
                     </span>
                   </div>
                 </div>
 
                 {/* Ngày còn lại Tháng Hiện Tại */}
-                <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
                   <div className="flex justify-between items-start select-none">
-                    <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-tight font-sans">Ngày còn lại<br />{currentMonthStr}</h4>
-                    <button type="button" className="text-slate-350 hover:text-slate-500 p-1 transition cursor-pointer font-bold">
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
+                    <h4 className="text-[9.5px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-tight font-sans">
+                      Ngày còn lại<br />{currentMonthStr}
+                    </h4>
                   </div>
                   <div className="flex flex-col items-center justify-center p-1 sm:p-2 mb-1 select-none">
-                    <div className="bg-blue-500 text-white font-black text-xl sm:text-3xl lg:text-[32px] w-11 h-11 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl flex items-center justify-center font-mono shadow-md shadow-blue-100/50 transition-all duration-500">
+                    <div className="bg-blue-500 text-white font-black text-xl sm:text-3xl w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center tabular-nums shadow-md shadow-blue-200 transition-all duration-500">
                       {daysRemaining}
                     </div>
-                    <span className="text-[8.5px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mt-1 sm:mt-1.5 font-sans">Ngày</span>
+                    <span className="text-[9px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest mt-1 font-sans">Ngày</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-100 text-center select-none">
+                    <span className="text-[10px] font-bold text-slate-500">Tháng {targetMonth}/{targetYearNum}</span>
                   </div>
                 </div>
 
                 {/* SL xe theo LSX */}
-                <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
                   <div className="flex justify-between items-start select-none">
                     <div>
-                      <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">SL xe theo LSX</h4>
+                      <h4 className="text-[9.5px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">SL xe theo LSX</h4>
                     </div>
-                    <button type="button" className="text-slate-350 hover:text-slate-500 p-1 transition cursor-pointer">
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
                   </div>
-                  <div className="mt-3 sm:mt-4 select-none">
-                    <span className="text-2xl sm:text-4xl lg:text-[38px] font-black text-red-500 font-mono block tracking-tight leading-none">{lsxVal.toLocaleString()}</span>
+                  <div className="mt-2 sm:mt-3 select-none">
+                    <span className="text-2xl sm:text-3xl lg:text-[34px] font-black text-rose-500 tabular-nums block tracking-tight leading-none">
+                      {lsxVal.toLocaleString()}
+                    </span>
+                    <span className="text-[11px] font-bold text-slate-400 mt-1 block">xe trong lệnh</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-100 select-none">
+                    <span className="text-[10px] font-bold text-slate-500">Kế hoạch theo LSX</span>
                   </div>
                 </div>
 
                 {/* SL xe lắp ráp */}
-                <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
                   <div className="flex justify-between items-start select-none">
                     <div>
-                      <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">SL xe lắp ráp</h4>
+                      <h4 className="text-[9.5px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">SL xe lắp ráp</h4>
                     </div>
-                    <button type="button" className="text-slate-350 hover:text-slate-500 p-1 transition cursor-pointer">
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
                   </div>
-                  <div className="mt-3 sm:mt-4 select-none">
-                    <span className="text-2xl sm:text-4xl lg:text-[38px] font-black text-amber-500 font-mono block tracking-tight leading-none">{laprapVal.toLocaleString()}</span>
+                  <div className="mt-2 sm:mt-3 select-none">
+                    <span className="text-2xl sm:text-3xl lg:text-[34px] font-black text-amber-500 tabular-nums block tracking-tight leading-none">
+                      {laprapVal.toLocaleString()}
+                    </span>
+                    <span className="text-[11px] font-bold text-slate-400 mt-1 block">xe hoàn thành</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-100 select-none">
+                    <span className="text-[10px] font-bold text-slate-500">Tiến độ thực tế</span>
                   </div>
                 </div>
 
                 {/* SL xe đạt lần 1 */}
-                <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
                   <div className="flex justify-between items-start select-none">
                     <div>
-                      <h4 className="text-[9px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">SL xe đạt lần 1</h4>
+                      <h4 className="text-[9.5px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">SL xe đạt lần 1</h4>
                     </div>
-                    <button type="button" className="text-slate-355 hover:text-slate-505 p-1 transition cursor-pointer">
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
                   </div>
-                  <div className="mt-3 sm:mt-4 select-none">
-                    <span className="text-2xl sm:text-4xl lg:text-[38px] font-black text-sky-500 font-mono block tracking-tight leading-none">{datVal.toLocaleString()}</span>
+                  <div className="mt-2 sm:mt-3 select-none">
+                    <span className="text-2xl sm:text-3xl lg:text-[34px] font-black text-emerald-600 tabular-nums block tracking-tight leading-none">
+                      {datVal.toLocaleString()}
+                    </span>
+                    <span className="text-[11px] font-bold text-emerald-600 mt-1 block">
+                      {laprapVal > 0 ? ((datVal / laprapVal) * 100).toFixed(1) : '100'}% Đạt Chuẩn
+                    </span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-100 select-none">
+                    <span className="text-[10px] font-bold text-slate-500">Nghiệm thu đạt lần 1</span>
                   </div>
                 </div>
               </div>
 
-              {/* 2. BLUE LINE SEPARATOR WITH DOTS */}
-              <div className="w-full h-[3px] bg-blue-500/10 rounded-full relative my-1 select-none">
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-500" />
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-blue-500" />
-              </div>
-
               {/* 3. GRAPHS ROW */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                 {/* Left Graph: Tình trạng kiểm tra */}
-                <div className="lg:col-span-1 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between h-[340px]">
+                <div className="lg:col-span-1 bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between min-h-[340px]">
                   <div className="flex justify-between items-center select-none border-b border-slate-100 pb-2.5">
                     <div>
-                      <h4 className="font-extrabold text-xs uppercase text-slate-755 flex items-center gap-1.5">
+                      <h4 className="font-black text-xs uppercase text-slate-800 flex items-center gap-1.5">
                         Tình trạng kiểm tra
                       </h4>
-                      <span className="inline-flex items-center gap-1 bg-purple-50 text-[9px] font-black text-purple-600 border border-purple-200/30 px-2 py-0.5 rounded-md mt-1 select-none">
+                      <span className="inline-flex items-center gap-1 bg-purple-50 text-[9.5px] font-black text-purple-700 border border-purple-200/40 px-2 py-0.5 rounded-md mt-1 select-none">
                         ✦ Phân tích thông minh
                       </span>
                     </div>
-                    <button type="button" className="text-slate-300 hover:text-slate-500 rounded p-1 transition cursor-pointer">
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
                   </div>
-                  <div className="flex-grow flex items-center justify-center">
+                  <div className="flex-grow flex items-center justify-center pt-2">
                     <PieChartComponent
                       datPercentage={Math.round(pieDatPercent)}
                       loiPercentage={Math.round(pieLoiPercent)}
@@ -10909,19 +10957,16 @@ return (
                 </div>
 
                 {/* Right Graph: Model Lắp ráp */}
-                <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between h-[340px]">
+                <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between min-h-[340px]">
                   <div className="flex justify-between items-center select-none border-b border-slate-100 pb-2.5">
                     <div>
-                      <h4 className="font-extrabold text-xs uppercase text-slate-755 flex items-center gap-1.5">
-                        Sản lượng Model lắp ráp dập sườn
+                      <h4 className="font-black text-xs uppercase text-slate-800 flex items-center gap-1.5">
+                        Sản lượng Model lắp ráp
                       </h4>
-                      <span className="inline-flex items-center gap-1 bg-purple-50 text-[9px] font-black text-purple-600 border border-purple-200/30 px-2 py-0.5 rounded-md mt-1 select-none">
-                        ✦ Phân tích thông minh (Báo cáo ngày)
+                      <span className="inline-flex items-center gap-1 bg-blue-50 text-[9.5px] font-black text-blue-700 border border-blue-200/40 px-2 py-0.5 rounded-md mt-1 select-none">
+                        ✦ Phân tích chi tiết {activeBarData.length} dòng xe
                       </span>
                     </div>
-                    <button type="button" className="text-slate-300 hover:text-slate-500 rounded p-1 transition cursor-pointer">
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
                   </div>
                   <div className="flex-grow pt-2">
                     <BarChartComponent data={activeBarData} onBarClick={setOqcDetailModalModel} />
@@ -10933,12 +10978,12 @@ return (
               <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 hover:shadow-md transition-all duration-300">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 select-none border-b border-slate-100 pb-3 mb-5">
                   <div>
-                    <h4 className="font-extrabold text-xs uppercase text-slate-755 flex items-center gap-2">
+                    <h4 className="font-black text-xs uppercase text-slate-800 flex items-center gap-2">
                       <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                       Phân tích Chất lượng Đạt / Lỗi Xếp chồng theo Dòng xe (OQC)
                     </h4>
-                    <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase font-mono">
-                      Số lượng đạt (Xanh lá) ở dưới • Số lượng lỗi (Đỏ/Cam) ở trên
+                    <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase">
+                      Số lượng đạt (Xanh lá) ở dưới • Số lượng sai lỗi (Đỏ/Hồng) ở trên
                     </p>
                   </div>
 
@@ -10969,126 +11014,130 @@ return (
                 ) : (
                   <div className="space-y-4">
                     {/* Chart Grid representing each model as a vertical bar */}
-                    <div className="flex items-end justify-around gap-2 h-[260px] pt-4 px-2 sm:px-4 relative font-sans select-none border-b border-slate-100/80">
+                    <div className="overflow-x-auto pb-1">
+                      <div className="flex items-end justify-around gap-2 h-[260px] min-w-[580px] lg:min-w-0 pt-4 px-2 sm:px-4 relative font-sans select-none border-b border-slate-100/80">
 
-                      {/* Background vertical scale lines */}
-                      <div className="absolute inset-x-0 inset-y-0 flex flex-col justify-between pointer-events-none">
-                        {[100, 75, 50, 25, 0].map((tick) => (
-                          <div key={tick} className="flex items-center w-full relative h-0">
-                            <span className="text-[9px] text-slate-400 font-extrabold font-mono w-10 shrink-0 text-right pr-2 select-none">
-                              {stackedMode === 'rate' ? `${tick}%` : Math.round((tick / 100) * maxTotal)}
-                            </span>
-                            <div className="flex-1 border-t border-dashed border-slate-100" />
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Stacked Bars Container */}
-                      <div className="absolute inset-y-0 left-12 right-0 flex justify-around items-end z-10 bottom-0 select-none">
-                        {modelStats.map((item, idx) => {
-                          let passHeight = 0;
-                          let failHeight = 0;
-
-                          if (stackedMode === 'rate') {
-                            passHeight = item.passRate;
-                            failHeight = item.failRate;
-                          } else {
-                            passHeight = (item.passed / maxTotal) * 100;
-                            failHeight = (item.failed / maxTotal) * 100;
-                          }
-
-                          const showPassLabel = passHeight > 12;
-                          const showFailLabel = failHeight > 12;
-
-                          return (
-                            <div
-                              key={`${item.model}-${idx}`}
-                              className="flex flex-col items-center h-full justify-end group/bar relative"
-                              style={{ width: `${Math.max(12, Math.min(18, 80 / modelStats.length))}%` }}
-                            >
-                              {/* Stacked Pillar Core */}
-                              <div className="w-full h-full flex flex-col justify-end bg-slate-50/40 hover:bg-slate-100/50 rounded-t-xl transition-all duration-300 relative border border-transparent hover:border-slate-200/50">
-
-                                {/* Sát trên - Lỗi (Red/Orange segment) */}
-                                {item.failed > 0 && (
-                                  <div
-                                    className="w-full bg-rose-500 hover:bg-rose-400 transition-all duration-305 flex flex-col items-center justify-center relative cursor-pointer shadow-inner shrink-0"
-                                    style={{ height: `${failHeight}%` }}
-                                    onClick={() => setOqcDetailModalModel(item.model)}
-                                  >
-                                    {showFailLabel && (
-                                      <div className="text-[10px] text-white font-mono font-black tracking-tighter text-center leading-none">
-                                        <span className="block">{item.failed}</span>
-                                        <span className="block text-[8px] opacity-90">{item.failRate}%</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* Sát dưới - Đạt (Green segment) */}
-                                {item.passed > 0 && (
-                                  <div
-                                    className={`w-full bg-emerald-500 hover:bg-emerald-400 transition-all duration-305 flex flex-col items-center justify-center relative cursor-pointer shadow-inner shrink-0 ${item.failed === 0 ? 'rounded-t-xl' : 'rounded-t-none'}`}
-                                    style={{ height: `${passHeight}%` }}
-                                    onClick={() => setOqcDetailModalModel(item.model)}
-                                  >
-                                    {showPassLabel && (
-                                      <div className="text-[10px] text-white font-mono font-black tracking-tighter text-center leading-none">
-                                        <span className="block">{item.passed}</span>
-                                        <span className="block text-[8px] opacity-90">{item.passRate}%</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                              </div>
-
-                              {/* Dynamic Detailed Interacting Tooltip */}
-                              <div className="absolute bottom-full mb-3 opacity-0 group-hover/bar:opacity-100 transition-all bg-slate-900 text-white text-[10px] font-medium p-3 rounded-xl shadow-lg pointer-events-none whitespace-nowrap z-50 transform translate-y-1 group-hover/bar:translate-y-0 scale-95 group-hover/bar:scale-100 border border-slate-850">
-                                <div className="font-extrabold uppercase text-slate-400 tracking-wider text-[8px] pb-1 border-b border-slate-800 mb-1 flex items-center gap-1">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                  Chi tiết chất lượng dòng xe (KCS)
-                                </div>
-                                <div className="font-extrabold text-[11px] text-white uppercase">{item.model}</div>
-                                <div className="mt-1.5 space-y-0.5 font-mono font-bold text-[10px]">
-                                  <div className="flex justify-between gap-5 text-emerald-400">
-                                    <span>✓ Đạt chuẩn:</span>
-                                    <span>{item.passed} xe ({item.passRate}%)</span>
-                                  </div>
-                                  <div className="flex justify-between gap-5 text-rose-400">
-                                    <span>✗ Có khuyết phẩm:</span>
-                                    <span>{item.failed} xe ({item.failRate}%)</span>
-                                  </div>
-                                  <div className="flex justify-between gap-5 text-slate-350 border-t border-slate-800 pt-1 mt-1 font-sans">
-                                    <span>🛞 Tổng xe:</span>
-                                    <span className="font-mono font-black">{item.total} xe</span>
-                                  </div>
-                                </div>
-                                <div className="text-[8px] italic text-slate-500 mt-1.5 block text-center font-sans">Bấm vào cột để xem nhật ký</div>
-                              </div>
-
+                        {/* Background vertical scale lines */}
+                        <div className="absolute inset-x-0 inset-y-0 flex flex-col justify-between pointer-events-none">
+                          {[100, 75, 50, 25, 0].map((tick) => (
+                            <div key={tick} className="flex items-center w-full relative h-0">
+                              <span className="text-[9px] text-slate-400 font-extrabold tabular-nums w-10 shrink-0 text-right pr-2 select-none">
+                                {stackedMode === 'rate' ? `${tick}%` : Math.round((tick / 100) * maxTotal)}
+                              </span>
+                              <div className="flex-1 border-t border-dashed border-slate-100" />
                             </div>
-                          );
-                        })}
-                      </div>
+                          ))}
+                        </div>
 
+                        {/* Stacked Bars Container */}
+                        <div className="absolute inset-y-0 left-12 right-0 flex justify-around items-end z-10 bottom-0 select-none">
+                          {modelStats.map((item, idx) => {
+                            let passHeight = 0;
+                            let failHeight = 0;
+
+                            if (stackedMode === 'rate') {
+                              passHeight = item.passRate;
+                              failHeight = item.failRate;
+                            } else {
+                              passHeight = (item.passed / maxTotal) * 100;
+                              failHeight = (item.failed / maxTotal) * 100;
+                            }
+
+                            const showPassLabel = passHeight > 12;
+                            const showFailLabel = failHeight > 12;
+
+                            return (
+                              <div
+                                key={`${item.model}-${idx}`}
+                                className="flex flex-col items-center h-full justify-end group/bar relative"
+                                style={{ width: `${Math.max(12, Math.min(18, 80 / modelStats.length))}%` }}
+                              >
+                                {/* Stacked Pillar Core */}
+                                <div className="w-full h-full flex flex-col justify-end bg-slate-50/40 hover:bg-slate-100/50 rounded-t-xl transition-all duration-300 relative border border-transparent hover:border-slate-200/50">
+
+                                  {/* Sát trên - Lỗi (Red/Orange segment) */}
+                                  {item.failed > 0 && (
+                                    <div
+                                      className="w-full bg-rose-500 hover:bg-rose-400 transition-all duration-305 flex flex-col items-center justify-center relative cursor-pointer shadow-inner shrink-0"
+                                      style={{ height: `${failHeight}%` }}
+                                      onClick={() => setOqcDetailModalModel(item.model)}
+                                    >
+                                      {showFailLabel && (
+                                        <div className="text-[10px] text-white tabular-nums font-black tracking-tighter text-center leading-none">
+                                          <span className="block">{item.failed}</span>
+                                          <span className="block text-[8px] opacity-90">{item.failRate}%</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Sát dưới - Đạt (Green segment) */}
+                                  {item.passed > 0 && (
+                                    <div
+                                      className={`w-full bg-emerald-500 hover:bg-emerald-400 transition-all duration-305 flex flex-col items-center justify-center relative cursor-pointer shadow-inner shrink-0 ${item.failed === 0 ? 'rounded-t-xl' : 'rounded-t-none'}`}
+                                      style={{ height: `${passHeight}%` }}
+                                      onClick={() => setOqcDetailModalModel(item.model)}
+                                    >
+                                      {showPassLabel && (
+                                        <div className="text-[10px] text-white tabular-nums font-black tracking-tighter text-center leading-none">
+                                          <span className="block">{item.passed}</span>
+                                          <span className="block text-[8px] opacity-90">{item.passRate}%</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                </div>
+
+                                {/* Dynamic Detailed Interacting Tooltip */}
+                                <div className="absolute bottom-full mb-3 opacity-0 group-hover/bar:opacity-100 transition-all bg-slate-900 text-white text-[10px] font-medium p-3 rounded-xl shadow-lg pointer-events-none whitespace-nowrap z-50 transform translate-y-1 group-hover/bar:translate-y-0 scale-95 group-hover/bar:scale-100 border border-slate-800">
+                                  <div className="font-extrabold uppercase text-slate-400 tracking-wider text-[8px] pb-1 border-b border-slate-800 mb-1 flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    Chi tiết chất lượng dòng xe (KCS)
+                                  </div>
+                                  <div className="font-extrabold text-[11px] text-white uppercase">{item.model}</div>
+                                  <div className="mt-1.5 space-y-0.5 tabular-nums font-bold text-[10px]">
+                                    <div className="flex justify-between gap-5 text-emerald-400">
+                                      <span>✓ Đạt chuẩn:</span>
+                                      <span>{item.passed} xe ({item.passRate}%)</span>
+                                    </div>
+                                    <div className="flex justify-between gap-5 text-rose-400">
+                                      <span>✗ Có sai lỗi:</span>
+                                      <span>{item.failed} xe ({item.failRate}%)</span>
+                                    </div>
+                                    <div className="flex justify-between gap-5 text-slate-350 border-t border-slate-800 pt-1 mt-1 font-sans">
+                                      <span>🛞 Tổng xe:</span>
+                                      <span className="tabular-nums font-black">{item.total} xe</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-[8px] italic text-slate-500 mt-1.5 block text-center font-sans">Bấm vào cột để xem nhật ký</div>
+                                </div>
+
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                      </div>
                     </div>
 
                     {/* X-Axis Labels and Legends */}
                     <div className="flex flex-col gap-3">
                       {/* Labels under bars */}
-                      <div className="flex justify-around items-center pl-12 select-none">
-                        {modelStats.map((item, idx) => (
-                          <div
-                            key={`${item.model}-${idx}`}
-                            className="text-[10px] font-black text-slate-500 uppercase truncate text-center leading-tight tracking-tight scale-90 cursor-pointer hover:text-blue-600 transition-colors"
-                            style={{ width: `${Math.max(12, Math.min(18, 80 / modelStats.length))}%` }}
-                            title={item.model}
-                            onClick={() => setOqcDetailModalModel(item.model)}
-                          >
-                            {item.model.replace('DK ', '')}
-                          </div>
-                        ))}
+                      <div className="overflow-x-auto">
+                        <div className="flex justify-around items-center min-w-[580px] lg:min-w-0 pl-12 select-none">
+                          {modelStats.map((item, idx) => (
+                            <div
+                              key={`${item.model}-${idx}`}
+                              className="text-[10px] font-black text-slate-500 uppercase truncate text-center leading-tight tracking-tight scale-90 cursor-pointer hover:text-blue-600 transition-colors"
+                              style={{ width: `${Math.max(12, Math.min(18, 80 / modelStats.length))}%` }}
+                              title={item.model}
+                              onClick={() => setOqcDetailModalModel(item.model)}
+                            >
+                              {item.model.replace('DK ', '')}
+                            </div>
+                          ))}
+                        </div>
                       </div>
 
                       {/* Legend Indicator bar on the bottom */}
@@ -11099,7 +11148,7 @@ return (
                         </div>
                         <div className="flex items-center gap-1.5">
                           <span className="w-3 h-3 rounded bg-rose-500" />
-                          <span>Khuyết phẩm ({modelStats.reduce((acc, curr) => acc + curr.failed, 0)} xe)</span>
+                          <span>Sai lỗi ({modelStats.reduce((acc, curr) => acc + curr.failed, 0)} xe)</span>
                         </div>
                         <div className="w-px h-3 bg-slate-200 hidden sm:block" />
                         <div className="text-[9px] tracking-wide text-slate-400">
@@ -11131,7 +11180,7 @@ return (
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 select-none font-sans">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-ping shrink-0" />
-                    <h3 className="text-xs uppercase font-black text-slate-705 tracking-wider">Top 5 khuyết phẩm chất lượng xe theo từng dòng ({assembledModels.length} dòng xe lắp ráp)</h3>
+                    <h3 className="text-xs uppercase font-black text-slate-800 tracking-wider">Top 5 sai lỗi chất lượng xe theo từng dòng ({assembledModels.length} dòng xe lắp ráp)</h3>
                   </div>
                   <span className="text-[10px] text-slate-400 font-bold italic font-sans">* Mỗi thẻ tương ứng với 1 model xe được lắp ráp trong kỳ lọc</span>
                 </div>
@@ -17529,7 +17578,7 @@ return (
             {/* Footer */}
             <div className="bg-slate-50 p-4 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-2">
               <span className="text-[10px] text-slate-400 font-sans italic text-center sm:text-left">
-                * Dữ liệu đồng bộ trực tiếp từ máy quét KCS đầu chuyền dập sườn &amp; lắp ráp DKBike
+                * Dữ liệu đồng bộ trực tiếp từ máy quét KCS đầu chuyền &amp; lắp ráp DKBike
               </span>
               <button
                 type="button"
@@ -17562,7 +17611,7 @@ return (
               </button>
               <div className="flex items-center gap-2.5 mb-1">
                 <Wrench className="w-4 h-4 text-rose-500 animate-pulse" />
-                <span className="text-[10px] font-black tracking-widest text-sky-400 uppercase">QMS Đánh Giá &amp; Chỉ Đạo Xử Lý Khuyết Phẩm DKBike (Có thể chỉnh sửa dữ liệu)</span>
+                <span className="text-[10px] font-black tracking-widest text-sky-400 uppercase">QMS Đánh Giá &amp; Chỉ Đạo Xử Lý Sai Lỗi DKBike (Có thể chỉnh sửa dữ liệu)</span>
               </div>
               <h3 className="font-black text-slate-100 text-base uppercase tracking-tight pr-6">
                 Đánh giá thông tin &amp; Biện pháp khắc phục
@@ -17576,15 +17625,15 @@ return (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60 shadow-3xs">
                   <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Dòng xe lỗi (Model)</span>
-                  <strong className="text-[12px] font-extrabold text-slate-800 uppercase font-mono block mt-0.5">{selectedDashboardDefect.modelName}</strong>
+                  <strong className="text-[12px] font-extrabold text-slate-800 uppercase block mt-0.5">{selectedDashboardDefect.modelName}</strong>
                 </div>
                 <div className="bg-rose-50/40 p-3 rounded-xl border border-rose-100/70 shadow-3xs">
-                  <span className="text-[9px] font-bold text-rose-500 block uppercase tracking-wider">Tên khuyết phẩm lỗi</span>
+                  <span className="text-[9px] font-bold text-rose-500 block uppercase tracking-wider">Tên sai lỗi</span>
                   <strong className="text-[12px] font-black text-rose-700 uppercase block mt-0.5">{selectedDashboardDefect.name}</strong>
                 </div>
                 <div className="bg-amber-50/40 p-3 rounded-xl border border-amber-100/70 shadow-3xs flex flex-col justify-between">
                   <span className="text-[9px] font-bold text-amber-600 block uppercase tracking-wider">Tần suất ghi nhận</span>
-                  <span className="text-sm font-black text-rose-600 font-mono tracking-tighter mt-0.5 shrink-0 block">
+                  <span className="text-sm font-black text-rose-600 tabular-nums tracking-tighter mt-0.5 shrink-0 block">
                     {selectedDashboardDefect.count} chiếc xe lỗi
                   </span>
                 </div>
