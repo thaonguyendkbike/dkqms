@@ -195,7 +195,7 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
       }
     }
 
-    // Top các model lắp ráp nhiều nhất (Top 8 model để hiển thị thanh dày, rõ ràng)
+    // Top các model lắp ráp nhiều nhất (Top 10 model)
     const topModels = Object.entries(modelCountMap)
       .map(([name, count]) => ({
         name,
@@ -205,7 +205,7 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
         passRate: count > 0 ? Math.round(((modelPassedMap[name] || 0) / count) * 100) : 100
       }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 8);
+      .slice(0, 10);
 
     // Top sai lỗi (Pareto)
     const topDefects = Object.entries(defectCountMap)
@@ -266,6 +266,16 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
   };
 
   const maxModelCount = Math.max(1, ...(stats.topModels.map(m => m.count)));
+  const peakVal = Math.max(...stats.topModels.map(m => m.count), 0);
+  const maxVal = peakVal > 0 ? Math.ceil((peakVal * 1.18) / 20) * 20 : 100;
+  const tickStep = maxVal / 4;
+  const yTicks = [
+    Math.round(tickStep * 4),
+    Math.round(tickStep * 3),
+    Math.round(tickStep * 2),
+    Math.round(tickStep * 1),
+    0
+  ];
 
   return (
     <div className="min-h-screen bg-slate-900 text-white font-sans flex flex-col p-3 sm:p-5 select-none antialiased">
@@ -576,15 +586,15 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
           </div>
         </div>
 
-        {/* Biểu đồ Cột Sản Lượng Model Lắp Ráp - Thanh Dày To & Rõ Ràng */}
+        {/* Biểu đồ Cột Sản Lượng Model Lắp Ráp - Biểu đồ cột đứng trực quan */}
         <div className="lg:col-span-2 bg-slate-800/90 rounded-2xl border border-slate-700/80 p-4 sm:p-5 shadow-md flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-slate-700/60 pb-2.5">
+          <div className="flex items-center justify-between border-b border-slate-700/60 pb-2.5 mb-2">
             <div>
               <h3 className="font-black text-xs sm:text-sm uppercase tracking-wider text-slate-200">
-                Sản Lượng Lắp Ráp Theo Dòng Xe (Top Model)
+                Sản Lượng Model Lắp Ráp
               </h3>
               <span className="text-xs font-bold text-slate-400">
-                Xếp theo tổng số lượng xe đã kiểm tra KCS
+                Biểu đồ cột sản lượng theo dòng xe
               </span>
             </div>
             <span className="text-xs text-blue-400 font-mono font-bold bg-blue-500/10 px-2.5 py-0.5 rounded border border-blue-400/20">
@@ -592,64 +602,71 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
             </span>
           </div>
 
-          {/* Bar Chart Danh Sách Model (Thanh to dày h-6, chữ to rõ) */}
-          <div className="flex-1 py-3 flex flex-col justify-around gap-2.5">
-            {stats.topModels.length === 0 ? (
-              <div className="py-12 text-center text-xs text-slate-400 italic">
-                Chưa có dữ liệu lắp ráp trong kỳ lọc này.
-              </div>
-            ) : (
-              stats.topModels.map(m => {
-                return (
-                  <div key={m.name} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs sm:text-sm font-bold">
-                      <span className="text-slate-200 truncate max-w-[260px]" title={m.name}>
-                        {m.name}
+          {stats.topModels.length === 0 ? (
+            <div className="py-16 text-center text-xs text-slate-400 italic">
+              Chưa có dữ liệu lắp ráp trong kỳ lọc này.
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col justify-end pt-2 pb-1 relative select-none">
+              <div className="h-[210px] sm:h-[230px] w-full relative">
+                {/* Horizontal Gridlines */}
+                <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+                  {yTicks.map((tick) => (
+                    <div key={tick} className="flex items-center w-full relative h-0">
+                      <span className="text-[10px] sm:text-xs text-slate-400 font-bold tabular-nums w-10 shrink-0 pb-1 text-right pr-2">
+                        {tick.toLocaleString()}
                       </span>
-                      <div className="flex items-center gap-3 font-mono text-xs">
-                        <span className="text-emerald-400 font-black">
-                          {m.passed.toLocaleString()} đạt ({m.passRate}%)
-                        </span>
-                        {m.failed > 0 && (
-                          <span className="text-rose-400 font-bold">
-                            {m.failed.toLocaleString()} lỗi
-                          </span>
-                        )}
-                        <span className="text-white font-black text-xs sm:text-sm w-20 text-right">
-                          {m.count.toLocaleString()} xe
-                        </span>
-                      </div>
+                      <div className="flex-1 border-t border-dashed border-slate-700/60" />
                     </div>
-                    {/* Thanh Bar tỉ lệ dày to (h-5 sm:h-6) */}
-                    <div className="w-full h-5 sm:h-6 bg-slate-700/80 rounded-lg overflow-hidden flex shadow-inner">
+                  ))}
+                </div>
+
+                {/* Vertical Columns Container */}
+                <div className="absolute inset-y-0 left-12 right-0 flex justify-around items-end z-10 bottom-[1px]">
+                  {stats.topModels.map((item) => {
+                    const heightPerc = `${Math.min(100, Math.max(6, (item.count / maxVal) * 100))}%`;
+                    const colWidth = Math.max(6, Math.min(15, 85 / Math.max(stats.topModels.length, 1)));
+
+                    return (
                       <div
-                        style={{ width: `${(m.passed / maxModelCount) * 100}%` }}
-                        className="bg-emerald-500 transition-all duration-700 flex items-center justify-end px-2"
-                        title={`Đạt: ${m.passed}`}
+                        key={item.name}
+                        className="flex flex-col items-center h-full justify-end relative group"
+                        style={{ width: `${colWidth}%` }}
                       >
-                        {m.passed > 0 && (m.passed / maxModelCount) > 0.15 && (
-                          <span className="text-[10px] sm:text-xs font-black text-emerald-950 font-mono">
-                            {m.passed.toLocaleString()}
-                          </span>
-                        )}
+                        {/* Vertical Column Bar */}
+                        <div
+                          className="w-full bg-gradient-to-t from-blue-600 via-blue-500 to-sky-400 rounded-t-lg flex flex-col justify-start items-center pt-1.5 relative shadow-md transition-all duration-500 hover:brightness-110"
+                          style={{ height: heightPerc }}
+                        >
+                          {/* Floating Count Badge on top of column */}
+                          <div className="bg-white text-blue-900 font-black text-[10px] sm:text-xs px-1.5 py-0.5 rounded shadow-md tabular-nums tracking-tight select-none">
+                            {item.count.toLocaleString()}
+                          </div>
+                        </div>
                       </div>
-                      <div
-                        style={{ width: `${(m.failed / maxModelCount) * 100}%` }}
-                        className="bg-rose-500 transition-all duration-700 flex items-center justify-center px-1"
-                        title={`Lỗi: ${m.failed}`}
-                      >
-                        {m.failed > 0 && (
-                          <span className="text-[10px] font-black text-white font-mono">
-                            {m.failed}
-                          </span>
-                        )}
-                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* X-Axis Labels (Model Names) */}
+              <div className="flex justify-around items-center pl-12 pt-2 border-t border-slate-700/80 mt-1">
+                {stats.topModels.map((item) => {
+                  const colWidth = Math.max(6, Math.min(15, 85 / Math.max(stats.topModels.length, 1)));
+                  return (
+                    <div
+                      key={item.name}
+                      className="text-[10px] sm:text-xs font-black text-slate-300 uppercase truncate text-center leading-tight tracking-tight px-0.5"
+                      style={{ width: `${colWidth}%` }}
+                      title={item.name}
+                    >
+                      {item.name.replace(/^DK\s+/i, '')}
                     </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
