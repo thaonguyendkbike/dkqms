@@ -1,6 +1,7 @@
 import React, { useState, useEffect, FormEvent, useMemo, useCallback, useRef } from 'react';
 // flushSync removed (Change 1: replaced with regular setState for smoother UX)
 import XLSXStyle from 'xlsx-js-style';
+import html2canvas from 'html2canvas';
 import {
   Wrench,
   Plus,
@@ -2643,6 +2644,7 @@ export default function QualityInspectionRecords({
   const [iqcFilterWeek, setIqcFilterWeek] = useState<string>('All');
   const [pqcFilterWeek, setPqcFilterWeek] = useState<string>('All');
   const [oqcFilterWeek, setOqcFilterWeek] = useState<string>('All');
+  const [isCapturingOqc, setIsCapturingOqc] = useState(false);
 
   const [iqcCurrentPage, setIqcCurrentPage] = useState<number>(1);
   const [selectedIqcIds, setSelectedIqcIds] = useState<string[]>([]);
@@ -6722,6 +6724,70 @@ const handleExportOqcCSV = () => {
   }
 };
 
+// Chụp ảnh toàn bộ trang Báo cáo & Đồ thị OQC và lưu vào Clipboard (kèm tải ảnh PNG)
+const handleCaptureOqcDashboard = async () => {
+  const el = document.getElementById('oqc-dashboard-capture-area');
+  if (!el) {
+    alert('Không tìm thấy vùng báo cáo để chụp hình!');
+    return;
+  }
+
+  setIsCapturingOqc(true);
+
+  try {
+    // Đợi ngắn 150ms để DOM và font chữ ổn định
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    const canvas = await html2canvas(el, {
+      scale: 2, // 2x Retina cho độ phân giải siêu nét
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#f8fafc',
+      logging: false,
+      windowWidth: Math.max(el.scrollWidth, 1280),
+    });
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        setIsCapturingOqc(false);
+        alert('Không thể tạo file ảnh từ báo cáo!');
+        return;
+      }
+
+      let copiedToClipboard = false;
+      try {
+        if (navigator.clipboard && (window as any).ClipboardItem) {
+          const item = new (window as any).ClipboardItem({ 'image/png': blob });
+          await navigator.clipboard.write([item]);
+          copiedToClipboard = true;
+        }
+      } catch (clipErr) {
+        console.warn('Lỗi ghi trực tiếp vào Clipboard:', clipErr);
+      }
+
+      setIsCapturingOqc(false);
+
+      if (copiedToClipboard) {
+        alert('📸 ĐÃ CHỤP TOÀN BỘ BÁO CÁO & SAO CHÉP VÀO CLIPBOARD!\n\nAnh Thao chỉ cần nhấn phím Ctrl + V (hoặc Dán) trực tiếp vào Zalo, Chat, Word, hoặc Slide báo cáo.');
+      } else {
+        // Tự động tải ảnh PNG về máy nếu trình duyệt giới hạn quyền ghi Clipboard
+        const link = document.createElement('a');
+        const dateStr = new Date().toLocaleDateString('vi-VN').replace(/\//g, '-');
+        link.href = canvas.toDataURL('image/png');
+        link.download = `DK_QMS_BaoCao_OQC_${dateStr}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        alert('📸 ĐÃ CHỤP ẢNH TOÀN BỘ BÁO CÁO THÀNH CÔNG!\n\nẢnh đã được tải về máy của anh Thao (do trình duyệt đang hạn chế tự động dán ảnh vào Clipboard).');
+      }
+    }, 'image/png');
+  } catch (err: any) {
+    setIsCapturingOqc(false);
+    console.error('Lỗi khi chụp ảnh báo cáo:', err);
+    alert('Có lỗi xảy ra khi chụp ảnh báo cáo: ' + (err?.message || err));
+  }
+};
+
 // Xuất file Báo Cáo Dashboard OQC Tổng hợp theo bộ lọc hiện tại ra Excel
 const handleExportOqcDashboardExcel = () => {
   try {
@@ -7919,14 +7985,26 @@ return (
           </button>
         )}
         {qcMainSubTab === 'oqc' && oqcSubView === 'dashboard' && (
-          <button
-            type="button"
-            onClick={handleExportOqcDashboardExcel}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 border border-indigo-500"
-            title="Xuất file Excel Báo Cáo Tổng Hợp Dashboard OQC theo đúng bộ lọc hiện tại"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" /> BC Dashboard
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={handleCaptureOqcDashboard}
+              disabled={isCapturingOqc}
+              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 border border-emerald-600 disabled:opacity-50"
+              title="Chụp toàn bộ trang Báo cáo & Đồ thị và sao chép trực tiếp vào Clipboard (Ctrl + V)"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              {isCapturingOqc ? 'Đang chụp ảnh...' : 'Chụp ảnh Báo cáo'}
+            </button>
+            <button
+              type="button"
+              onClick={handleExportOqcDashboardExcel}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 border border-indigo-500"
+              title="Xuất file Excel Báo Cáo Tổng Hợp Dashboard OQC theo đúng bộ lọc hiện tại"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" /> BC Dashboard
+            </button>
+          </>
         )}
         <button
           type="button"
@@ -11033,6 +11111,16 @@ return (
                       <Calendar className="w-3 h-3" />
                       Hôm nay
                     </button>
+                    <button
+                      type="button"
+                      onClick={handleCaptureOqcDashboard}
+                      disabled={isCapturingOqc}
+                      className="text-[9.5px] sm:text-[10px] px-2.5 py-1 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer active:scale-95 border bg-white text-emerald-700 hover:bg-emerald-50 border-emerald-300 disabled:opacity-50"
+                      title="Chụp toàn bộ ảnh báo cáo và lưu vào Clipboard (Ctrl + V để dán)"
+                    >
+                      <Camera className="w-3 h-3 text-emerald-600" />
+                      {isCapturingOqc ? 'Đang chụp...' : 'Chụp ảnh'}
+                    </button>
                     {(oqcFilterMonth !== 'All' || oqcFilterYear !== 'All' || oqcFilterDate !== 'All' || oqcFilterModel !== 'All' || oqcFilterWeek !== 'All' || oqcSearch !== '') && (
                       <button
                         type="button"
@@ -11169,7 +11257,29 @@ return (
                 )}
               </div>
 
-              {/* 1. TOP CARDS GRID */}
+              {/* KHỐI BÁO CÁO & ĐỒ THỊ CHỤP MÀN HÌNH (CAPTURE AREA) */}
+              <div id="oqc-dashboard-capture-area" className="space-y-6 bg-slate-50/50 p-2.5 sm:p-5 rounded-3xl border border-slate-200/70 shadow-2xs">
+                {/* Header thương hiệu hiển thị trên ảnh chụp */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 select-none">
+                  <div>
+                    <h3 className="font-black text-slate-800 text-xs sm:text-base tracking-wide uppercase">
+                      Công ty TNHH Xe điện DK Việt Nhật • DKBike QLCL (DK QMS)
+                    </h3>
+                    <p className="text-[10px] sm:text-xs font-bold text-slate-500 mt-0.5">
+                      Báo cáo Tổng hợp Phân tích Chất lượng Xuất xưởng OQC (KCS Thành phẩm)
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="inline-block bg-blue-100 text-blue-700 text-[10px] sm:text-[10.5px] font-black px-2.5 py-0.5 rounded-full border border-blue-200/60">
+                      {oqcFilterDescParts.length > 0 ? `Bộ lọc: ${oqcFilterDescParts.join(' | ')}` : 'Toàn bộ kỳ'}
+                    </span>
+                    <span className="block text-[9.5px] sm:text-[10px] text-slate-400 font-bold mt-1">
+                      Thời điểm xuất: {new Date().toLocaleDateString('vi-VN')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 1. TOP CARDS GRID */}
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 animate-in slide-in-from-top-1 px-0.5">
                 {/* TIẾN ĐỘ LẮP RÁP (TỔNG THÁNG HOẶC TỔNG NĂM) */}
                 <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
@@ -11593,6 +11703,9 @@ return (
                   </div>
                 )}
               </div>
+
+              </div>
+              {/* KẾT THÚC KHỐI BÁO CÁO CHỤP MÀN HÌNH */}
 
             </div>
           );
