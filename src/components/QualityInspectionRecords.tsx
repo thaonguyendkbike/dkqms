@@ -2654,8 +2654,9 @@ export default function QualityInspectionRecords({
   const [tvCurrentTime, setTvCurrentTime] = useState('');
   const isTvMode = useMemo(() => {
     if (typeof window === 'undefined') return false;
+    const pathname = (window.location.pathname || '').toLowerCase();
     const p = new URLSearchParams(window.location.search);
-    return p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1';
+    return pathname === '/tv' || pathname === '/tv/' || pathname.startsWith('/tv') || p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1';
   }, []);
 
   const [iqcCurrentPage, setIqcCurrentPage] = useState<number>(1);
@@ -2914,9 +2915,10 @@ export default function QualityInspectionRecords({
   // OQC Sub-view state — hoisted before guarded useMemo hooks that depend on it
   const [oqcSubView, setOqcSubView] = useState<'station' | 'handover' | 'part_codes' | 'dashboard'>(() => {
     if (typeof window !== 'undefined') {
+      const pathname = (window.location.pathname || '').toLowerCase();
       const p = new URLSearchParams(window.location.search);
       const view = (p.get('view') || p.get('tab') || window.location.hash || '').toLowerCase();
-      if (view.includes('oqc-dashboard') || view.includes('oqc_dashboard') || view.includes('dashboard-oqc') || view.includes('oqc-bc')) {
+      if (pathname === '/tv' || pathname === '/tv/' || pathname.startsWith('/tv') || p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1' || view.includes('oqc-dashboard') || view.includes('oqc_dashboard') || view.includes('dashboard-oqc') || view.includes('oqc-bc')) {
         return 'dashboard';
       }
     }
@@ -19100,21 +19102,21 @@ return (
             {/* Direct URL Box */}
             <div>
               <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">
-                Đường dẫn trực tiếp cho trình duyệt Tivi:
+                Đường dẫn siêu ngắn cho trình duyệt Tivi:
               </label>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   readOnly
-                  value={`${typeof window !== 'undefined' ? window.location.origin + window.location.pathname : ''}?view=oqc-dashboard&tv=1`}
-                  className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-indigo-700 select-all focus:outline-none"
+                  value={typeof window !== 'undefined' ? `${window.location.origin}/tv` : 'https://dkqms.cloud/tv'}
+                  className="flex-1 bg-purple-50 border border-purple-200 rounded-xl px-3 py-2 text-sm font-mono font-black text-purple-700 select-all focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={() => {
-                    const link = `${window.location.origin}${window.location.pathname}?view=oqc-dashboard&tv=1`;
+                    const link = typeof window !== 'undefined' ? `${window.location.origin}/tv` : 'https://dkqms.cloud/tv';
                     navigator.clipboard.writeText(link).then(() => {
-                      alert('✅ ĐÃ SAO CHÉP ĐƯỜNG DẪN TIVI VÀO BỘ NHỚ!\n\nAnh Thao có thể gửi qua Zalo hoặc dán vào trình duyệt Tivi.');
+                      alert('✅ ĐÃ SAO CHÉP ĐƯỜNG DẪN TIVI VÀO BỘ NHỚ!\n\nLink: ' + link + '\n\nAnh Thao chỉ cần mở trình duyệt Tivi và gõ: dkqms.cloud/tv');
                     });
                   }}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
@@ -19122,13 +19124,16 @@ return (
                   <Copy className="w-3.5 h-3.5" /> Sao chép link
                 </button>
               </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Anh chỉ cần gõ đúng 2 chữ cái sau tên miền: <strong className="text-purple-600 font-mono">dkqms.cloud/tv</strong>
+              </p>
             </div>
 
             {/* QR Code & Direct Open */}
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row items-center gap-4">
               <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-xs shrink-0 text-center">
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?view=oqc-dashboard&tv=1` : '')}`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(typeof window !== 'undefined' ? `${window.location.origin}/tv` : 'https://dkqms.cloud/tv')}`}
                   alt="QR Code Tivi"
                   className="w-28 h-28 mx-auto"
                 />
@@ -19142,7 +19147,7 @@ return (
                   Anh có thể dùng Camera điện thoại quét mã QR để mở nhanh, sau đó bấm <strong>Chia sẻ màn hình (Smart View / AirPlay / Chromecast)</strong> thẳng lên Tivi mà không cần gõ phím trên điều khiển!
                 </p>
                 <a
-                  href={`${typeof window !== 'undefined' ? window.location.origin + window.location.pathname : ''}?view=oqc-dashboard&tv=1`}
+                  href={typeof window !== 'undefined' ? `${window.location.origin}/tv` : 'https://dkqms.cloud/tv'}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-bold hover:underline pt-1"

@@ -8238,9 +8238,10 @@ export function App() {
 
   const [qcMainSubTab, setQcMainSubTab] = useState<'iqc' | 'pqc' | 'oqc' | 'reports'>(() => {
     if (typeof window !== 'undefined') {
+      const pathname = (window.location.pathname || '').toLowerCase();
       const p = new URLSearchParams(window.location.search);
       const view = (p.get('view') || p.get('tab') || window.location.hash || '').toLowerCase();
-      if (view.includes('oqc') || view.includes('oqc-dashboard')) {
+      if (pathname === '/tv' || pathname === '/tv/' || pathname.startsWith('/tv') || p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1' || view.includes('oqc') || view.includes('oqc-dashboard')) {
         return 'oqc';
       }
     }
@@ -8328,13 +8329,14 @@ export function App() {
   const [newOqcCheckTime, setNewOqcCheckTime] = useState('14:30');
   const [newOqcDate, setNewOqcDate] = useState('23/05/2026');
 
-  // Active view state
+  // Active view state (Tự động nhận diện đường dẫn /tv và Deep Link)
   const [activeTab, setActiveTab] = useState<string>(() => {
     try {
       if (typeof window !== 'undefined') {
+        const pathname = (window.location.pathname || '').toLowerCase();
         const p = new URLSearchParams(window.location.search);
         const view = (p.get('view') || p.get('tab') || window.location.hash || '').toLowerCase();
-        if (view.includes('oqc') || view.includes('oqc-dashboard')) {
+        if (pathname === '/tv' || pathname === '/tv/' || pathname.startsWith('/tv') || p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1' || view.includes('oqc') || view.includes('oqc-dashboard')) {
           return 'quality_inspection_records';
         }
       }
@@ -8345,8 +8347,9 @@ export function App() {
   });
   const [showSidebar, setShowSidebar] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
+      const pathname = (window.location.pathname || '').toLowerCase();
       const p = new URLSearchParams(window.location.search);
-      if (p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1') {
+      if (pathname === '/tv' || pathname === '/tv/' || pathname.startsWith('/tv') || p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1') {
         return false;
       }
       return window.innerWidth >= 768;
@@ -8354,16 +8357,18 @@ export function App() {
     return true;
   });
 
-  // Tự động điều hướng Deep Link khi truy cập trực tiếp bằng URL (ví dụ trên Tivi hoặc Kiosk)
+  // Tự động điều hướng Deep Link khi truy cập trực tiếp bằng URL (ví dụ dkqms.cloud/tv)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleUrlChange = () => {
+      const pathname = (window.location.pathname || '').toLowerCase();
       const p = new URLSearchParams(window.location.search);
       const view = (p.get('view') || p.get('tab') || window.location.hash || '').toLowerCase();
-      if (view.includes('oqc') || view.includes('oqc-dashboard')) {
+      const isTv = pathname === '/tv' || pathname === '/tv/' || pathname.startsWith('/tv') || p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1';
+      if (isTv || view.includes('oqc') || view.includes('oqc-dashboard')) {
         setActiveTab('quality_inspection_records');
         setQcMainSubTab('oqc');
-        if (p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1') {
+        if (isTv) {
           setShowSidebar(false);
         }
       }
