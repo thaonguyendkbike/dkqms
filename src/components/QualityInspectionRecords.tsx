@@ -42,6 +42,7 @@ import {
   Zap,
   Copy,
   CheckCircle2,
+  CheckCheck,
   ChevronLeft,
   ChevronRight,
   Tag,
@@ -2947,6 +2948,16 @@ export default function QualityInspectionRecords({
       set.add(stdDate);
     }
 
+    // Luôn bổ sung ngày hôm nay vào danh sách để phục vụ nút "Hôm nay"
+    const now = new Date();
+    const todayFormatted = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    if (
+      (oqcFilterMonth === 'All' || String(now.getMonth() + 1) === String(oqcFilterMonth)) &&
+      (oqcFilterYear === 'All' || String(now.getFullYear()) === String(oqcFilterYear))
+    ) {
+      set.add(todayFormatted);
+    }
+
     const sorted = Array.from(set).sort((a, b) => {
       const pA = a.split('/');
       const pB = b.split('/');
@@ -4257,6 +4268,15 @@ export default function QualityInspectionRecords({
       baseFiltered.push(r);
     }
 
+    // Khi chọn LSX cụ thể, sắp xếp thứ tự số sêri từ nhỏ đến lớn (26DK11111 ở trên, 26DK11112 ở dưới)
+    if (!isAllLsx) {
+      baseFiltered.sort((a, b) => {
+        const sA = (a.serialNo || a.chassisNo || '').trim();
+        const sB = (b.serialNo || b.chassisNo || '').trim();
+        return sA.localeCompare(sB, undefined, { numeric: true, sensitivity: 'base' });
+      });
+    }
+
     kcsBaseRecordsCacheRef.current = baseFiltered;
     return baseFiltered;
   }, [qcMainSubTab, oqcSubView, oqcRecords, kcsSelectedLsx, kcsFilterDate, kcsFilterMonth, kcsFilterYear, kcsSearch]);
@@ -4451,6 +4471,73 @@ export default function QualityInspectionRecords({
       return true;
     });
   }, [handoverScannedList, handoverFilterDate, handoverFilterModel, handoverSearch]);
+
+  // Đếm số lượng xe báo phẩm bàn giao tính theo bộ lọc Dashboard (OQC Dashboard)
+  const oqcDashboardHandoverCount = useMemo(() => {
+    if (!Array.isArray(handoverScannedList) || handoverScannedList.length === 0) return 0;
+    const sLower = oqcSearch.trim().toLowerCase();
+    const isWeekAll = oqcFilterWeek === 'All';
+    const isMonthAll = oqcFilterMonth === 'All';
+    const isYearAll = oqcFilterYear === 'All';
+    const isDateAll = oqcFilterDate === 'All';
+    const isModelAll = oqcFilterModel === 'All';
+    const stdFilterDate = isDateAll ? '' : standardizeDate(oqcFilterDate);
+
+    let count = 0;
+    for (let i = 0; i < handoverScannedList.length; i++) {
+      const item = handoverScannedList[i];
+      const stdItemDate = item.date ? standardizeDate(item.date) : '';
+
+      // 1. Date filter
+      if (!isDateAll && stdItemDate !== stdFilterDate) continue;
+
+      // 2. Month & Year filter
+      if (stdItemDate) {
+        const parts = stdItemDate.split('/');
+        if (parts.length >= 3) {
+          const m = String(parseInt(parts[1], 10) || '');
+          const y = String(parseInt(parts[2], 10) || '');
+          if (!isMonthAll && m !== oqcFilterMonth) continue;
+          if (!isYearAll && y !== oqcFilterYear) continue;
+        }
+      } else {
+        if (!isMonthAll || !isYearAll) continue;
+      }
+
+      // 3. Week filter
+      if (!isWeekAll) {
+        const dateInfo = stdItemDate ? getWeekAndMonthFromDate(stdItemDate) : null;
+        const itemWeek = dateInfo ? dateInfo.week : 'T1';
+        if (itemWeek !== oqcFilterWeek) continue;
+      }
+
+      // 4. Model filter
+      if (!isModelAll) {
+        const itemMdl = item.model || '';
+        const matchesModel =
+          itemMdl === oqcFilterModel ||
+          itemMdl.toLowerCase().includes(oqcFilterModel.toLowerCase());
+        if (!matchesModel) continue;
+      }
+
+      // 5. Search filter
+      if (sLower !== '') {
+        const matchSerial = (item.serialNo || '').toLowerCase().includes(sLower);
+        const matchChassis = (item.chassisNo || '').toLowerCase().includes(sLower);
+        const matchEngine = (item.engineNo || '').toLowerCase().includes(sLower);
+        const matchModel = (item.model || '').toLowerCase().includes(sLower);
+        const matchColor = (item.color || '').toLowerCase().includes(sLower);
+        const matchLsx = (item.lsx || '').toLowerCase().includes(sLower);
+        const matchPart = (item.partCode || '').toLowerCase().includes(sLower);
+        if (!matchSerial && !matchChassis && !matchEngine && !matchModel && !matchColor && !matchLsx && !matchPart) {
+          continue;
+        }
+      }
+
+      count++;
+    }
+    return count;
+  }, [handoverScannedList, oqcFilterDate, oqcFilterMonth, oqcFilterYear, oqcFilterWeek, oqcFilterModel, oqcSearch]);
 
   const handleExportKcsReportCSV = (
     type: 'weekly' | 'monthly',
@@ -10137,7 +10224,8 @@ return (
                     };
 
                     const filtered = handoverScannedList.filter(x => x.serialNo.toUpperCase() !== (found ? found.serialNo.toUpperCase() : serial));
-                    saveHandoverList([newItem, ...filtered]);
+                    // Quét trước ở trên, quét sau ở dưới
+                    saveHandoverList([...filtered, newItem]);
                     setHandoverScanInput('');
                     if (handoverFilterDate !== 'All' && handoverFilterDate !== currentDateStr) {
                       setHandoverFilterDate(currentDateStr);
@@ -10345,16 +10433,6 @@ return (
                     Súng quét Barcode / QR tự động nhận diện thông tin và đồng bộ thời gian thực
                   </span>
                 </div>
-
-                {handoverModelSummary.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100">
-                    {handoverModelSummary.map(item => (
-                      <span key={`${item.model}-${item.color}`} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md text-[11px] font-medium">
-                        {item.model} ({item.color}): <strong>{item.count}</strong>
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {/* Table */}
@@ -10931,6 +11009,30 @@ return (
                     <h4 className="text-[10px] sm:text-[10.5px] font-black uppercase text-slate-700 tracking-wider">Bộ lọc dữ liệu chất lượng KCS (OQC Dashboard)</h4>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const now = new Date();
+                        const todayFormatted = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+                        setOqcFilterDate(todayFormatted);
+                        setOqcFilterMonth(String(now.getMonth() + 1));
+                        setOqcFilterYear(String(now.getFullYear()));
+                        setOqcFilterWeek('All');
+                      }}
+                      className={`text-[9.5px] sm:text-[10px] px-2.5 py-1 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer active:scale-95 border ${
+                        (() => {
+                          const now = new Date();
+                          const todayFormatted = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+                          return oqcFilterDate === todayFormatted;
+                        })()
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                          : 'bg-white text-blue-700 hover:bg-blue-50 border-blue-200'
+                      }`}
+                      title="Lọc nhanh toàn bộ dữ liệu ngày hôm nay"
+                    >
+                      <Calendar className="w-3 h-3" />
+                      Hôm nay
+                    </button>
                     {(oqcFilterMonth !== 'All' || oqcFilterYear !== 'All' || oqcFilterDate !== 'All' || oqcFilterModel !== 'All' || oqcFilterWeek !== 'All' || oqcSearch !== '') && (
                       <button
                         type="button"
@@ -11068,9 +11170,9 @@ return (
               </div>
 
               {/* 1. TOP CARDS GRID */}
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 animate-in slide-in-from-top-1 px-0.5">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 animate-in slide-in-from-top-1 px-0.5">
                 {/* TIẾN ĐỘ LẮP RÁP (TỔNG THÁNG HOẶC TỔNG NĂM) */}
-                <div className="col-span-2 md:col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
                   <div className="flex justify-between items-start select-none">
                     <h4 className="text-[9.5px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">
                       {card1Title}
@@ -11173,6 +11275,32 @@ return (
                   </div>
                   <div className="pt-2 border-t border-slate-100 select-none">
                     <span className="text-[10px] font-bold text-slate-500">Nghiệm thu đạt lần 1</span>
+                  </div>
+                </div>
+
+                {/* SL Báo Phẩm Bàn Giao */}
+                <div className="col-span-1 bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+                  <div className="flex justify-between items-start select-none">
+                    <div>
+                      <h4 className="text-[9.5px] sm:text-[10px] uppercase font-black text-slate-400 tracking-wider leading-none">SL Báo phẩm bàn giao</h4>
+                    </div>
+                    <div className="p-1.5 bg-purple-50 text-purple-600 rounded-xl shrink-0 -mt-1">
+                      <CheckCheck className="w-4 h-4 text-purple-600" />
+                    </div>
+                  </div>
+                  <div className="mt-2 sm:mt-3 select-none">
+                    <span className="text-2xl sm:text-3xl lg:text-[34px] font-black text-purple-600 tabular-nums block tracking-tight leading-none">
+                      {oqcDashboardHandoverCount.toLocaleString()}
+                    </span>
+                    <span className="text-[11px] font-bold text-slate-400 mt-1 block">xe đã bàn giao</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-100 select-none flex items-center justify-between text-[10px]">
+                    <span className="font-bold text-slate-500">Đã quét bàn giao</span>
+                    {laprapVal > 0 && (
+                      <span className="font-black text-purple-600 tabular-nums bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200/50">
+                        {((oqcDashboardHandoverCount / laprapVal) * 100).toFixed(1)}%
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -14426,7 +14554,8 @@ return (
                 });
               });
 
-              const updatedList = [...newItems, ...handoverScannedList];
+              // Quét trước ở trên, quét sau ở dưới
+              const updatedList = [...handoverScannedList, ...newItems];
               saveHandoverList(updatedList);
               setHandoverPasteText('');
               setShowPasteHandoverModal(false);
