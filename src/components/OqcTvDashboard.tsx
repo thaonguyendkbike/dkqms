@@ -64,6 +64,26 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
   const [currentTime, setCurrentTime] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date>(new Date());
+  
+  // Thời gian nghỉ trưa (phút), mặc định 90 phút (1h30p) - có thể chỉnh thành 60p, 0p...
+  const [breakMinutes, setBreakMinutes] = useState<number>(() => {
+    try {
+      const saved = safeStorage.getItem('dk_oqc_takt_break_minutes');
+      if (saved !== null && saved !== undefined && !isNaN(Number(saved))) {
+        return Math.max(0, Number(saved));
+      }
+    } catch { }
+    return 90;
+  });
+
+  const handleBreakMinutesChange = (val: number) => {
+    const safeVal = Math.max(0, isNaN(val) ? 0 : Math.min(val, 360));
+    setBreakMinutes(safeVal);
+    try {
+      safeStorage.setItem('dk_oqc_takt_break_minutes', String(safeVal));
+    } catch { }
+  };
+
   const [localHandoverList, setLocalHandoverList] = useState<any[]>(() => {
     if (Array.isArray(oqcHandoverList) && oqcHandoverList.length > 0) return oqcHandoverList;
     try {
@@ -283,6 +303,7 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
     let taktTimeSub = 'Chưa có mốc thời gian';
     let taktEarliestStr = '--:--';
     let taktLatestStr = '--:--';
+    let isBreakDeducted = false;
 
     if (dayCheckTimesInSec.length > 0) {
       const minSec = Math.min(...dayCheckTimesInSec);
@@ -294,12 +315,24 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
       taktEarliestStr = `${minH}:${minM}`;
       taktLatestStr = `${maxH}:${maxM}`;
 
-      const totalSpanSec = maxSec - minSec;
-      const totalSpanMin = Math.round(totalSpanSec / 60);
+      const rawSpanSec = maxSec - minSec;
       const cars = lapRapTotal;
 
-      if (cars > 0 && totalSpanSec > 0) {
-        const taktSecPerCar = Math.round(totalSpanSec / cars);
+      // Kiểm tra có xe ở cả buổi sáng (< 12h00) và buổi chiều (> 13h00)
+      const hasMorningSession = minSec < (12 * 3600);
+      const hasAfternoonSession = maxSec > (13 * 3600);
+      const hasBothSessions = hasMorningSession && hasAfternoonSession;
+
+      let effectiveSpanSec = rawSpanSec;
+      if (hasBothSessions && breakMinutes > 0) {
+        effectiveSpanSec = Math.max(0, rawSpanSec - (breakMinutes * 60));
+        isBreakDeducted = true;
+      }
+
+      const effectiveSpanMin = Math.round(effectiveSpanSec / 60);
+
+      if (cars > 0 && effectiveSpanSec > 0) {
+        const taktSecPerCar = Math.round(effectiveSpanSec / cars);
         if (taktSecPerCar < 60) {
           taktTimeDisplay = `${taktSecPerCar}`;
           taktTimeUnit = 'giây / xe';
@@ -307,7 +340,12 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
           taktTimeDisplay = (taktSecPerCar / 60).toFixed(1);
           taktTimeUnit = 'phút / xe';
         }
-        taktTimeSub = `${taktEarliestStr} ➔ ${taktLatestStr} (${totalSpanMin}p / ${cars} xe)`;
+
+        if (isBreakDeducted) {
+          taktTimeSub = `${taktEarliestStr} ➔ ${taktLatestStr} (${effectiveSpanMin}p làm việc / ${cars} xe • trừ ${breakMinutes}p trưa)`;
+        } else {
+          taktTimeSub = `${taktEarliestStr} ➔ ${taktLatestStr} (${effectiveSpanMin}p / ${cars} xe)`;
+        }
       } else if (cars === 1 || minSec === maxSec) {
         taktTimeDisplay = '1 xe';
         taktTimeUnit = 'hoàn thành';
@@ -329,9 +367,10 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
       taktTimeUnit,
       taktTimeSub,
       taktEarliestStr,
-      taktLatestStr
+      taktLatestStr,
+      isBreakDeducted
     };
-  }, [oqcRecords, timeFilter, todayStr, customDateStd, isDateFilterActive, currentMonth, currentYear]);
+  }, [oqcRecords, timeFilter, todayStr, customDateStd, isDateFilterActive, currentMonth, currentYear, breakMinutes]);
 
   // Đếm số lượng xe quét bàn giao tương ứng với bộ lọc thời gian
   const handoverCount = useMemo(() => {
@@ -485,6 +524,24 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
                 title="Chọn ngày cụ thể để xem Takt Time và tiến độ ngày đó"
               />
             </div>
+
+            {/* Ô chỉnh số phút nghỉ trưa khi xem theo ngày */}
+            {isDateFilterActive && (
+              <div className="flex items-center gap-1 pl-2 border-l border-slate-700/80 text-xs text-slate-300">
+                <span className="text-[11px] text-slate-400 whitespace-nowrap">Nghỉ trưa:</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="300"
+                  step="5"
+                  value={breakMinutes}
+                  onChange={(e) => handleBreakMinutesChange(Number(e.target.value))}
+                  className="w-12 px-1 py-0.5 text-center font-bold bg-slate-900 border border-slate-700 rounded-lg text-amber-300 focus:border-amber-400 outline-none text-xs"
+                  title="Thời gian nghỉ trưa (phút) - Tự động trừ khi có xe cả sáng (<12h) và chiều (>13h)"
+                />
+                <span className="text-[11px] text-slate-400">p</span>
+              </div>
+            )}
           </div>
 
           {/* Đồng hồ to rõ trên TV */}
@@ -587,9 +644,21 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
                 {stats.taktTimeSub}
               </span>
             </div>
-            <div className="pt-2 border-t border-slate-700/60 flex justify-between text-xs text-slate-400 font-bold">
-              <span>Đầu - Cuối ngày</span>
-              <span className="text-amber-400 font-bold">{stats.taktEarliestStr} - {stats.taktLatestStr}</span>
+            <div className="pt-2 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-400 font-bold">
+              <span>{stats.taktEarliestStr} - {stats.taktLatestStr}</span>
+              <div className="flex items-center gap-1 text-[11px]" title="Thời gian nghỉ trưa (phút) - Tự động trừ khi làm cả sáng và chiều">
+                <span className="text-slate-400">Trưa:</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="300"
+                  step="5"
+                  value={breakMinutes}
+                  onChange={(e) => handleBreakMinutesChange(Number(e.target.value))}
+                  className="w-11 px-1 py-0.5 text-center font-bold bg-slate-900 border border-slate-700 rounded text-amber-300 focus:border-amber-400 outline-none text-xs"
+                />
+                <span className="text-slate-400">p</span>
+              </div>
             </div>
           </div>
         ) : (
