@@ -317,6 +317,9 @@ export default function QMSDatabaseExplorer({
 
   // Actions
   const resetDatabaseToDefaults = () => {
+    if (!confirm("⚠️ CẢNH BÁO QUAN TRỌNG!\n\nAnh Thao có chắc chắn muốn khôi phục CSDL về trạng thái mặc định ban đầu không?\n\nThao tác này chỉ nên dùng khi thử nghiệm hệ thống mới.")) {
+      return;
+    }
     localStorage.removeItem('dk_qms_employees');
     localStorage.removeItem('dk_qms_work_items');
     localStorage.removeItem('dk_qms_kpis');

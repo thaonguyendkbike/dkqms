@@ -207,6 +207,14 @@
     min-height: 0 !important;
   }
 
+  #capa_print_zone table,
+  #capa_print_zone tr,
+  #defect_print_zone table,
+  #defect_print_zone tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
   body.printing-defect #defect_print_zone,
   body.printing-defect #defect_print_zone * {
     visibility: visible !important;

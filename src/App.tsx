@@ -136,12 +136,14 @@ const INITIAL_MONTHLY_PLANS: MonthlyPlan[] = [];
 const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
 export function getNextCapaId(currentCapas: any[]): string {
-  if (!Array.isArray(currentCapas)) return 'CAPA-2026-001';
+  const currentYear = new Date().getFullYear();
+  if (!Array.isArray(currentCapas)) return `CAPA-${currentYear}-001`;
   let maxNum = 0;
+  const regex = new RegExp(`CAPA-(?:${currentYear}|\\d{4})-(\\d+)`);
   currentCapas.forEach(c => {
     if (!c) return;
     const idStr = c.id || c.CAPAID || '';
-    const match = idStr.match(/CAPA-2026-(\d+)/);
+    const match = idStr.match(regex);
     if (match && match[1]) {
       const num = parseInt(match[1], 10);
       if (num > maxNum) {
@@ -151,7 +153,7 @@ export function getNextCapaId(currentCapas: any[]): string {
   });
   const nextNum = maxNum + 1;
   const padded = String(nextNum).padStart(3, '0');
-  return `CAPA-2026-${padded}`;
+  return `CAPA-${currentYear}-${padded}`;
 }
 
 export function trackDeletedId(key: string, id: string): void {
@@ -4137,9 +4139,24 @@ export function App() {
         setPtspTasks(resequenced);
         safeStorage.setItem('dk_ptsp_tasks', JSON.stringify(resequenced));
       }
+      const isCapasDirty = localStorage.getItem('dk_capas_is_dirty') === 'true';
       if (serverData.dk_capas !== undefined && Array.isArray(serverData.dk_capas)) {
-        setCapas(serverData.dk_capas);
-        safeStorage.setItem('dk_capas', JSON.stringify(serverData.dk_capas));
+        if (!isCapasDirty) {
+          setCapas(serverData.dk_capas);
+          safeStorage.setItem('dk_capas', JSON.stringify(serverData.dk_capas));
+        } else {
+          console.log("[Startup Protection]: dk_capas đang có dữ liệu cục bộ chưa đồng bộ hoặc vừa khôi phục. Bảo toàn và xếp hàng đẩy lên Cloud.");
+          const localSaved = safeStorage.getItem('dk_capas') || localStorage.getItem('dk_capas');
+          if (localSaved) {
+            try {
+              const parsed = JSON.parse(localSaved);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                setCapas(parsed);
+                pendingSyncBuffer.current['dk_capas'] = parsed;
+              }
+            } catch (e) { }
+          }
+        }
       }
       const isEcosDirty = localStorage.getItem('dk_ecos_is_dirty') === 'true';
       if (serverData.dk_ecos !== undefined && Array.isArray(serverData.dk_ecos) && !isEcosDirty) {
@@ -8518,6 +8535,16 @@ export function App() {
             safeStorage.setItem('dk_qms_quality_planning_tasks', value);
             safeStorage.setItem('dk_qms_quality_planning_tasks_is_dirty', 'true');
             syncToServer('dk_qms_quality_planning_tasks', parsed);
+          }
+        } catch (err) { }
+      } else if (key === 'dk_capas' && value) {
+        try {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed)) {
+            setCapas(parsed);
+            safeStorage.setItem('dk_capas', value);
+            safeStorage.setItem('dk_capas_is_dirty', 'true');
+            syncToServer('dk_capas', parsed);
           }
         } catch (err) { }
       }
@@ -16374,12 +16401,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           DueDate: newCapaTargetDate || new Date().toISOString().split('T')[0],
                           status: newCapaStatus,
                           Status: newCapaStatus as any,
-                          rootCause: newCapaRootCause || 'Sơ sài bavia mộc sườn, chất sơn dán mỏng',
-                          RootCause: newCapaRootCause || 'Sơ sài bavia mộc sườn, chất sơn dán mỏng',
-                          actions: newCapaCorrectiveAction || newCapaActions || 'Tăng nhiệt sấy giắc hoặc gá bi chặn rơ lọt',
-                          Correction: newCapaCorrection || newCapaActions || 'Tăng nhiệt sấy giắc hoặc gá bi chặn rơ lọt',
-                          CorrectiveAction: newCapaCorrectiveAction || newCapaActions,
-                          PreventiveAction: newCapaPreventiveAction || 'Tiến hành rà soát chuyên sâu theo quý',
+                          rootCause: newCapaRootCause.trim() || '',
+                          RootCause: newCapaRootCause.trim() || '',
+                          actions: newCapaCorrectiveAction.trim() || newCapaActions.trim() || '',
+                          Correction: newCapaCorrection.trim() || newCapaActions.trim() || '',
+                          CorrectiveAction: newCapaCorrectiveAction.trim() || newCapaActions.trim() || '',
+                          PreventiveAction: newCapaPreventiveAction.trim() || '',
                           locationOfOrigin: newCapaLocationOfOrigin || 'Phòng QLCL',
                           locationDetail: newCapaLocationDetail || '',
                           priority: newCapaPriority || 'Trung bình',
@@ -29150,6 +29177,28 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         syncToServer('dk_capas', updated);
                         return updated;
                       });
+
+                      // Tự động đồng bộ trạng thái hai chiều sang phân hệ Lỗi thị trường (Defects) liên kết
+                      const isClosed = statusVal === 'Đóng' || statusVal === 'Đã đóng';
+                      setDefects(prevDefects => {
+                        let hasDefectChange = false;
+                        const updatedDefects = prevDefects.map(d => {
+                          if (d.capaId && (d.capaId === idVal || d.capaId === data.id || d.capaId === data.CAPAID)) {
+                            hasDefectChange = true;
+                            return {
+                              ...d,
+                              status: isClosed ? 'Đã xử lý' : 'Đang xử lý'
+                            };
+                          }
+                          return d;
+                        });
+                        if (hasDefectChange) {
+                          safeStorage.setItem('dk_defects', JSON.stringify(updatedDefects));
+                          safeStorage.setItem('dk_defects_is_dirty', 'true');
+                          syncToServer('dk_defects', updatedDefects);
+                        }
+                        return updatedDefects;
+                      });
                       break;
                     }
                     case 'ptsp':
@@ -37392,11 +37441,124 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                 <button
                   type="button"
                   onClick={() => {
-                    document.body.classList.add('printing-capa');
-                    window.print();
-                    document.body.classList.remove('printing-capa');
+                    const zone = document.getElementById('capa_print_zone');
+                    if (!zone) {
+                      document.body.classList.add('printing-capa');
+                      const onAfter = () => {
+                        document.body.classList.remove('printing-capa');
+                        window.removeEventListener('afterprint', onAfter);
+                      };
+                      window.addEventListener('afterprint', onAfter);
+                      window.print();
+                      return;
+                    }
+
+                    // Tạo iframe ẩn với kích thước 1024x768 để engine Chromium render đầy đủ trang A4
+                    const iframe = document.createElement('iframe');
+                    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:1024px;height:768px;border:0;opacity:0;pointer-events:none;z-index:-9999;';
+                    document.body.appendChild(iframe);
+
+                    const iwin = iframe.contentWindow;
+                    const idoc = iframe.contentDocument || iwin?.document;
+                    if (!iwin || !idoc) {
+                      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+                      document.body.classList.add('printing-capa');
+                      const onAfter = () => {
+                        document.body.classList.remove('printing-capa');
+                        window.removeEventListener('afterprint', onAfter);
+                      };
+                      window.addEventListener('afterprint', onAfter);
+                      window.print();
+                      return;
+                    }
+
+                    const styleTags = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).map(el => el.outerHTML).join('\n');
+                    const docTitle = `BienBan_CAPA_DKBike_${selectedCapaForDoc.id || selectedCapaForDoc.CAPAID || ''}`;
+
+                    idoc.open();
+                    idoc.write(`<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>${docTitle}</title>
+  <base href="${window.location.origin}/">
+  ${styleTags}
+  <style>
+    @page { size: A4 portrait; margin: 12mm 10mm; }
+    html, body {
+      background: #ffffff !important;
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow: visible !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+      color: #0f172a !important;
+    }
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      box-sizing: border-box !important;
+    }
+    #capa_print_zone {
+      overflow: visible !important;
+      max-height: none !important;
+      height: auto !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+    }
+    #capa_print_zone > div {
+      border: none !important;
+      box-shadow: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      min-height: 0 !important;
+    }
+    .grid, .mt-8, .mt-6, .mt-14, table, tr {
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }
+  </style>
+</head>
+<body>
+  ${zone.outerHTML}
+</body>
+</html>`);
+                    idoc.close();
+
+                    let cleanedUp = false;
+                    const doCleanup = () => {
+                      if (cleanedUp) return;
+                      cleanedUp = true;
+                      setTimeout(() => {
+                        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+                      }, 1500);
+                    };
+
+                    iwin.addEventListener('afterprint', doCleanup);
+                    setTimeout(doCleanup, 180000); // An toàn tối đa 3 phút
+
+                    setTimeout(() => {
+                      try {
+                        iwin.focus();
+                        iwin.print();
+                      } catch (err) {
+                        console.error('[CAPA Report Print Fallback]:', err);
+                        doCleanup();
+                        document.body.classList.add('printing-capa');
+                        const onAfter = () => {
+                          document.body.classList.remove('printing-capa');
+                          window.removeEventListener('afterprint', onAfter);
+                        };
+                        window.addEventListener('afterprint', onAfter);
+                        window.print();
+                      }
+                    }, 450);
                   }}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg cursor-pointer transition shadow border text-xs"
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg cursor-pointer transition shadow border text-xs flex items-center gap-1.5"
                 >
                   🖨 In Biên bản trực tiếp
                 </button>
