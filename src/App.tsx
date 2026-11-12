@@ -14410,7 +14410,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
 
   if (isBmRoute) {
     return (
-      <div className="w-full h-full min-h-screen overflow-y-auto overflow-x-hidden bg-slate-900">
+      <div className="w-full h-full min-h-screen overflow-y-auto overflow-x-hidden bg-slate-50">
         <QmsFormsCenter
           onBackToApp={() => {
             if (typeof window !== 'undefined' && window.location.pathname.includes('/bm')) {

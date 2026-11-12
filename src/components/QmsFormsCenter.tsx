@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   FileText, 
   Download, 
@@ -6,16 +6,11 @@ import {
   Search, 
   ArrowLeft, 
   FileSpreadsheet, 
-  CheckCircle2, 
-  Layers, 
-  ShieldCheck, 
-  Users, 
   Eye, 
   Copy, 
   Check, 
-  Wrench,
-  Sparkles,
-  ExternalLink
+  List, 
+  LayoutGrid
 } from 'lucide-react';
 import { QMS_FORM_TEMPLATES, QmsFormTemplate } from '../data/qmsFormsData';
 
@@ -28,6 +23,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [previewForm, setPreviewForm] = useState<QmsFormTemplate | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   // Bộ lọc danh sách biểu mẫu
   const filteredForms = useMemo(() => {
@@ -60,11 +56,42 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(url);
       setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2500);
+      setTimeout(() => setCopiedLink(false), 2000);
     }
   };
 
-  // In trực tiếp biểu mẫu qua Dedicated Print Engine Iframe A4 độc lập
+  // Tạo HTML bảng Header cân đối 2 bên (50% - 50%) chuẩn Word & In ấn (Không có slogan)
+  const renderBalancedHeaderHtml = (form: QmsFormTemplate) => {
+    return `
+      <table style="width:100%; border:1pt solid #000; border-collapse:collapse; margin-bottom:10pt;">
+        <tr>
+          <td style="width:50%; border:1pt solid #000; padding:6pt 8pt; text-align:center; vertical-align:middle;">
+            <div style="font-weight:bold; font-size:10.5pt; text-transform:uppercase; line-height:1.3; font-family:'Times New Roman', serif;">CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT</div>
+            <div style="font-weight:bold; font-size:9.5pt; text-transform:uppercase; margin-top:2pt; font-family:'Times New Roman', serif;">PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL)</div>
+            <div style="font-size:8.5pt; font-style:italic; margin-top:2pt; font-family:'Times New Roman', serif;">Tiêu chuẩn: ISO 9001:2015</div>
+          </td>
+          <td style="width:50%; border:1pt solid #000; padding:5pt 10pt; font-size:9.5pt; vertical-align:middle; font-family:'Times New Roman', serif;">
+            <table style="width:100%; border:none; border-collapse:collapse; font-size:9.5pt; font-family:'Times New Roman', serif;">
+              <tr>
+                <td style="width:42%; padding:1.5pt 0; border:none; font-weight:bold;">Mã Biểu Mẫu:</td>
+                <td style="padding:1.5pt 0; border:none; font-weight:bold;">${form.code}</td>
+              </tr>
+              <tr>
+                <td style="padding:1.5pt 0; border:none; font-weight:bold;">Mã Quy Trình:</td>
+                <td style="padding:1.5pt 0; border:none;">${form.procedureCode}</td>
+              </tr>
+              <tr>
+                <td style="padding:1.5pt 0; border:none; font-weight:bold;">Lần Ban Hành:</td>
+                <td style="padding:1.5pt 0; border:none;">${form.revision} | Ngày: ${form.effectiveDate}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    `;
+  };
+
+  // In trực tiếp biểu mẫu qua Dedicated Print Engine Iframe A4 độc lập - Tận dụng tối đa 1 trang
   const handlePrintForm = (form: QmsFormTemplate) => {
     const zone = document.getElementById('qms-form-printable-document');
     if (!zone) {
@@ -93,15 +120,19 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
   <meta charset="utf-8">
   <title>${docTitle}</title>
   <style>
-    @page { size: A4 portrait; margin: 12mm 12mm 15mm 12mm; }
+    @page { 
+      size: A4 portrait; 
+      margin: 10mm 12mm 10mm 12mm; 
+    }
     html, body {
       background: #ffffff !important;
       margin: 0 !important;
       padding: 0 !important;
       font-family: "Times New Roman", Times, serif;
       color: #000000 !important;
-      font-size: 13px;
-      line-height: 1.4;
+      font-size: 12px;
+      line-height: 1.35;
+      height: 100%;
     }
     * {
       box-sizing: border-box !important;
@@ -113,82 +144,79 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       max-width: 100% !important;
       margin: 0 auto;
       padding: 0 !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
     }
-    .company-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      border-bottom: 2px solid #000;
-      padding-bottom: 8px;
-      margin-bottom: 16px;
+    table.header-table {
+      width: 100% !important;
+      border: 1px solid #000 !important;
+      border-collapse: collapse !important;
+      margin-bottom: 8px !important;
     }
-    .company-title {
-      font-size: 14px;
-      font-weight: bold;
-      text-transform: uppercase;
-      margin: 0;
-    }
-    .dept-title {
-      font-size: 12px;
-      font-weight: bold;
-      margin: 2px 0 0 0;
-    }
-    .meta-box {
-      text-align: right;
-      font-size: 11.5px;
-      font-style: italic;
+    table.header-table td {
+      border: 1px solid #000 !important;
+      padding: 4px 8px !important;
     }
     .form-main-title {
       text-align: center;
-      margin: 16px 0 14px 0;
+      margin: 8px 0 10px 0;
     }
     .form-main-title h1 {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: bold;
       text-transform: uppercase;
-      margin: 0 0 4px 0;
+      margin: 0 0 2px 0;
     }
     .form-main-title p {
-      font-size: 11.5px;
+      font-size: 11px;
       font-style: italic;
       margin: 0;
+      color: #333;
     }
     .info-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px 16px;
-      margin-bottom: 16px;
-      font-size: 12px;
+      gap: 6px 16px;
+      margin-bottom: 10px;
+      font-size: 11.5px;
     }
     .info-item {
-      border-bottom: 1px dotted #666;
+      border-bottom: 1px dotted #555;
       padding-bottom: 2px;
+      display: flex;
+      justify-content: space-between;
     }
     table.qms-table {
       width: 100%;
       border-collapse: collapse;
-      margin: 14px 0;
-      font-size: 12px;
+      margin: 8px 0;
+      font-size: 11px;
     }
     table.qms-table th, table.qms-table td {
       border: 1px solid #000;
-      padding: 6px 8px;
+      padding: 4px 6px;
       vertical-align: middle;
     }
     table.qms-table th {
-      background-color: #f1f5f9 !important;
+      background-color: #f3f4f6 !important;
       font-weight: bold;
       text-align: center;
     }
     .section-title {
-      font-size: 12.5px;
+      font-size: 11.5px;
       font-weight: bold;
       text-transform: uppercase;
-      margin: 14px 0 6px 0;
+      margin: 8px 0 4px 0;
+    }
+    .conclusions-box {
+      margin: 8px 0;
+      padding: 6px 8px;
+      border: 1px solid #555;
+      font-size: 11px;
     }
     .signatures-table {
       width: 100%;
-      margin-top: 30px;
+      margin-top: 14px;
       border: none !important;
       text-align: center;
       page-break-inside: avoid !important;
@@ -196,22 +224,22 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     }
     .signatures-table td {
       border: none !important;
-      padding: 4px;
+      padding: 2px 4px;
       vertical-align: top;
       width: 33.33%;
     }
     .sign-role {
       font-weight: bold;
-      font-size: 12.5px;
+      font-size: 11.5px;
       text-transform: uppercase;
     }
     .sign-sub {
-      font-size: 11px;
+      font-size: 10px;
       font-style: italic;
       color: #333;
     }
     .sign-space {
-      height: 70px;
+      height: 60px;
     }
   </style>
 </head>
@@ -244,42 +272,29 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     }, 450);
   };
 
-  // Xuất file Microsoft Word (.doc) hoàn chỉnh
+  // Xuất file Microsoft Word (.doc) hoàn chỉnh - Chuẩn 1 trang A4
   const handleExportWord = (form: QmsFormTemplate) => {
     try {
-      const headerContent = `
-        <div style="display:flex; justify-content:space-between; border-bottom:2pt solid #000; padding-bottom:8pt; margin-bottom:14pt;">
-          <div>
-            <p style="margin:0; font-size:11pt; font-weight:bold; text-transform:uppercase;">CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT</p>
-            <p style="margin:2pt 0 0 0; font-size:10pt; font-weight:bold; color:#1e293b;">PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL) - DK QMS</p>
-            <p style="margin:2pt 0 0 0; font-size:9pt; font-style:italic; color:#64748b;">Khẩu hiệu: Xe cho cả gia đình | Tiêu chuẩn: ISO 9001:2015</p>
-          </div>
-          <div style="text-align:right; font-size:9.5pt;">
-            <p style="margin:0;"><b>Mã BM:</b> <span style="color:#4338ca; font-weight:bold;">${form.code}</span></p>
-            <p style="margin:2pt 0 0 0;"><b>Mã QT:</b> ${form.procedureCode}</p>
-            <p style="margin:2pt 0 0 0;">Lần BH: ${form.revision} | Ngày HL: ${form.effectiveDate}</p>
-          </div>
-        </div>
-      `;
+      const headerContent = renderBalancedHeaderHtml(form);
 
       const titleContent = `
-        <div style="text-align:center; margin:18pt 0 14pt 0;">
-          <h1 style="font-size:14pt; font-weight:bold; text-transform:uppercase; margin:0 0 4pt 0; color:#0f172a;">${form.title}</h1>
-          <p style="font-size:10pt; font-style:italic; margin:0; color:#475569;">(${form.subtitle || form.purpose})</p>
+        <div style="text-align:center; margin:10pt 0 8pt 0;">
+          <h1 style="font-size:13.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 2pt 0; font-family:'Times New Roman', serif;">${form.title}</h1>
+          <p style="font-size:9.5pt; font-style:italic; margin:0; color:#333; font-family:'Times New Roman', serif;">(${form.subtitle || form.purpose})</p>
         </div>
       `;
 
-      let fieldsHtml = '<div style="margin-bottom:14pt;"><table style="width:100%; border:none; font-size:10pt;">';
+      let fieldsHtml = '<div style="margin-bottom:8pt;"><table style="width:100%; border:none; border-collapse:collapse; font-size:9.5pt; font-family:\'Times New Roman\', serif;">';
       for (let i = 0; i < form.fields.length; i += 2) {
         const f1 = form.fields[i];
         const f2 = form.fields[i + 1];
         fieldsHtml += `
           <tr>
-            <td style="width:50%; padding:4pt 8pt 4pt 0; border-bottom:1pt dotted #94a3b8;">
-              <b>${f1.label}:</b> ......................................................................
+            <td style="width:50%; padding:2.5pt 6pt 2.5pt 0; border-bottom:1pt dotted #666;">
+              <b>${f1.label}:</b> ....................................................................
             </td>
-            <td style="width:50%; padding:4pt 0 4pt 8pt; border-bottom:1pt dotted #94a3b8;">
-              ${f2 ? `<b>${f2.label}:</b> ......................................................................` : ''}
+            <td style="width:50%; padding:2.5pt 0 2.5pt 6pt; border-bottom:1pt dotted #666;">
+              ${f2 ? `<b>${f2.label}:</b> ....................................................................` : ''}
             </td>
           </tr>
         `;
@@ -289,22 +304,25 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       let tablesHtml = '';
       form.tables.forEach(t => {
         tablesHtml += `
-          <div style="margin:14pt 0 10pt 0;">
-            <p style="font-size:10.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 6pt 0; color:#1e293b;">${t.title}</p>
-            <table style="width:100%; border-collapse:collapse; font-size:9.5pt;" border="1" cellpadding="6">
+          <div style="margin:8pt 0 6pt 0;">
+            <p style="font-size:9.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 3pt 0; font-family:'Times New Roman', serif;">${t.title}</p>
+            <table style="width:100%; border-collapse:collapse; font-size:9pt; font-family:'Times New Roman', serif;" border="1" cellpadding="4">
               <thead>
-                <tr style="background-color:#f1f5f9; font-weight:bold; text-align:center;">
-                  ${t.headers.map(h => `<th style="padding:6pt; border:1pt solid #000;">${h}</th>`).join('')}
+                <tr style="background-color:#f3f4f6; font-weight:bold; text-align:center;">
+                  ${t.headers.map(h => `<th style="padding:4pt; border:1pt solid #000;">${h}</th>`).join('')}
                 </tr>
               </thead>
               <tbody>
                 ${t.rows.map(row => `
                   <tr>
-                    ${row.map((cell, idx) => `
-                      <td style="padding:5pt 6pt; border:1pt solid #000; text-align:${idx === 0 ? 'center' : 'left'};">
-                        ${cell}
-                      </td>
-                    `).join('')}
+                    ${row.map((cell, idx) => {
+                      const formattedCell = String(cell).replace(/\n/g, '<br/>');
+                      return `
+                        <td style="padding:3.5pt 4pt; border:1pt solid #000; text-align:${idx === 0 ? 'center' : 'left'}; vertical-align:middle;">
+                          ${formattedCell}
+                        </td>
+                      `;
+                    }).join('')}
                   </tr>
                 `).join('')}
               </tbody>
@@ -316,27 +334,31 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       let conclusionsHtml = '';
       if (form.conclusions && form.conclusions.length > 0) {
         conclusionsHtml += `
-          <div style="margin:14pt 0; padding:8pt; border:1pt solid #cbd5e1; background-color:#f8fafc;">
-            <p style="font-size:10.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 6pt 0;">KẾT LUẬN & PHÁN QUYẾT XỬ LÝ:</p>
-            ${form.conclusions.map(c => `
-              <p style="margin:3pt 0; font-size:10pt;">
-                <b>• ${c.label}:</b> <span>${c.content || '..................................................................................'}</span>
-              </p>
-            `).join('')}
+          <div style="margin:8pt 0; padding:6pt; border:1pt solid #000; font-family:'Times New Roman', serif;">
+            <p style="font-size:9.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 4pt 0;">KẾT LUẬN & PHÁN QUYẾT XỬ LÝ:</p>
+            ${form.conclusions.map(c => {
+              const formattedContent = (c.content || '....................................................................................................................').replace(/\n/g, '<br/>');
+              return `
+                <div style="margin:2.5pt 0; font-size:9.5pt; line-height:1.35;">
+                  <b>• ${c.label}:</b><br/>
+                  <div style="padding-left:10pt;">${formattedContent}</div>
+                </div>
+              `;
+            }).join('')}
           </div>
         `;
       }
 
       let signaturesHtml = `
-        <div style="margin-top:24pt; page-break-inside:avoid;">
-          <table style="width:100%; border:none; text-align:center; font-size:10pt;">
+        <div style="margin-top:10pt; page-break-inside:avoid;">
+          <table style="width:100%; border:none; text-align:center; font-size:9.5pt; font-family:'Times New Roman', serif;">
             <tr>
               ${form.signRoles.map(s => `
-                <td style="width:33.33%; padding:4pt; vertical-align:top; border:none;">
-                  <p style="margin:0; font-weight:bold; text-transform:uppercase; font-size:10pt;">${s.role}</p>
-                  <p style="margin:2pt 0 0 0; font-style:italic; font-size:9pt; color:#475569;">(${s.title})</p>
-                  <div style="height:65pt;"></div>
-                  <p style="margin:0; font-style:italic; font-size:8.5pt; color:#64748b;">(Ký & ghi rõ họ tên)</p>
+                <td style="width:33.33%; padding:2pt; vertical-align:top; border:none;">
+                  <p style="margin:0; font-weight:bold; text-transform:uppercase; font-size:9.5pt;">${s.role}</p>
+                  <p style="margin:1pt 0 0 0; font-style:italic; font-size:8.5pt; color:#444;">(${s.title})</p>
+                  <div style="height:50pt;"></div>
+                  <p style="margin:0; font-style:italic; font-size:8pt; color:#666;">(Ký & ghi rõ họ tên)</p>
                 </td>
               `).join('')}
             </tr>
@@ -350,9 +372,14 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
           <meta charset='utf-8'>
           <title>${form.code} - ${form.title}</title>
           <style>
-            @page WordSection1 { size:595.35pt 841.95pt; margin:42.5pt 42.5pt 42.5pt 42.5pt; mso-header-margin:35.4pt; mso-footer-margin:35.4pt; mso-paper-source:0; }
+            @page WordSection1 { 
+              size:595.35pt 841.95pt; 
+              margin:28.35pt 35.4pt 28.35pt 35.4pt; 
+              mso-header-margin:28.35pt; 
+              mso-footer-margin:28.35pt; 
+            }
             div.WordSection1 { page:WordSection1; }
-            body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; line-height: 1.4; color: #000; }
+            body { font-family: 'Times New Roman', Times, serif; font-size: 10pt; line-height: 1.3; color: #000; }
           </style>
         </head>
         <body>
@@ -403,7 +430,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
         csvLines.push(`"${t.title}"`);
         csvLines.push(t.headers.map(h => `"${h.replace(/"/g, '""')}"`).join(','));
         t.rows.forEach(r => {
-          csvLines.push(r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','));
+          csvLines.push(r.map(cell => `"${String(cell).replace(/\n/g, ' / ').replace(/"/g, '""')}"`).join(','));
         });
         csvLines.push(`""`);
       });
@@ -412,7 +439,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       if (form.conclusions) {
         csvLines.push(`"KẾT LUẬN & PHÁN QUYẾT"`);
         form.conclusions.forEach(c => {
-          csvLines.push(`"${c.label}","${(c.content || '').replace(/"/g, '""')}"`);
+          csvLines.push(`"${c.label}","${(c.content || '').replace(/\n/g, ' / ').replace(/"/g, '""')}"`);
         });
         csvLines.push(`""`);
       }
@@ -444,40 +471,26 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       let fullBody = '';
       QMS_FORM_TEMPLATES.forEach((form, idx) => {
         const pageBreak = idx > 0 ? '<br clear=all style="mso-special-character:line-break;page-break-before:always">' : '';
-        
-        const headerContent = `
-          <div style="display:flex; justify-content:space-between; border-bottom:2pt solid #000; padding-bottom:8pt; margin-bottom:12pt;">
-            <div>
-              <p style="margin:0; font-size:11pt; font-weight:bold; text-transform:uppercase;">CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT</p>
-              <p style="margin:2pt 0 0 0; font-size:10pt; font-weight:bold; color:#1e293b;">PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL) - DK QMS</p>
-              <p style="margin:2pt 0 0 0; font-size:9pt; font-style:italic; color:#64748b;">Khẩu hiệu: Xe cho cả gia đình | Tiêu chuẩn: ISO 9001:2015</p>
-            </div>
-            <div style="text-align:right; font-size:9.5pt;">
-              <p style="margin:0;"><b>Mã BM:</b> <span style="color:#4338ca; font-weight:bold;">${form.code}</span></p>
-              <p style="margin:2pt 0 0 0;"><b>Mã QT:</b> ${form.procedureCode}</p>
-              <p style="margin:2pt 0 0 0;">Lần BH: ${form.revision} | Ngày HL: ${form.effectiveDate}</p>
-            </div>
-          </div>
-        `;
+        const headerContent = renderBalancedHeaderHtml(form);
 
         const titleContent = `
-          <div style="text-align:center; margin:14pt 0 12pt 0;">
-            <h1 style="font-size:13pt; font-weight:bold; text-transform:uppercase; margin:0 0 4pt 0; color:#0f172a;">${form.title}</h1>
-            <p style="font-size:9.5pt; font-style:italic; margin:0; color:#475569;">(${form.subtitle || form.purpose})</p>
+          <div style="text-align:center; margin:10pt 0 8pt 0;">
+            <h1 style="font-size:13pt; font-weight:bold; text-transform:uppercase; margin:0 0 2pt 0; font-family:'Times New Roman', serif;">${form.title}</h1>
+            <p style="font-size:9.5pt; font-style:italic; margin:0; color:#333; font-family:'Times New Roman', serif;">(${form.subtitle || form.purpose})</p>
           </div>
         `;
 
-        let fieldsHtml = '<div style="margin-bottom:12pt;"><table style="width:100%; border:none; font-size:9.5pt;">';
+        let fieldsHtml = '<div style="margin-bottom:8pt;"><table style="width:100%; border:none; border-collapse:collapse; font-size:9.5pt; font-family:\'Times New Roman\', serif;">';
         for (let i = 0; i < form.fields.length; i += 2) {
           const f1 = form.fields[i];
           const f2 = form.fields[i + 1];
           fieldsHtml += `
             <tr>
-              <td style="width:50%; padding:3pt 6pt 3pt 0; border-bottom:1pt dotted #94a3b8;">
-                <b>${f1.label}:</b> ......................................................................
+              <td style="width:50%; padding:2.5pt 6pt 2.5pt 0; border-bottom:1pt dotted #666;">
+                <b>${f1.label}:</b> ....................................................................
               </td>
-              <td style="width:50%; padding:3pt 0 3pt 6pt; border-bottom:1pt dotted #94a3b8;">
-                ${f2 ? `<b>${f2.label}:</b> ......................................................................` : ''}
+              <td style="width:50%; padding:2.5pt 0 2.5pt 6pt; border-bottom:1pt dotted #666;">
+                ${f2 ? `<b>${f2.label}:</b> ....................................................................` : ''}
               </td>
             </tr>
           `;
@@ -487,22 +500,25 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
         let tablesHtml = '';
         form.tables.forEach(t => {
           tablesHtml += `
-            <div style="margin:12pt 0 8pt 0;">
-              <p style="font-size:10pt; font-weight:bold; text-transform:uppercase; margin:0 0 4pt 0; color:#1e293b;">${t.title}</p>
-              <table style="width:100%; border-collapse:collapse; font-size:9pt;" border="1" cellpadding="5">
+            <div style="margin:8pt 0 6pt 0;">
+              <p style="font-size:9.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 3pt 0; font-family:'Times New Roman', serif;">${t.title}</p>
+              <table style="width:100%; border-collapse:collapse; font-size:9pt; font-family:'Times New Roman', serif;" border="1" cellpadding="4">
                 <thead>
-                  <tr style="background-color:#f1f5f9; font-weight:bold; text-align:center;">
-                    ${t.headers.map(h => `<th style="padding:5pt; border:1pt solid #000;">${h}</th>`).join('')}
+                  <tr style="background-color:#f3f4f6; font-weight:bold; text-align:center;">
+                    ${t.headers.map(h => `<th style="padding:4pt; border:1pt solid #000;">${h}</th>`).join('')}
                   </tr>
                 </thead>
                 <tbody>
                   ${t.rows.map(row => `
                     <tr>
-                      ${row.map((cell, cIdx) => `
-                        <td style="padding:4pt 5pt; border:1pt solid #000; text-align:${cIdx === 0 ? 'center' : 'left'};">
-                          ${cell}
-                        </td>
-                      `).join('')}
+                      ${row.map((cell, cIdx) => {
+                        const formattedCell = String(cell).replace(/\n/g, '<br/>');
+                        return `
+                          <td style="padding:3.5pt 4pt; border:1pt solid #000; text-align:${cIdx === 0 ? 'center' : 'left'}; vertical-align:middle;">
+                            ${formattedCell}
+                          </td>
+                        `;
+                      }).join('')}
                     </tr>
                   `).join('')}
                 </tbody>
@@ -514,27 +530,31 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
         let conclusionsHtml = '';
         if (form.conclusions && form.conclusions.length > 0) {
           conclusionsHtml += `
-            <div style="margin:12pt 0; padding:6pt; border:1pt solid #cbd5e1; background-color:#f8fafc;">
-              <p style="font-size:10pt; font-weight:bold; text-transform:uppercase; margin:0 0 4pt 0;">KẾT LUẬN & PHÁN QUYẾT XỬ LÝ:</p>
-              ${form.conclusions.map(c => `
-                <p style="margin:2pt 0; font-size:9.5pt;">
-                  <b>• ${c.label}:</b> <span>${c.content || '..................................................................................'}</span>
-                </p>
-              `).join('')}
+            <div style="margin:8pt 0; padding:6pt; border:1pt solid #000; font-family:'Times New Roman', serif;">
+              <p style="font-size:9.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 4pt 0;">KẾT LUẬN & PHÁN QUYẾT XỬ LÝ:</p>
+              ${form.conclusions.map(c => {
+                const formattedContent = (c.content || '....................................................................................................................').replace(/\n/g, '<br/>');
+                return `
+                  <div style="margin:2.5pt 0; font-size:9.5pt; line-height:1.35;">
+                    <b>• ${c.label}:</b><br/>
+                    <div style="padding-left:10pt;">${formattedContent}</div>
+                  </div>
+                `;
+              }).join('')}
             </div>
           `;
         }
 
         let signaturesHtml = `
-          <div style="margin-top:20pt; page-break-inside:avoid;">
-            <table style="width:100%; border:none; text-align:center; font-size:9.5pt;">
+          <div style="margin-top:10pt; page-break-inside:avoid;">
+            <table style="width:100%; border:none; text-align:center; font-size:9.5pt; font-family:'Times New Roman', serif;">
               <tr>
                 ${form.signRoles.map(s => `
-                  <td style="width:33.33%; padding:3pt; vertical-align:top; border:none;">
+                  <td style="width:33.33%; padding:2pt; vertical-align:top; border:none;">
                     <p style="margin:0; font-weight:bold; text-transform:uppercase; font-size:9.5pt;">${s.role}</p>
-                    <p style="margin:2pt 0 0 0; font-style:italic; font-size:8.5pt; color:#475569;">(${s.title})</p>
-                    <div style="height:55pt;"></div>
-                    <p style="margin:0; font-style:italic; font-size:8pt; color:#64748b;">(Ký & ghi rõ họ tên)</p>
+                    <p style="margin:1pt 0 0 0; font-style:italic; font-size:8.5pt; color:#444;">(${s.title})</p>
+                    <div style="height:50pt;"></div>
+                    <p style="margin:0; font-style:italic; font-size:8pt; color:#666;">(Ký & ghi rõ họ tên)</p>
                   </td>
                 `).join('')}
               </tr>
@@ -561,9 +581,12 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
           <meta charset='utf-8'>
           <title>Tron_Bo_10_Bieu_Mau_Chuan_DKBike_QLCL_2026</title>
           <style>
-            @page WordSection1 { size:595.35pt 841.95pt; margin:42.5pt 42.5pt 42.5pt 42.5pt; }
+            @page WordSection1 { 
+              size:595.35pt 841.95pt; 
+              margin:28.35pt 35.4pt 28.35pt 35.4pt; 
+            }
             div.WordSection1 { page:WordSection1; }
-            body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; line-height: 1.4; color: #000; }
+            body { font-family: 'Times New Roman', Times, serif; font-size: 10pt; line-height: 1.3; color: #000; }
           </style>
         </head>
         <body>
@@ -588,53 +611,11 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans selection:bg-indigo-600 selection:text-white">
-      {/* ==================== HEADER TRUNG TÂM BIỂU MẪU ==================== */}
-      <header className="bg-slate-850 border-b border-slate-700/80 sticky top-0 z-30 shadow-md backdrop-blur-md bg-opacity-95">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
+      {/* ==================== HEADER THANH ĐIỀU HÀNH ==================== */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-tr from-indigo-600 to-blue-500 rounded-xl shadow-md border border-indigo-400/30">
-              <FileSpreadsheet className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  DK QMS FORMS CENTER
-                </span>
-                <span className="text-xs text-slate-400 font-bold hidden sm:inline">
-                  • dkqms.cloud/bm
-                </span>
-              </div>
-              <h1 className="text-base sm:text-lg font-black text-white tracking-tight uppercase mt-0.5 flex items-center gap-2">
-                Hệ Thống Biểu Mẫu Chuẩn Quản Lý Chất Lượng DKBike
-              </h1>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Nút Copy URL dkqms.cloud/bm */}
-            <button
-              type="button"
-              onClick={handleCopyLink}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border border-slate-700 active:scale-95"
-              title="Sao chép đường dẫn trực tiếp: dkqms.cloud/bm"
-            >
-              {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
-              <span>{copiedLink ? 'Đã chép link' : 'dkqms.cloud/bm'}</span>
-            </button>
-
-            {/* Nút Tải trọn bộ Word */}
-            <button
-              type="button"
-              onClick={handleDownloadAllFormsDoc}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 sm:px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 border border-emerald-400/30"
-              title="Tải trọn bộ toàn bộ 10 biểu mẫu chuẩn về máy tính dạng Word (.doc)"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Tải trọn bộ 10 BM (.doc)</span>
-            </button>
-
-            {/* Nút quay lại ứng dụng */}
             <button
               type="button"
               onClick={() => {
@@ -644,229 +625,291 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                   window.location.href = '/';
                 }
               }}
-              className="bg-indigo-650 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-sm active:scale-95 border border-indigo-400/30"
-              title="Quay lại giao diện phần mềm QMS chính"
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 transition"
+              title="Quay lại ứng dụng chính"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Về QMS</span>
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div>
+              <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                Hệ Thống Biểu Mẫu Chuẩn Quản Lý Chất Lượng
+              </h1>
+              <p className="text-xs text-slate-500">
+                Công ty TNHH Xe điện DK Việt Nhật • Phòng Quản lý chất lượng (QLCL)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Nút Copy link */}
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5"
+              title="Sao chép đường dẫn trực tiếp: dkqms.cloud/bm"
+            >
+              {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+              <span>{copiedLink ? 'Đã sao chép' : 'dkqms.cloud/bm'}</span>
+            </button>
+
+            {/* Nút Tải trọn bộ Word */}
+            <button
+              type="button"
+              onClick={handleDownloadAllFormsDoc}
+              className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs"
+              title="Tải trọn bộ 10 biểu mẫu chuẩn dạng Word (.doc)"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Tải trọn bộ 10 BM (.doc)</span>
             </button>
           </div>
         </div>
       </header>
 
       {/* ==================== NỘI DUNG CHÍNH ==================== */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full flex-1 space-y-6">
-        {/* Banner Nhận diện Doanh nghiệp & 4 Trụ Cột Tổ Chức */}
-        <div className="bg-gradient-to-r from-slate-850 via-slate-800 to-indigo-950/60 p-5 sm:p-6 rounded-2xl border border-slate-700/80 shadow-lg relative overflow-hidden">
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-black uppercase tracking-widest text-indigo-400 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" /> CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT • DKBIKE
-              </p>
-              <h2 className="text-lg sm:text-xl font-black text-white mt-1">
-                Bộ Biểu Mẫu Nghiệp Vụ Chuẩn Hóa Phòng Quản Lý Chất Lượng (P-QLCL)
-              </h2>
-              <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
-                Hệ thống 10 biểu mẫu chuẩn hóa theo tiêu chuẩn Quốc tế ISO 9001:2015 và ma trận phân nhiệm RACI 
-                (Thực thi - Xác nhận - Phê duyệt), kết nối trực tiếp với dòng dữ liệu số hóa của phần mềm DK QMS.
-              </p>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 w-full flex-1 space-y-4">
+        {/* Bộ lọc phòng ban & Công cụ tìm kiếm */}
+        <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Bộ lọc phân hệ / phòng ban */}
+          <div className="flex items-center gap-1.5 flex-wrap overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setSelectedDept('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                selectedDept === 'all'
+                  ? 'bg-slate-900 text-white font-bold'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+              }`}
+            >
+              Tất cả ({stats.total})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDept('Lãnh đạo Phòng QLCL')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                selectedDept === 'Lãnh đạo Phòng QLCL'
+                  ? 'bg-slate-900 text-white font-bold'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+              }`}
+            >
+              Lãnh đạo QLCL ({stats.qlcl})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDept('Bộ phận QC Hiện trường')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                selectedDept === 'Bộ phận QC Hiện trường'
+                  ? 'bg-slate-900 text-white font-bold'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+              }`}
+            >
+              QC Hiện trường ({stats.qc})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDept('Bộ phận QA/QE')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                selectedDept === 'Bộ phận QA/QE'
+                  ? 'bg-slate-900 text-white font-bold'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+              }`}
+            >
+              BP QA / QE ({stats.qa})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDept('Bộ phận Kỹ thuật Thẩm định')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                selectedDept === 'Bộ phận Kỹ thuật Thẩm định'
+                  ? 'bg-slate-900 text-white font-bold'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+              }`}
+            >
+              Kỹ thuật Thẩm định ({stats.kttd})
+            </button>
+          </div>
+
+          {/* Ô Tìm Kiếm và Nút Chuyển Đổi Hiển Thị (Thẻ / Danh Sách) */}
+          <div className="flex items-center gap-2 self-end md:self-auto w-full md:w-auto">
+            <div className="relative flex-1 md:w-72">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                placeholder="Tìm mã BM, tên biểu mẫu..."
+                className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-500 bg-white"
+              />
             </div>
 
-            <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
-              <div className="bg-slate-900/80 border border-slate-700/80 rounded-xl px-3 py-2 text-center">
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">Phiên bản ban hành</span>
-                <span className="text-xs font-black text-amber-300">V4.0 (11/2026)</span>
-              </div>
-              <div className="bg-slate-900/80 border border-slate-700/80 rounded-xl px-3 py-2 text-center">
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">Tổng biểu mẫu</span>
-                <span className="text-base font-black text-blue-400 tabular-nums">{stats.total} BM</span>
-              </div>
+            {/* Nút Toggle Thẻ / Danh sách */}
+            <div className="flex items-center border border-slate-300 rounded-lg p-0.5 bg-slate-100 shrink-0">
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1 transition ${
+                  viewMode === 'list'
+                    ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Hiển thị dạng Danh sách bảng"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Danh sách</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1 transition ${
+                  viewMode === 'grid'
+                    ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Hiển thị dạng Thẻ (Grid)"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Thẻ</span>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Thanh 4 Khối Trụ Cột & Bộ Lọc Phòng Ban */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <button
-            type="button"
-            onClick={() => setSelectedDept('all')}
-            className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
-              selectedDept === 'all'
-                ? 'bg-indigo-600/30 border-indigo-500 shadow-md'
-                : 'bg-slate-800/80 border-slate-700/80 hover:bg-slate-800 hover:border-slate-600'
-            }`}
-          >
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Tất cả biểu mẫu</span>
-              <Layers className="w-4 h-4 text-indigo-400" />
+        {/* ==================== HIỂN THỊ DẠNG DANH SÁCH (TABLE) ==================== */}
+        {viewMode === 'list' ? (
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+                    <th className="py-2.5 px-3 text-center w-12">STT</th>
+                    <th className="py-2.5 px-3 w-28">Mã BM</th>
+                    <th className="py-2.5 px-3 w-24">Mã QT</th>
+                    <th className="py-2.5 px-4">Tên Biểu Mẫu & Mô tả</th>
+                    <th className="py-2.5 px-3 w-44">Bộ phận phụ trách</th>
+                    <th className="py-2.5 px-3 w-28 text-center">Phiên bản</th>
+                    <th className="py-2.5 px-3 text-right w-56">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200/70">
+                  {filteredForms.map((form, index) => (
+                    <tr key={form.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-3 text-center font-mono text-slate-500">{index + 1}</td>
+                      <td className="py-3 px-3">
+                        <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
+                          {form.code}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-slate-600">{form.procedureCode}</td>
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-slate-900 leading-snug">{form.title}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">{form.subtitle || form.purpose}</div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 block truncate">
+                          {form.department}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-center text-[11px] text-slate-600">
+                        Lần {form.revision} ({form.effectiveDate})
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewForm(form)}
+                            className="p-1.5 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded border border-slate-200 transition"
+                            title="Xem chi tiết bản in A4"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewForm(form);
+                              setTimeout(() => handlePrintForm(form), 100);
+                            }}
+                            className="p-1.5 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded border border-slate-200 transition"
+                            title="In trực tiếp khổ A4"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleExportWord(form)}
+                            className="px-2 py-1 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded border border-slate-200 transition flex items-center gap-1 font-medium text-[11px]"
+                            title="Tải file Word (.doc)"
+                          >
+                            <FileText className="w-3 h-3" />
+                            <span>Word</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleExportCsv(form)}
+                            className="px-2 py-1 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded border border-slate-200 transition flex items-center gap-1 font-medium text-[11px]"
+                            title="Tải file Excel (.csv)"
+                          >
+                            <FileSpreadsheet className="w-3 h-3" />
+                            <span>CSV</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredForms.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-400">
+                        Không tìm thấy biểu mẫu nào phù hợp với từ khóa tìm kiếm.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-            <div className="mt-2 flex items-baseline gap-1">
-              <span className="text-2xl font-black text-white tabular-nums">{stats.total}</span>
-              <span className="text-[10px] text-slate-400 font-bold">mẫu</span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedDept('Lãnh đạo Phòng QLCL')}
-            className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
-              selectedDept === 'Lãnh đạo Phòng QLCL'
-                ? 'bg-rose-600/30 border-rose-500 shadow-md'
-                : 'bg-slate-800/80 border-slate-700/80 hover:bg-slate-800 hover:border-slate-600'
-            }`}
-          >
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black uppercase tracking-wider text-rose-400">Lãnh đạo P-QLCL</span>
-              <ShieldCheck className="w-4 h-4 text-rose-400" />
-            </div>
-            <div className="mt-2 flex items-baseline gap-1">
-              <span className="text-2xl font-black text-white tabular-nums">{stats.qlcl}</span>
-              <span className="text-[10px] text-slate-400 font-bold">Stop-Line</span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedDept('Bộ phận QC Hiện trường')}
-            className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
-              selectedDept === 'Bộ phận QC Hiện trường'
-                ? 'bg-blue-600/30 border-blue-500 shadow-md'
-                : 'bg-slate-800/80 border-slate-700/80 hover:bg-slate-800 hover:border-slate-600'
-            }`}
-          >
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black uppercase tracking-wider text-blue-400">QC Hiện trường</span>
-              <Users className="w-4 h-4 text-blue-400" />
-            </div>
-            <div className="mt-2 flex items-baseline gap-1">
-              <span className="text-2xl font-black text-white tabular-nums">{stats.qc}</span>
-              <span className="text-[10px] text-slate-400 font-bold">IQC/IPQC/OQC</span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedDept('Bộ phận QA/QE')}
-            className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
-              selectedDept === 'Bộ phận QA/QE'
-                ? 'bg-purple-600/30 border-purple-500 shadow-md'
-                : 'bg-slate-800/80 border-slate-700/80 hover:bg-slate-800 hover:border-slate-600'
-            }`}
-          >
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black uppercase tracking-wider text-purple-400">BP QA / QE</span>
-              <Sparkles className="w-4 h-4 text-purple-400" />
-            </div>
-            <div className="mt-2 flex items-baseline gap-1">
-              <span className="text-2xl font-black text-white tabular-nums">{stats.qa}</span>
-              <span className="text-[10px] text-slate-400 font-bold">CAR/PAR & SQE</span>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedDept('Bộ phận Kỹ thuật Thẩm định')}
-            className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between col-span-2 md:col-span-1 ${
-              selectedDept === 'Bộ phận Kỹ thuật Thẩm định'
-                ? 'bg-amber-600/30 border-amber-500 shadow-md'
-                : 'bg-slate-800/80 border-slate-700/80 hover:bg-slate-800 hover:border-slate-600'
-            }`}
-          >
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">Kỹ thuật Thẩm định</span>
-              <Wrench className="w-4 h-4 text-amber-400" />
-            </div>
-            <div className="mt-2 flex items-baseline gap-1">
-              <span className="text-2xl font-black text-white tabular-nums">{stats.kttd}</span>
-              <span className="text-[10px] text-slate-400 font-bold">Bảo hành & TB</span>
-            </div>
-          </button>
-        </div>
-
-        {/* Thanh Tìm Kiếm Biểu Mẫu */}
-        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-800/70 p-3 rounded-xl border border-slate-700/80">
-          <div className="relative w-full sm:w-96">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchKeyword}
-              onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="Tìm theo mã BM (BM-QC-01), tên biểu mẫu, quy trình..."
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition"
-            />
           </div>
-
-          <div className="text-xs text-slate-400 font-bold flex items-center gap-2 self-end sm:self-auto">
-            <span>Hiển thị: <strong className="text-indigo-400">{filteredForms.length}</strong> / {stats.total} biểu mẫu</span>
-          </div>
-        </div>
-
-        {/* Lưới Danh Sách Các Biểu Mẫu */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredForms.map((form) => {
-            const deptColors: Record<string, { badge: string; border: string }> = {
-              'Lãnh đạo Phòng QLCL': { badge: 'bg-rose-500/20 text-rose-300 border-rose-500/30', border: 'hover:border-rose-500/50' },
-              'Bộ phận QC Hiện trường': { badge: 'bg-blue-500/20 text-blue-300 border-blue-500/30', border: 'hover:border-blue-500/50' },
-              'Bộ phận QA/QE': { badge: 'bg-purple-500/20 text-purple-300 border-purple-500/30', border: 'hover:border-purple-500/50' },
-              'Bộ phận Kỹ thuật Thẩm định': { badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30', border: 'hover:border-amber-500/50' },
-            };
-            const col = deptColors[form.department] || { badge: 'bg-slate-700 text-slate-300 border-slate-600', border: 'hover:border-slate-500' };
-
-            return (
+        ) : (
+          /* ==================== HIỂN THỊ DẠNG THẺ (GRID) ==================== */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredForms.map((form) => (
               <div
                 key={form.id}
-                className={`bg-slate-800/90 rounded-2xl border border-slate-700/80 p-5 shadow-md flex flex-col justify-between transition-all ${col.border}`}
+                className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex flex-col justify-between hover:border-slate-300 transition"
               >
                 <div>
-                  {/* Mã biểu mẫu & Bộ phận */}
-                  <div className="flex items-start justify-between gap-2 mb-2.5">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-indigo-600 text-white tracking-wide shadow-xs">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-900 text-white">
                         {form.code}
                       </span>
-                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-700">
+                      <span className="font-mono text-[11px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                         {form.procedureCode}
                       </span>
                     </div>
-                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border ${col.badge}`}>
+                    <span className="text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                       {form.department}
                     </span>
                   </div>
 
-                  {/* Tên biểu mẫu */}
-                  <h3 className="text-sm sm:text-base font-black text-white leading-snug">
+                  <h3 className="text-sm font-bold text-slate-900 leading-snug">
                     {form.title}
                   </h3>
 
-                  {/* Phụ đề & Mục đích */}
-                  <p className="text-xs text-slate-300 mt-1.5 line-clamp-2 leading-relaxed">
+                  <p className="text-xs text-slate-500 mt-1 line-clamp-2">
                     {form.subtitle || form.purpose}
                   </p>
 
-                  {/* Thông số kỹ thuật của biểu mẫu */}
-                  <div className="mt-3 pt-3 border-t border-slate-700/60 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
-                    <div>
-                      <span>Lần BH / Hiệu lực:</span>
-                      <span className="font-bold text-slate-200 block">Lần {form.revision} ({form.effectiveDate})</span>
-                    </div>
-                    <div>
-                      <span>Phê duyệt RACI:</span>
-                      <span className="font-bold text-indigo-300 block truncate" title={form.signRoles.map(s => s.role).join(' • ')}>
-                        {form.signRoles.map(s => s.type).join(' ➔ ')} ({form.signRoles[form.signRoles.length - 1].title})
-                      </span>
-                    </div>
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 text-[11px] text-slate-500 flex justify-between">
+                    <span>Lần ban hành: <strong>{form.revision}</strong> ({form.effectiveDate})</span>
+                    <span>Quyền duyệt: <strong>{form.signRoles[form.signRoles.length - 1].role}</strong></span>
                   </div>
                 </div>
 
-                {/* Các nút Thao tác: Xem, In, Tải Word, Tải CSV */}
-                <div className="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between gap-2 flex-wrap">
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                   <button
                     type="button"
                     onClick={() => setPreviewForm(form)}
-                    className="bg-slate-700/80 hover:bg-slate-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border border-slate-600 active:scale-95"
-                    title="Xem chi tiết biểu mẫu và in ấn"
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 transition flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Eye className="w-3.5 h-3.5 text-indigo-400" />
+                    <Eye className="w-3.5 h-3.5" />
                     <span>Xem mẫu A4</span>
                   </button>
 
@@ -874,41 +917,40 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                     <button
                       type="button"
                       onClick={() => handleExportWord(form)}
-                      className="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs active:scale-95"
-                      title="Tải biểu mẫu Microsoft Word (.doc)"
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 transition flex items-center gap-1 cursor-pointer"
+                      title="Tải file Word (.doc)"
                     >
                       <FileText className="w-3.5 h-3.5" />
-                      <span>Word (.doc)</span>
+                      <span>Word</span>
                     </button>
-
                     <button
                       type="button"
                       onClick={() => handleExportCsv(form)}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs active:scale-95"
-                      title="Tải biểu mẫu Excel (.csv)"
+                      className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 transition flex items-center gap-1 cursor-pointer"
+                      title="Tải file Excel (.csv)"
                     >
                       <FileSpreadsheet className="w-3.5 h-3.5" />
-                      <span>Excel (.csv)</span>
+                      <span>CSV</span>
                     </button>
                   </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </main>
 
       {/* ==================== MODAL XEM CHI TIẾT BIỂU MẪU CHUẨN A4 ==================== */}
       {previewForm && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white border border-slate-300 rounded-xl max-w-4xl w-full max-h-[95vh] flex flex-col shadow-xl overflow-hidden">
             {/* Modal Header */}
-            <div className="bg-slate-850 px-5 py-3.5 border-b border-slate-700/80 flex justify-between items-center text-white shrink-0">
+            <div className="bg-slate-100 px-4 py-2.5 border-b border-slate-200 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-2">
-                <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-indigo-600 text-white">
+                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-900 text-white">
                   {previewForm.code}
                 </span>
-                <h3 className="font-bold text-sm text-slate-100 truncate max-w-md sm:max-w-xl">
+                <h3 className="font-bold text-xs sm:text-sm text-slate-800 truncate max-w-md">
                   {previewForm.title}
                 </h3>
               </div>
@@ -917,8 +959,8 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                 <button
                   type="button"
                   onClick={() => handlePrintForm(previewForm)}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
-                  title="In trực tiếp bản A4 hoặc Lưu dạng PDF"
+                  className="bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1 cursor-pointer"
+                  title="In trực tiếp A4 hoặc Lưu file PDF"
                 >
                   <Printer className="w-3.5 h-3.5" />
                   <span>In A4 / PDF</span>
@@ -926,7 +968,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                 <button
                   type="button"
                   onClick={() => handleExportWord(previewForm)}
-                  className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                  className="bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1 cursor-pointer"
                   title="Tải file Word (.doc)"
                 >
                   <FileText className="w-3.5 h-3.5" />
@@ -935,70 +977,88 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                 <button
                   type="button"
                   onClick={() => setPreviewForm(null)}
-                  className="text-slate-400 hover:text-white p-1 hover:bg-slate-700 rounded-lg transition text-base font-bold ml-1 cursor-pointer"
+                  className="text-slate-400 hover:text-slate-700 p-1 hover:bg-slate-200 rounded transition font-bold cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
             </div>
 
-            {/* Modal Body - Bản in A4 Giấy Trắng Chữ Đen Trực Quan */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-950/60 select-text">
+            {/* Modal Body - Bản in A4 Trực Quan */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100 select-text">
               <div 
                 id="qms-form-printable-document"
-                className="bg-white text-slate-900 border border-slate-300 shadow-xl p-8 sm:p-12 mx-auto max-w-3xl rounded-none font-serif text-[12.5px] leading-relaxed min-h-[297mm]"
+                className="bg-white text-slate-900 border border-slate-300 shadow-sm p-6 sm:p-10 mx-auto max-w-3xl font-serif text-[12px] leading-relaxed"
+                style={{ width: '100%', minHeight: '270mm' }}
               >
-                {/* Header Tiêu Chuẩn Doanh Nghiệp */}
-                <div className="company-header flex justify-between items-start border-b-2 border-slate-900 pb-3 mb-5">
-                  <div className="font-sans text-left">
-                    <h1 className="company-title font-black text-slate-900 text-xs sm:text-sm uppercase tracking-tight">
-                      CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT
-                    </h1>
-                    <p className="dept-title text-[10.5px] text-slate-600 font-extrabold font-mono mt-0.5 uppercase tracking-wide">
-                      PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL) - DK QMS
-                    </p>
-                    <p className="text-[9.5px] text-slate-500 italic mt-0.5">
-                      Khẩu hiệu: "Xe cho cả gia đình" | Tiêu chuẩn: ISO 9001:2015
-                    </p>
-                  </div>
-                  <div className="meta-box text-right text-[10.5px] font-mono leading-tight text-slate-600">
-                    <p className="font-bold">Mã số: <span className="text-indigo-700">{previewForm.code}</span></p>
-                    <p>Mã quy trình: {previewForm.procedureCode}</p>
-                    <p>Lần ban hành: {previewForm.revision} | Ngày: {previewForm.effectiveDate}</p>
-                  </div>
-                </div>
+                {/* Header Tiêu Chuẩn Doanh Nghiệp 2 Bên Đều Nhau (50% - 50%) */}
+                <table className="header-table w-full border border-black border-collapse mb-3">
+                  <tbody>
+                    <tr>
+                      <td className="w-1/2 border border-black p-2 text-center align-middle">
+                        <div className="font-bold text-[12px] uppercase leading-tight font-serif">
+                          CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT
+                        </div>
+                        <div className="font-bold text-[11px] uppercase mt-0.5 font-serif">
+                          PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL)
+                        </div>
+                        <div className="text-[10px] italic mt-0.5 text-slate-600 font-serif">
+                          Tiêu chuẩn: ISO 9001:2015
+                        </div>
+                      </td>
+                      <td className="w-1/2 border border-black p-2 text-[11px] align-middle font-serif">
+                        <table className="w-full border-0 text-[11px]">
+                          <tbody>
+                            <tr>
+                              <td className="w-5/12 font-bold py-0.5 border-0">Mã Biểu Mẫu:</td>
+                              <td className="font-bold py-0.5 border-0">{previewForm.code}</td>
+                            </tr>
+                            <tr>
+                              <td className="font-bold py-0.5 border-0">Mã Quy Trình:</td>
+                              <td className="py-0.5 border-0">{previewForm.procedureCode}</td>
+                            </tr>
+                            <tr>
+                              <td className="font-bold py-0.5 border-0">Lần Ban Hành:</td>
+                              <td className="py-0.5 border-0">{previewForm.revision} | Ngày: {previewForm.effectiveDate}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
 
                 {/* Tiêu Đề Biểu Mẫu */}
-                <div className="form-main-title text-center my-5">
-                  <h1 className="text-base sm:text-lg font-black text-slate-900 uppercase tracking-wide border-b pb-1.5 max-w-max mx-auto border-slate-300">
+                <div className="form-main-title text-center my-3">
+                  <h1 className="text-sm sm:text-base font-bold text-black uppercase tracking-wide">
                     {previewForm.title}
                   </h1>
-                  <p className="text-[11px] italic text-slate-500 mt-1">
+                  <p className="text-[11px] italic text-slate-600 mt-0.5">
                     ({previewForm.subtitle || previewForm.purpose})
                   </p>
                 </div>
 
                 {/* Danh mục các trường thông tin chung */}
-                <div className="info-grid grid grid-cols-2 gap-x-6 gap-y-2 mb-4 text-[11.5px] font-sans">
+                <div className="info-grid grid grid-cols-2 gap-x-6 gap-y-1.5 mb-3 text-[11.5px] font-sans">
                   {previewForm.fields.map((f, fIdx) => (
-                    <div key={fIdx} className="info-item border-b border-dotted border-slate-400 pb-1 flex justify-between">
-                      <span className="font-bold text-slate-700">{f.label}:</span>
-                      <span className="text-slate-400 italic">....................................................</span>
+                    <div key={fIdx} className="info-item border-b border-dotted border-slate-400 pb-0.5 flex justify-between">
+                      <span className="font-bold text-slate-800">{f.label}:</span>
+                      <span className="text-slate-400">....................................................</span>
                     </div>
                   ))}
                 </div>
 
                 {/* Các Bảng Biểu Kỹ Thuật / Nghiệm Thu */}
                 {previewForm.tables.map((tbl, tIdx) => (
-                  <div key={tIdx} className="my-4">
-                    <h4 className="section-title text-xs font-bold text-slate-900 uppercase mb-2">
+                  <div key={tIdx} className="my-3">
+                    <h4 className="section-title text-[11.5px] font-bold text-black uppercase mb-1.5">
                       {tbl.title}
                     </h4>
-                    <table className="qms-table w-full border-collapse border border-slate-900 text-[11px]">
+                    <table className="qms-table w-full border-collapse border border-black text-[11px]">
                       <thead>
                         <tr className="bg-slate-100 font-bold">
                           {tbl.headers.map((h, hIdx) => (
-                            <th key={hIdx} className="border border-slate-900 p-2 text-center">
+                            <th key={hIdx} className="border border-black p-1.5 text-center">
                               {h}
                             </th>
                           ))}
@@ -1008,8 +1068,12 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                         {tbl.rows.map((row, rIdx) => (
                           <tr key={rIdx}>
                             {row.map((cell, cIdx) => (
-                              <td key={cIdx} className={`border border-slate-900 p-2 ${cIdx === 0 ? 'text-center' : 'text-left'}`}>
-                                {cell}
+                              <td key={cIdx} className={`border border-black p-1.5 ${cIdx === 0 ? 'text-center' : 'text-left'}`}>
+                                {String(cell).split('\n').map((line, lIdx) => (
+                                  <div key={lIdx} className={line.startsWith('□') ? 'font-mono text-[11.5px]' : ''}>
+                                    {line}
+                                  </div>
+                                ))}
                               </td>
                             ))}
                           </tr>
@@ -1021,36 +1085,43 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
 
                 {/* Kết luận & Phán quyết */}
                 {previewForm.conclusions && previewForm.conclusions.length > 0 && (
-                  <div className="my-4 p-3 border border-slate-300 bg-slate-50/60 rounded text-[11.5px]">
-                    <h5 className="font-bold uppercase text-slate-900 mb-1">
+                  <div className="conclusions-box my-3 p-2.5 border border-black text-[11px]">
+                    <div className="font-bold uppercase text-black mb-1">
                       KẾT LUẬN & PHÁN QUYẾT XỬ LÝ:
-                    </h5>
+                    </div>
                     {previewForm.conclusions.map((c, cIdx) => (
-                      <p key={cIdx} className="my-1">
-                        <strong className="text-slate-700">• {c.label}:</strong>{' '}
-                        <span>{c.content || '................................................................................................................'}</span>
-                      </p>
+                      <div key={cIdx} className="my-1.5">
+                        <strong className="text-black">• {c.label}:</strong>
+                        <div className="pl-3 mt-0.5 text-slate-800">
+                          {(c.content || '....................................................................................................................')
+                            .split('\n')
+                            .map((line, lIdx) => (
+                              <div key={lIdx} className={line.startsWith('□') ? 'font-mono text-[11.5px] py-0.5' : ''}>
+                                {line}
+                              </div>
+                            ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
 
                 {/* Bảng Ký Duyệt Phân Quyền RACI */}
-                <div className="signatures-table mt-10 pt-4 border-t border-slate-300">
-                  <table className="w-full text-center border-0 text-[11.5px]">
+                <div className="signatures-table mt-4 pt-2">
+                  <table className="w-full text-center border-0 text-[11px]">
                     <tbody>
-                      <tr className="font-bold text-slate-900">
+                      <tr className="font-bold text-black uppercase">
                         {previewForm.signRoles.map((s, sIdx) => (
-                          <td key={sIdx} className="w-1/3 pb-16 uppercase">
+                          <td key={sIdx} className="w-1/3 align-top border-0">
                             <span className="sign-role">{s.role}</span>
-                            <span className="sign-sub block text-[10px] text-slate-500 font-normal italic lowercase mt-0.5">
+                            <span className="sign-sub block text-[10px] text-slate-600 font-normal italic lowercase mt-0.5">
                               ({s.title})
                             </span>
+                            <div className="sign-space h-14"></div>
+                            <span className="text-[10px] text-slate-500 italic block font-normal">
+                              (Ký và ghi rõ họ tên)
+                            </span>
                           </td>
-                        ))}
-                      </tr>
-                      <tr className="text-slate-400 font-medium italic text-[10px]">
-                        {previewForm.signRoles.map((_, sIdx) => (
-                          <td key={sIdx}>(Ký và ghi rõ họ tên)</td>
                         ))}
                       </tr>
                     </tbody>
@@ -1060,14 +1131,14 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-850 px-5 py-3 border-t border-slate-700/80 flex justify-between items-center text-xs">
-              <span className="text-slate-400 text-[11px]">
-                Định dạng chuẩn ISO 9001:2015 của Công ty TNHH Xe điện DK Việt Nhật
+            <div className="bg-slate-100 px-4 py-2.5 border-t border-slate-200 flex justify-between items-center text-xs">
+              <span className="text-slate-500 text-[11px]">
+                Biểu mẫu quản lý chất lượng ISO 9001:2015 • Công ty TNHH Xe điện DK Việt Nhật
               </span>
               <button
                 type="button"
                 onClick={() => setPreviewForm(null)}
-                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg transition"
+                className="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium rounded-lg transition"
               >
                 Đóng
               </button>

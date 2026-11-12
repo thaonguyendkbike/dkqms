@@ -31,7 +31,7 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
     code: 'BM-QLCL-01',
     procedureCode: 'QT-QLCL-01',
     title: 'LỆNH ĐÌNH CHỈ SẢN XUẤT KHẨN CẤP (STOP-LINE)',
-    subtitle: 'Lệnh quyền hạn cao nhất của Trưởng phòng QLCL nhằm khoanh vùng sự cố nghiêm trọng',
+    subtitle: 'Lệnh quyền hạn của Trưởng phòng QLCL khoanh vùng sự cố nghiêm trọng',
     department: 'Lãnh đạo Phòng QLCL',
     revision: '01',
     effectiveDate: '01/11/2026',
@@ -47,26 +47,26 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
       { label: 'Thời gian phát hiện' },
       { label: 'Dây chuyền / Trạm dừng' },
       { label: 'Người phát hiện (QC/IPQC)' },
-      { label: 'Mã sản phẩm / Lô xe bị ảnh hưởng' },
+      { label: 'Mã sản phẩm / Lô xe ảnh hưởng' },
       { label: 'Quản đốc xưởng phụ trách' }
     ],
     tables: [
       {
         title: 'I. NỘI DUNG RỦI RO LỖI HỆ THỐNG PHÁT HIỆN',
-        headers: ['STT', 'Hạng mục phát hiện lỗi', 'Mô tả chi tiết sự cố / Sai lệch SOP', 'Mức độ rủi ro', 'Ghi chú / Hành động lập tức'],
+        headers: ['STT', 'Hạng mục / Trạm phát hiện', 'Mô tả chi tiết sự cố / Sai lệch SOP', 'Mức độ rủi ro', 'Hành động khẩn cấp lập tức'],
         rows: [
-          ['1', 'Lỗi kỹ thuật / Bản vẽ', 'Sai lệch kích thước lắp ráp giữa khung và càng sau', '[X] Critical', 'Dừng chuyền lập tức'],
-          ['2', 'Linh kiện / Vật tư đầu vào', 'Lô giắc nguồn động cơ chập chờn tiếp xúc', '[X] Critical', 'Cách ly toàn bộ lô LK'],
-          ['3', 'Thiết bị / Súng siết lực', 'Súng siết trạm 03 lệch dải lực (+15% dung sai)', '[ ] Major', 'Thay súng dự phòng & hiệu chuẩn'],
-          ['4', 'Thao tác công nhân', 'Bỏ qua bước tra mỡ vòng bi cổ phốt theo SOP', '[ ] Major', 'Đào tạo & chấn chỉnh thao tác']
+          ['1', '................................................', '................................................................................', '□ Critical\n□ Major\n□ Minor', '................................................'],
+          ['2', '................................................', '................................................................................', '□ Critical\n□ Major\n□ Minor', '................................................'],
+          ['3', '................................................', '................................................................................', '□ Critical\n□ Major\n□ Minor', '................................................'],
+          ['4', '................................................', '................................................................................', '□ Critical\n□ Major\n□ Minor', '................................................']
         ]
       }
     ],
     conclusions: [
-      { label: 'Thời gian tạm dừng chuyền', content: 'Từ: ........................ Đến: ........................' },
-      { label: 'Dự kiến thời gian khắc phục', content: 'Khoảng ............ giờ' },
-      { label: 'Biện pháp khoanh vùng cách ly', content: 'Cách ly 100% các xe trong dải số khung nghi ngờ và dán thẻ cảnh báo đỏ Stop-Line' },
-      { label: 'Triệu tập Hội đồng MRB', content: '[X] Có triệu tập khẩn   [ ] Không cần' }
+      { label: 'Thời gian tạm dừng dây chuyền', content: 'Từ: ................................................ Đến: ................................................' },
+      { label: 'Dự kiến thời gian khắc phục', content: 'Khoảng .................... giờ (Dự kiến hoàn tất: ................................................)' },
+      { label: 'Biện pháp khoanh vùng cách ly', content: '................................................................................................................................................' },
+      { label: 'Triệu tập Hội đồng MRB', content: '□ Có triệu tập Hội đồng khẩn cấp\n□ Không cần triệu tập (Xử lý trực tiếp tại xưởng)' }
     ]
   },
   {
@@ -88,28 +88,28 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
     fields: [
       { label: 'Tên Nhà cung cấp' },
       { label: 'Tên linh kiện / Vật tư' },
-      { label: 'Mã linh kiện (Ecount/ERP)' },
-      { label: 'Số Lô / Invoice' },
+      { label: 'Mã linh kiện (ERP/Ecount)' },
+      { label: 'Số Lô / Số Invoice' },
       { label: 'Tổng số lượng giao (N)' },
-      { label: 'Số lượng mẫu kiểm tra (n - AQL)' }
+      { label: 'Số lượng lấy mẫu (n - AQL)' }
     ],
     tables: [
       {
         title: 'I. KẾT QUẢ ĐO KIỂM THỰC TẾ THEO TIÊU CHUẨN QA',
         headers: ['STT', 'Hạng mục kiểm tra', 'Tiêu chuẩn kỹ thuật (QA)', 'Dụng cụ đo', 'Kết quả đo thực tế', 'Đánh giá'],
         rows: [
-          ['1', 'Kích thước / Dung sai', 'Bản vẽ kỹ thuật: ±0.05 mm', 'Thước kẹp cơ/điện tử', '12.02 mm', 'Pass'],
-          ['2', 'Ngoại quan / Bề mặt sơn', 'Không xước, không phồng rộp, đều màu', 'Bàn kiểm quang học', 'Mịn đẹp, bóng chuẩn', 'Pass'],
-          ['3', 'Tính năng điện / Cơ lý', 'Điện áp 60V, dòng không tải < 1.2A', 'Đồng hồ VOM & Tải giả', '60.1V - 1.1A', 'Pass'],
-          ['4', 'Lắp thử nghiệm (Trial)', 'Khớp 100% linh kiện mẫu đối chứng', 'Jig dưỡng mẫu R&D', 'Vào khớp êm khít', 'Pass'],
-          ['5', 'Đóng gói / Tem nhãn', 'Đúng quy cách đóng gói và tem truy xuất', 'Kiểm quan sát', 'Có đủ tem mã vạch', 'Pass']
+          ['1', 'Kích thước / Dung sai lắp ráp', 'Bản vẽ kỹ thuật: ±0.05 mm', '........................', '....................................', '□ Đạt\n□ Không đạt'],
+          ['2', 'Ngoại quan / Bề mặt sơn / Xi mạ', 'Không xước, đều màu, không rộp', 'Bàn kiểm quang học', '....................................', '□ Đạt\n□ Không đạt'],
+          ['3', 'Tính năng điện / Cơ lý', 'Điện áp, dòng tải đúng thông số', 'Đồng hồ VOM/Tải giả', '....................................', '□ Đạt\n□ Không đạt'],
+          ['4', 'Lắp ráp thử nghiệm (Trial)', 'Khớp 100% mẫu đối chứng R&D', 'Dưỡng mẫu chuẩn', '....................................', '□ Đạt\n□ Không đạt'],
+          ['5', 'Quy cách đóng gói & Tem nhãn', 'Đầy đủ tem nhãn và truy xuất', 'Quan sát thực tế', '....................................', '□ Đạt\n□ Không đạt']
         ]
       }
     ],
     conclusions: [
-      { label: 'Tỉ lệ lỗi phát hiện (Defect Rate)', content: '0.0% (0 lỗi trên cỡ mẫu)' },
-      { label: 'Kết luận phân loại lô hàng', content: '[X] ĐẠT (Dán tem xanh Pass)   [ ] CHỜ XỬ LÝ (Tem vàng)   [ ] TRẢ HÀNG (Tem đỏ Reject)' },
-      { label: 'Hướng xử lý đề xuất', content: 'Nhập kho sản xuất bình thường' }
+      { label: 'Tỉ lệ lỗi phát hiện (Defect Rate)', content: 'Số lỗi phát hiện: ............ chi tiết (Tỉ lệ lỗi: ............ %)' },
+      { label: 'Kết luận phân loại lô hàng', content: '□ ĐẠT TIÊU CHUẨN (Cho phép nhập kho - Dán tem xanh Pass)\n□ CHỜ XỬ LÝ (Tạm giữ cách ly - Dán tem vàng Hold)\n□ KHÔNG ĐẠT (Từ chối nhập kho - Dán tem đỏ Reject)' },
+      { label: 'Ý kiến đề xuất xử lý', content: '................................................................................................................................................' }
     ]
   },
   {
@@ -138,19 +138,20 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
     ],
     tables: [
       {
-        title: 'I. Ý KIẾN ĐÁNH GIÁ CHUYÊN MÔN CỦA CÁC PHÒNG BAN',
-        headers: ['STT', 'Bộ phận tham gia', 'Ý kiến đánh giá chuyên môn & Phân tích rủi ro', 'Đại diện xác nhận'],
+        title: 'I. Ý KIẾN ĐÁNH GIÁ CHUYÊN MÔN CỦA CÁC BỘ PHẬN THAM GIA',
+        headers: ['STT', 'Bộ phận tham gia', 'Ý kiến đánh giá chuyên môn & Phân tích rủi ro', 'Ký xác nhận'],
         rows: [
-          ['1', 'Phòng Quản lý chất lượng (QLCL)', 'Lô càng sau lệch dưỡng 1.5mm, có thể chỉnh nguội trước khi lắp ráp', 'Đã ký'],
-          ['2', 'Phòng Sản xuất (Xưởng lắp ráp)', 'Đồng ý nhận gia công sửa chữa với điều kiện NCC chịu chi phí nhân công', 'Đã ký'],
-          ['3', 'Phòng Mua hàng & Cung ứng', 'Đã đàm phán trừ tiền gia công vào công nợ tháng của Nhà cung cấp', 'Đã ký'],
-          ['4', 'Phòng Kỹ thuật & R&D', 'Đã kiểm tra kết cấu an toàn sau nắn chỉnh, đảm bảo tải trọng', 'Đã ký']
+          ['1', 'Phòng Quản lý chất lượng (QLCL)', '........................................................................................................................', '....................'],
+          ['2', 'Phòng Sản xuất (Xưởng lắp ráp)', '........................................................................................................................', '....................'],
+          ['3', 'Phòng Mua hàng & Cung ứng', '........................................................................................................................', '....................'],
+          ['4', 'Phòng Kỹ thuật & R&D', '........................................................................................................................', '....................']
         ]
       }
     ],
     conclusions: [
-      { label: 'Quyết định cuối cùng của Hội đồng MRB', content: '[ ] Trả lại NCC (RTV)   [X] Sửa chữa sử dụng (Rework)   [ ] Dùng nhân nhượng (UAI)   [ ] Hủy bỏ (Scrap)' },
-      { label: 'Phân công trách nhiệm giám sát', content: 'Bộ phận IPQC giám sát 100% công đoạn sửa chữa và nghiệm thu lại trước khi đưa lên chuyền.' }
+      { label: 'Quyết định cuối cùng của Hội đồng MRB', content: '□ TRẢ LẠI NHÀ CUNG CẤP (RTV - Return to Vendor)\n□ SỬA CHỮA / TÁI CHẾ ĐỂ DÙNG (Rework)\n□ SỬ DỤNG CÓ ĐIỀU KIỆN / ĐẶC NHƯỢNG (UAI - Use As Is)\n□ HỦY BỎ / TIÊU HỦY PHẾ PHẨM (Scrap)' },
+      { label: 'Phân công trách nhiệm & Thời hạn', content: 'Đơn vị thực hiện: ................................................ Người giám sát: ................................................ Thời hạn: ................................................' },
+      { label: 'Ghi chú bổ sung', content: '................................................................................................................................................' }
     ]
   },
   {
@@ -175,24 +176,24 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
       { label: 'Dây chuyền lắp ráp' },
       { label: 'Số Khung xe mẫu (VIN)' },
       { label: 'Số Động cơ xe mẫu' },
-      { label: 'Thời gian hoàn thành kiểm định' }
+      { label: 'Thời gian hoàn thành kiểm tra' }
     ],
     tables: [
       {
         title: 'I. DANH MỤC KIỂM SOÁT XE MẪU ĐẦU CHUYỀN (FIRST-PIECE CHECKLIST)',
-        headers: ['STT', 'Hạng mục kiểm soát', 'Thông số tiêu chuẩn (SOP/Bản vẽ)', 'Kết quả đo thực tế', 'Đánh giá'],
+        headers: ['STT', 'Hạng mục kiểm soát', 'Thông số tiêu chuẩn (SOP/Bản vẽ)', 'Kết quả kiểm tra thực tế', 'Đánh giá'],
         rows: [
-          ['1', 'Lực siết trục bánh trước/sau', 'Trước: 45-55 Nm | Sau: 75-85 Nm', 'Trước: 50 Nm | Sau: 80 Nm', 'Pass'],
-          ['2', 'Cân vành & Đảo lốp', 'Độ đảo hướng kính < 1.0 mm', '0.6 mm', 'Pass'],
-          ['3', 'Hệ thống phanh cơ/đĩa', 'Hành trình tay phanh 15 - 25 mm', '20 mm', 'Pass'],
-          ['4', 'Hệ thống điện & Chiếu sáng', 'Đèn pha, cốt, xi nhan, còi, cụm đồng hồ chuẩn', 'Hoạt động hoàn hảo', 'Pass'],
-          ['5', 'Góc lái & Chén cổ phốt', 'Xoay nhẹ nhàng, không rơ lỏng, không sượng', 'Êm ái, chuẩn dưỡng', 'Pass']
+          ['1', 'Lực siết trục bánh trước & sau', 'Trước: 45-55 Nm | Sau: 75-85 Nm', '................................................', '□ Đạt\n□ Không đạt'],
+          ['2', 'Cân vành & Độ đảo lốp', 'Độ đảo hướng kính < 1.0 mm', '................................................', '□ Đạt\n□ Không đạt'],
+          ['3', 'Hệ thống phanh cơ / đĩa', 'Hành trình tay phanh: 15 - 25 mm', '................................................', '□ Đạt\n□ Không đạt'],
+          ['4', 'Hệ thống điện & Chiếu sáng', 'Đèn pha, xi nhan, còi, đồng hồ chuẩn', '................................................', '□ Đạt\n□ Không đạt'],
+          ['5', 'Góc lái & Cổ phốt', 'Xoay nhẹ nhàng, không rơ lỏng', '................................................', '□ Đạt\n□ Không đạt']
         ]
       }
     ],
     conclusions: [
-      { label: 'Kết luận xe mẫu đầu chuyền', content: '[X] ĐẠT TIÊU CHUẨN - CHO PHÉP BẤM MÁY CHẠY SẢN XUẤT HÀNG LOẠT' },
-      { label: 'Ghi chú cho cả ca', content: 'Chú ý siết đều lực bu lông càng sau theo đúng thông số trên bảng hướng dẫn công việc.' }
+      { label: 'Kết luận xe mẫu đầu chuyền', content: '□ ĐẠT TIÊU CHUẨN - CHO PHÉP BẤM MÁY CHẠY SẢN XUẤT HÀNG LOẠT\n□ KHÔNG ĐẠT - YÊU CẦU CĂN CHỈNH LẠI GÁ DƯỠNG VÀ LÀM LẠI XE MẪU' },
+      { label: 'Ghi chú & Lưu ý cho ca sản xuất', content: '................................................................................................................................................' }
     ]
   },
   {
@@ -222,15 +223,17 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
         title: 'I. NHẬT KÝ GIÁM SÁT TUẦN TRA CÁC TRẠM LẮP RÁP (PATROL LOG)',
         headers: ['Khung giờ', 'Trạm / Công đoạn', 'Hạng mục kiểm tra', 'SL kiểm', 'Lỗi (NG)', 'Ghi chú & Hành động khắc phục tức thời'],
         rows: [
-          ['08:30', 'Trạm 01 - Động cơ', 'Lực siết bu lông chân máy', '05 xe', '0', 'Lực siết đạt chuẩn 42 Nm'],
-          ['09:45', 'Trạm 03 - Dây điện', 'Đường đi dây nguồn chính tránh góc sắc nhọn', '10 xe', '0', 'Đã bọc thêm ống gen chống cọ xát'],
-          ['10:45', 'Trạm 05 - Ốp nhựa', 'Độ khít khe hở dàn áo nhựa màu', '08 xe', '1 xe hở mép', 'Đã nhắc công nhân gá lẫy chuẩn trước khi bắn vít'],
-          ['14:15', 'Trạm 07 - Bánh xe', 'Áp suất lốp trước 2.2 bar, sau 2.5 bar', '12 xe', '0', 'Áp suất chuẩn đồng hồ đo']
+          ['..........', '................................', '................................', '..........', '..........', '................................................'],
+          ['..........', '................................', '................................', '..........', '..........', '................................................'],
+          ['..........', '................................', '................................', '..........', '..........', '................................................'],
+          ['..........', '................................', '................................', '..........', '..........', '................................................'],
+          ['..........', '................................', '................................', '..........', '..........', '................................................']
         ]
       }
     ],
     conclusions: [
-      { label: 'Tổng kết ca tuần tra', content: 'Toàn ca phát hiện 01 lỗi ngoại quan nhỏ, đã xử lý dứt điểm tại trạm, không lọt lỗi xuống cuối chuyền.' }
+      { label: 'Tổng kết ca tuần tra', content: 'Tổng số lượt kiểm tra: ............ trạm | Tổng lỗi phát hiện: ............ lỗi | Đã khắc phục tại chỗ: ............ lỗi' },
+      { label: 'Đánh giá mức độ tuân thủ SOP', content: '□ TỐT (Tuân thủ 100% SOP & thông số)\n□ CẦN CHẤN CHỈNH (Có sai lệch nhỏ nhưng đã xử lý)\n□ KHÔNG ĐẠT (Phát hiện lỗi nghiêm trọng, lập biên bản)' }
     ]
   },
   {
@@ -258,19 +261,21 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
     ],
     tables: [
       {
-        title: 'I. BẢNG NGHIỆM THU 100% XE THÀNH PHẨM TRƯỚC XUẤT XƯỞNG',
-        headers: ['STT', 'Số Khung (VIN)', 'Số Động cơ / Máy', 'Ngoại quan', 'Chạy thử đường trường', 'Dán tem KCS', 'Kết quả'],
+        title: 'I. BẢNG NGHIỆM THU XE THÀNH PHẨM TRƯỚC XUẤT XƯỞNG',
+        headers: ['STT', 'Số Khung (VIN)', 'Số Động cơ / Máy', 'Ngoại quan', 'Chạy thử đường', 'Tem KCS', 'Kết quả'],
         rows: [
-          ['1', 'DKB-2026-00801', 'DK-EG-8801', 'Bóng đẹp, không trầy', 'Êm, phanh ăn, tốc độ 45km/h', 'Đã dán', 'ĐẠT'],
-          ['2', 'DKB-2026-00802', 'DK-EG-8802', 'Bóng đẹp, không trầy', 'Êm, phanh ăn, tốc độ 45km/h', 'Đã dán', 'ĐẠT'],
-          ['3', 'DKB-2026-00803', 'DK-EG-8803', 'Hơi xước nhẹ dè trước', 'Đã thay mới linh kiện dè', 'Đã dán', 'ĐẠT (Sau sửa)'],
-          ['4', 'DKB-2026-00804', 'DK-EG-8804', 'Bóng đẹp, không trầy', 'Êm, phanh ăn, tốc độ 45km/h', 'Đã dán', 'ĐẠT']
+          ['1', '................................', '................................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đã dán', '□ ĐẠT\n□ LỖI'],
+          ['2', '................................', '................................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đã dán', '□ ĐẠT\n□ LỖI'],
+          ['3', '................................', '................................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đã dán', '□ ĐẠT\n□ LỖI'],
+          ['4', '................................', '................................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đã dán', '□ ĐẠT\n□ LỖI'],
+          ['5', '................................', '................................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đã dán', '□ ĐẠT\n□ LỖI']
         ]
       }
     ],
     conclusions: [
-      { label: 'Tổng số xe kiểm tra', content: 'Tổng kiểm tra: 100 xe | Đạt xuất kho: 100 xe | Tỉ lệ đạt FPY: 99.0%' },
-      { label: 'Chứng thực xuất xưởng', content: 'Đủ điều kiện nhập kho thành phẩm và phát hành phiếu xuất xưởng cho Đại lý.' }
+      { label: 'Tổng số xe nghiệm thu', content: 'Tổng kiểm tra: .......... xe | Đạt xuất xưởng: .......... xe | Lỗi cần sửa: .......... xe | Tỉ lệ đạt FPY: .......... %' },
+      { label: 'Chứng thực xuất xưởng', content: '□ ĐỦ ĐIỀU KIỆN NHẬP KHO THÀNH PHẨM & XUẤT XƯỞNG CHO ĐẠI LÝ\n□ CHƯA ĐỦ ĐIỀU KIỆN - CÁCH LY CHỜ XỬ LÝ LỖI' },
+      { label: 'Ghi chú bàn giao', content: '................................................................................................................................................' }
     ]
   },
   {
@@ -299,19 +304,19 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
     tables: [
       {
         title: 'I. BẢNG CHẤM ĐIỂM 4 TRỤ CỘT ĐÁNH GIÁ (Q-C-D-S)',
-        headers: ['Trụ cột', 'Tỷ trọng', 'Tiêu chí chấm điểm chi tiết', 'Điểm tối đa', 'Điểm đạt', 'Đánh giá'],
+        headers: ['Trụ cột', 'Tỷ trọng', 'Tiêu chí chấm điểm chi tiết', 'Điểm chuẩn', 'Điểm đạt', 'Đánh giá'],
         rows: [
-          ['Quality (Chất lượng)', '40%', 'Tỷ lệ lô hàng đạt IQC (>98%), không phát sinh lỗi Critical', '40', '38', 'Tốt'],
-          ['Cost (Chi phí & Bù lỗi)', '20%', 'Mức độ hợp tác bù linh kiện lỗi bảo hành và đền bù nhân công', '20', '19', 'Rất tốt'],
-          ['Delivery (Giao hàng)', '20%', 'Giao hàng đúng hẹn, đúng số lượng, bao gói đúng quy cách', '20', '18', 'Đạt'],
-          ['Service (Dịch vụ & Cải tiến)', '20%', 'Phản hồi CAR/PAR nhanh chóng (<48h), có kỹ thuật hỗ trợ hiện trường', '20', '17', 'Đạt']
+          ['Quality (Chất lượng)', '40%', 'Tỷ lệ lô hàng đạt IQC (>98%), không phát sinh lỗi an toàn', '40 điểm', '...... / 40', '........................'],
+          ['Cost (Chi phí & Bù lỗi)', '20%', 'Mức độ hợp tác bù linh kiện lỗi bảo hành và chi phí công', '20 điểm', '...... / 20', '........................'],
+          ['Delivery (Giao hàng)', '20%', 'Giao hàng đúng hẹn, đủ số lượng, bao gói đúng quy cách', '20 điểm', '...... / 20', '........................'],
+          ['Service (Dịch vụ & Cải tiến)', '20%', 'Phản hồi CAR/PAR nhanh (<48h), hỗ trợ kỹ thuật hiện trường', '20 điểm', '...... / 20', '........................']
         ]
       }
     ],
     conclusions: [
-      { label: 'Tổng điểm đánh giá', content: '92 / 100 điểm' },
-      { label: 'Xếp loại Nhà cung cấp', content: '[X] HẠNG A (Chiến lược - Ưu tiên tăng sản lượng)   [ ] HẠNG B   [ ] HẠNG C   [ ] HẠNG D (Đình chỉ)' },
-      { label: 'Yêu cầu hành động đối với NCC', content: 'Tiếp tục duy trì chất lượng sơn tĩnh điện và cải thiện tiến độ gửi báo cáo 8D khi phát sinh lỗi.' }
+      { label: 'Tổng điểm đánh giá thực tế', content: 'Tổng cộng: ............ / 100 điểm' },
+      { label: 'Xếp loại Nhà cung cấp', content: '□ HẠNG A (Từ 90 - 100 điểm: Nhà cung cấp Chiến lược - Ưu tiên tăng sản lượng)\n□ HẠNG B (Từ 75 - 89 điểm: Đạt chuẩn - Tiếp tục duy trì đơn hàng)\n□ HẠNG C (Từ 60 - 74 điểm: Cần giám sát chặt chẽ - Yêu cầu lập kế hoạch cải tiến)\n□ HẠNG D (Dưới 60 điểm: Không đạt - Tạm đình chỉ hoặc cắt mã cung ứng)' },
+      { label: 'Yêu cầu hành động đối với NCC', content: '................................................................................................................................................' }
     ]
   },
   {
@@ -327,7 +332,7 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
     purpose: 'Yêu cầu đơn vị gây lỗi điều tra nguyên nhân gốc rễ bằng 4M/5-Whys và cam kết biện pháp ngăn ngừa tái phát dứt điểm.',
     signRoles: [
       { role: 'Thực thi [T]', type: 'T', title: 'Kỹ sư QA phát hành phiếu' },
-      { role: 'Xác nhận [C]', type: 'C', title: 'Đơn vị bị yêu cầu (Xưởng / NCC)' },
+      { role: 'Xác nhận [C]', type: 'C', title: 'Đơn vị nhận yêu cầu (Xưởng / NCC)' },
       { role: 'Phê duyệt [P]', type: 'P', title: 'Trưởng phòng QLCL' }
     ],
     fields: [
@@ -342,16 +347,17 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
         title: 'I. PHÂN TÍCH NGUYÊN NHÂN GỐC RỄ (4M & 5-WHYS)',
         headers: ['Yếu tố 4M', 'Phân tích chi tiết nguyên nhân gốc rễ (5-Whys)', 'Hành động khắc phục (Corrective Action)', 'Thời hạn cam kết'],
         rows: [
-          ['Man (Con người)', 'Công nhân mới chưa thuộc thao tác cài chốt giắc chống nước', 'Đào tạo lại SOP và cấp chứng chỉ thao tác', '3 ngày'],
-          ['Machine (Máy móc)', 'Jig ép cốt giắc bị mòn chốt định vị sau 50.000 lần dập', 'Gia công nhiệt luyện chốt Jig mới tăng độ cứng', '5 ngày'],
-          ['Material (Vật tư)', 'Nhựa vỏ giắc hơi giòn khi trời lạnh', 'Yêu cầu NCC bổ sung phụ gia tăng dẻo dai', '7 ngày'],
-          ['Method (Phương pháp)', 'Quy trình kiểm tra chưa có bước thử lực kéo giật giắc', 'Bổ sung bước kéo thử lực 5kg vào bảng tiêu chuẩn KCS', '2 ngày']
+          ['Man (Con người)', '................................................................................', '................................................................................', '........................'],
+          ['Machine (Máy móc)', '................................................................................', '................................................................................', '........................'],
+          ['Material (Vật tư)', '................................................................................', '................................................................................', '........................'],
+          ['Method (Phương pháp)', '................................................................................', '................................................................................', '........................']
         ]
       }
     ],
     conclusions: [
-      { label: 'Hành động phòng ngừa diện rộng (PA)', content: 'Ban hành cảnh báo chất lượng toàn nhà máy và cập nhật vào bảng FMEA công đoạn.' },
-      { label: 'Kết quả đánh giá hiệu lực sau 30 ngày', content: '[X] HIỆU QUẢ (Đóng phiếu)   [ ] CHƯA HIỆU QUẢ (Tái mở phiếu CAR)' }
+      { label: 'Hành động phòng ngừa diện rộng (PA)', content: '................................................................................................................................................' },
+      { label: 'Kết quả đánh giá hiệu lực sau 30 ngày', content: '□ ĐẠT HIỆU LỰC (Đóng phiếu CAR/PAR)\n□ CHƯA ĐẠT HIỆU LỰC (Tái phát hành phiếu CAR mới & yêu cầu giải trình lại)' },
+      { label: 'Ghi chú xác nhận của QA', content: '................................................................................................................................................' }
     ]
   },
   {
@@ -367,12 +373,12 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
     purpose: 'Tiếp nhận mẫu linh kiện hỏng từ Đại lý, mổ xẻ phân tích nguyên nhân hư hỏng, phân định trách nhiệm bảo hành chính xác.',
     signRoles: [
       { role: 'Thực thi [T]', type: 'T', title: 'Kỹ sư Thẩm định Kỹ thuật (KTTĐ)' },
-      { role: 'Xác nhận [H]', type: 'H', title: 'Đại diện Phòng Dịch vụ Sau bán hàng' },
+      { role: 'Xác nhận [H]', type: 'H', title: 'Đại diện Phòng Sau bán hàng' },
       { role: 'Phê duyệt [P]', type: 'P', title: 'Trưởng phòng QLCL' }
     ],
     fields: [
       { label: 'Mã biên bản giám định' },
-      { label: 'Tên Đại lý / Khách hàng gửi bảo hành' },
+      { label: 'Tên Đại lý / Khách hàng gửi BH' },
       { label: 'Ngày tiếp nhận mẫu' },
       { label: 'Số Khung xe (VIN)' },
       { label: 'Số Động cơ / Cụm chi tiết' },
@@ -383,15 +389,15 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
         title: 'I. KẾT QUẢ GIÁM ĐỊNH MỔ XẺ CHI TIẾT LINH KIỆN HƯ HỎNG',
         headers: ['STT', 'Linh kiện yêu cầu BH', 'Hiện trạng thực tế khi tiếp nhận', 'Kết quả mổ xẻ giám định', 'Kết luận phân định trách nhiệm'],
         rows: [
-          ['1', 'Cụm IC Điều tốc (ECU)', 'Mất nguồn, không kéo ga được', 'Nổ Mosfet công suất do ngập nước vượt ngưỡng', '[X] Lỗi do Khách hàng sử dụng (Từ chối BH)'],
-          ['2', 'Động cơ bánh sau', 'Kêu rè rè, rung lắc khi tăng tốc', 'Vỡ nam châm từ vĩnh cửu do keo dán nhiệt kém', '[X] Lỗi do Nhà cung cấp linh kiện (Đổi mới)'],
-          ['3', 'Bộ đồng hồ điện tử LCD', 'Màn hình mờ, chập chờn vạch pin', 'Hỏng tụ lọc nguồn trên mạch chính', '[X] Lỗi bảo hành chính hãng DKBike']
+          ['1', '................................', '................................................', '................................................', '□ Lỗi do Nhà cung cấp linh kiện\n□ Lỗi do Quá trình lắp ráp DKBike\n□ Lỗi do Khách hàng / Đại lý sử dụng'],
+          ['2', '................................', '................................................', '................................................', '□ Lỗi do Nhà cung cấp linh kiện\n□ Lỗi do Quá trình lắp ráp DKBike\n□ Lỗi do Khách hàng / Đại lý sử dụng'],
+          ['3', '................................', '................................................', '................................................', '□ Lỗi do Nhà cung cấp linh kiện\n□ Lỗi do Quá trình lắp ráp DKBike\n□ Lỗi do Khách hàng / Đại lý sử dụng']
         ]
       }
     ],
     conclusions: [
-      { label: 'Phương án xử lý linh kiện', content: '[X] Đổi mới linh kiện đạt chuẩn cho Đại lý   [ ] Sửa chữa phục hồi   [ ] Trả lại mẫu từ chối' },
-      { label: 'Hành động đối với NCC', content: 'Gửi biên bản kèm ảnh mổ xẻ cho Nhà cung cấp động cơ yêu cầu giải trình và đền bù.' }
+      { label: 'Phương án xử lý linh kiện', content: '□ ĐỔI MỚI LINH KIỆN ĐẠT CHUẨN CHO ĐẠI LÝ\n□ TỪ CHỐI BẢO HÀNH (Trả lại mẫu cho Đại lý do lỗi sử dụng)\n□ SỬA CHỮA / TÁI CHẾ THAY THẾ PHỤ TÙNG HAO MÒN' },
+      { label: 'Hành động phản hồi Nhà cung cấp', content: '................................................................................................................................................' }
     ]
   },
   {
@@ -414,24 +420,24 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
       { label: 'Năm theo dõi' },
       { label: 'Vị trí quản lý thiết bị' },
       { label: 'Kỹ sư hiệu chuẩn phụ trách' },
-      { label: 'Tổ chức hiệu chuẩn bên ngoài (nếu có)' }
+      { label: 'Tổ chức hiệu chuẩn (nếu có)' }
     ],
     tables: [
       {
         title: 'I. DANH MỤC THIẾT BỊ & TÌNH TRẠNG HIỆU CHUẨN (MASTER LOG)',
         headers: ['Mã TB', 'Tên thiết bị / Dụng cụ đo', 'Dải đo & Độ chính xác', 'Ngày HC gần nhất', 'Ngày HC kế tiếp', 'Tình trạng Tem', 'Đánh giá'],
         rows: [
-          ['TB-01', 'Thước kẹp điện tử Mitutoyo', '0 - 150mm (0.01mm)', '01/11/2026', '01/05/2027', 'Tem xanh hợp chuẩn', 'ĐẠT'],
-          ['TB-02', 'Súng siết lực Kanon', '10 - 100 Nm (±2%)', '15/10/2026', '15/04/2027', 'Tem xanh hợp chuẩn', 'ĐẠT'],
-          ['TB-03', 'Thiết bị đo dòng & tải ECU', '0 - 50A / 0 - 100V', '20/09/2026', '20/03/2027', 'Tem xanh hợp chuẩn', 'ĐẠT'],
-          ['TB-04', 'Panme đo ngoài Mitutoyo', '25 - 50mm (0.001mm)', '05/11/2026', '05/05/2027', 'Tem xanh hợp chuẩn', 'ĐẠT'],
-          ['TB-05', 'Đồng hồ so đo độ đảo chân gập', '0 - 10mm (0.01mm)', '10/11/2026', '10/05/2027', 'Tem xanh hợp chuẩn', 'ĐẠT']
+          ['TB-01', '................................................', '................................', '....../....../202...', '....../....../202...', '□ Đã dán tem\n□ Chưa dán tem', '□ ĐẠT\n□ NGỪNG DÙNG'],
+          ['TB-02', '................................................', '................................', '....../....../202...', '....../....../202...', '□ Đã dán tem\n□ Chưa dán tem', '□ ĐẠT\n□ NGỪNG DÙNG'],
+          ['TB-03', '................................................', '................................', '....../....../202...', '....../....../202...', '□ Đã dán tem\n□ Chưa dán tem', '□ ĐẠT\n□ NGỪNG DÙNG'],
+          ['TB-04', '................................................', '................................', '....../....../202...', '....../....../202...', '□ Đã dán tem\n□ Chưa dán tem', '□ ĐẠT\n□ NGỪNG DÙNG'],
+          ['TB-05', '................................................', '................................', '....../....../202...', '....../....../202...', '□ Đã dán tem\n□ Chưa dán tem', '□ ĐẠT\n□ NGỪNG DÙNG']
         ]
       }
     ],
     conclusions: [
-      { label: 'Hiện trạng thiết bị', content: '100% thiết bị đo lường trên dây chuyền và phòng Lab đang trong thời hạn hiệu chuẩn hợp lệ.' },
-      { label: 'Kế hoạch kỳ tới', content: 'Lập danh sách gửi Trung tâm Đo lường 1 (Quatest 1) hiệu chuẩn lại các quả cân chuẩn và súng siết lực vào tháng 04/2027.' }
+      { label: 'Đánh giá hiện trạng thiết bị', content: 'Tổng số thiết bị quản lý: ............ | Thiết bị đạt chuẩn hoạt động: ............ | Thiết bị chờ hiệu chuẩn/hỏng: ............' },
+      { label: 'Kế hoạch hiệu chuẩn định kỳ', content: '................................................................................................................................................' }
     ]
   }
 ];
