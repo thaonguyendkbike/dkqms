@@ -122,6 +122,7 @@ import QMSWorkflowTab from './components/QMSWorkflowTab';
 import QualityPlanning, { getInitialQmsPlanningTasks } from './components/QualityPlanning';
 import ChatNoteTab from './components/ChatNoteTab';
 import OqcTvDashboard from './components/OqcTvDashboard';
+import QmsFormsCenter from './components/QmsFormsCenter';
 import { compressBase64String, compressImageFile } from './imageCompressor';
 
 // Firebase Integrations
@@ -8347,13 +8348,16 @@ export function App() {
   const [newOqcCheckTime, setNewOqcCheckTime] = useState('14:30');
   const [newOqcDate, setNewOqcDate] = useState('23/05/2026');
 
-  // Active view state (Tự động nhận diện đường dẫn /tv và Deep Link)
+  // Active view state (Tự động nhận diện đường dẫn /tv, /bm và Deep Link)
   const [activeTab, setActiveTab] = useState<string>(() => {
     try {
       if (typeof window !== 'undefined') {
         const pathname = (window.location.pathname || '').toLowerCase();
         const p = new URLSearchParams(window.location.search);
         const view = (p.get('view') || p.get('tab') || window.location.hash || '').toLowerCase();
+        if (pathname === '/bm' || pathname === '/bm/' || pathname.startsWith('/bm') || p.get('bm') === '1' || p.get('bm') === 'true' || view.includes('bm') || view.includes('bieu-mau') || view.includes('forms')) {
+          return 'qms_forms';
+        }
         if (pathname === '/tv' || pathname === '/tv/' || pathname.startsWith('/tv') || p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1' || view.includes('oqc') || view.includes('oqc-dashboard')) {
           return 'quality_inspection_records';
         }
@@ -8367,6 +8371,9 @@ export function App() {
     if (typeof window !== 'undefined') {
       const pathname = (window.location.pathname || '').toLowerCase();
       const p = new URLSearchParams(window.location.search);
+      if (pathname === '/bm' || pathname === '/bm/' || pathname.startsWith('/bm') || p.get('bm') === '1' || p.get('bm') === 'true') {
+        return false;
+      }
       if (pathname === '/tv' || pathname === '/tv/' || pathname.startsWith('/tv') || p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1') {
         return false;
       }
@@ -8375,13 +8382,19 @@ export function App() {
     return true;
   });
 
-  // Tự động điều hướng Deep Link khi truy cập trực tiếp bằng URL (ví dụ dkqms.cloud/tv)
+  // Tự động điều hướng Deep Link khi truy cập trực tiếp bằng URL (ví dụ dkqms.cloud/tv hoặc dkqms.cloud/bm)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleUrlChange = () => {
       const pathname = (window.location.pathname || '').toLowerCase();
       const p = new URLSearchParams(window.location.search);
       const view = (p.get('view') || p.get('tab') || window.location.hash || '').toLowerCase();
+      const isBm = pathname === '/bm' || pathname === '/bm/' || pathname.startsWith('/bm') || p.get('bm') === '1' || p.get('bm') === 'true' || view.includes('bm') || view.includes('bieu-mau') || view.includes('forms');
+      if (isBm) {
+        setActiveTab('qms_forms');
+        setShowSidebar(false);
+        return;
+      }
       const isTv = pathname === '/tv' || pathname === '/tv/' || pathname.startsWith('/tv') || p.get('tv') === '1' || p.get('tv') === 'true' || p.get('kiosk') === '1';
       if (isTv || view.includes('oqc') || view.includes('oqc-dashboard')) {
         setActiveTab('quality_inspection_records');
@@ -14385,6 +14398,31 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
     );
   }
 
+  // ROUTE DÀNH RIÊNG CHO TRUNG TÂM BIỂU MẪU: dkqms.cloud/bm
+  const isBmRoute = typeof window !== 'undefined' && (
+    window.location.pathname === '/bm' ||
+    window.location.pathname === '/bm/' ||
+    window.location.pathname.startsWith('/bm') ||
+    new URLSearchParams(window.location.search).get('bm') === '1' ||
+    new URLSearchParams(window.location.search).get('bm') === 'true' ||
+    activeTab === 'qms_forms'
+  );
+
+  if (isBmRoute) {
+    return (
+      <div className="w-full h-full min-h-screen overflow-y-auto overflow-x-hidden bg-slate-900">
+        <QmsFormsCenter
+          onBackToApp={() => {
+            if (typeof window !== 'undefined' && window.location.pathname.includes('/bm')) {
+              window.history.pushState({}, '', '/');
+            }
+            setActiveTab('dashboard');
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="bg-slate-50 flex flex-col h-screen w-full font-sans text-slate-900 overflow-hidden" id="app_root">
 
@@ -14640,6 +14678,25 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             >
               <Workflow className={`w-5 h-5 shrink-0 ${activeTab === 'qms_workflow' ? 'text-white' : 'text-cyan-500'}`} />
               Sơ đồ Quy trình QMS
+            </button>
+
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.history.pushState({}, '', '/bm');
+                }
+                setActiveTab('qms_forms');
+              }}
+              className={`w-full flex items-center gap-3 p-3 rounded-lg text-base md:text-[15px] font-medium transition-all text-left cursor-pointer ${activeTab === 'qms_forms' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
+                }`}
+              id="nav_qms_forms"
+              title="Trung tâm hệ thống biểu mẫu chuẩn QLCL (dkqms.cloud/bm)"
+            >
+              <FileSpreadsheet className={`w-5 h-5 shrink-0 ${activeTab === 'qms_forms' ? 'text-white' : 'text-emerald-600'}`} />
+              <div className="flex-1 flex items-center justify-between">
+                <span>Biểu mẫu QLCL (/bm)</span>
+                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${activeTab === 'qms_forms' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'}`}>10 BM</span>
+              </div>
             </button>
 
             <button
