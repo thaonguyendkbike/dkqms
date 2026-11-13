@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   FileText, 
   Download, 
@@ -20,6 +20,7 @@ import {
   CheckSquare,
   Square,
   Sliders,
+  Loader2,
   X
 } from 'lucide-react';
 import { QMS_FORM_TEMPLATES, QmsFormTemplate } from '../data/qmsFormsData';
@@ -199,8 +200,86 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
   const [selectedDocCategory, setSelectedDocCategory] = useState<string>('all');
   const [docSearchKeyword, setDocSearchKeyword] = useState<string>('');
   const [previewDoc, setPreviewDoc] = useState<QmsDocumentItem | null>(null);
+  const [docPreviewMode, setDocPreviewMode] = useState<'summary' | 'file'>('summary');
+  const [docFileLoading, setDocFileLoading] = useState(false);
+  const [docFileError, setDocFileError] = useState<string | null>(null);
+  const docxContainerRef = useRef<HTMLDivElement | null>(null);
   const [editingDoc, setEditingDoc] = useState<QmsDocumentItem | null>(null);
   const [docViewMode, setDocViewMode] = useState<'list' | 'grid'>('list');
+
+  const openDocPreview = (doc: QmsDocumentItem, mode: 'summary' | 'file') => {
+    setDocFileError(null);
+    setDocPreviewMode(mode);
+    setPreviewDoc(doc);
+  };
+
+  // Nạp và render trực tiếp file .docx gốc khi chọn chế độ "Xem trực tiếp"
+  useEffect(() => {
+    if (!previewDoc || docPreviewMode !== 'file') {
+      setDocFileLoading(false);
+      setDocFileError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const loadDocx = async () => {
+      const container = docxContainerRef.current;
+      if (!container) return;
+
+      container.innerHTML = '';
+      setDocFileLoading(true);
+      setDocFileError(null);
+
+      try {
+        const fileUrl = encodeURI(`/docs/P_QLCL/${previewDoc.relPath}`);
+        const res = await fetch(fileUrl, { signal: controller.signal });
+        if (!res.ok) {
+          throw new Error(`Không tải được tệp (HTTP ${res.status})`);
+        }
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          throw new Error('Không tìm thấy tệp Word trên máy chủ.');
+        }
+
+        const blob = await res.blob();
+        const { renderAsync } = await import('docx-preview');
+        if (cancelled || !docxContainerRef.current) return;
+
+        docxContainerRef.current.innerHTML = '';
+        await renderAsync(blob, docxContainerRef.current, undefined, {
+          className: 'dkqms-docx-preview',
+          inWrapper: true,
+          ignoreWidth: false,
+          ignoreHeight: false,
+          ignoreFonts: false,
+          breakPages: true,
+          ignoreLastRenderedPageBreak: false,
+          useBase64URL: true,
+          renderHeaders: true,
+          renderFooters: true,
+          renderFootnotes: true,
+          renderEndnotes: true
+        });
+      } catch (err: any) {
+        if (cancelled || err?.name === 'AbortError') return;
+        console.error('Lỗi đọc file Word:', err);
+        setDocFileError(err?.message || 'Không thể hiển thị trực tiếp tệp Word này.');
+      } finally {
+        if (!cancelled) {
+          setDocFileLoading(false);
+        }
+      }
+    };
+
+    loadDocx();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [previewDoc?.id, previewDoc?.relPath, docPreviewMode]);
 
   // Copy link state
   const [copiedLink, setCopiedLink] = useState(false);
@@ -1790,7 +1869,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                         <th className="py-3 px-4 border-r border-slate-200">Tên Tài Liệu & Nội dung</th>
                         <th className="py-3 px-3 w-48 border-r border-slate-200">Chuyên mục</th>
                         <th className="py-3 px-3 w-24 text-center border-r border-slate-200">Dung lượng</th>
-                        <th className="py-3 px-3 text-right w-56">Thao tác</th>
+                        <th className="py-3 px-3 text-right w-72">Thao tác</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
@@ -1824,15 +1903,24 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                             {doc.fileSizeKB} KB
                           </td>
                           <td className="py-3 px-3 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
                               <button
                                 type="button"
-                                onClick={() => setPreviewDoc(doc)}
+                                onClick={() => openDocPreview(doc, 'summary')}
                                 className="px-2 py-1 text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded border border-slate-300 transition flex items-center gap-1 font-bold text-[11px] cursor-pointer"
                                 title="Xem tóm tắt nội dung tài liệu"
                               >
+                                <FileText className="w-3 h-3" />
+                                <span>Tóm tắt</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openDocPreview(doc, 'file')}
+                                className="px-2 py-1 text-indigo-800 hover:text-indigo-950 bg-indigo-50 hover:bg-indigo-100 rounded border border-indigo-300 transition flex items-center gap-1 font-bold text-[11px] cursor-pointer"
+                                title="Xem trực tiếp nội dung file Word gốc"
+                              >
                                 <Eye className="w-3 h-3" />
-                                <span>Xem</span>
+                                <span>Xem trực tiếp</span>
                               </button>
                               <button
                                 type="button"
@@ -1898,15 +1986,25 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                       </div>
                     </div>
 
-                    <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
+                    <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <button
                           type="button"
-                          onClick={() => setPreviewDoc(doc)}
+                          onClick={() => openDocPreview(doc, 'summary')}
                           className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-slate-50 text-xs font-bold text-slate-700 hover:bg-slate-100 transition flex items-center gap-1.5 cursor-pointer"
+                          title="Xem tóm tắt nội dung tài liệu"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Xem tóm tắt</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openDocPreview(doc, 'file')}
+                          className="px-2.5 py-1.5 rounded-lg border border-indigo-300 bg-indigo-50 text-xs font-bold text-indigo-800 hover:bg-indigo-100 transition flex items-center gap-1.5 cursor-pointer"
+                          title="Xem trực tiếp nội dung file Word gốc"
                         >
                           <Eye className="w-3.5 h-3.5" />
-                          <span>Xem tóm tắt</span>
+                          <span>Xem trực tiếp</span>
                         </button>
                         <button
                           type="button"
@@ -2800,14 +2898,14 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       )}
 
       {/* =========================================================================
-          MODAL XEM CHI TIẾT TÀI LIỆU P-QLCL (TAB 2)
+          MODAL XEM CHI TIẾT & XEM TRỰC TIẾP TÀI LIỆU P-QLCL (TAB 2)
           ========================================================================= */}
       {previewDoc && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-          <div className="bg-white border border-slate-300 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-xl overflow-hidden">
-            <div className="bg-slate-100 px-4 py-3 border-b border-slate-300 flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-slate-900 text-white">
+        <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className={`bg-white border border-slate-300 rounded-xl w-full flex flex-col shadow-xl overflow-hidden transition-all ${docPreviewMode === 'file' ? 'max-w-5xl h-[92vh]' : 'max-w-2xl max-h-[90vh]'}`}>
+            <div className="bg-slate-100 px-4 py-3 border-b border-slate-300 flex flex-wrap justify-between items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-slate-900 text-white shrink-0">
                   {previewDoc.code || 'DOCX'}
                 </span>
                 <h3 className="font-black text-sm text-slate-900 truncate max-w-md">
@@ -2815,12 +2913,40 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                 </h3>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Chuyển đổi nhanh giữa Xem tóm tắt & Xem trực tiếp file */}
+                <div className="flex items-center bg-slate-200 p-0.5 rounded-lg border border-slate-300">
+                  <button
+                    type="button"
+                    onClick={() => setDocPreviewMode('summary')}
+                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                      docPreviewMode === 'summary'
+                        ? 'bg-white text-slate-900 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Xem tóm tắt</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDocPreviewMode('file')}
+                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                      docPreviewMode === 'file'
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Xem trực tiếp file</span>
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => setEditingDoc(JSON.parse(JSON.stringify(previewDoc)))}
                   className="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
-                  title="Chỉnh sửa tiêu đề & nội dung tài liệu này ngay tại web"
+                  title="Chỉnh sửa tiêu đề & nội dung tóm tắt tài liệu này ngay tại web"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                   <span>Chỉnh sửa</span>
@@ -2843,71 +2969,101 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
               </div>
             </div>
 
-            <div className="p-5 overflow-y-auto space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                <div>
-                  <span className="text-slate-500 block">Chuyên mục:</span>
-                  <span className="font-bold text-slate-800">{previewDoc.categoryName}</span>
+            {docPreviewMode === 'summary' ? (
+              <div className="p-5 overflow-y-auto space-y-4 text-xs flex-1">
+                <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <div>
+                    <span className="text-slate-500 block">Chuyên mục:</span>
+                    <span className="font-bold text-slate-800">{previewDoc.categoryName}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Bộ phận áp dụng:</span>
+                    <span className="font-bold text-slate-800">{previewDoc.department}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Tên tệp gốc:</span>
+                    <span className="font-mono text-[11px] text-slate-700 break-all">{previewDoc.fileName}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Dung lượng &amp; Cập nhật:</span>
+                    <span className="font-mono font-bold text-slate-800">{previewDoc.fileSizeKB} KB • {previewDoc.updatedDate}</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-slate-500 block">Bộ phận áp dụng:</span>
-                  <span className="font-bold text-slate-800">{previewDoc.department}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Tên tệp gốc:</span>
-                  <span className="font-mono text-[11px] text-slate-700 break-all">{previewDoc.fileName}</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Dung lượng &amp; Cập nhật:</span>
-                  <span className="font-mono font-bold text-slate-800">{previewDoc.fileSizeKB} KB • {previewDoc.updatedDate}</span>
-                </div>
-              </div>
 
-              <div>
-                <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide mb-1">
-                  1. Tóm tắt nội dung tài liệu
-                </h4>
-                <p className="text-slate-700 leading-relaxed bg-white p-3 rounded-lg border border-slate-200 whitespace-pre-wrap">
-                  {previewDoc.summary}
-                </p>
-              </div>
-
-              {previewDoc.scope && (
                 <div>
                   <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide mb-1">
-                    2. Phạm vi áp dụng
+                    1. Tóm tắt nội dung tài liệu
                   </h4>
                   <p className="text-slate-700 leading-relaxed bg-white p-3 rounded-lg border border-slate-200 whitespace-pre-wrap">
-                    {previewDoc.scope}
+                    {previewDoc.summary}
                   </p>
                 </div>
-              )}
 
-              {previewDoc.keyContents && previewDoc.keyContents.length > 0 && (
-                <div>
-                  <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide mb-1">
-                    3. Các đề mục & nội dung cốt lõi
-                  </h4>
-                  <ul className="space-y-1.5 bg-white p-3 rounded-lg border border-slate-200">
-                    {previewDoc.keyContents.map((kc, kIdx) => (
-                      <li key={kIdx} className="flex items-start gap-2 text-slate-700">
-                        <span className="text-slate-400 mt-0.5">•</span>
-                        <span>{kc}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+                {previewDoc.scope && (
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide mb-1">
+                      2. Phạm vi áp dụng
+                    </h4>
+                    <p className="text-slate-700 leading-relaxed bg-white p-3 rounded-lg border border-slate-200 whitespace-pre-wrap">
+                      {previewDoc.scope}
+                    </p>
+                  </div>
+                )}
 
-            <div className="bg-slate-100 px-4 py-2.5 border-t border-slate-300 flex justify-between items-center text-xs">
-              <span className="text-slate-500 text-[11px] font-medium">
-                Tài liệu lưu trữ chính thức • Thư mục P_QLCL DKBike
+                {previewDoc.keyContents && previewDoc.keyContents.length > 0 && (
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide mb-1">
+                      3. Các đề mục & nội dung cốt lõi
+                    </h4>
+                    <ul className="space-y-1.5 bg-white p-3 rounded-lg border border-slate-200">
+                      {previewDoc.keyContents.map((kc, kIdx) => (
+                        <li key={kIdx} className="flex items-start gap-2 text-slate-700">
+                          <span className="text-slate-400 mt-0.5">•</span>
+                          <span>{kc}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex-1 overflow-auto bg-slate-200/80 relative">
+                {docFileLoading && (
+                  <div className="flex flex-col items-center justify-center py-16 text-slate-600 gap-2">
+                    <Loader2 className="w-7 h-7 animate-spin text-indigo-600" />
+                    <span className="text-xs font-bold">Đang đọc &amp; hiển thị nội dung file {previewDoc.fileName}...</span>
+                  </div>
+                )}
+                {docFileError && (
+                  <div className="m-6 bg-rose-50 border border-rose-200 rounded-xl p-5 text-center space-y-3">
+                    <p className="text-xs font-bold text-rose-800">{docFileError}</p>
+                    <a
+                      href={encodeURI(`/docs/P_QLCL/${previewDoc.relPath}`)}
+                      download={previewDoc.fileName}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Tải file Word về máy</span>
+                    </a>
+                  </div>
+                )}
+                <div
+                  ref={docxContainerRef}
+                  className="min-w-0 [&_.dkqms-docx-preview-wrapper]:!bg-transparent [&_.dkqms-docx-preview-wrapper]:!p-4 [&_.dkqms-docx-preview-wrapper>section.dkqms-docx-preview]:!shadow-lg [&_.dkqms-docx-preview-wrapper>section.dkqms-docx-preview]:!mx-auto"
+                />
+              </div>
+            )}
+
+            <div className="bg-slate-100 px-4 py-2.5 border-t border-slate-300 flex justify-between items-center text-xs shrink-0">
+              <span className="text-slate-500 text-[11px] font-medium truncate pr-3">
+                {docPreviewMode === 'file'
+                  ? `Đang xem trực tiếp tệp gốc: ${previewDoc.fileName} (${previewDoc.fileSizeKB} KB)`
+                  : 'Tài liệu lưu trữ chính thức • Thư mục P_QLCL DKBike'}
               </span>
               <button
                 type="button"
                 onClick={() => setPreviewDoc(null)}
-                className="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition cursor-pointer"
+                className="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition cursor-pointer shrink-0"
               >
                 Đóng
               </button>
