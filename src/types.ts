@@ -695,6 +695,24 @@ export interface PartEvaluation {
   updatedAt?: string;
 }
 
+// ==========================================
+// 18. WEEKLY & MONTHLY REPORT NOTES (Nhận xét / Kết luận của QLCL theo kỳ)
+// ==========================================
+export interface ReportNote {
+  id: string;                      // 'W-2026-24' hoặc 'M-2026-06'
+  periodType: 'week' | 'month';
+  year: number;
+  isoWeek?: number;
+  month?: number;
+  summary: string;                 // Nhận xét tổng quan
+  highlights?: string;             // Điểm nổi bật
+  nextActions?: string;            // Kế hoạch / Việc kỳ tới
+  author: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
 
 
 

@@ -91,7 +91,7 @@ import {
   INITIAL_EQUIPMENT_INCIDENTS,
   INITIAL_DEALERS
 } from './initialData';
-import { Task, KPI, Supplier, CAPA, PTSPProject, PTSPTask, MarketDefect, ECOChange, COPQMetric, CustomForm, QualityStaff, DKBikeModel, PlanTarget, WeeklyPlan, MonthlyPlan, EquipmentItem, MaintenanceLog, EquipmentIncident, SupplierProductionAudit, Dealer, ImprovementAction, PartEvaluation } from './types';
+import { Task, KPI, Supplier, CAPA, PTSPProject, PTSPTask, MarketDefect, ECOChange, COPQMetric, CustomForm, QualityStaff, DKBikeModel, PlanTarget, WeeklyPlan, MonthlyPlan, EquipmentItem, MaintenanceLog, EquipmentIncident, SupplierProductionAudit, Dealer, ImprovementAction, PartEvaluation, ReportNote } from './types';
 import { DAILY_LOG_DATA, DailyLogRecord } from './dailyLogsData';
 import { INITIAL_PTSP_TASKS } from './ptspTasksData';
 import {
@@ -2074,6 +2074,7 @@ export function App() {
     'dk_ecos',
     'dk_defects',
     'dk_part_evaluations',
+    'dk_report_notes',
     'dk_fmea',
     'dk_improvement_actions',
     'dk_qms_quality_planning_tasks'
@@ -2517,6 +2518,7 @@ export function App() {
       dk_oqc_records: 'Phiếu kiểm tra OQC (Đầu ra)',
       dk_defects: 'Danh mục lỗi chất lượng',
       dk_part_evaluations: 'Đánh giá linh kiện lỗi (BM-KTTD-01)',
+      dk_report_notes: 'Nhận xét báo cáo Tuần / Tháng',
       dk_fmea: 'Phân tích FMEA',
       dk_improvement_actions: 'Hành động cải tiến chất lượng',
       dk_kpis: 'Chỉ số chất lượng KPIs',
@@ -2621,6 +2623,7 @@ export function App() {
         else if (key === 'dk_oqc_records') setOqcRecords(serverRecords);
         else if (key === 'dk_defects') setDefects(serverRecords);
         else if (key === 'dk_part_evaluations') setPartEvaluations(serverRecords);
+        else if (key === 'dk_report_notes') setReportNotes(serverRecords);
         else if (key === 'dk_fmea') setFmea(serverRecords);
         else if (key === 'dk_improvement_actions') setImprovementActions(serverRecords);
         else if (key === 'dk_kpis') setKpis(serverRecords);
@@ -2712,6 +2715,7 @@ export function App() {
         else if (key === 'dk_oqc_records') setOqcRecords(mergedList);
         else if (key === 'dk_defects') setDefects(mergedList);
         else if (key === 'dk_part_evaluations') setPartEvaluations(mergedList);
+        else if (key === 'dk_report_notes') setReportNotes(mergedList);
         else if (key === 'dk_fmea') setFmea(mergedList);
         else if (key === 'dk_improvement_actions') setImprovementActions(mergedList);
         else if (key === 'dk_kpis') setKpis(mergedList);
@@ -3294,6 +3298,7 @@ export function App() {
     const keyLabels: Record<string, string> = {
       'dk_defects': 'Sự cố lỗi thị trường (Market Defects)',
       'dk_part_evaluations': 'Tổng hợp đánh giá linh kiện lỗi (BM-KTTD-01)',
+      'dk_report_notes': 'Nhận xét báo cáo Tuần / Tháng',
       'dk_improvement_actions': 'Hành động cải tiến ECO (Improvement Actions)',
       'dk_fmea': 'Phân tích FMEA',
       'dk_capas': 'Hồ sơ khắc phục CAPA',
@@ -3376,6 +3381,10 @@ export function App() {
           displayTitle = `ĐG Linh kiện: ${item.partName || 'Linh kiện'} (SL ${item.quantity || 1}) [${item.id || itemId}]`;
           details = `${item.rootCauseCategory || ''} • ${item.resolution || ''} • ${item.findingNote || ''}`;
           date = item.receivedDate || '';
+        } else if (key === 'dk_report_notes') {
+          displayTitle = `Nhận xét BC [${item.id || itemId}] (${item.author || 'QLCL'})`;
+          details = item.summary || '';
+          date = item.updatedAt || item.createdAt || '';
         } else {
           displayTitle = `${item.title || item.name || item.TaskDescription || item.TaskName || 'Bản ghi'} [${itemId}]`;
           details = item.description || item.NextAction || item.explanation || item.note || '';
@@ -3509,7 +3518,7 @@ export function App() {
           'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
           'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
           'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_part_evaluations'
+          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_part_evaluations', 'dk_report_notes'
         ];
         defaultKeys.forEach(dk => {
           if (!localKeys.includes(dk)) localKeys.push(dk);
@@ -3801,7 +3810,7 @@ export function App() {
         'dk_tasks', 'dk_weekly_plans', 'dk_monthly_plans', 'dk_ptsp_tasks',
         'dk_capas', 'dk_ecos', 'dk_daily_logs', 'dk_iqc_records',
         'dk_pqc_records', 'dk_oqc_records', 'dk_staff', 'dk_dealers',
-        'dk_defects', 'dk_part_evaluations', 'dk_fmea', 'dk_improvement_actions', 'dk_oqc_handover_list',
+        'dk_defects', 'dk_part_evaluations', 'dk_report_notes', 'dk_fmea', 'dk_improvement_actions', 'dk_oqc_handover_list',
         'dk_oqc_color_changes'
       ];
       localKeys.forEach(k => {
@@ -3833,6 +3842,7 @@ export function App() {
             else if (k === 'dk_dealers') setDealers(sanitizedParsed);
             else if (k === 'dk_defects') setDefects(sanitizedParsed);
             else if (k === 'dk_part_evaluations') setPartEvaluations(sanitizedParsed);
+            else if (k === 'dk_report_notes') setReportNotes(sanitizedParsed);
             else if (k === 'dk_fmea') setFmea(sanitizedParsed);
             else if (k === 'dk_improvement_actions') setImprovementActions(sanitizedParsed);
           } catch (e) { }
@@ -3932,7 +3942,7 @@ export function App() {
           'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
           'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
           'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions', 'dk_part_evaluations'
+          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions', 'dk_part_evaluations', 'dk_report_notes'
         ];
 
         const rawDocMap: Record<string, any> = {};
@@ -4048,7 +4058,7 @@ export function App() {
         'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
         'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
         'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-        'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions', 'dk_part_evaluations'
+        'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions', 'dk_part_evaluations', 'dk_report_notes'
       ];
 
       ALL_RECONCILE_KEYS.forEach((key) => {
@@ -4260,6 +4270,11 @@ export function App() {
       if (serverData.dk_part_evaluations !== undefined && Array.isArray(serverData.dk_part_evaluations) && !isPartEvalsDirty) {
         setPartEvaluations(serverData.dk_part_evaluations);
         safeStorage.setItem('dk_part_evaluations', JSON.stringify(serverData.dk_part_evaluations));
+      }
+      const isReportNotesDirty = localStorage.getItem('dk_report_notes_is_dirty') === 'true';
+      if (serverData.dk_report_notes !== undefined && Array.isArray(serverData.dk_report_notes) && !isReportNotesDirty) {
+        setReportNotes(serverData.dk_report_notes);
+        safeStorage.setItem('dk_report_notes', JSON.stringify(serverData.dk_report_notes));
       }
       if (serverData.dk_copqs !== undefined) setCopqs(serverData.dk_copqs);
       if (serverData.dk_fmea !== undefined) setFmea(serverData.dk_fmea);
@@ -4532,6 +4547,7 @@ export function App() {
           else if (key === 'dk_pqc_records') setPqcRecords(finalDisplayData);
           else if (key === 'dk_defects') setDefects(finalDisplayData);
           else if (key === 'dk_part_evaluations') setPartEvaluations(finalDisplayData);
+          else if (key === 'dk_report_notes') setReportNotes(finalDisplayData);
           else if (key === 'dk_fmea') setFmea(finalDisplayData);
           else if (key === 'dk_improvement_actions') setImprovementActions(finalDisplayData);
 
@@ -4576,6 +4592,7 @@ export function App() {
             else if (key === 'dk_pqc_records') setPqcRecords(sanitizedParsed);
             else if (key === 'dk_defects') setDefects(sanitizedParsed);
             else if (key === 'dk_part_evaluations') setPartEvaluations(sanitizedParsed);
+            else if (key === 'dk_report_notes') setReportNotes(sanitizedParsed);
             else if (key === 'dk_fmea') setFmea(sanitizedParsed);
             else if (key === 'dk_improvement_actions') setImprovementActions(sanitizedParsed);
           }
@@ -4989,6 +5006,40 @@ export function App() {
   };
   const [defects, setDefects] = useState<MarketDefect[]>(() => getSavedState('dk_defects', INITIAL_DEFECTS));
   const [partEvaluations, setPartEvaluations] = useState<PartEvaluation[]>(() => getSavedState('dk_part_evaluations', []));
+  const [reportNotes, setReportNotes] = useState<ReportNote[]>(() => getSavedState('dk_report_notes', []));
+  const handleSaveReportNote = (note: ReportNote): boolean => {
+    if (!isUserAuthorized()) {
+      safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
+      return false;
+    }
+    setReportNotes(prev => {
+      const exists = prev.some(x => x.id === note.id);
+      const updated = exists ? prev.map(x => x.id === note.id ? note : x) : [note, ...prev];
+      safeStorage.setItem('dk_report_notes', JSON.stringify(updated));
+      safeStorage.setItem('dk_report_notes_is_dirty', 'true');
+      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_report_notes');
+      syncToServer('dk_report_notes', updated);
+      return updated;
+    });
+    triggerToast(`Đã lưu nhận xét báo cáo kỳ ${note.id}`, 'success');
+    return true;
+  };
+  const handleDeleteReportNote = (id: string) => {
+    if (!isUserAuthorized()) {
+      safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
+      return;
+    }
+    trackDeletedId('dk_report_notes', id);
+    setReportNotes(prev => {
+      const updated = prev.filter(x => x.id !== id);
+      safeStorage.setItem('dk_report_notes', JSON.stringify(updated));
+      safeStorage.setItem('dk_report_notes_is_dirty', 'true');
+      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_report_notes');
+      syncToServer('dk_report_notes', updated);
+      return updated;
+    });
+    triggerToast(`Đã xóa nhận xét kỳ ${id}`, 'info');
+  };
   const [marketFeedbackSubTab, setMarketFeedbackSubTab] = useState<'feedback' | 'part_eval'>('feedback');
   const handleSavePartEvaluation = (item: PartEvaluation, isEdit: boolean): boolean => {
     if (!isUserAuthorized()) {
@@ -8037,6 +8088,12 @@ export function App() {
       syncToServer('dk_part_evaluations', partEvaluations);
     }
   }, [partEvaluations]);
+
+  useEffect(() => {
+    if (localStorage.getItem('dk_report_notes_is_dirty') === 'true') {
+      syncToServer('dk_report_notes', reportNotes);
+    }
+  }, [reportNotes]);
 
   useEffect(() => {
     if (localStorage.getItem('dk_ecos_is_dirty') === 'true') {
@@ -26023,6 +26080,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     resolveRate: data.count > 0 ? Math.round((data.resolved / data.count) * 100) : 0
                   }))
                   .sort((a, b) => b.count - a.count);
+                const maxModelCount = Math.max(...modelChartData.map(m => m.count), 1);
 
                 // 2. Thống kê theo Khách Hàng / Đại Lý (Top Dealers)
                 const customerMap = new Map<string, { count: number; resolved: number; latestDate: string }>();
@@ -26045,6 +26103,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   }))
                   .sort((a, b) => b.count - a.count)
                   .slice(0, 8); // Top 8 đại lý phản ánh nhiều nhất
+                const maxCustomerCount = Math.max(...customerChartData.map(c => c.count), 1);
 
                 // 3. Thống kê theo Nhóm Lỗi (Defect Categories - Pareto)
                 const typeMap = new Map<string, { count: number; resolved: number; sevA: number }>();
@@ -26066,9 +26125,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     resolveRate: data.count > 0 ? Math.round((data.resolved / data.count) * 100) : 0
                   }))
                   .sort((a, b) => b.count - a.count);
+                const maxTypeCount = Math.max(...typeChartData.map(t => t.count), 1);
 
                 return (
-                  <div className="bg-white border-2 border-slate-300 rounded-2xl p-5 shadow-sm space-y-5 animate-fadeIn" id="market_defects_dashboard">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-5 animate-fadeIn" id="market_defects_dashboard">
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-3.5 gap-2">
                       <div className="flex items-center gap-3">
@@ -26178,103 +26238,103 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       </div>
                     )}
 
-                    {/* 4 KPI Cards viền rõ ràng, chỉ số lớn */}
+                    {/* 4 KPI Cards tối giản, đồng nhất */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
                       {/* KPI 1: Lỗi xe từ KH */}
-                      <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col justify-between gap-2.5 shadow-xs hover:border-rose-400 transition">
+                      <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-rose-300 transition">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Lỗi xe từ KH</span>
                           <span className="p-1.5 rounded-lg bg-rose-100 text-rose-600">
-                            <Car className="w-4 h-4" />
+                            <Car className="w-3.5 h-3.5" />
                           </span>
                         </div>
                         <div className="flex items-baseline justify-between">
-                          <span className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900">{allCustomerDefects.length}</span>
-                          <span className="text-sm font-extrabold text-rose-600">{custRate}% đã xử lý</span>
+                          <span className="text-2xl font-black text-slate-900">{allCustomerDefects.length}</span>
+                          <span className="text-xs font-extrabold text-rose-600">{custRate}% đã xử lý</span>
                         </div>
                         <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
                           <div className="bg-rose-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${custRate}%` }} />
                         </div>
-                        <div className="text-xs text-slate-600 font-semibold flex items-center justify-between pt-0.5">
-                          <span>Chưa: <b className="text-amber-600 font-extrabold">{custUnprocessed}</b></span>
-                          <span>Đang: <b className="text-blue-600 font-extrabold">{custProcessing}</b></span>
-                          <span>Xong: <b className="text-emerald-600 font-extrabold">{custProcessed}</b></span>
+                        <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
+                          <span>Chưa: <b className="text-amber-600">{custUnprocessed}</b></span>
+                          <span>Đang: <b className="text-blue-600">{custProcessing}</b></span>
+                          <span>Xong: <b className="text-emerald-600">{custProcessed}</b></span>
                         </div>
                       </div>
 
                       {/* KPI 2: Đề xuất Cải tiến */}
-                      <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col justify-between gap-2.5 shadow-xs hover:border-emerald-400 transition">
+                      <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-emerald-300 transition">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Đề xuất Cải tiến</span>
                           <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-600">
-                            <Sparkles className="w-4 h-4" />
+                            <Sparkles className="w-3.5 h-3.5" />
                           </span>
                         </div>
                         <div className="flex items-baseline justify-between">
-                          <span className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900">{allSuggestions.length}</span>
-                          <span className="text-sm font-extrabold text-emerald-600">{sugRate}% gắn CAPA/ECO</span>
+                          <span className="text-2xl font-black text-slate-900">{allSuggestions.length}</span>
+                          <span className="text-xs font-extrabold text-emerald-600">{sugRate}% gắn CAPA/ECO</span>
                         </div>
                         <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
                           <div className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${sugRate}%` }} />
                         </div>
-                        <div className="text-xs text-slate-600 font-semibold flex items-center justify-between pt-0.5">
-                          <span>Đã chuyển: <b className="text-emerald-600 font-extrabold">{sugConverted}</b></span>
-                          <span>Chờ đánh giá: <b className="text-amber-600 font-extrabold">{sugPending}</b></span>
+                        <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
+                          <span>Đã chuyển: <b className="text-emerald-600">{sugConverted}</b></span>
+                          <span>Chờ đánh giá: <b className="text-amber-600">{sugPending}</b></span>
                         </div>
                       </div>
 
                       {/* KPI 3: Kế hoạch ECO */}
-                      <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col justify-between gap-2.5 shadow-xs hover:border-indigo-400 transition">
+                      <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-indigo-300 transition">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Kế hoạch ECO</span>
                           <span className="p-1.5 rounded-lg bg-indigo-100 text-indigo-600">
-                            <Wrench className="w-4 h-4" />
+                            <Wrench className="w-3.5 h-3.5" />
                           </span>
                         </div>
                         <div className="flex items-baseline justify-between">
-                          <span className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900">{actTotal}</span>
-                          <span className="text-sm font-extrabold text-indigo-600">{actRate}% hoàn tất</span>
+                          <span className="text-2xl font-black text-slate-900">{actTotal}</span>
+                          <span className="text-xs font-extrabold text-indigo-600">{actRate}% hoàn tất</span>
                         </div>
                         <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
                           <div className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${actRate}%` }} />
                         </div>
-                        <div className="text-xs text-slate-600 font-semibold flex items-center justify-between pt-0.5">
-                          <span>Đang thực hiện: <b className="text-blue-600 font-extrabold">{actInProg}</b></span>
-                          <span>Hoàn thành: <b className="text-emerald-600 font-extrabold">{actDone}</b></span>
+                        <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
+                          <span>Đang thực hiện: <b className="text-blue-600">{actInProg}</b></span>
+                          <span>Hoàn thành: <b className="text-emerald-600">{actDone}</b></span>
                         </div>
                       </div>
 
                       {/* KPI 4: Tiến độ Toàn Phân hệ */}
-                      <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col justify-between gap-2.5 shadow-xs hover:border-amber-400 transition">
+                      <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-amber-300 transition">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Tiến độ chung</span>
                           <span className="p-1.5 rounded-lg bg-amber-100 text-amber-600">
-                            <CheckCircle2 className="w-4 h-4" />
+                            <CheckCircle2 className="w-3.5 h-3.5" />
                           </span>
                         </div>
                         <div className="flex items-baseline justify-between">
-                          <span className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900">{overallRate}%</span>
-                          <span className="text-sm font-extrabold text-amber-700">{totalResolved}/{totalIssues} hồ sơ</span>
+                          <span className="text-2xl font-black text-slate-900">{overallRate}%</span>
+                          <span className="text-xs font-extrabold text-amber-700">{totalResolved}/{totalIssues} hồ sơ</span>
                         </div>
                         <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
                           <div className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${overallRate}%` }} />
                         </div>
-                        <div className="text-xs text-slate-600 font-semibold flex items-center justify-between pt-0.5">
-                          <span>Tổng phản ánh: <b className="text-slate-800 font-extrabold">{totalIssues}</b></span>
-                          <span>Đã xong: <b className="text-emerald-600 font-extrabold">{totalResolved}</b></span>
+                        <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
+                          <span>Tổng phản ánh: <b className="text-slate-800">{totalIssues}</b></span>
+                          <span>Đã xong: <b className="text-emerald-600">{totalResolved}</b></span>
                         </div>
                       </div>
                     </div>
 
                     {/* ============================================================== */}
-                    {/* DANH SÁCH THỐNG KÊ PHÂN TÍCH (KHÔNG THANH BAR) */}
+                    {/* KHU VỰC BIỂU ĐỒ PHÂN TÍCH GỌN NHẸ */}
                     {/* ============================================================== */}
                     <div className="pt-2 space-y-3" id="market_defects_visual_charts">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                         <div className="flex items-center gap-2">
                           <BarChart className="w-4 h-4 text-blue-600" />
                           <span className="text-xs font-extrabold uppercase text-slate-800 tracking-wide">
-                            Thống kê phân tích
+                            Biểu đồ phân tích
                           </span>
                           <span className="text-[11px] text-slate-400 hidden md:inline">
                             • Bấm vào dòng để lọc nhanh danh sách
@@ -26282,7 +26342,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         </div>
 
                         {/* Chart View Switcher */}
-                        <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-300 text-xs font-bold">
+                        <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-bold">
                           <button
                             type="button"
                             onClick={() => setDefectsChartTab('all')}
@@ -26330,18 +26390,18 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       </div>
 
                       {dashboardDefects.length === 0 ? (
-                        <div className="bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-500">
+                        <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-500">
                           <p className="text-xs font-bold">Không có dữ liệu phù hợp với bộ lọc hiện tại.</p>
                         </div>
                       ) : (
                         <div className={`grid gap-3.5 ${defectsChartTab === 'all' ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1'}`}>
-                          {/* DANH SÁCH 1: THEO DÒNG XE */}
+                          {/* BIỂU ĐỒ 1: THEO DÒNG XE */}
                           {(defectsChartTab === 'all' || defectsChartTab === 'model') && (
-                            <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col shadow-xs">
-                              <div className="flex items-center justify-between pb-2.5 mb-1 border-b border-slate-200">
+                            <div className="bg-slate-50/40 border border-slate-200 rounded-xl p-4 flex flex-col">
+                              <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200">
                                 <div className="flex items-center gap-2">
-                                  <span className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg">
-                                    <Car className="w-4 h-4" />
+                                  <span className="p-1 bg-indigo-100 text-indigo-600 rounded-md">
+                                    <Car className="w-3.5 h-3.5" />
                                   </span>
                                   <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
                                     Theo Dòng xe ({modelChartData.length})
@@ -26349,32 +26409,39 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 </div>
                               </div>
 
-                              <div className="divide-y divide-slate-200 max-h-72 overflow-y-auto pr-1">
+                              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                                 {modelChartData.map((item, idx) => {
+                                  const barWidth = Math.max(6, Math.round((item.count / maxModelCount) * 100));
                                   const isSelected = marketDefectsFilterModel === item.model;
                                   return (
                                     <div
                                       key={idx}
                                       onClick={() => setMarketDefectsFilterModel(isSelected ? 'All' : item.model)}
-                                      className={`px-2.5 py-2.5 transition cursor-pointer flex items-center justify-between gap-2 ${isSelected
-                                        ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-400 rounded-lg'
-                                        : 'hover:bg-slate-50'
+                                      className={`px-2.5 py-2 rounded-lg transition cursor-pointer ${isSelected
+                                        ? 'bg-indigo-50 ring-1 ring-indigo-400'
+                                        : 'hover:bg-white'
                                         }`}
                                       title={`${item.model}: ${item.resolved}/${item.count} đã xử lý (${item.resolveRate}%)${item.sevA > 0 ? ` • ${item.sevA} mức A` : ''} — Bấm để lọc`}
                                     >
-                                      <span className="text-xs sm:text-sm font-bold text-slate-800 truncate flex items-center gap-2">
-                                        <span className="text-xs text-slate-400 font-mono w-5 shrink-0">{idx + 1}.</span>
-                                        <span className="truncate">{item.model}</span>
-                                      </span>
-                                      <span className="font-mono shrink-0 flex items-baseline gap-1.5">
-                                        {item.sevA > 0 && (
-                                          <span className="text-[11px] font-extrabold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded">
-                                            {item.sevA}A
-                                          </span>
-                                        )}
-                                        <b className="text-base sm:text-lg font-black text-slate-900">{item.count}</b>
-                                        <span className="text-xs font-semibold text-slate-500">({item.pct}%)</span>
-                                      </span>
+                                      <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
+                                        <span className="font-bold text-slate-800 truncate flex items-center gap-1.5">
+                                          <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
+                                          <span className="truncate">{item.model}</span>
+                                        </span>
+                                        <span className="font-mono text-[11px] shrink-0 flex items-center gap-1.5">
+                                          {item.sevA > 0 && (
+                                            <span className="text-[10px] font-bold text-rose-600">{item.sevA}A</span>
+                                          )}
+                                          <b className="text-slate-900 font-black">{item.count}</b>
+                                          <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
+                                        </span>
+                                      </div>
+                                      <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
+                                        <div
+                                          className="bg-indigo-600 h-1.5 rounded-full transition-all duration-500"
+                                          style={{ width: `${barWidth}%` }}
+                                        />
+                                      </div>
                                     </div>
                                   );
                                 })}
@@ -26382,13 +26449,13 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             </div>
                           )}
 
-                          {/* DANH SÁCH 2: TOP KHÁCH HÀNG / ĐẠI LÝ */}
+                          {/* BIỂU ĐỒ 2: TOP KHÁCH HÀNG / ĐẠI LÝ */}
                           {(defectsChartTab === 'all' || defectsChartTab === 'customer') && (
-                            <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col shadow-xs">
-                              <div className="flex items-center justify-between pb-2.5 mb-1 border-b border-slate-200">
+                            <div className="bg-slate-50/40 border border-slate-200 rounded-xl p-4 flex flex-col">
+                              <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200">
                                 <div className="flex items-center gap-2">
-                                  <span className="p-1.5 bg-emerald-100 text-emerald-600 rounded-lg">
-                                    <Building2 className="w-4 h-4" />
+                                  <span className="p-1 bg-emerald-100 text-emerald-600 rounded-md">
+                                    <Building2 className="w-3.5 h-3.5" />
                                   </span>
                                   <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
                                     Top Đại lý / KH ({customerChartData.length})
@@ -26396,27 +26463,36 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 </div>
                               </div>
 
-                              <div className="divide-y divide-slate-200 max-h-72 overflow-y-auto pr-1">
+                              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                                 {customerChartData.map((item, idx) => {
+                                  const barWidth = Math.max(6, Math.round((item.count / maxCustomerCount) * 100));
                                   const isSelected = marketDefectsSearch === item.customer;
                                   return (
                                     <div
                                       key={idx}
                                       onClick={() => setMarketDefectsSearch(isSelected ? '' : item.customer)}
-                                      className={`px-2.5 py-2.5 transition cursor-pointer flex items-center justify-between gap-2 ${isSelected
-                                        ? 'bg-emerald-50 ring-1 ring-inset ring-emerald-400 rounded-lg'
-                                        : 'hover:bg-slate-50'
+                                      className={`px-2.5 py-2 rounded-lg transition cursor-pointer ${isSelected
+                                        ? 'bg-emerald-50 ring-1 ring-emerald-400'
+                                        : 'hover:bg-white'
                                         }`}
                                       title={`${item.customer}: ${item.resolved}/${item.count} đã xử lý (${item.resolveRate}%)${item.latestDate ? ` • Gần nhất: ${item.latestDate}` : ''} — Bấm để lọc`}
                                     >
-                                      <span className="text-xs sm:text-sm font-bold text-slate-800 truncate flex items-center gap-2">
-                                        <span className="text-xs text-slate-400 font-mono w-5 shrink-0">{idx + 1}.</span>
-                                        <span className="truncate">{item.customer}</span>
-                                      </span>
-                                      <span className="font-mono shrink-0 flex items-baseline gap-1.5">
-                                        <b className="text-base sm:text-lg font-black text-slate-900">{item.count}</b>
-                                        <span className="text-xs font-semibold text-slate-500">({item.pct}%)</span>
-                                      </span>
+                                      <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
+                                        <span className="font-bold text-slate-800 truncate flex items-center gap-1.5">
+                                          <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
+                                          <span className="truncate">{item.customer}</span>
+                                        </span>
+                                        <span className="font-mono text-[11px] shrink-0 flex items-center gap-1.5">
+                                          <b className="text-slate-900 font-black">{item.count}</b>
+                                          <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
+                                        </span>
+                                      </div>
+                                      <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
+                                        <div
+                                          className="bg-emerald-600 h-1.5 rounded-full transition-all duration-500"
+                                          style={{ width: `${barWidth}%` }}
+                                        />
+                                      </div>
                                     </div>
                                   );
                                 })}
@@ -26424,13 +26500,13 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             </div>
                           )}
 
-                          {/* DANH SÁCH 3: CƠ CẤU NHÓM LỖI */}
+                          {/* BIỂU ĐỒ 3: CƠ CẤU NHÓM LỖI */}
                           {(defectsChartTab === 'all' || defectsChartTab === 'type') && (
-                            <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col shadow-xs">
-                              <div className="flex items-center justify-between pb-2.5 mb-1 border-b border-slate-200">
+                            <div className="bg-slate-50/40 border border-slate-200 rounded-xl p-4 flex flex-col">
+                              <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200">
                                 <div className="flex items-center gap-2">
-                                  <span className="p-1.5 bg-amber-100 text-amber-600 rounded-lg">
-                                    <AlertTriangle className="w-4 h-4" />
+                                  <span className="p-1 bg-amber-100 text-amber-600 rounded-md">
+                                    <AlertTriangle className="w-3.5 h-3.5" />
                                   </span>
                                   <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
                                     Nhóm Lỗi Pareto ({typeChartData.length})
@@ -26438,32 +26514,39 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 </div>
                               </div>
 
-                              <div className="divide-y divide-slate-200 max-h-72 overflow-y-auto pr-1">
+                              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                                 {typeChartData.map((item, idx) => {
+                                  const barWidth = Math.max(6, Math.round((item.count / maxTypeCount) * 100));
                                   const isSelected = marketDefectsSearch === item.type;
                                   return (
                                     <div
                                       key={idx}
                                       onClick={() => setMarketDefectsSearch(isSelected ? '' : item.type)}
-                                      className={`px-2.5 py-2.5 transition cursor-pointer flex items-center justify-between gap-2 ${isSelected
-                                        ? 'bg-amber-50 ring-1 ring-inset ring-amber-400 rounded-lg'
-                                        : 'hover:bg-slate-50'
+                                      className={`px-2.5 py-2 rounded-lg transition cursor-pointer ${isSelected
+                                        ? 'bg-amber-50 ring-1 ring-amber-400'
+                                        : 'hover:bg-white'
                                         }`}
                                       title={`${item.type}: ${item.resolved}/${item.count} đã xử lý (${item.resolveRate}%)${item.sevA > 0 ? ` • ${item.sevA} mức A` : ''} — Bấm để lọc`}
                                     >
-                                      <span className="text-xs sm:text-sm font-bold text-slate-800 truncate flex items-center gap-2">
-                                        <span className="text-xs text-slate-400 font-mono w-5 shrink-0">{idx + 1}.</span>
-                                        <span className="truncate">{item.type}</span>
-                                      </span>
-                                      <span className="font-mono shrink-0 flex items-baseline gap-1.5">
-                                        {item.sevA > 0 && (
-                                          <span className="text-[11px] font-extrabold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded">
-                                            {item.sevA}A
-                                          </span>
-                                        )}
-                                        <b className="text-base sm:text-lg font-black text-slate-900">{item.count}</b>
-                                        <span className="text-xs font-semibold text-slate-500">({item.pct}%)</span>
-                                      </span>
+                                      <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
+                                        <span className="font-bold text-slate-800 truncate flex items-center gap-1.5">
+                                          <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
+                                          <span className="truncate">{item.type}</span>
+                                        </span>
+                                        <span className="font-mono text-[11px] shrink-0 flex items-center gap-1.5">
+                                          {item.sevA > 0 && (
+                                            <span className="text-[10px] font-bold text-rose-600">{item.sevA}A</span>
+                                          )}
+                                          <b className="text-slate-900 font-black">{item.count}</b>
+                                          <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
+                                        </span>
+                                      </div>
+                                      <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
+                                        <div
+                                          className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
+                                          style={{ width: `${barWidth}%` }}
+                                        />
+                                      </div>
                                     </div>
                                   );
                                 })}
