@@ -9145,17 +9145,18 @@ return (
             const dateParts = nowDate.split('/');
             const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
             const nowYear = Number(dateParts[2]) || now.getFullYear();
-            const locked = isKcsDateTimeLocked(record, nowDate);
+            const wasUnchecked = currentEffective.status === 'Chưa kiểm tra';
+            const locked = isKcsDateTimeLocked(currentEffective, nowDate);
 
             const override: Partial<OQCRecord> = {
               status: 'Lỗi' as const,
               defectDetail: updatedStr,
               rootCause: currentEffective.rootCause || '',
               failedCount: 1,
-              checkTime: locked ? record.checkTime : (currentEffective.checkTime || nowTime),
-              date: locked ? record.date : (currentEffective.date || nowDate),
-              month: locked ? record.month : (currentEffective.month || nowMonth),
-              year: locked ? record.year : (currentEffective.year || nowYear),
+              checkTime: wasUnchecked ? nowTime : (locked ? currentEffective.checkTime : (currentEffective.checkTime || nowTime)),
+              date: wasUnchecked ? nowDate : (locked ? currentEffective.date : (currentEffective.date || nowDate)),
+              month: wasUnchecked ? nowMonth : (locked ? currentEffective.month : (currentEffective.month || nowMonth)),
+              year: wasUnchecked ? nowYear : (locked ? currentEffective.year : (currentEffective.year || nowYear)),
               updatedAt: new Date().toISOString(),
               checkedBy: currentEffective.checkedBy || 'Liễu Tùng Lâm'
             };
@@ -9180,7 +9181,8 @@ return (
             const dateParts = nowDate.split('/');
             const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
             const nowYear = Number(dateParts[2]) || now.getFullYear();
-            const locked = isKcsDateTimeLocked(record, nowDate);
+            const wasUnchecked = currentEffective.status === 'Chưa kiểm tra';
+            const locked = isKcsDateTimeLocked(currentEffective, nowDate);
 
             // Xóa điểm lỗi: Giữ nguyên trạng thái Lỗi của xe (nút Lỗi vẫn luôn đỏ), tuyệt đối không tự động biến thành Đạt
             const override: Partial<OQCRecord> = {
@@ -9188,10 +9190,10 @@ return (
               status: 'Lỗi' as const,
               failedCount: 1,
               rootCause: currentEffective.rootCause || '',
-              checkTime: locked ? record.checkTime : (currentEffective.checkTime || nowTime),
-              date: locked ? record.date : (currentEffective.date || nowDate),
-              month: locked ? record.month : (currentEffective.month || nowMonth),
-              year: locked ? record.year : (currentEffective.year || nowYear),
+              checkTime: wasUnchecked ? nowTime : (locked ? currentEffective.checkTime : (currentEffective.checkTime || nowTime)),
+              date: wasUnchecked ? nowDate : (locked ? currentEffective.date : (currentEffective.date || nowDate)),
+              month: wasUnchecked ? nowMonth : (locked ? currentEffective.month : (currentEffective.month || nowMonth)),
+              year: wasUnchecked ? nowYear : (locked ? currentEffective.year : (currentEffective.year || nowYear)),
               updatedAt: new Date().toISOString(),
               checkedBy: currentEffective.checkedBy || 'Liễu Tùng Lâm'
             };
@@ -9339,18 +9341,19 @@ return (
             const dateParts = nowDate.split('/');
             const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
             const nowYear = Number(dateParts[2]) || now.getFullYear();
-            const locked = isKcsDateTimeLocked(record, nowDate);
+            const wasUnchecked = currentEffective.status === 'Chưa kiểm tra';
+            const locked = isKcsDateTimeLocked(currentEffective, nowDate);
 
-            const targetStatus = currentEffective.status === 'Chưa kiểm tra' ? 'Lỗi' : currentEffective.status;
+            const targetStatus = wasUnchecked ? 'Lỗi' : currentEffective.status;
 
             const override: Partial<OQCRecord> = {
               rootCause: rootCause || '',
               status: targetStatus,
               failedCount: targetStatus === 'Lỗi' ? 1 : 0,
-              checkTime: locked ? record.checkTime : (currentEffective.checkTime || nowTime),
-              date: locked ? record.date : (currentEffective.date || nowDate),
-              month: locked ? record.month : (currentEffective.month || nowMonth),
-              year: locked ? record.year : (currentEffective.year || nowYear),
+              checkTime: wasUnchecked ? nowTime : (locked ? currentEffective.checkTime : (currentEffective.checkTime || nowTime)),
+              date: wasUnchecked ? nowDate : (locked ? currentEffective.date : (currentEffective.date || nowDate)),
+              month: wasUnchecked ? nowMonth : (locked ? currentEffective.month : (currentEffective.month || nowMonth)),
+              year: wasUnchecked ? nowYear : (locked ? currentEffective.year : (currentEffective.year || nowYear)),
               updatedAt: new Date().toISOString()
             };
 
@@ -9385,10 +9388,12 @@ return (
               : `Xác nhận đánh dấu tất cả ${pendingLsxCars} xe chưa kiểm trong LSX ${kcsSelectedLsx} thành ĐẠT?`;
             if (!window.confirm(confirmMsg)) return;
 
-            const nowTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-            const nowDate = new Date().toLocaleDateString('vi-VN');
-            const nowMonth = new Date().getMonth() + 1;
-            const nowYear = new Date().getFullYear();
+            const now = new Date();
+            const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+            const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
+            const dateParts = nowDate.split('/');
+            const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
+            const nowYear = Number(dateParts[2]) || now.getFullYear();
 
             const pendingIds = new Set(displayLsxRecords.filter(r => r.status !== 'Đạt' && r.status !== 'Lỗi').map(r => r.id));
 
@@ -9924,7 +9929,7 @@ return (
 
                               {/* Check Time & Date */}
                               <td className="px-3 py-2.5 text-center">
-                                {r.checkTime || r.date ? (
+                                {(r.status === 'Đạt' || r.status === 'Lỗi') && (r.checkTime || r.date) ? (
                                   <div
                                     className="text-[10.5px] font-mono leading-tight"
                                     title={isKcsDateTimeLocked(r) ? 'Giờ và ngày kiểm tra đã khóa sau khi kết thúc ngày kiểm' : undefined}
@@ -14277,9 +14282,10 @@ return (
                 }
 
                 const startRow = isHeader ? 1 : 0;
-                const todayStr = new Date().toLocaleDateString('vi-VN');
-                const todayMonth = new Date().getMonth() + 1;
-                const todayYear = new Date().getFullYear();
+                const todayStr = standardizeDate(new Date().toLocaleDateString('vi-VN'));
+                const todayParts = todayStr.split('/');
+                const todayMonth = Number(todayParts[1]) || (new Date().getMonth() + 1);
+                const todayYear = Number(todayParts[2]) || new Date().getFullYear();
 
                 for (let i = startRow; i < lines.length; i++) {
                   const line = lines[i];
@@ -14477,8 +14483,8 @@ return (
                         failedCount: keepOldResult ? oldRec.failedCount : (newHasResult ? newRec.failedCount : oldRec.failedCount),
                         rootCause: nextRootCause,
                         defectCauseDetail: keepOldResult ? oldRec.defectCauseDetail : (newHasResult ? (newRec.defectCauseDetail || oldRec.defectCauseDetail) : oldRec.defectCauseDetail),
-                        checkTime: (keepOldResult || lockedDateTime) ? oldRec.checkTime : (newRec.checkTime || oldRec.checkTime),
-                        date: (keepOldResult || lockedDateTime) ? oldRec.date : (newRec.date || oldRec.date),
+                        checkTime: nextStatus === 'Chưa kiểm tra' ? '' : ((keepOldResult || lockedDateTime) ? oldRec.checkTime : (newRec.checkTime || oldRec.checkTime)),
+                        date: nextStatus === 'Chưa kiểm tra' ? '' : ((keepOldResult || lockedDateTime) ? oldRec.date : (newRec.date || oldRec.date)),
                         month: (keepOldResult || lockedDateTime) ? oldRec.month : (newRec.month || oldRec.month),
                         year: (keepOldResult || lockedDateTime) ? oldRec.year : (newRec.year || oldRec.year),
                         updatedAt: new Date().toISOString()
