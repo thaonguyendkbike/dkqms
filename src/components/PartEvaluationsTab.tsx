@@ -184,7 +184,6 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
   const [rootCauseCategory, setRootCauseCategory] = useState<PartEvaluationRootCause>('Lỗi NCC');
   const [resolution, setResolution] = useState<PartEvaluationResolution>('Đổi mới BH');
   const [findingNote, setFindingNote] = useState<string>('');
-  const [keepContextOnSave, setKeepContextOnSave] = useState<boolean>(false);
   const [showOptionalFields, setShowOptionalFields] = useState<boolean>(false);
   const [showEntryModal, setShowEntryModal] = useState<boolean>(false);
   const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(false);
@@ -404,7 +403,7 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
     };
   }, [filteredEvaluations]);
 
-  const resetForm = (preserveContext: boolean) => {
+  const resetForm = () => {
     setEditingId(null);
     setCustomId('');
     setPartName('');
@@ -416,15 +415,14 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
     setUsageDuration('');
     setNccFeedbackAction('');
     setImages([]);
-    if (!preserveContext) {
-      setModel('');
-      setDealer('');
-      setSupplierName('');
-    }
+    setModel('');
+    setDealer('');
+    setSupplierName('');
+    setWarrantyStatus('Còn bảo hành');
   };
 
   const handleOpenCreateModal = () => {
-    resetForm(false);
+    resetForm();
     setShowOptionalFields(false);
     setShowEntryModal(true);
   };
@@ -432,7 +430,7 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
   const handleCloseEntryModal = () => {
     setShowEntryModal(false);
     if (editingId) {
-      resetForm(false);
+      resetForm();
     }
   };
 
@@ -516,11 +514,8 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
 
     const ok = onSaveEvaluation(payload, Boolean(editingId));
     if (ok) {
-      const shouldKeepOpen = !editingId && keepContextOnSave;
-      resetForm(shouldKeepOpen);
-      if (!shouldKeepOpen) {
-        setShowEntryModal(false);
-      }
+      resetForm();
+      setShowEntryModal(false);
     }
   };
 
@@ -985,13 +980,13 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
             >
               <div className="px-6 py-4 bg-gradient-to-r from-indigo-900 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <h3
-                    className="text-sm sm:text-base font-black uppercase tracking-wide flex items-center gap-2"
+                  <h2
+                    className="text-sm sm:text-base font-black uppercase tracking-wide flex items-center gap-2 text-white"
                     style={{ color: '#ffffff' }}
                   >
                     <PackageCheck className="w-5 h-5 text-amber-300 shrink-0" />
                     <span>{editingId ? `Chỉnh sửa đánh giá: ${editingId}` : 'Nhập đánh giá linh kiện lỗi (BM-KTTD-01)'}</span>
-                  </h3>
+                  </h2>
                   <p className="text-xs text-indigo-100 mt-1">
                     Nhân sự thẩm định: <b className="text-white">{inspector}</b> • Tự động lưu SafeStorage &amp; đồng bộ Cloud tức thời
                   </p>
@@ -1335,20 +1330,8 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                       className="text-xs font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1.5 cursor-pointer bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-200"
                     >
                       {showOptionalFields ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                      <span>{showOptionalFields ? 'Thu gọn' : 'Chi tiết thêm'}</span>
+                      <span>{showOptionalFields ? 'Thu gọn chi tiết' : 'Chi tiết thêm (VIN, Số máy, Ảnh...)'}</span>
                     </button>
-
-                    {!editingId && (
-                      <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={keepContextOnSave}
-                          onChange={(e) => setKeepContextOnSave(e.target.checked)}
-                          className="rounded border-slate-300 text-indigo-600"
-                        />
-                        <span>Giữ lại Dòng xe / Đại lý để nhập tiếp</span>
-                      </label>
-                    )}
                   </div>
 
                   <div className="flex items-center gap-2.5">
