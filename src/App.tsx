@@ -3874,13 +3874,22 @@ export function App() {
 
       // 1. Tải riêng biệt dk_staff hỗ trợ hiển thị danh sách cán bộ được duyệt ngoài màn hình đăng nhập
       try {
-        const staffSnap = await getDoc(doc(db, 'dk_db_sync', 'dk_staff'));
-        if (staffSnap.exists()) {
-          const docData = staffSnap.data();
-          if (docData && docData.data !== undefined && Array.isArray(docData.data)) {
-            const cleanedStaff = sanitizeMasterStaff(docData.data);
-            setStaff(cleanedStaff);
-            localStorage.setItem('dk_staff', JSON.stringify(cleanedStaff));
+        if (localStorage.getItem('dk_staff_is_dirty') === 'true') {
+          console.log('[Staff Load Protection]: Local dk_staff is dirty. Skipping initial cloud overwrite.');
+        } else {
+          let staffSnap;
+          try {
+            staffSnap = await getDocFromServer(doc(db, 'dk_db_sync', 'dk_staff'));
+          } catch {
+            staffSnap = await getDoc(doc(db, 'dk_db_sync', 'dk_staff'));
+          }
+          if (staffSnap && staffSnap.exists()) {
+            const docData = staffSnap.data();
+            if (docData && docData.data !== undefined && Array.isArray(docData.data)) {
+              const cleanedStaff = sanitizeMasterStaff(docData.data);
+              setStaff(cleanedStaff);
+              safeStorage.setItem('dk_staff', JSON.stringify(cleanedStaff));
+            }
           }
         }
       } catch (err: any) {
@@ -5282,12 +5291,15 @@ export function App() {
     // 1. Tải tức thời ngay khi khởi động
     getDoc(docRef).then((snap) => {
       if (!isMounted || !snap.exists()) return;
+      if (localStorage.getItem('dk_staff_is_dirty') === 'true') {
+        console.log('[Global Staff Fetch Protection]: Local dk_staff is dirty. Preserving local changes.');
+        return;
+      }
       const docData = snap.data();
       if (docData && Array.isArray(docData.data) && docData.data.length > 0) {
         const cleaned = sanitizeMasterStaff(docData.data);
         setStaff(cleaned);
         safeStorage.setItem('dk_staff', JSON.stringify(cleaned));
-        try { localStorage.setItem('dk_staff', JSON.stringify(cleaned)); } catch (e) { }
       }
     }).catch(err => {
       console.warn("[Global Staff Initial Fetch Notice]:", err?.message || err);
@@ -5296,12 +5308,15 @@ export function App() {
     // 2. Lắng nghe real-time liên tục
     const unsub = onSnapshot(docRef, (snap) => {
       if (!isMounted || !snap.exists()) return;
+      if (localStorage.getItem('dk_staff_is_dirty') === 'true') {
+        console.log('[Global Staff Snapshot Protection]: Local dk_staff is dirty. Preserving local changes.');
+        return;
+      }
       const docData = snap.data();
       if (docData && Array.isArray(docData.data) && docData.data.length > 0) {
         const cleaned = sanitizeMasterStaff(docData.data);
         setStaff(cleaned);
         safeStorage.setItem('dk_staff', JSON.stringify(cleaned));
-        try { localStorage.setItem('dk_staff', JSON.stringify(cleaned)); } catch (e) { }
       }
     }, (err) => {
       console.warn("[Global Staff Snapshot Notice]:", err?.message || err);
@@ -7563,6 +7578,9 @@ export function App() {
             }
             const updated = staff.filter(s => s.id !== id);
             setStaff(updated);
+            safeStorage.setItem('dk_staff', JSON.stringify(updated));
+            localStorage.setItem('dk_staff_is_dirty', 'true');
+            if (localDirtyKeys.current) localDirtyKeys.current.add('dk_staff');
             syncToServer('dk_staff', updated);
             break;
           }
@@ -7986,7 +8004,7 @@ export function App() {
   }, [customForms]);
 
   useEffect(() => {
-    localStorage.setItem('dk_staff', JSON.stringify(staff));
+    safeStorage.setItem('dk_staff', JSON.stringify(staff));
     if (localStorage.getItem('dk_staff_is_dirty') === 'true') {
       syncToServer('dk_staff', staff);
     }
@@ -14204,8 +14222,13 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       // Tự động kiểm tra trực tiếp từ Firestore nếu dữ liệu RAM chưa kịp cập nhật
                       let currentStaffList = (staff && Array.isArray(staff) && staff.length > 0) ? staff : INITIAL_STAFF;
                       try {
-                        const staffSnap = await getDoc(doc(db, 'dk_db_sync', 'dk_staff'));
-                        if (staffSnap.exists()) {
+                        let staffSnap;
+                        try {
+                          staffSnap = await getDocFromServer(doc(db, 'dk_db_sync', 'dk_staff'));
+                        } catch {
+                          staffSnap = await getDoc(doc(db, 'dk_db_sync', 'dk_staff'));
+                        }
+                        if (staffSnap && staffSnap.exists()) {
                           const d = staffSnap.data();
                           const list = Array.isArray(d?.data) ? d.data : (Array.isArray(d) ? d : []);
                           if (list.length > 0) {
@@ -14213,7 +14236,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             currentStaffList = cleaned;
                             setStaff(cleaned);
                             safeStorage.setItem('dk_staff', JSON.stringify(cleaned));
-                            try { localStorage.setItem('dk_staff', JSON.stringify(cleaned)); } catch (e) { }
                           }
                         }
                       } catch (e) { }
@@ -14348,22 +14370,55 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  localStorage.clear();
-                  await signOut(auth);
-                  alert("Đã đăng xuất tài khoản Google thành công.");
-                } catch (error: any) {
-                  alert(`Lỗi đăng xuất: ${error.message || error}`);
-                }
-              }}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-rose-700 hover:bg-rose-600 text-white rounded-xl font-bold font-sans shadow-lg cursor-pointer transition text-xs md:text-sm active:scale-98"
-              id="btn_sign_out_denied"
-            >
-              ĐĂNG XUẤT & ĐĂNG NHẬP BẰNG TÀI KHOẢN KHÁC
-            </button>
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const snap = await getDocFromServer(doc(db, 'dk_db_sync', 'dk_staff'));
+                    if (snap.exists()) {
+                      const d = snap.data();
+                      const list = Array.isArray(d?.data) ? d.data : (Array.isArray(d) ? d : []);
+                      if (list.length > 0) {
+                        const cleaned = sanitizeMasterStaff(list);
+                        setStaff(cleaned);
+                        safeStorage.setItem('dk_staff', JSON.stringify(cleaned));
+                        const userEmailLower = (firebaseUser.email || '').toLowerCase().trim();
+                        const matched = cleaned.some(s => s && s.email && s.email.toLowerCase().trim() === userEmailLower);
+                        if (!matched) {
+                          alert(`Đã làm mới danh sách từ Cloud nhưng email ${firebaseUser.email} vẫn chưa được gán trong danh sách nhân sự. Anh Thao vui lòng kiểm tra lại email đã lưu/đồng bộ trên máy chủ chưa nhé.`);
+                        }
+                        return;
+                      }
+                    }
+                    alert("Chưa tìm thấy danh sách nhân sự mới hơn trên máy chủ Cloud.");
+                  } catch (error: any) {
+                    alert(`Không thể kiểm tra từ Cloud: ${error?.message || error}`);
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold font-sans shadow-lg cursor-pointer transition text-xs active:scale-98"
+                id="btn_refresh_staff_denied"
+              >
+                🔄 KIỂM TRA LẠI QUYỀN TỪ CLOUD
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    localStorage.clear();
+                    await signOut(auth);
+                    alert("Đã đăng xuất tài khoản Google thành công.");
+                  } catch (error: any) {
+                    alert(`Lỗi đăng xuất: ${error.message || error}`);
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-rose-700 hover:bg-rose-600 text-white rounded-xl font-bold font-sans shadow-lg cursor-pointer transition text-xs md:text-sm active:scale-98"
+                id="btn_sign_out_denied"
+              >
+                ĐĂNG XUẤT &amp; ĐĂNG NHẬP BẰNG TÀI KHOẢN KHÁC
+              </button>
+            </div>
           </div>
 
           <div className="bg-slate-950/40 rounded-2xl p-4 border border-slate-800/60 relative z-10 space-y-2">
@@ -28399,12 +28454,18 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           const newId = `STF-${nextIdNum.toString().padStart(2, '0')}`;
                           const newMember = {
                             id: newId,
-                            name: newStaffName,
-                            role: newStaffRole,
-                            email: newStaffEmail,
-                            permission: newStaffPermission
+                            name: newStaffName.trim(),
+                            role: newStaffRole.trim(),
+                            email: newStaffEmail.trim(),
+                            permission: newStaffPermission,
+                            updatedAt: new Date().toISOString()
                           };
-                          setStaff([...staff, newMember]);
+                          const updatedStaff = sanitizeMasterStaff([...staff, newMember]);
+                          setStaff(updatedStaff);
+                          safeStorage.setItem('dk_staff', JSON.stringify(updatedStaff));
+                          localStorage.setItem('dk_staff_is_dirty', 'true');
+                          if (localDirtyKeys.current) localDirtyKeys.current.add('dk_staff');
+                          syncToServer('dk_staff', updatedStaff);
                           setNewStaffName('');
                           setNewStaffRole('');
                           setNewStaffEmail('');
@@ -29289,13 +29350,26 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     case 'form':
                       setCustomForms(prev => prev.map(cf => cf.id === data.id ? data : cf));
                       break;
-                    case 'staff':
+                    case 'staff': {
                       if (!isStaffAdmin()) {
                         alert("⚠️ BẢO MẬT: Chỉ anh Thao mới có quyền Thêm/Xóa/Quản lý danh sách nhân sự của phòng!");
                         return;
                       }
-                      setStaff(prev => prev.map(st => st.id === data.id ? data : st));
+                      const cleanedMember: QualityStaff = {
+                        ...data,
+                        name: String(data.name || '').trim(),
+                        role: String(data.role || '').trim(),
+                        email: String(data.email || '').trim(),
+                        updatedAt: new Date().toISOString()
+                      };
+                      const updatedStaff = sanitizeMasterStaff(staff.map(st => st.id === data.id ? cleanedMember : st));
+                      setStaff(updatedStaff);
+                      safeStorage.setItem('dk_staff', JSON.stringify(updatedStaff));
+                      localStorage.setItem('dk_staff_is_dirty', 'true');
+                      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_staff');
+                      syncToServer('dk_staff', updatedStaff);
                       break;
+                    }
                     case 'model': {
                       const updatedModels = models.map(m => m.id === data.id ? data : m);
                       setModels(updatedModels);
