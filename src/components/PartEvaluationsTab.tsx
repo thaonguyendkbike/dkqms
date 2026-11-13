@@ -455,7 +455,7 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
     setNccFeedbackAction(ev.nccFeedbackAction || '');
     setImages(ev.images || []);
     setShowOptionalFields(
-      Boolean(ev.vin || ev.engineNo || ev.usageDuration || ev.nccFeedbackAction || (ev.images && ev.images.length > 0))
+      Boolean(ev.vin || ev.engineNo || ev.nccFeedbackAction || (ev.images && ev.images.length > 0))
     );
     setShowEntryModal(true);
   };
@@ -1036,9 +1036,9 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                   ))}
                 </div>
 
-                {/* Hàng 1: 1. Linh kiện lỗi * | Hạn bảo hành | Số lượng */}
+                {/* Hàng 1: 1. Linh kiện lỗi * | Tình trạng bảo hành | Thời gian sử dụng | Số lượng */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                  <div className="md:col-span-6">
+                  <div className="md:col-span-4">
                     <label className="text-xs font-extrabold text-slate-700 block mb-1.5 whitespace-nowrap">
                       1. Linh kiện lỗi <span className="text-rose-600">*</span>
                     </label>
@@ -1058,7 +1058,7 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                     </datalist>
                   </div>
 
-                  <div className="md:col-span-4">
+                  <div className="md:col-span-3">
                     <label className="text-xs font-extrabold text-slate-700 block mb-1.5 whitespace-nowrap">
                       Tình trạng bảo hành
                     </label>
@@ -1072,6 +1072,19 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                       <option value="Hết bảo hành">Hết bảo hành</option>
                       <option value="Chưa rõ">Chưa rõ</option>
                     </select>
+                  </div>
+
+                  <div className="md:col-span-3">
+                    <label className="text-xs font-extrabold text-slate-700 block mb-1.5 whitespace-nowrap">
+                      Thời gian sử dụng (km / tháng)
+                    </label>
+                    <input
+                      type="text"
+                      value={usageDuration}
+                      onChange={(e) => setUsageDuration(e.target.value)}
+                      placeholder="VD: 3 tháng / 1.200km"
+                      className="w-full h-10 border border-slate-300 rounded-lg px-3.5 text-xs font-semibold text-slate-900 focus:outline-none focus:border-indigo-600 bg-white"
+                    />
                   </div>
 
                   <div className="md:col-span-2">
@@ -1277,17 +1290,7 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                     className="w-full border border-slate-300 bg-white rounded px-2.5 py-1.5 text-xs"
                   />
                 </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Thời gian đã sử dụng (km / tháng)</label>
-                  <input
-                    type="text"
-                    value={usageDuration}
-                    onChange={(e) => setUsageDuration(e.target.value)}
-                    placeholder="VD: 3 tháng / 1.200km"
-                    className="w-full border border-slate-300 bg-white rounded px-2.5 py-1.5 text-xs"
-                  />
-                </div>
-                <div className="sm:col-span-2 lg:col-span-3">
+                <div className="sm:col-span-2 lg:col-span-4">
                   <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Hành động phản hồi NCC / Bộ phận chịu phí</label>
                   <input
                     type="text"
