@@ -19,6 +19,7 @@ export interface QmsFormTemplate {
   revision: string;     // Lần BH: 01
   effectiveDate: string;// Ngày HL: 01/11/2026
   orientation?: 'portrait' | 'landscape';
+  fieldsColumns?: 2 | 3;
   scope: string;        // Phạm vi áp dụng
   purpose: string;      // Mục đích sử dụng
   signRoles: { role: string; type: string; title: string }[];
@@ -297,6 +298,7 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
     revision: '01',
     effectiveDate: '13/11/2026',
     orientation: 'portrait',
+    fieldsColumns: 3,
     scope: 'Kiểm tra xe thành phẩm tại kho trước khi đóng lên xe tải vận chuyển giao cho Đại lý / Khách hàng',
     purpose: 'Kiểm tra độc lập từng xe trước khi đóng lên xe hàng giao cho khách hàng: định danh Model/Số Seri, soi ngoại quan sơn nhựa, lắp pin rời QC thử điện, rà soát lỗi phản ánh KH, vệ sinh và phụ kiện kèm theo.',
     signRoles: [
@@ -306,12 +308,12 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
     ],
     fields: [
       { label: 'Ngày xuất hàng', placeholder: '....../....../202...' },
-      { label: 'Giờ kiểm', placeholder: '......h......' },
       { label: 'Tên Đại lý / Khách hàng' },
-      { label: 'Tổng số xe xuất (chiếc)' },
       { label: 'NV QC kiểm tra' },
+      { label: 'Tổng số xe xuất (chiếc)' },
       { label: 'Biển số xe tải vận chuyển' },
-      { label: 'Thủ kho Thành phẩm' }
+      { label: 'Thủ kho Thành phẩm' },
+      { label: 'Giờ kiểm', placeholder: '......h......' }
     ],
     preTableNote: {
       title: 'CÁC LỖI TRỌNG TÂM TỪNG PHÁT SINH PHẢN ÁNH TỪ ĐẠI LÝ/ KHÁCH HÀNG CẦN KIỂM TRA KỸ TRÊN ĐƠN HÀNG NÀY (Ghi trước khi kiểm):',
@@ -323,8 +325,8 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
         headerGroups: [
           { label: 'STT', colSpan: 1, rowSpan: 2 },
           { label: 'I. ĐỊNH DANH XE XUẤT KHO\n(Ghi rõ Model, Màu & số seri)', colSpan: 2 },
-          { label: 'II. KIỂM TRA NGOẠI QUAN CHUYÊN SÂU\n(Soi bề mặt sơn, nhựa & độ khít lắp ghép)', colSpan: 2 },
-          { label: 'III. THỬ ĐIỆN (LẮP PIN RỜI QC)\n& RÀ SOÁT LỖI PHẢN ÁNH KH', colSpan: 2 },
+          { label: 'II. KIỂM TRA NGOẠI QUAN CHUYÊN SÂU', colSpan: 2 },
+          { label: 'III. THỬ ĐIỆN (LẮP PIN RỜI)\n& RÀ SOÁT LỖI PÁ KH', colSpan: 2 },
           { label: 'IV. VỆ SINH XE &\nPHỤ KIỆN ĐI KÈM', colSpan: 2 },
           { label: 'V. KẾT LUẬN & LƯU VẾT XỬ LÝ\n(Ký xác nhận sửa lỗi / đổi xe)', colSpan: 2 }
         ],
@@ -339,7 +341,7 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
           '5. Vệ sinh xe',
           '6. Phụ kiện kèm',
           'KẾT LUẬN XUẤT KHO\n(✓ Cho xuất / ✗ Giữ/Đổi)',
-          'MÔ TẢ LỖI PHÁT HIỆN & CHỮ KÝ XÁC NHẬN ĐÃ XỬ LÝ'
+          'MÔ TẢ LỖI PHÁT HIỆN &\nCHỮ KÝ XÁC NHẬN ĐÃ XỬ LÝ'
         ],
         rows: Array.from({ length: 15 }, (_, idx) => [
           String(idx + 1),

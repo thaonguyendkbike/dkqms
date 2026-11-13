@@ -541,33 +541,28 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     }
 
     const docTitle = `DKBike_${form.code}_${form.title.replace(/[\/\s,:]/g, '_')}`;
+    const fieldsCols = form.fieldsColumns || 2;
+    const emptyFieldDots = fieldsCols === 3 ? '........................' : '................................................';
 
-    // Build Fields 2 cột cân đối
+    // Build Fields cân đối theo 2 hoặc 3 cột
     let fieldsRowsHtml = '';
-    for (let i = 0; i < form.fields.length; i += 2) {
-      const f1 = form.fields[i];
-      const f2 = form.fields[i + 1];
-      const v1 = (filled.fields[f1.label] || '').trim();
-      const v2 = f2 ? (filled.fields[f2.label] || '').trim() : '';
-
-      fieldsRowsHtml += `
-        <tr>
+    for (let i = 0; i < form.fields.length; i += fieldsCols) {
+      let rowCellsHtml = '';
+      for (let c = 0; c < fieldsCols; c++) {
+        const f = form.fields[i + c];
+        const v = f ? (filled.fields[f.label] || '').trim() : '';
+        rowCellsHtml += `
           <td class="field-cell">
-            <div class="field-line">
-              <span class="field-label">${escapeHtml(f1.label)}:</span>
-              <span class="field-value ${v1 ? 'filled' : 'empty'}">${v1 ? escapeHtml(v1).replace(/\n/g, '<br/>') : '................................................'}</span>
-            </div>
-          </td>
-          <td class="field-cell">
-            ${f2 ? `
+            ${f ? `
               <div class="field-line">
-                <span class="field-label">${escapeHtml(f2.label)}:</span>
-                <span class="field-value ${v2 ? 'filled' : 'empty'}">${v2 ? escapeHtml(v2).replace(/\n/g, '<br/>') : '................................................'}</span>
+                <span class="field-label">${escapeHtml(f.label)}:</span>
+                <span class="field-value ${v ? 'filled' : 'empty'}">${v ? escapeHtml(v).replace(/\n/g, '<br/>') : emptyFieldDots}</span>
               </div>
             ` : ''}
           </td>
-        </tr>
-      `;
+        `;
+      }
+      fieldsRowsHtml += `<tr>${rowCellsHtml}</tr>`;
     }
 
     // Build Pre-Table Note (nếu có)
@@ -734,16 +729,18 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       width: 100%;
       border-collapse: collapse;
       margin-bottom: ${isCompactTable ? '6px' : '10px'};
-      font-size: ${isCompactTable ? '10.5px' : '11.5px'};
+      font-size: ${fieldsCols === 3 ? '10px' : isCompactTable ? '10.5px' : '11.5px'};
       table-layout: fixed;
     }
     table.info-table td.field-cell {
-      width: 50%;
-      padding: 3px 8px 3px 0;
+      width: ${(100 / fieldsCols).toFixed(2)}%;
+      padding: ${fieldsCols === 3 ? '2.5px 5px' : '3px 8px'};
       vertical-align: top;
     }
+    table.info-table td.field-cell:first-child {
+      padding-left: 0;
+    }
     table.info-table td.field-cell:last-child {
-      padding-left: 8px;
       padding-right: 0;
     }
     .field-line {
@@ -752,7 +749,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      gap: 6px;
+      gap: 4px;
     }
     .field-label {
       font-weight: bold;
@@ -770,6 +767,8 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     }
     .field-value.empty {
       color: #555;
+      white-space: nowrap;
+      overflow: hidden;
     }
     .pre-table-note {
       background-color: #f3f4f6 !important;
@@ -1012,22 +1011,22 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
         </div>
       `;
 
-      let fieldsHtml = '<div style="margin-bottom:8pt;"><table style="width:100%; border:none; border-collapse:collapse; font-size:9.5pt; font-family:\'Times New Roman\', serif;">';
-      for (let i = 0; i < form.fields.length; i += 2) {
-        const f1 = form.fields[i];
-        const f2 = form.fields[i + 1];
-        const val1 = (filled.fields[f1.label] || '').trim() || '....................................................................';
-        const val2 = f2 ? ((filled.fields[f2.label] || '').trim() || '....................................................................') : '';
-        fieldsHtml += `
-          <tr>
-            <td style="width:50%; padding:2.5pt 6pt 2.5pt 0; border-bottom:1pt dotted #666;">
-              <b>${escapeHtml(f1.label)}:</b> <span style="color:#0f172a; font-weight:bold;">${escapeHtml(val1)}</span>
+      const wordFieldsCols = form.fieldsColumns || 2;
+      const wordEmptyDots = wordFieldsCols === 3 ? '....................................' : '....................................................................';
+      let fieldsHtml = `<div style="margin-bottom:8pt;"><table style="width:100%; border:none; border-collapse:collapse; font-size:${wordFieldsCols === 3 ? '8.5pt' : '9.5pt'}; font-family:'Times New Roman', serif;">`;
+      for (let i = 0; i < form.fields.length; i += wordFieldsCols) {
+        let rowHtml = '';
+        for (let c = 0; c < wordFieldsCols; c++) {
+          const f = form.fields[i + c];
+          const val = f ? ((filled.fields[f.label] || '').trim() || wordEmptyDots) : '';
+          const colPad = c === 0 ? '2.5pt 5pt 2.5pt 0' : c === wordFieldsCols - 1 ? '2.5pt 0 2.5pt 5pt' : '2.5pt 5pt';
+          rowHtml += `
+            <td style="width:${(100 / wordFieldsCols).toFixed(2)}%; padding:${colPad};${f ? ' border-bottom:1pt dotted #666;' : ''}">
+              ${f ? `<b>${escapeHtml(f.label)}:</b> <span style="color:#0f172a; font-weight:bold;">${escapeHtml(val)}</span>` : ''}
             </td>
-            <td style="width:50%; padding:2.5pt 0 2.5pt 6pt; border-bottom:1pt dotted #666;">
-              ${f2 ? `<b>${escapeHtml(f2.label)}:</b> <span style="color:#0f172a; font-weight:bold;">${escapeHtml(val2)}</span>` : ''}
-            </td>
-          </tr>
-        `;
+          `;
+        }
+        fieldsHtml += `<tr>${rowHtml}</tr>`;
       }
       fieldsHtml += '</table></div>';
 
@@ -2068,11 +2067,11 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                 </div>
 
                 {/* Danh mục các trường thông tin chung */}
-                <div className="info-grid grid grid-cols-2 gap-x-6 gap-y-1.5 mb-3 text-[11.5px] font-sans">
+                <div className={`info-grid grid ${previewForm.fieldsColumns === 3 ? 'grid-cols-1 sm:grid-cols-3 gap-x-4 text-[11px]' : 'grid-cols-2 gap-x-6 text-[11.5px]'} gap-y-1.5 mb-3 font-sans`}>
                   {previewForm.fields.map((f, fIdx) => {
                     const val = currentFilledData.fields[f.label] || '';
                     return (
-                      <div key={fIdx} className="info-item border-b border-dotted border-slate-400 pb-0.5 flex items-center justify-between gap-2">
+                      <div key={fIdx} className="info-item border-b border-dotted border-slate-400 pb-0.5 flex items-center justify-between gap-2 min-w-0">
                         <span className="font-bold text-slate-800 shrink-0">{f.label}:</span>
                         {modalMode === 'interactive' ? (
                           <input
@@ -2085,11 +2084,11 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                               }));
                             }}
                             placeholder="Nhập thông tin..."
-                            className="flex-1 text-right text-slate-900 font-bold bg-indigo-50/20 hover:bg-indigo-50/40 focus:bg-white focus:outline-none px-1 rounded transition text-xs border border-transparent focus:border-indigo-400"
+                            className="flex-1 min-w-0 text-right text-slate-900 font-bold bg-indigo-50/20 hover:bg-indigo-50/40 focus:bg-white focus:outline-none px-1 rounded transition text-xs border border-transparent focus:border-indigo-400"
                           />
                         ) : (
                           <span className="text-slate-900 font-bold text-right break-words whitespace-pre-wrap">
-                            {val || <span className="text-slate-400 font-normal">....................................................</span>}
+                            {val || <span className="text-slate-400 font-normal whitespace-nowrap">{previewForm.fieldsColumns === 3 ? '........................' : '....................................................'}</span>}
                           </span>
                         )}
                       </div>
