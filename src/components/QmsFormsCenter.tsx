@@ -472,9 +472,57 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       .join('');
   };
 
+  // Tính danh sách chỉ số cột đã được gộp rowSpan=2 ở tầng tiêu đề trên
+  const getRowSpanSkippedCols = (headerGroups?: { label: string; colSpan: number; rowSpan?: number }[]): Set<number> => {
+    const skipped = new Set<number>();
+    if (!headerGroups) return skipped;
+    let colCursor = 0;
+    headerGroups.forEach(g => {
+      if ((g.rowSpan || 1) > 1) {
+        for (let k = 0; k < g.colSpan; k++) {
+          skipped.add(colCursor + k);
+        }
+      }
+      colCursor += g.colSpan;
+    });
+    return skipped;
+  };
+
+  // Render phần <thead> cho Print & Word (hỗ trợ cả bảng 1 tầng và bảng gộp nhóm 2 tầng headerGroups)
+  const renderTableTheadHtml = (
+    tbl: QmsFormTemplate['tables'][number],
+    isFirstColStt: boolean,
+    forWord: boolean
+  ): string => {
+    const thStyle = forWord ? 'padding:4pt; border:1pt solid #000;' : '';
+    const bgStyle = forWord ? 'background-color:#f3f4f6; font-weight:bold; text-align:center;' : '';
+
+    if (tbl.headerGroups && tbl.headerGroups.length > 0) {
+      const skipped = getRowSpanSkippedCols(tbl.headerGroups);
+      const row1 = `<tr style="${bgStyle}">${tbl.headerGroups
+        .map((g, idx) => {
+          const sttWidth = idx === 0 && g.colSpan === 1 && isFirstColStt ? 'width:32px;' : '';
+          return `<th colspan="${g.colSpan}" rowspan="${g.rowSpan || 1}" style="${thStyle}${sttWidth}">${escapeHtml(g.label).replace(/\n/g, '<br/>')}</th>`;
+        })
+        .join('')}</tr>`;
+      const row2 = `<tr style="${bgStyle}">${tbl.headers
+        .map((h, hIdx) => {
+          if (skipped.has(hIdx)) return '';
+          return `<th style="${thStyle}">${escapeHtml(h).replace(/\n/g, '<br/>')}</th>`;
+        })
+        .join('')}</tr>`;
+      return `<thead>${row1}${row2}</thead>`;
+    }
+
+    return `<thead><tr style="${bgStyle}">${tbl.headers
+      .map((h, hIdx) => `<th style="${thStyle}${hIdx === 0 && isFirstColStt ? 'width:34px;' : ''}">${escapeHtml(h).replace(/\n/g, '<br/>')}</th>`)
+      .join('')}</tr></thead>`;
+  };
+
   // In trực tiếp biểu mẫu qua Dedicated Print Engine Iframe A4 độc lập (HTML thuần từ state, không clone input/textarea)
   const handlePrintForm = (form: QmsFormTemplate) => {
     const filled = getFilledDataForForm(form);
+    const isLandscape = form.orientation === 'landscape';
 
     const iframe = document.createElement('iframe');
     iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:1024px;height:768px;border:0;opacity:0;pointer-events:none;z-index:-9999;';
@@ -518,21 +566,30 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       `;
     }
 
+    // Build Pre-Table Note (nếu có)
+    const preNoteRaw = filled.fields['__preTableNote__'];
+    const preNoteDisplay =
+      preNoteRaw !== undefined && preNoteRaw.trim() !== ''
+        ? preNoteRaw
+        : form.preTableNote?.content || '';
+    const preTableNoteHtml = form.preTableNote
+      ? `
+      <div class="pre-table-note">
+        <div class="pre-table-note-title">${escapeHtml(form.preTableNote.title)}</div>
+        <div class="pre-table-note-body">${escapeHtml(preNoteDisplay).replace(/\n/g, '<br/>')}</div>
+      </div>
+    `
+      : '';
+
     // Build Tables
     const tablesHtml = form.tables
       .map((tbl, tIdx) => {
-        const isFirstColStt = tbl.headers[0] && tbl.headers[0].trim().toUpperCase() === 'STT';
+        const isFirstColStt = Boolean(tbl.headers[0] && tbl.headers[0].trim().toUpperCase() === 'STT');
         return `
           <div class="table-section">
             <div class="section-title">${escapeHtml(tbl.title)}</div>
             <table class="qms-table">
-              <thead>
-                <tr>
-                  ${tbl.headers
-                    .map((h, hIdx) => `<th style="${hIdx === 0 && isFirstColStt ? 'width:34px;' : ''}">${escapeHtml(h)}</th>`)
-                    .join('')}
-                </tr>
-              </thead>
+              ${renderTableTheadHtml(tbl, isFirstColStt, false)}
               <tbody>
                 ${tbl.rows
                   .map(
@@ -611,8 +668,8 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
   <title>${escapeHtml(docTitle)}</title>
   <style>
     @page {
-      size: A4 portrait;
-      margin: 10mm 12mm 10mm 12mm;
+      size: A4 ${isLandscape ? 'landscape' : 'portrait'};
+      margin: ${isLandscape ? '8mm 10mm 8mm 10mm' : '10mm 12mm 10mm 12mm'};
     }
     html, body {
       background: #ffffff !important;
@@ -710,6 +767,24 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     .field-value.empty {
       color: #555;
     }
+    .pre-table-note {
+      background-color: #f3f4f6 !important;
+      border: 1px solid #000;
+      padding: 5px 8px;
+      margin: 6px 0 8px 0;
+      font-size: 10.5px;
+    }
+    .pre-table-note-title {
+      font-weight: bold;
+      font-style: italic;
+      margin-bottom: 3px;
+    }
+    .pre-table-note-body {
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      font-weight: bold;
+    }
     .table-section {
       margin: 8px 0;
     }
@@ -722,7 +797,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     table.qms-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 11px;
+      font-size: ${isLandscape ? '9.5px' : '11px'};
     }
     table.qms-table tr {
       page-break-inside: avoid;
@@ -730,7 +805,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     }
     table.qms-table th, table.qms-table td {
       border: 1px solid #000;
-      padding: 4px 6px;
+      padding: ${isLandscape ? '3px 4px' : '4px 6px'};
       vertical-align: top;
       word-break: break-word;
       overflow-wrap: anywhere;
@@ -879,6 +954,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       ${fieldsRowsHtml}
     </table>
 
+    ${preTableNoteHtml}
     ${tablesHtml}
     ${conclusionsHtml}
     ${signaturesHtml}
@@ -912,6 +988,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
   const handleExportWord = (form: QmsFormTemplate) => {
     try {
       const filled = getFilledDataForForm(form);
+      const isLandscape = form.orientation === 'landscape';
       const headerContent = renderBalancedHeaderHtml(form);
 
       const titleContent = `
@@ -940,17 +1017,28 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       }
       fieldsHtml += '</table></div>';
 
+      const wordPreNoteRaw = filled.fields['__preTableNote__'];
+      const wordPreNoteDisplay =
+        wordPreNoteRaw !== undefined && wordPreNoteRaw.trim() !== ''
+          ? wordPreNoteRaw
+          : form.preTableNote?.content || '';
+      const wordPreNoteHtml = form.preTableNote
+        ? `
+        <div style="margin:6pt 0; padding:5pt 8pt; background-color:#f3f4f6; border:1pt solid #000; font-size:9pt; font-family:'Times New Roman', serif;">
+          <p style="margin:0 0 3pt 0; font-weight:bold; font-style:italic;">${escapeHtml(form.preTableNote.title)}</p>
+          <p style="margin:0; font-weight:bold;">${escapeHtml(wordPreNoteDisplay).replace(/\n/g, '<br/>')}</p>
+        </div>
+      `
+        : '';
+
       let tablesHtml = '';
       form.tables.forEach((t, tIdx) => {
+        const isFirstColStt = Boolean(t.headers[0] && t.headers[0].trim().toUpperCase() === 'STT');
         tablesHtml += `
           <div style="margin:8pt 0 6pt 0;">
             <p style="font-size:9.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 3pt 0; font-family:'Times New Roman', serif;">${escapeHtml(t.title)}</p>
-            <table style="width:100%; border-collapse:collapse; font-size:9pt; font-family:'Times New Roman', serif;" border="1" cellpadding="4">
-              <thead>
-                <tr style="background-color:#f3f4f6; font-weight:bold; text-align:center;">
-                  ${t.headers.map(h => `<th style="padding:4pt; border:1pt solid #000;">${escapeHtml(h)}</th>`).join('')}
-                </tr>
-              </thead>
+            <table style="width:100%; border-collapse:collapse; font-size:${isLandscape ? '8pt' : '9pt'}; font-family:'Times New Roman', serif;" border="1" cellpadding="4">
+              ${renderTableTheadHtml(t, isFirstColStt, true)}
               <tbody>
                 ${t.rows.map((row, rIdx) => `
                   <tr>
@@ -958,7 +1046,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                       const cellKey = `${tIdx}_${rIdx}_${cIdx}`;
                       const cellVal = resolveDisplayCellText(filled.tableCells[cellKey], cell);
                       return `
-                        <td style="padding:3.5pt 4pt; border:1pt solid #000; text-align:${cIdx === 0 && t.headers[0]?.toUpperCase() === 'STT' ? 'center' : 'left'}; vertical-align:middle;">
+                        <td style="padding:3.5pt 4pt; border:1pt solid #000; text-align:${cIdx === 0 && isFirstColStt ? 'center' : 'left'}; vertical-align:middle;">
                           ${renderFormattedCellHtml(cellVal, true)}
                         </td>
                       `;
@@ -1018,10 +1106,10 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
           <title>${escapeHtml(form.code)} - ${escapeHtml(form.title)}</title>
           <style>
             @page WordSection1 { 
-              size:595.35pt 841.95pt; 
-              margin:28.35pt 35.4pt 28.35pt 35.4pt; 
-              mso-header-margin:28.35pt; 
-              mso-footer-margin:28.35pt; 
+              size:${isLandscape ? '841.95pt 595.35pt; mso-page-orientation:landscape;' : '595.35pt 841.95pt;'} 
+              margin:${isLandscape ? '22pt 28pt 22pt 28pt;' : '28.35pt 35.4pt 28.35pt 35.4pt;'} 
+              mso-header-margin:24pt; 
+              mso-footer-margin:24pt; 
             }
             div.WordSection1 { page:WordSection1; }
             body { font-family: 'Times New Roman', Times, serif; font-size: 10pt; line-height: 1.3; color: #000; }
@@ -1032,6 +1120,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
             ${headerContent}
             ${titleContent}
             ${fieldsHtml}
+            ${wordPreNoteHtml}
             ${tablesHtml}
             ${conclusionsHtml}
             ${signaturesHtml}
@@ -1807,7 +1896,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
           ========================================================================= */}
       {previewForm && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-          <div className="bg-slate-200 border border-slate-400 rounded-xl max-w-4xl w-full max-h-[96vh] flex flex-col shadow-2xl overflow-hidden">
+          <div className={`bg-slate-200 border border-slate-400 rounded-xl ${previewForm.orientation === 'landscape' ? 'max-w-6xl' : 'max-w-4xl'} w-full max-h-[96vh] flex flex-col shadow-2xl overflow-hidden`}>
             {/* Modal Header & Thanh công cụ thao tác */}
             <div className="bg-white px-4 py-2.5 border-b border-slate-300 flex flex-wrap justify-between items-center gap-2 shrink-0">
               <div className="flex items-center gap-2">
@@ -1913,8 +2002,8 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
             <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-200 select-text">
               <div 
                 id="qms-form-printable-document"
-                className="bg-white text-slate-900 border border-slate-300 shadow-xl p-6 sm:p-10 mx-auto max-w-3xl font-serif text-[12px] leading-relaxed"
-                style={{ width: '100%', minHeight: '270mm' }}
+                className={`bg-white text-slate-900 border border-slate-300 shadow-xl p-5 sm:p-8 mx-auto ${previewForm.orientation === 'landscape' ? 'max-w-[1060px]' : 'max-w-3xl'} font-serif text-[12px] leading-relaxed`}
+                style={{ width: '100%', minHeight: previewForm.orientation === 'landscape' ? '185mm' : '270mm' }}
               >
                 {/* Header Tiêu Chuẩn Doanh Nghiệp 2 Bên Đều Nhau (50% - 50%) */}
                 <table className="header-table w-full border border-black border-collapse mb-3">
@@ -1993,22 +2082,71 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                   })}
                 </div>
 
+                {/* Hộp Ghi chú lỗi trọng tâm trước khi kiểm (nếu có) */}
+                {previewForm.preTableNote && (() => {
+                  const rawNote = currentFilledData.fields['__preTableNote__'];
+                  const noteVal = rawNote !== undefined ? rawNote : previewForm.preTableNote.content;
+                  return (
+                    <div className="bg-slate-100 border border-black p-2 mb-3 text-[11px]">
+                      <div className="font-bold italic text-black mb-1">
+                        {previewForm.preTableNote.title}
+                      </div>
+                      {modalMode === 'interactive' ? (
+                        <AutoResizeTextarea
+                          minRows={1}
+                          value={rawNote === undefined ? '' : rawNote}
+                          onChange={(val) => {
+                            setCurrentFilledData(prev => ({
+                              ...prev,
+                              fields: { ...prev.fields, __preTableNote__: val }
+                            }));
+                          }}
+                          placeholder={previewForm.preTableNote.content}
+                          className="w-full text-slate-900 font-bold bg-white/80 focus:bg-white focus:outline-none p-1 rounded border border-slate-300 focus:border-indigo-400 text-xs resize-none"
+                        />
+                      ) : (
+                        <div className="font-bold text-slate-900 whitespace-pre-wrap break-words">
+                          {noteVal.trim() ? noteVal : previewForm.preTableNote.content}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Các Bảng Biểu Kỹ Thuật / Nghiệm Thu */}
                 {previewForm.tables.map((tbl, tIdx) => {
-                  const isFirstColStt = tbl.headers[0] && tbl.headers[0].trim().toUpperCase() === 'STT';
+                  const isFirstColStt = Boolean(tbl.headers[0] && tbl.headers[0].trim().toUpperCase() === 'STT');
+                  const skippedCols = getRowSpanSkippedCols(tbl.headerGroups);
                   return (
                     <div key={tIdx} className="my-3">
                       <h4 className="section-title text-[11.5px] font-bold text-black uppercase mb-1.5">
                         {tbl.title}
                       </h4>
-                      <table className="qms-table w-full border-collapse border border-black text-[11px]">
+                      <table className={`qms-table w-full border-collapse border border-black ${previewForm.orientation === 'landscape' ? 'text-[10px]' : 'text-[11px]'}`}>
                         <thead>
+                          {tbl.headerGroups && tbl.headerGroups.length > 0 && (
+                            <tr className="bg-slate-100 font-bold">
+                              {tbl.headerGroups.map((g, gIdx) => (
+                                <th
+                                  key={gIdx}
+                                  colSpan={g.colSpan}
+                                  rowSpan={g.rowSpan || 1}
+                                  className={`border border-black p-1 text-center whitespace-pre-line ${gIdx === 0 && g.colSpan === 1 && isFirstColStt ? 'w-9' : ''}`}
+                                >
+                                  {g.label}
+                                </th>
+                              ))}
+                            </tr>
+                          )}
                           <tr className="bg-slate-100 font-bold">
-                            {tbl.headers.map((h, hIdx) => (
-                              <th key={hIdx} className={`border border-black p-1.5 text-center ${hIdx === 0 && isFirstColStt ? 'w-10' : ''}`}>
-                                {h}
-                              </th>
-                            ))}
+                            {tbl.headers.map((h, hIdx) => {
+                              if (skippedCols.has(hIdx)) return null;
+                              return (
+                                <th key={hIdx} className={`border border-black p-1 text-center whitespace-pre-line ${hIdx === 0 && isFirstColStt ? 'w-10' : ''}`}>
+                                  {h}
+                                </th>
+                              );
+                            })}
                           </tr>
                         </thead>
                         <tbody>

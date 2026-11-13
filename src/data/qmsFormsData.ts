@@ -3,6 +3,12 @@
 // CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT - PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL)
 // =========================================================================
 
+export interface QmsFormTableHeaderGroup {
+  label: string;
+  colSpan: number;
+  rowSpan?: number;
+}
+
 export interface QmsFormTemplate {
   id: string;
   code: string;         // Mã BM, ví dụ: BM-QLCL-01
@@ -12,12 +18,15 @@ export interface QmsFormTemplate {
   department: 'Lãnh đạo Phòng QLCL' | 'Bộ phận QC Hiện trường' | 'Bộ phận QA/QE' | 'Bộ phận Kỹ thuật Thẩm định';
   revision: string;     // Lần BH: 01
   effectiveDate: string;// Ngày HL: 01/11/2026
+  orientation?: 'portrait' | 'landscape';
   scope: string;        // Phạm vi áp dụng
   purpose: string;      // Mục đích sử dụng
   signRoles: { role: string; type: string; title: string }[];
   fields: { label: string; placeholder?: string; type?: string }[];
+  preTableNote?: { title: string; content: string };
   tables: {
     title: string;
+    headerGroups?: QmsFormTableHeaderGroup[];
     headers: string[];
     rows: (string | number)[][];
     notes?: string;
@@ -276,6 +285,74 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
       { label: 'Tổng số xe nghiệm thu', content: 'Tổng kiểm tra: .......... xe | Đạt xuất xưởng: .......... xe | Lỗi cần sửa: .......... xe | Tỉ lệ đạt FPY: .......... %' },
       { label: 'Chứng thực xuất xưởng', content: '□ ĐỦ ĐIỀU KIỆN NHẬP KHO THÀNH PHẨM & XUẤT XƯỞNG CHO ĐẠI LÝ\n□ CHƯA ĐỦ ĐIỀU KIỆN - CÁCH LY CHỜ XỬ LÝ LỖI' },
       { label: 'Ghi chú bàn giao', content: '................................................................................................................................................' }
+    ]
+  },
+  {
+    id: 'bm-qc-06',
+    code: 'BM-QC-06',
+    procedureCode: 'QT-QC-02',
+    title: 'BIÊN BẢN KIỂM TRA CHẤT LƯỢNG XE THÀNH PHẨM TRƯỚC KHI XUẤT XƯỞNG',
+    subtitle: 'Áp dụng kiểm tra độc lập từng xe khi xuất kho giao Đại lý; lắp Pin rời chuyên dụng của QC để thử điện. Đánh dấu [✓] Đạt, [✗] Lỗi. Lưu hồ sơ 03 năm',
+    department: 'Bộ phận QC Hiện trường',
+    revision: '01',
+    effectiveDate: '13/11/2026',
+    orientation: 'landscape',
+    scope: 'Kiểm tra xe thành phẩm tại kho trước khi đóng lên xe tải vận chuyển giao cho Đại lý / Khách hàng',
+    purpose: 'Kiểm tra độc lập từng xe trước khi đóng lên xe hàng giao cho khách hàng: định danh Model/Số Seri, soi ngoại quan sơn nhựa, lắp pin rời QC thử điện, rà soát lỗi phản ánh KH, vệ sinh và phụ kiện kèm theo.',
+    signRoles: [
+      { role: 'Thực thi [T]', type: 'T', title: 'NV QC kiểm tra xuất xưởng' },
+      { role: 'Xác nhận [H]', type: 'H', title: 'Thủ kho Thành phẩm' },
+      { role: 'Phê duyệt [P]', type: 'P', title: 'Tổ trưởng QC / TP QLCL' }
+    ],
+    fields: [
+      { label: 'Ngày xuất hàng', placeholder: '....../....../202...' },
+      { label: 'Giờ kiểm', placeholder: '......h......' },
+      { label: 'Tên Đại lý / Khách hàng' },
+      { label: 'Tổng số xe xuất (chiếc)' },
+      { label: 'NV QC kiểm tra' },
+      { label: 'Biển số xe tải vận chuyển' },
+      { label: 'Thủ kho Thành phẩm' }
+    ],
+    preTableNote: {
+      title: 'CÁC LỖI TRỌNG TÂM TỪNG PHÁT SINH PHẢN ÁNH TỪ ĐẠI LÝ/ KHÁCH HÀNG CẦN KIỂM TRA KỸ TRÊN ĐƠN HÀNG NÀY (Ghi trước khi kiểm):',
+      content: '1) ....................................................   2) ....................................................   3) ....................................................'
+    },
+    tables: [
+      {
+        title: 'I. BẢNG KIỂM TRA ĐỘC LẬP TỪNG XE THÀNH PHẨM TRƯỚC KHI ĐÓNG LÊN XE HÀNG',
+        headerGroups: [
+          { label: 'STT', colSpan: 1, rowSpan: 2 },
+          { label: 'I. ĐỊNH DANH XE XUẤT KHO\n(Ghi rõ Model, Màu & số seri)', colSpan: 2 },
+          { label: 'II. KIỂM TRA NGOẠI QUAN CHUYÊN SÂU\n(Soi bề mặt sơn, nhựa & độ khít lắp ghép)', colSpan: 2 },
+          { label: 'III. THỬ ĐIỆN (LẮP PIN RỜI QC)\n& RÀ SOÁT LỖI PHẢN ÁNH KH', colSpan: 2 },
+          { label: 'IV. VỆ SINH XE &\nPHỤ KIỆN ĐI KÈM', colSpan: 2 },
+          { label: 'V. KẾT LUẬN & LƯU VẾT XỬ LÝ\n(Ký xác nhận sửa lỗi / đổi xe)', colSpan: 2 }
+        ],
+        headers: [
+          'STT',
+          'Dòng xe (Model) & Màu sắc',
+          'Số Seri',
+          '1. Sơn & Nhựa',
+          '2. Độ khít nhựa',
+          '3. Tính năng Điện',
+          '4. Lỗi phản ánh KH',
+          '5. Vệ sinh xe',
+          '6. Phụ kiện kèm',
+          'KẾT LUẬN XUẤT KHO\n(✓ Cho xuất / ✗ Giữ/Đổi)',
+          'MÔ TẢ LỖI PHÁT HIỆN & CHỮ KÝ XÁC NHẬN ĐÃ XỬ LÝ'
+        ],
+        rows: [
+          ['1', '....................', '....................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Cho xuất\n□ Giữ/Đổi', '........................................'],
+          ['2', '....................', '....................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Cho xuất\n□ Giữ/Đổi', '........................................'],
+          ['3', '....................', '....................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Cho xuất\n□ Giữ/Đổi', '........................................'],
+          ['4', '....................', '....................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Cho xuất\n□ Giữ/Đổi', '........................................'],
+          ['5', '....................', '....................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Cho xuất\n□ Giữ/Đổi', '........................................']
+        ]
+      }
+    ],
+    conclusions: [
+      { label: 'Tổng hợp kết quả xuất kho giao hàng', content: 'Tổng số xe kiểm: .......... chiếc | Cho xuất: .......... chiếc | Giữ / Đổi xe: .......... chiếc' },
+      { label: 'Ghi chú bàn giao vận chuyển', content: '................................................................................................................................................' }
     ]
   },
   {
