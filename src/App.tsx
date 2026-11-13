@@ -745,6 +745,68 @@ export function mapOldCategoryToStandard(cat: string): string {
   return 'IQC';
 }
 
+const normalizeStaffNameKey = (name: string): string =>
+  String(name || '')
+    .normalize('NFC')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+export function sanitizeMasterStaff(rawList: any[]): QualityStaff[] {
+  const source = Array.isArray(rawList) ? rawList : [];
+  const mergedByName = new Map<string, QualityStaff>();
+  const usedIds = new Set<string>();
+
+  const upsertMember = (item: any, isFromCloudOrLocal: boolean) => {
+    if (!item || typeof item !== 'object' || !item.name) return;
+    const cleanName = String(item.name).normalize('NFC').replace(/\s+/g, ' ').trim();
+    if (!cleanName) return;
+    const key = normalizeStaffNameKey(cleanName);
+    const emailLower = String(item.email || '').trim().toLowerCase();
+    const normalizedItem: QualityStaff = {
+      ...item,
+      id: String(item.id || '').trim(),
+      name: cleanName,
+      role: String(item.role || '').trim(),
+      email: String(item.email || '').trim(),
+      permission:
+        emailLower === 'thaonguyendkbike@gmail.com'
+          ? 'edit'
+          : item.permission === 'edit' || (item.permission as any) === 'admin'
+            ? 'edit'
+            : 'view',
+    };
+
+    const existing = mergedByName.get(key);
+    if (!existing) {
+      let finalId = normalizedItem.id;
+      if (!finalId || usedIds.has(finalId)) {
+        let idx = mergedByName.size + 1;
+        while (usedIds.has(`STF-${String(idx).padStart(2, '0')}`)) idx++;
+        finalId = `STF-${String(idx).padStart(2, '0')}`;
+      }
+      usedIds.add(finalId);
+      mergedByName.set(key, { ...normalizedItem, id: finalId });
+    } else if (isFromCloudOrLocal) {
+      const keepNewEmail =
+        (normalizedItem.permission === 'edit' && existing.permission !== 'edit') ||
+        (normalizedItem.email.toLowerCase().includes('@gmail.com') &&
+          !existing.email.toLowerCase().includes('@gmail.com'));
+      mergedByName.set(key, {
+        ...existing,
+        email: keepNewEmail && normalizedItem.email ? normalizedItem.email : existing.email || normalizedItem.email,
+        permission: existing.permission === 'edit' || normalizedItem.permission === 'edit' ? 'edit' : 'view',
+        role: normalizedItem.role.length > existing.role.length ? normalizedItem.role : existing.role || normalizedItem.role,
+      });
+    }
+  };
+
+  source.forEach((item) => upsertMember(item, true));
+  INITIAL_STAFF.forEach((initMember) => upsertMember(initMember, false));
+
+  return Array.from(mergedByName.values());
+}
+
 export function sanitizeDailyLogs(raw: any[]): DailyLogRecord[] {
   if (!Array.isArray(raw)) return [];
 
@@ -2431,6 +2493,7 @@ export function App() {
 
     // Chuẩn hóa và làm sạch đặc thù phân hệ
     if (key === 'dk_daily_logs') result = sanitizeDailyLogs(result);
+    else if (key === 'dk_staff') result = sanitizeMasterStaff(result);
     else if (key === 'dk_oqc_records') result = deduplicateOqcRecords(result);
     else if (key === 'dk_defects') result = sanitizeDefects(result);
     else if (key === 'dk_ptsp_tasks') result = resequencePtspTasks(result);
@@ -3714,18 +3777,7 @@ export function App() {
           const docData = staffSnap.data();
           const list = Array.isArray(docData?.data) ? docData.data : (Array.isArray(docData) ? docData : []);
           if (list.length > 0) {
-            const merged = [...list];
-            INITIAL_STAFF.forEach(initStaff => {
-              if (!merged.some((s: any) => s && (s.id === initStaff.id || s.name === initStaff.name))) {
-                merged.push(initStaff);
-              }
-            });
-            const cleanedStaff = merged.map((s: any) => {
-              if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
-                return { ...s, permission: 'edit' as const };
-              }
-              return s;
-            });
+            const cleanedStaff = sanitizeMasterStaff(list);
             setStaff(cleanedStaff);
             safeStorage.setItem('dk_staff', JSON.stringify(cleanedStaff));
             try { localStorage.setItem('dk_staff', JSON.stringify(cleanedStaff)); } catch (e) { }
@@ -3767,7 +3819,7 @@ export function App() {
             else if (k === 'dk_oqc_records') setOqcRecords(sanitizedParsed);
             else if (k === 'dk_oqc_handover_list') setOqcHandoverList(sanitizedParsed);
             else if (k === 'dk_oqc_color_changes') setOqcColorChanges(sanitizedParsed);
-            else if (k === 'dk_staff') setStaff(sanitizedParsed);
+            else if (k === 'dk_staff') setStaff(sanitizeMasterStaff(sanitizedParsed));
             else if (k === 'dk_dealers') setDealers(sanitizedParsed);
             else if (k === 'dk_defects') setDefects(sanitizedParsed);
             else if (k === 'dk_fmea') setFmea(sanitizedParsed);
@@ -3826,14 +3878,9 @@ export function App() {
         if (staffSnap.exists()) {
           const docData = staffSnap.data();
           if (docData && docData.data !== undefined && Array.isArray(docData.data)) {
-            const cleanedStaff = docData.data.map((s: any) => {
-              if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
-                return { ...s, permission: 'edit' };
-              }
-              return s;
-            });
+            const cleanedStaff = sanitizeMasterStaff(docData.data);
             setStaff(cleanedStaff);
-            localStorage.setItem('dk_staff', JSON.stringify(docData.data));
+            localStorage.setItem('dk_staff', JSON.stringify(cleanedStaff));
           }
         }
       } catch (err: any) {
@@ -4045,18 +4092,7 @@ export function App() {
 
       // Dispatch non-subcollection states to React
       if (serverData.dk_staff !== undefined && Array.isArray(serverData.dk_staff)) {
-        const merged = [...serverData.dk_staff];
-        INITIAL_STAFF.forEach(initStaff => {
-          if (!merged.some((s: any) => s && (s.id === initStaff.id || s.name === initStaff.name))) {
-            merged.push(initStaff);
-          }
-        });
-        const cleanedStaff = merged.map((s: any) => {
-          if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
-            return { ...s, permission: 'edit' as const };
-          }
-          return s;
-        });
+        const cleanedStaff = sanitizeMasterStaff(serverData.dk_staff);
         setStaff(cleanedStaff);
         safeStorage.setItem('dk_staff', JSON.stringify(cleanedStaff));
       }
@@ -4756,13 +4792,10 @@ export function App() {
           isRemoteUpdateRef.current[key] = true;
           setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
           if (key === 'dk_staff') {
-            const cleaned = list.map((s: any) => {
-              if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
-                return { ...s, permission: 'edit' as const };
-              }
-              return s;
-            });
+            const cleaned = sanitizeMasterStaff(list);
             setStaff(cleaned);
+            safeStorage.setItem('dk_staff', JSON.stringify(cleaned));
+            try { localStorage.setItem('dk_staff', JSON.stringify(cleaned)); } catch (e) { }
           } else if (key === 'dk_oqc_color_changes') {
             setOqcColorChanges(list);
           } else if (key === 'dk_supplier_production_audits') {
@@ -5238,18 +5271,7 @@ export function App() {
   const [customForms, setCustomForms] = useState<CustomForm[]>(() => getSavedState('dk_custom_forms', INITIAL_FORMS));
   const [staff, setStaff] = useState<QualityStaff[]>(() => {
     const rawList = getSavedState('dk_staff', INITIAL_STAFF);
-    const merged = Array.isArray(rawList) ? [...rawList] : [];
-    INITIAL_STAFF.forEach(initStaff => {
-      if (!merged.some(s => s && (s.id === initStaff.id || s.name === initStaff.name))) {
-        merged.push(initStaff);
-      }
-    });
-    return merged.map(s => {
-      if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
-        return { ...s, permission: 'edit' as const };
-      }
-      return s;
-    });
+    return sanitizeMasterStaff(rawList);
   });
 
   // Tải tức thời và lắng nghe thời gian thực Master Staff từ Firestore (hoạt động liên tục cả trước và sau đăng nhập)
@@ -5262,18 +5284,7 @@ export function App() {
       if (!isMounted || !snap.exists()) return;
       const docData = snap.data();
       if (docData && Array.isArray(docData.data) && docData.data.length > 0) {
-        const mergedFromCloud = [...docData.data];
-        INITIAL_STAFF.forEach(initStaff => {
-          if (!mergedFromCloud.some((s: any) => s && (s.id === initStaff.id || s.name === initStaff.name))) {
-            mergedFromCloud.push(initStaff);
-          }
-        });
-        const cleaned = mergedFromCloud.map((s: any) => {
-          if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
-            return { ...s, permission: 'edit' as const };
-          }
-          return s;
-        });
+        const cleaned = sanitizeMasterStaff(docData.data);
         setStaff(cleaned);
         safeStorage.setItem('dk_staff', JSON.stringify(cleaned));
         try { localStorage.setItem('dk_staff', JSON.stringify(cleaned)); } catch (e) { }
@@ -5287,18 +5298,7 @@ export function App() {
       if (!isMounted || !snap.exists()) return;
       const docData = snap.data();
       if (docData && Array.isArray(docData.data) && docData.data.length > 0) {
-        const mergedFromCloud = [...docData.data];
-        INITIAL_STAFF.forEach(initStaff => {
-          if (!mergedFromCloud.some((s: any) => s && (s.id === initStaff.id || s.name === initStaff.name))) {
-            mergedFromCloud.push(initStaff);
-          }
-        });
-        const cleaned = mergedFromCloud.map((s: any) => {
-          if (s && s.email && s.email.toLowerCase().trim() === 'thaonguyendkbike@gmail.com') {
-            return { ...s, permission: 'edit' as const };
-          }
-          return s;
-        });
+        const cleaned = sanitizeMasterStaff(docData.data);
         setStaff(cleaned);
         safeStorage.setItem('dk_staff', JSON.stringify(cleaned));
         try { localStorage.setItem('dk_staff', JSON.stringify(cleaned)); } catch (e) { }
@@ -14209,10 +14209,11 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           const d = staffSnap.data();
                           const list = Array.isArray(d?.data) ? d.data : (Array.isArray(d) ? d : []);
                           if (list.length > 0) {
-                            currentStaffList = list;
-                            setStaff(list);
-                            safeStorage.setItem('dk_staff', JSON.stringify(list));
-                            try { localStorage.setItem('dk_staff', JSON.stringify(list)); } catch (e) { }
+                            const cleaned = sanitizeMasterStaff(list);
+                            currentStaffList = cleaned;
+                            setStaff(cleaned);
+                            safeStorage.setItem('dk_staff', JSON.stringify(cleaned));
+                            try { localStorage.setItem('dk_staff', JSON.stringify(cleaned)); } catch (e) { }
                           }
                         }
                       } catch (e) { }
