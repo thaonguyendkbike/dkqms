@@ -116,11 +116,9 @@ import {
 } from './weeklyReportsData';
 import QualityInspectionRecords from './components/QualityInspectionRecords';
 import KPIDashboard, { DEFAULT_DETAILED_KPIS } from './components/KPIDashboard';
-import QMSDatabaseExplorer from './components/QMSDatabaseExplorer';
 import MachineryMaintenance from './components/MachineryMaintenance';
 import QMSWorkflowTab from './components/QMSWorkflowTab';
 import QualityPlanning, { getInitialQmsPlanningTasks } from './components/QualityPlanning';
-import ChatNoteTab from './components/ChatNoteTab';
 import OqcTvDashboard from './components/OqcTvDashboard';
 import QmsFormsCenter from './components/QmsFormsCenter';
 import { compressBase64String, compressImageFile } from './imageCompressor';
@@ -7402,7 +7400,7 @@ export function App() {
         setActiveTab('copq');
         break;
       case 'fmea':
-        setActiveTab('qms_database');
+        setActiveTab('dashboard');
         break;
       case 'supplier':
         setActiveTab('suppliers');
@@ -8363,7 +8361,7 @@ export function App() {
         }
       }
       const saved = localStorage.getItem('dk_active_tab');
-      if (saved) return saved;
+      if (saved && saved !== 'qms_database' && saved !== 'chat_note') return saved;
     } catch (e) { }
     return 'dashboard';
   });
@@ -14147,7 +14145,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             createdAt: new Date().toISOString().split('T')[0]
           };
           setCustomForms(prev => [autoForm, ...prev]);
-          setActiveTab('qms_database');
+          setActiveTab('dashboard');
         } else {
           setErrorMsg(data.error || 'Lỗi thiết lập biểu mẫu.');
         }
@@ -14830,16 +14828,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             </button>
 
             <button
-              onClick={() => setActiveTab('qms_database')}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg text-base md:text-[15px] font-medium transition-all text-left cursor-pointer ${activeTab === 'qms_database' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
-                }`}
-              id="nav_qms_database"
-            >
-              <Database className={`w-5 h-5 shrink-0 ${activeTab === 'qms_database' ? 'text-white' : 'text-amber-500'}`} />
-              CSDL Quan Hệ QMS
-            </button>
-
-            <button
               onClick={() => setActiveTab('master_lists')}
               className={`w-full flex items-center gap-3 p-3 rounded-lg text-base md:text-[15px] font-medium transition-all text-left cursor-pointer ${activeTab === 'master_lists' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
                 }`}
@@ -14857,16 +14845,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             >
               <Mail className={`w-5 h-5 shrink-0 ${activeTab === 'gmail' ? 'text-white' : 'text-indigo-550'}`} />
               Gửi Báo Cáo & Gmail
-            </button>
-
-            <button
-              onClick={() => setActiveTab('chat_note')}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg text-base md:text-[15px] font-medium transition-all text-left cursor-pointer ${activeTab === 'chat_note' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
-                }`}
-              id="nav_chat_note"
-            >
-              <MessageSquare className={`w-5 h-5 shrink-0 ${activeTab === 'chat_note' ? 'text-white' : 'text-indigo-500'}`} />
-              Chat Note & Thảo Luận
             </button>
           </div>
 
@@ -28327,34 +28305,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 oqcColorChanges={oqcColorChanges}
                 initialSenderName={currentUser.name}
                 initialSenderEmail={currentUser.email}
-              />
-            </div>
-          )}
-
-          {/* ==================================== TAB CHAT NOTE: STAFF DISCUSSIONS & CHAT NOTES ==================================== */}
-          {activeTab === 'chat_note' && (
-            <div className="space-y-6" id="view_chat_note_content">
-              <ChatNoteTab
-                staff={staff}
-                suppliers={suppliers}
-                dealers={dealers}
-                models={models}
-                currentUser={currentUser}
-              />
-            </div>
-          )}
-
-          {activeTab === 'qms_database' && (
-            <div className="space-y-6" id="view_qms_database_content">
-              <QMSDatabaseExplorer
-                suppliers={suppliers}
-                setSuppliers={setSuppliers}
-                capas={capas}
-                setCapas={setCapas}
-                handleForceCloudSync={handleForceCloudSync}
-                forceSyncProgress={forceSyncProgress}
-                setForceSyncProgress={setForceSyncProgress}
-                firebaseUser={firebaseUser}
               />
             </div>
           )}
