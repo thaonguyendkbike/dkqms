@@ -25846,7 +25846,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   onClick={() => setMarketFeedbackSubTab('feedback')}
                   className={`flex-1 py-2.5 px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
                     marketFeedbackSubTab === 'feedback'
-                      ? 'bg-white text-orange-700 shadow-sm border border-orange-200'
+                      ? 'bg-blue-600 text-white shadow-sm border border-blue-700'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                   }`}
                 >
@@ -25858,7 +25858,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   onClick={() => setMarketFeedbackSubTab('part_eval')}
                   className={`flex-1 py-2.5 px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
                     marketFeedbackSubTab === 'part_eval'
-                      ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200'
+                      ? 'bg-blue-600 text-white shadow-sm border border-blue-700'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                   }`}
                 >

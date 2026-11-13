@@ -14,6 +14,7 @@ import {
   Printer,
   RefreshCw,
   Search,
+  SlidersHorizontal,
   Trash2,
   X
 } from 'lucide-react';
@@ -183,8 +184,10 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
   const [rootCauseCategory, setRootCauseCategory] = useState<PartEvaluationRootCause>('Lỗi NCC');
   const [resolution, setResolution] = useState<PartEvaluationResolution>('Đổi mới BH');
   const [findingNote, setFindingNote] = useState<string>('');
-  const [keepContextOnSave, setKeepContextOnSave] = useState<boolean>(true);
+  const [keepContextOnSave, setKeepContextOnSave] = useState<boolean>(false);
   const [showOptionalFields, setShowOptionalFields] = useState<boolean>(false);
+  const [showEntryModal, setShowEntryModal] = useState<boolean>(false);
+  const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(false);
 
   // Optional BM-KTTD-01 extra fields
   const [partCode, setPartCode] = useState<string>('');
@@ -420,6 +423,19 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
     }
   };
 
+  const handleOpenCreateModal = () => {
+    resetForm(false);
+    setShowOptionalFields(false);
+    setShowEntryModal(true);
+  };
+
+  const handleCloseEntryModal = () => {
+    setShowEntryModal(false);
+    if (editingId) {
+      resetForm(false);
+    }
+  };
+
   const handleLoadForEdit = (ev: PartEvaluation) => {
     setEditingId(ev.id);
     setCustomId(ev.id);
@@ -440,11 +456,10 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
     setWarrantyStatus(ev.warrantyStatus || 'Còn bảo hành');
     setNccFeedbackAction(ev.nccFeedbackAction || '');
     setImages(ev.images || []);
-    if (ev.vin || ev.engineNo || ev.usageDuration || ev.nccFeedbackAction || (ev.images && ev.images.length > 0)) {
-      setShowOptionalFields(true);
-    }
-    const formEl = document.getElementById('part_eval_quick_form');
-    if (formEl) formEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setShowOptionalFields(
+      Boolean(ev.vin || ev.engineNo || ev.usageDuration || ev.nccFeedbackAction || (ev.images && ev.images.length > 0))
+    );
+    setShowEntryModal(true);
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -501,7 +516,11 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
 
     const ok = onSaveEvaluation(payload, Boolean(editingId));
     if (ok) {
-      resetForm(!editingId && keepContextOnSave);
+      const shouldKeepOpen = !editingId && keepContextOnSave;
+      resetForm(shouldKeepOpen);
+      if (!shouldKeepOpen) {
+        setShowEntryModal(false);
+      }
     }
   };
 
@@ -936,38 +955,66 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
           ? summaryStats.bySupplier
           : summaryStats.byDealer;
 
+  const hasActiveFilters = Boolean(
+    searchTerm ||
+      filterCause !== 'All' ||
+      filterResolution !== 'All' ||
+      filterModel !== 'All' ||
+      filterTime !== 'all' ||
+      filterMonth !== 'All' ||
+      filterYear !== 'All'
+  );
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* =====================================================================
-          1. FORM NHẬP NHANH ĐÁNH GIÁ LINH KIỆN LỖI (TỐI GIẢN THEO BM-KTTD-01)
+          1. POPUP MODAL NHẬP NHANH ĐÁNH GIÁ LINH KIỆN LỖI (BM-KTTD-01)
          ===================================================================== */}
-      <form
-        id="part_eval_quick_form"
-        onSubmit={handleSubmit}
-        className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden"
-      >
-        <div className="px-4 py-3 bg-gradient-to-r from-indigo-900 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h3 className="text-sm font-black uppercase tracking-wide flex items-center gap-2">
-              <PackageCheck className="w-4 h-4 text-amber-300" />
-              {editingId ? `Chỉnh sửa đánh giá: ${editingId}` : 'Nhập nhanh Đánh giá Linh kiện lỗi (BM-KTTD-01)'}
-            </h3>
-            <p className="text-[11px] text-indigo-100 mt-0.5">
-              Tối giản thao tác cho nhân sự thẩm định (<b>{inspector}</b>) • Tự động lưu SafeStorage &amp; đồng bộ Cloud tức thời
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-[11px] font-mono bg-white/10 px-2.5 py-1 rounded-lg border border-white/20">
-            <span>Mã BB: <strong className="text-amber-300">{previewAutoId}</strong></span>
-            <span>•</span>
-            <input
-              type="date"
-              value={receivedDate}
-              onChange={(e) => setReceivedDate(e.target.value)}
-              className="bg-transparent text-white font-bold focus:outline-none cursor-pointer"
-              title="Ngày tiếp nhận / đánh giá"
-            />
-          </div>
-        </div>
+      {showEntryModal && (
+        <div
+          className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-3 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) handleCloseEntryModal();
+          }}
+        >
+          <div className="max-w-4xl w-full max-h-[92vh] overflow-y-auto rounded-xl shadow-2xl">
+            <form
+              id="part_eval_quick_form"
+              onSubmit={handleSubmit}
+              className="bg-white border border-slate-300 rounded-xl overflow-hidden"
+            >
+              <div className="px-4 py-3 bg-gradient-to-r from-indigo-900 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-wide flex items-center gap-2">
+                    <PackageCheck className="w-4 h-4 text-amber-300" />
+                    {editingId ? `Chỉnh sửa đánh giá: ${editingId}` : 'Nhập nhanh Đánh giá Linh kiện lỗi (BM-KTTD-01)'}
+                  </h3>
+                  <p className="text-[11px] text-indigo-100 mt-0.5">
+                    Tối giản thao tác cho nhân sự thẩm định (<b>{inspector}</b>) • Tự động lưu SafeStorage &amp; đồng bộ Cloud tức thời
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 text-[11px] font-mono bg-white/10 px-2.5 py-1 rounded-lg border border-white/20">
+                    <span>Mã BB: <strong className="text-amber-300">{previewAutoId}</strong></span>
+                    <span>•</span>
+                    <input
+                      type="date"
+                      value={receivedDate}
+                      onChange={(e) => setReceivedDate(e.target.value)}
+                      className="bg-transparent text-white font-bold focus:outline-none cursor-pointer"
+                      title="Ngày tiếp nhận / đánh giá"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCloseEntryModal}
+                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+                    title="Đóng cửa sổ nhập liệu"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
 
         <div className="p-4 space-y-3.5">
           {/* Bấm chọn nhanh linh kiện hay gặp */}
@@ -1281,21 +1328,19 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                     onChange={(e) => setKeepContextOnSave(e.target.checked)}
                     className="rounded border-slate-300 text-indigo-600"
                   />
-                  <span>Giữ lại Dòng xe / Đại lý để nhập lô tiếp</span>
+                  <span>Giữ lại Dòng xe / Đại lý &amp; mở tiếp form để nhập lô</span>
                 </label>
               )}
             </div>
 
             <div className="flex items-center gap-2">
-              {editingId && (
-                <button
-                  type="button"
-                  onClick={() => resetForm(false)}
-                  className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-lg transition cursor-pointer"
-                >
-                  Hủy sửa
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleCloseEntryModal}
+                className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-lg transition cursor-pointer"
+              >
+                {editingId ? 'Hủy sửa' : 'Đóng'}
+              </button>
               <button
                 type="submit"
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold rounded-lg transition shadow-sm flex items-center gap-1.5 cursor-pointer"
@@ -1306,14 +1351,107 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
             </div>
           </div>
         </div>
-      </form>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* =====================================================================
-          2. BỘ LỌC & NÚT BÁO CÁO TỔNG HỢP
+          2. THANH CÔNG CỤ NHẬP LIỆU, ẨN/HIỆN BỘ LỌC & BÁO CÁO TỔNG HỢP
          ===================================================================== */}
       <div className="bg-white border border-slate-300 rounded-xl p-3.5 shadow-sm space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap flex-1 min-w-[240px]">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleOpenCreateModal}
+              className="px-3.5 py-2 rounded-lg text-xs font-extrabold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nhập đánh giá (BM-KTTD-01)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsFilterExpanded((v) => !v)}
+              className={`px-3 py-2 rounded-lg text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer relative ${
+                isFilterExpanded || hasActiveFilters
+                  ? 'bg-indigo-50 text-indigo-800 border-indigo-300'
+                  : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300'
+              }`}
+              title="Bấm để ẩn/hiện bộ lọc dữ liệu"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>{isFilterExpanded ? 'Ẩn bộ lọc' : 'Hiện bộ lọc'}</span>
+              {hasActiveFilters && (
+                <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" title="Đang áp dụng bộ lọc" />
+              )}
+              {isFilterExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setFilterCause('All');
+                  setFilterResolution('All');
+                  setFilterModel('All');
+                  setFilterTime('all');
+                  setFilterMonth('All');
+                  setFilterYear('All');
+                }}
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-indigo-50 transition cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Xóa lọc</span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setShowSummaryReport((v) => !v)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition flex items-center gap-1 cursor-pointer ${
+                showSummaryReport
+                  ? 'bg-indigo-700 text-white border-indigo-800'
+                  : 'bg-slate-100 text-slate-700 border-slate-300'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>Báo cáo tổng hợp</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleCopyReportText}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 transition flex items-center gap-1 cursor-pointer"
+              title="Copy báo cáo tóm tắt để gửi nhanh"
+            >
+              {copiedSummary ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedSummary ? 'Đã copy' : 'Copy báo cáo'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handlePrintSummaryReport}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white transition flex items-center gap-1 cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>In báo cáo</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white transition flex items-center gap-1 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Xuất Excel ({filteredEvaluations.length})</span>
+            </button>
+          </div>
+        </div>
+
+        {isFilterExpanded && (
+          <div className="pt-3 border-t border-slate-200 flex items-center gap-2 flex-wrap">
             <div className="relative flex-1 min-w-[200px] max-w-xs">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -1407,73 +1545,8 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                 </option>
               ))}
             </select>
-
-            {(searchTerm ||
-              filterCause !== 'All' ||
-              filterResolution !== 'All' ||
-              filterModel !== 'All' ||
-              filterTime !== 'all' ||
-              filterMonth !== 'All' ||
-              filterYear !== 'All') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchTerm('');
-                  setFilterCause('All');
-                  setFilterResolution('All');
-                  setFilterModel('All');
-                  setFilterTime('all');
-                  setFilterMonth('All');
-                  setFilterYear('All');
-                }}
-                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Xóa lọc</span>
-              </button>
-            )}
           </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setShowSummaryReport((v) => !v)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition flex items-center gap-1 cursor-pointer ${
-                showSummaryReport
-                  ? 'bg-indigo-700 text-white border-indigo-800'
-                  : 'bg-slate-100 text-slate-700 border-slate-300'
-              }`}
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-              <span>Báo cáo tổng hợp</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleCopyReportText}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 transition flex items-center gap-1 cursor-pointer"
-              title="Copy báo cáo tóm tắt để gửi nhanh"
-            >
-              {copiedSummary ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedSummary ? 'Đã copy' : 'Copy báo cáo'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={handlePrintSummaryReport}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white transition flex items-center gap-1 cursor-pointer"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>In báo cáo</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleExportExcel}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white transition flex items-center gap-1 cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Xuất Excel ({filteredEvaluations.length})</span>
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* =====================================================================
