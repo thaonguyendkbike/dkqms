@@ -972,31 +972,36 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
          ===================================================================== */}
       {showEntryModal && (
         <div
-          className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-3 overflow-y-auto"
+          className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleCloseEntryModal();
           }}
         >
-          <div className="max-w-4xl w-full max-h-[92vh] overflow-y-auto rounded-xl shadow-2xl">
+          <div className="max-w-5xl w-full max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl">
             <form
               id="part_eval_quick_form"
               onSubmit={handleSubmit}
-              className="bg-white border border-slate-300 rounded-xl overflow-hidden"
+              className="bg-white border border-slate-300 rounded-2xl overflow-hidden"
             >
-              <div className="px-4 py-3 bg-gradient-to-r from-indigo-900 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <h3 className="text-sm font-black uppercase tracking-wide flex items-center gap-2">
-                    <PackageCheck className="w-4 h-4 text-amber-300" />
-                    {editingId ? `Chỉnh sửa đánh giá: ${editingId}` : 'Nhập nhanh Đánh giá Linh kiện lỗi (BM-KTTD-01)'}
+              <div className="px-6 py-4 bg-gradient-to-r from-indigo-900 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h3
+                    className="text-sm sm:text-base font-black uppercase tracking-wide flex items-center gap-2"
+                    style={{ color: '#ffffff' }}
+                  >
+                    <PackageCheck className="w-5 h-5 text-amber-300 shrink-0" />
+                    <span>{editingId ? `Chỉnh sửa đánh giá: ${editingId}` : 'Nhập đánh giá linh kiện lỗi (BM-KTTD-01)'}</span>
                   </h3>
-                  <p className="text-[11px] text-indigo-100 mt-0.5">
-                    Tối giản thao tác cho nhân sự thẩm định (<b>{inspector}</b>) • Tự động lưu SafeStorage &amp; đồng bộ Cloud tức thời
+                  <p className="text-xs text-indigo-100 mt-1">
+                    Nhân sự thẩm định: <b className="text-white">{inspector}</b> • Tự động lưu SafeStorage &amp; đồng bộ Cloud tức thời
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 text-[11px] font-mono bg-white/10 px-2.5 py-1 rounded-lg border border-white/20">
-                    <span>Mã BB: <strong className="text-amber-300">{previewAutoId}</strong></span>
-                    <span>•</span>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <div className="flex items-center gap-2 text-xs font-mono bg-white/10 px-3 py-1.5 rounded-lg border border-white/20 whitespace-nowrap">
+                    <span className="text-indigo-100">
+                      Mã BB: <strong className="text-amber-300">{previewAutoId}</strong>
+                    </span>
+                    <span className="text-white/40">•</span>
                     <input
                       type="date"
                       value={receivedDate}
@@ -1008,7 +1013,7 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                   <button
                     type="button"
                     onClick={handleCloseEntryModal}
-                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+                    className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
                     title="Đóng cửa sổ nhập liệu"
                   >
                     <X className="w-4 h-4" />
@@ -1016,213 +1021,223 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                 </div>
               </div>
 
-        <div className="p-4 space-y-3.5">
-          {/* Bấm chọn nhanh linh kiện hay gặp */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[11px] font-bold text-slate-500 mr-1">Chọn nhanh linh kiện:</span>
-            {COMMON_PARTS_QUICK_LIST.map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setPartName(item)}
-                className={`px-2 py-0.5 rounded-full text-[11px] font-bold border transition cursor-pointer ${
-                  partName === item
-                    ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
-                    : 'bg-slate-50 hover:bg-indigo-50 text-slate-700 border-slate-300'
-                }`}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
-
-          {/* Hàng nhập chính: ít trường nhất có thể */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-            {/* Tên linh kiện & Hạn bảo hành */}
-            <div className="md:col-span-4">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <label className="text-[11px] font-extrabold text-slate-700">
-                  1. Linh kiện lỗi <span className="text-rose-600">*</span>
-                </label>
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] font-bold text-slate-500">Hạn BH:</span>
-                  <select
-                    value={warrantyStatus}
-                    onChange={(e) => setWarrantyStatus(e.target.value)}
-                    aria-label="Hạn bảo hành"
-                    className="border border-slate-300 bg-indigo-50/70 rounded px-1.5 py-0.5 text-[11px] font-bold text-indigo-800 focus:outline-none focus:border-indigo-600 cursor-pointer"
-                  >
-                    <option value="Còn bảo hành">Còn bảo hành</option>
-                    <option value="Hết bảo hành">Hết bảo hành</option>
-                    <option value="Chưa rõ">Chưa rõ</option>
-                  </select>
-                </div>
-              </div>
-              <input
-                type="text"
-                required
-                list="dkqms_part_eval_parts"
-                value={partName}
-                onChange={(e) => setPartName(e.target.value)}
-                placeholder="Bấm chip trên hoặc gõ tên linh kiện..."
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600 bg-white"
-              />
-              <datalist id="dkqms_part_eval_parts">
-                {suggestedPartNames.map((p) => (
-                  <option key={p} value={p} />
-                ))}
-              </datalist>
-            </div>
-
-            {/* Số lượng */}
-            <div className="md:col-span-2">
-              <label className="text-[11px] font-extrabold text-slate-700 block mb-1">Số lượng</label>
-              <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden bg-white">
-                <button
-                  type="button"
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 font-black text-slate-700 cursor-pointer"
-                >
-                  -
-                </button>
-                <input
-                  type="number"
-                  min={1}
-                  value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value || '1', 10) || 1))}
-                  className="w-full text-center py-2 text-xs font-black text-slate-900 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => setQuantity((q) => q + 1)}
-                  className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 font-black text-slate-700 cursor-pointer"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-
-            {/* Dòng xe */}
-            <div className="md:col-span-3">
-              <label className="text-[11px] font-extrabold text-slate-700 block mb-1">Dòng xe (tùy chọn)</label>
-              <input
-                type="text"
-                list="dkqms_part_eval_models"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="VD: DK EZ5, DK S1..."
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-indigo-600 bg-white"
-              />
-              <datalist id="dkqms_part_eval_models">
-                {models.map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
-            </div>
-
-            {/* Đại lý */}
-            <div className="md:col-span-3">
-              <label className="text-[11px] font-extrabold text-slate-700 block mb-1">Đại lý gửi về (tùy chọn)</label>
-              <input
-                type="text"
-                list="dkqms_part_eval_dealers"
-                value={dealer}
-                onChange={(e) => setDealer(e.target.value)}
-                placeholder="Chọn hoặc gõ tên đại lý..."
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-indigo-600 bg-white"
-              />
-              <datalist id="dkqms_part_eval_dealers">
-                {dealers.map((dl) => (
-                  <option key={dl} value={dl} />
-                ))}
-              </datalist>
-            </div>
-          </div>
-
-          {/* 1 bấm chọn Nguyên nhân gốc & Phương án xử lý */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] font-extrabold text-slate-700 block mb-1">
-                2. Kết luận nguyên nhân gốc (chọn 1 nút)
-              </label>
-              <div className="grid grid-cols-3 gap-1.5">
-                {ROOT_CAUSE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setRootCauseCategory(opt.value)}
-                    className={`py-2 px-2 rounded-lg text-xs font-extrabold border transition cursor-pointer ${
-                      rootCauseCategory === opt.value
-                        ? opt.activeClass
-                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300'
-                    }`}
-                    title={opt.fullLabel}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[11px] font-extrabold text-slate-700 block mb-1">
-                3. Phương án xử lý bảo hành (chọn 1 nút)
-              </label>
-              <div className="grid grid-cols-3 gap-1.5">
-                {RESOLUTION_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setResolution(opt.value)}
-                    className={`py-2 px-2 rounded-lg text-xs font-extrabold border transition cursor-pointer ${
-                      resolution === opt.value
-                        ? opt.activeClass
-                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Hiện trạng & kết quả giám định (1 ô ngắn gọn) */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
-            <div className={rootCauseCategory === 'Lỗi NCC' ? 'md:col-span-8' : 'md:col-span-12'}>
-              <label className="text-[11px] font-extrabold text-slate-700 block mb-1">
-                4. Hiện trạng hư hỏng &amp; Kết quả kiểm tra giám định (ngắn gọn, tùy chọn)
-              </label>
-              <textarea
-                rows={2}
-                value={findingNote}
-                onChange={(e) => setFindingNote(e.target.value)}
-                placeholder="VD: Đo không thông mạch, cháy MOSFET pha IC, rò nước giắc..."
-                className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 bg-white"
-              />
-            </div>
-
-            {rootCauseCategory === 'Lỗi NCC' && (
-              <div className="md:col-span-4">
-                <label className="text-[11px] font-extrabold text-rose-700 block mb-1">
-                  Nhà cung cấp (nếu biết)
-                </label>
-                <input
-                  type="text"
-                  list="dkqms_part_eval_suppliers"
-                  value={supplierName}
-                  onChange={(e) => setSupplierName(e.target.value)}
-                  placeholder="Chọn hoặc gõ tên NCC..."
-                  className="w-full border border-rose-200 rounded-lg px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-rose-500 bg-rose-50/30"
-                />
-                <datalist id="dkqms_part_eval_suppliers">
-                  {suppliers.map((s) => (
-                    <option key={s} value={s} />
+              <div className="p-5 sm:p-6 space-y-5">
+                {/* Bấm chọn nhanh linh kiện hay gặp */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-extrabold text-slate-600 mr-1 whitespace-nowrap">Chọn nhanh:</span>
+                  {COMMON_PARTS_QUICK_LIST.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setPartName(item)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-bold border transition cursor-pointer ${
+                        partName === item
+                          ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
+                          : 'bg-white hover:bg-indigo-50 text-slate-700 border-slate-300'
+                      }`}
+                    >
+                      {item}
+                    </button>
                   ))}
-                </datalist>
-              </div>
-            )}
-          </div>
+                </div>
+
+                {/* Hàng 1: 1. Linh kiện lỗi * | Hạn bảo hành | Số lượng */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                  <div className="md:col-span-6">
+                    <label className="text-xs font-extrabold text-slate-700 block mb-1.5 whitespace-nowrap">
+                      1. Linh kiện lỗi <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      list="dkqms_part_eval_parts"
+                      value={partName}
+                      onChange={(e) => setPartName(e.target.value)}
+                      placeholder="Bấm chọn nhanh ở trên hoặc nhập tên linh kiện..."
+                      className="w-full h-10 border border-slate-300 rounded-lg px-3.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600 bg-white"
+                    />
+                    <datalist id="dkqms_part_eval_parts">
+                      {suggestedPartNames.map((p) => (
+                        <option key={p} value={p} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div className="md:col-span-4">
+                    <label className="text-xs font-extrabold text-slate-700 block mb-1.5 whitespace-nowrap">
+                      Tình trạng bảo hành
+                    </label>
+                    <select
+                      value={warrantyStatus}
+                      onChange={(e) => setWarrantyStatus(e.target.value)}
+                      aria-label="Tình trạng bảo hành"
+                      className="w-full h-10 border border-slate-300 bg-white rounded-lg px-3 text-xs font-bold text-indigo-800 focus:outline-none focus:border-indigo-600 cursor-pointer"
+                    >
+                      <option value="Còn bảo hành">Còn bảo hành</option>
+                      <option value="Hết bảo hành">Hết bảo hành</option>
+                      <option value="Chưa rõ">Chưa rõ</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="text-xs font-extrabold text-slate-700 block mb-1.5 whitespace-nowrap">
+                      Số lượng
+                    </label>
+                    <div className="flex items-center h-10 border border-slate-300 rounded-lg overflow-hidden bg-white">
+                      <button
+                        type="button"
+                        onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                        className="h-full px-3 bg-slate-100 hover:bg-slate-200 font-black text-slate-700 cursor-pointer"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        value={quantity}
+                        onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value || '1', 10) || 1))}
+                        className="w-full text-center h-full text-xs font-black text-slate-900 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setQuantity((q) => q + 1)}
+                        className="h-full px-3 bg-slate-100 hover:bg-slate-200 font-black text-slate-700 cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hàng 2: 3 cột cân đối (Dòng xe | Đại lý gửi về | Nhà cung cấp) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                  <div>
+                    <label className="text-xs font-extrabold text-slate-700 block mb-1.5 whitespace-nowrap">
+                      Dòng xe (tùy chọn)
+                    </label>
+                    <input
+                      type="text"
+                      list="dkqms_part_eval_models"
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      placeholder="VD: DK EZ5, DK S1..."
+                      className="w-full h-10 border border-slate-300 rounded-lg px-3.5 text-xs font-semibold text-slate-900 focus:outline-none focus:border-indigo-600 bg-white"
+                    />
+                    <datalist id="dkqms_part_eval_models">
+                      {models.map((m) => (
+                        <option key={m} value={m} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-extrabold text-slate-700 block mb-1.5 whitespace-nowrap">
+                      Đại lý gửi về (tùy chọn)
+                    </label>
+                    <input
+                      type="text"
+                      list="dkqms_part_eval_dealers"
+                      value={dealer}
+                      onChange={(e) => setDealer(e.target.value)}
+                      placeholder="Chọn hoặc gõ tên đại lý..."
+                      className="w-full h-10 border border-slate-300 rounded-lg px-3.5 text-xs font-semibold text-slate-900 focus:outline-none focus:border-indigo-600 bg-white"
+                    />
+                    <datalist id="dkqms_part_eval_dealers">
+                      {dealers.map((dl) => (
+                        <option key={dl} value={dl} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label
+                      className={`text-xs font-extrabold block mb-1.5 whitespace-nowrap ${
+                        rootCauseCategory === 'Lỗi NCC' ? 'text-rose-700' : 'text-slate-700'
+                      }`}
+                    >
+                      Nhà cung cấp (nếu biết)
+                    </label>
+                    <input
+                      type="text"
+                      list="dkqms_part_eval_suppliers"
+                      value={supplierName}
+                      onChange={(e) => setSupplierName(e.target.value)}
+                      placeholder="Chọn hoặc gõ tên NCC..."
+                      className={`w-full h-10 border rounded-lg px-3.5 text-xs font-semibold text-slate-900 focus:outline-none ${
+                        rootCauseCategory === 'Lỗi NCC'
+                          ? 'border-rose-300 bg-rose-50/40 focus:border-rose-500'
+                          : 'border-slate-300 bg-white focus:border-indigo-600'
+                      }`}
+                    />
+                    <datalist id="dkqms_part_eval_suppliers">
+                      {suppliers.map((s) => (
+                        <option key={s} value={s} />
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+
+                {/* Hàng 3: Nguyên nhân gốc & Phương án xử lý thẳng hàng */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-extrabold text-slate-700 block mb-1.5 whitespace-nowrap">
+                      2. Kết luận nguyên nhân gốc
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {ROOT_CAUSE_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setRootCauseCategory(opt.value)}
+                          className={`h-10 px-2 rounded-lg text-[11px] sm:text-xs font-extrabold border transition cursor-pointer flex items-center justify-center whitespace-nowrap ${
+                            rootCauseCategory === opt.value
+                              ? opt.activeClass
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300'
+                          }`}
+                          title={opt.fullLabel}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-extrabold text-slate-700 block mb-1.5 whitespace-nowrap">
+                      3. Phương án xử lý bảo hành
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {RESOLUTION_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setResolution(opt.value)}
+                          className={`h-10 px-2 rounded-lg text-[11px] sm:text-xs font-extrabold border transition cursor-pointer flex items-center justify-center whitespace-nowrap ${
+                            resolution === opt.value
+                              ? opt.activeClass
+                              : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hàng 4: Hiện trạng & kết quả giám định (full width) */}
+                <div>
+                  <label className="text-xs font-extrabold text-slate-700 block mb-1.5">
+                    4. Hiện trạng hư hỏng &amp; Kết quả kiểm tra giám định (ngắn gọn, tùy chọn)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={findingNote}
+                    onChange={(e) => setFindingNote(e.target.value)}
+                    placeholder="VD: Đo không thông mạch, cháy MOSFET pha IC, rò nước giắc..."
+                    className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600 bg-white"
+                  />
+                </div>
 
           {/* Khu vực mở rộng thông tin phụ của BM-KTTD-01 (ẩn mặc định) */}
           {showOptionalFields && (
@@ -1311,49 +1326,49 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
             </div>
           )}
 
-          {/* Thanh nút Lưu + mở rộng chi tiết */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200">
-            <div className="flex items-center gap-3 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setShowOptionalFields((v) => !v)}
-                className="text-xs font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 cursor-pointer bg-indigo-50 px-2.5 py-1.5 rounded-lg border border-indigo-200"
-              >
-                {showOptionalFields ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                <span>{showOptionalFields ? 'Thu gọn trường phụ' : 'Chi tiết thêm (VIN, Số máy, NCC, Ảnh...)'}</span>
-              </button>
+                {/* Thanh nút Lưu + mở rộng chi tiết */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-200">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setShowOptionalFields((v) => !v)}
+                      className="text-xs font-bold text-indigo-700 hover:text-indigo-900 flex items-center gap-1.5 cursor-pointer bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-200"
+                    >
+                      {showOptionalFields ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      <span>{showOptionalFields ? 'Thu gọn' : 'Chi tiết thêm'}</span>
+                    </button>
 
-              {!editingId && (
-                <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={keepContextOnSave}
-                    onChange={(e) => setKeepContextOnSave(e.target.checked)}
-                    className="rounded border-slate-300 text-indigo-600"
-                  />
-                  <span>Giữ lại Dòng xe / Đại lý &amp; mở tiếp form để nhập lô</span>
-                </label>
-              )}
-            </div>
+                    {!editingId && (
+                      <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={keepContextOnSave}
+                          onChange={(e) => setKeepContextOnSave(e.target.checked)}
+                          className="rounded border-slate-300 text-indigo-600"
+                        />
+                        <span>Giữ lại Dòng xe / Đại lý để nhập tiếp</span>
+                      </label>
+                    )}
+                  </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleCloseEntryModal}
-                className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-lg transition cursor-pointer"
-              >
-                {editingId ? 'Hủy sửa' : 'Đóng'}
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold rounded-lg transition shadow-sm flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>{editingId ? 'Lưu cập nhật' : 'Lưu đánh giá (BM-KTTD-01)'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={handleCloseEntryModal}
+                      className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold rounded-lg transition cursor-pointer"
+                    >
+                      {editingId ? 'Hủy sửa' : 'Đóng'}
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-extrabold rounded-lg transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{editingId ? 'Lưu cập nhật' : 'Lưu đánh giá'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </form>
           </div>
         </div>
@@ -1369,9 +1384,10 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
               type="button"
               onClick={handleOpenCreateModal}
               className="px-3.5 py-2 rounded-lg text-xs font-extrabold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+              title="Nhập đánh giá linh kiện lỗi (BM-KTTD-01)"
             >
               <Plus className="w-4 h-4" />
-              <span>Nhập đánh giá (BM-KTTD-01)</span>
+              <span>Nhập mới</span>
             </button>
 
             <button
@@ -1382,10 +1398,10 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                   ? 'bg-indigo-50 text-indigo-800 border-indigo-300'
                   : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300'
               }`}
-              title="Bấm để ẩn/hiện bộ lọc dữ liệu"
+              title="Ẩn / Hiện bộ lọc dữ liệu"
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>{isFilterExpanded ? 'Ẩn bộ lọc' : 'Hiện bộ lọc'}</span>
+              <span>Bộ lọc</span>
               {hasActiveFilters && (
                 <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" title="Đang áp dụng bộ lọc" />
               )}
@@ -1421,9 +1437,10 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                   ? 'bg-indigo-700 text-white border-indigo-800'
                   : 'bg-slate-100 text-slate-700 border-slate-300'
               }`}
+              title="Ẩn / Hiện báo cáo tổng hợp"
             >
               <BarChart3 className="w-3.5 h-3.5" />
-              <span>Báo cáo tổng hợp</span>
+              <span>Tổng hợp</span>
             </button>
             <button
               type="button"
@@ -1432,23 +1449,25 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
               title="Copy báo cáo tóm tắt để gửi nhanh"
             >
               {copiedSummary ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedSummary ? 'Đã copy' : 'Copy báo cáo'}</span>
+              <span>{copiedSummary ? 'Đã copy' : 'Copy'}</span>
             </button>
             <button
               type="button"
               onClick={handlePrintSummaryReport}
               className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white transition flex items-center gap-1 cursor-pointer"
+              title="In báo cáo tổng hợp"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>In báo cáo</span>
+              <span>In</span>
             </button>
             <button
               type="button"
               onClick={handleExportExcel}
               className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white transition flex items-center gap-1 cursor-pointer"
+              title="Xuất file Excel"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Xuất Excel ({filteredEvaluations.length})</span>
+              <span>Excel ({filteredEvaluations.length})</span>
             </button>
           </div>
         </div>
@@ -1712,10 +1731,10 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
             <thead className="bg-slate-100 text-[10px] font-bold uppercase text-slate-700 border-b border-slate-300">
               <tr>
                 <th className="p-2.5 text-center w-10 border-r border-slate-200">STT</th>
-                <th className="p-2.5 border-r border-slate-200 w-32">Mã BB &amp; Ngày</th>
-                <th className="p-2.5 border-r border-slate-200 w-40">Linh kiện &amp; SL</th>
-                <th className="p-2.5 border-r border-slate-200 min-w-[230px]">Dòng xe / Đại lý / NCC</th>
-                <th className="p-2.5 border-r border-slate-200 w-56 max-w-[240px]">Hiện trạng &amp; Kết quả giám định</th>
+                <th className="p-2.5 border-r border-slate-200 w-36">Mã BB &amp; Ngày</th>
+                <th className="p-2.5 border-r border-slate-200 w-44">Linh kiện &amp; SL</th>
+                <th className="p-2.5 border-r border-slate-200 w-[22%] min-w-[210px]">Dòng xe / Đại lý / NCC</th>
+                <th className="p-2.5 border-r border-slate-200 w-[22%] min-w-[210px]">Hiện trạng &amp; Kết quả giám định</th>
                 <th className="p-2.5 text-center border-r border-slate-200 w-28">Nguyên nhân gốc</th>
                 <th className="p-2.5 text-center border-r border-slate-200 w-32">Phương án xử lý</th>
                 <th className="p-2.5 text-center w-24">Thao tác</th>
@@ -1757,7 +1776,7 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                         {ev.supplierName && <div className="text-rose-700 font-semibold">NCC: {ev.supplierName}</div>}
                         {!ev.model && !ev.dealer && !ev.supplierName && <span className="text-slate-400 italic">--</span>}
                       </td>
-                      <td className="p-2.5 border-r border-slate-200 text-[11px] text-slate-700 max-w-[240px] break-words">
+                      <td className="p-2.5 border-r border-slate-200 text-[11px] text-slate-700 break-words">
                         <p className="whitespace-pre-line">{ev.findingNote || <span className="text-slate-400 italic">Chưa ghi chú chi tiết</span>}</p>
                         {(ev.vin || ev.engineNo || ev.nccFeedbackAction) && (
                           <div className="mt-1 text-[10px] text-slate-500 space-x-2">
