@@ -91,7 +91,7 @@ import {
   INITIAL_EQUIPMENT_INCIDENTS,
   INITIAL_DEALERS
 } from './initialData';
-import { Task, KPI, Supplier, CAPA, PTSPProject, PTSPTask, MarketDefect, ECOChange, COPQMetric, CustomForm, QualityStaff, DKBikeModel, PlanTarget, WeeklyPlan, MonthlyPlan, EquipmentItem, MaintenanceLog, EquipmentIncident, SupplierProductionAudit, Dealer, ImprovementAction } from './types';
+import { Task, KPI, Supplier, CAPA, PTSPProject, PTSPTask, MarketDefect, ECOChange, COPQMetric, CustomForm, QualityStaff, DKBikeModel, PlanTarget, WeeklyPlan, MonthlyPlan, EquipmentItem, MaintenanceLog, EquipmentIncident, SupplierProductionAudit, Dealer, ImprovementAction, PartEvaluation } from './types';
 import { DAILY_LOG_DATA, DailyLogRecord } from './dailyLogsData';
 import { INITIAL_PTSP_TASKS } from './ptspTasksData';
 import {
@@ -121,6 +121,7 @@ import QMSWorkflowTab from './components/QMSWorkflowTab';
 import QualityPlanning, { getInitialQmsPlanningTasks } from './components/QualityPlanning';
 import OqcTvDashboard from './components/OqcTvDashboard';
 import QmsFormsCenter from './components/QmsFormsCenter';
+import { PartEvaluationsTab } from './components/PartEvaluationsTab';
 import { compressBase64String, compressImageFile } from './imageCompressor';
 
 // Firebase Integrations
@@ -2072,6 +2073,7 @@ export function App() {
     'dk_capas',
     'dk_ecos',
     'dk_defects',
+    'dk_part_evaluations',
     'dk_fmea',
     'dk_improvement_actions',
     'dk_qms_quality_planning_tasks'
@@ -2514,6 +2516,7 @@ export function App() {
       dk_pqc_records: 'Phiếu kiểm tra PQC (Công đoạn)',
       dk_oqc_records: 'Phiếu kiểm tra OQC (Đầu ra)',
       dk_defects: 'Danh mục lỗi chất lượng',
+      dk_part_evaluations: 'Đánh giá linh kiện lỗi (BM-KTTD-01)',
       dk_fmea: 'Phân tích FMEA',
       dk_improvement_actions: 'Hành động cải tiến chất lượng',
       dk_kpis: 'Chỉ số chất lượng KPIs',
@@ -2617,6 +2620,7 @@ export function App() {
         else if (key === 'dk_pqc_records') setPqcRecords(serverRecords);
         else if (key === 'dk_oqc_records') setOqcRecords(serverRecords);
         else if (key === 'dk_defects') setDefects(serverRecords);
+        else if (key === 'dk_part_evaluations') setPartEvaluations(serverRecords);
         else if (key === 'dk_fmea') setFmea(serverRecords);
         else if (key === 'dk_improvement_actions') setImprovementActions(serverRecords);
         else if (key === 'dk_kpis') setKpis(serverRecords);
@@ -2707,6 +2711,7 @@ export function App() {
         else if (key === 'dk_pqc_records') setPqcRecords(mergedList);
         else if (key === 'dk_oqc_records') setOqcRecords(mergedList);
         else if (key === 'dk_defects') setDefects(mergedList);
+        else if (key === 'dk_part_evaluations') setPartEvaluations(mergedList);
         else if (key === 'dk_fmea') setFmea(mergedList);
         else if (key === 'dk_improvement_actions') setImprovementActions(mergedList);
         else if (key === 'dk_kpis') setKpis(mergedList);
@@ -3288,6 +3293,7 @@ export function App() {
 
     const keyLabels: Record<string, string> = {
       'dk_defects': 'Sự cố lỗi thị trường (Market Defects)',
+      'dk_part_evaluations': 'Tổng hợp đánh giá linh kiện lỗi (BM-KTTD-01)',
       'dk_improvement_actions': 'Hành động cải tiến ECO (Improvement Actions)',
       'dk_fmea': 'Phân tích FMEA',
       'dk_capas': 'Hồ sơ khắc phục CAPA',
@@ -3366,6 +3372,10 @@ export function App() {
           displayTitle = `OQC: ${item.serialNo || 'Số khung'} - ${item.modelName || 'Model'}`;
           details = `Lỗi: ${item.defectType || 'Không'} (${item.status || 'Đạt'})`;
           date = item.checkedDate || '';
+        } else if (key === 'dk_part_evaluations') {
+          displayTitle = `ĐG Linh kiện: ${item.partName || 'Linh kiện'} (SL ${item.quantity || 1}) [${item.id || itemId}]`;
+          details = `${item.rootCauseCategory || ''} • ${item.resolution || ''} • ${item.findingNote || ''}`;
+          date = item.receivedDate || '';
         } else {
           displayTitle = `${item.title || item.name || item.TaskDescription || item.TaskName || 'Bản ghi'} [${itemId}]`;
           details = item.description || item.NextAction || item.explanation || item.note || '';
@@ -3499,7 +3509,7 @@ export function App() {
           'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
           'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
           'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks'
+          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_part_evaluations'
         ];
         defaultKeys.forEach(dk => {
           if (!localKeys.includes(dk)) localKeys.push(dk);
@@ -3791,7 +3801,7 @@ export function App() {
         'dk_tasks', 'dk_weekly_plans', 'dk_monthly_plans', 'dk_ptsp_tasks',
         'dk_capas', 'dk_ecos', 'dk_daily_logs', 'dk_iqc_records',
         'dk_pqc_records', 'dk_oqc_records', 'dk_staff', 'dk_dealers',
-        'dk_defects', 'dk_fmea', 'dk_improvement_actions', 'dk_oqc_handover_list',
+        'dk_defects', 'dk_part_evaluations', 'dk_fmea', 'dk_improvement_actions', 'dk_oqc_handover_list',
         'dk_oqc_color_changes'
       ];
       localKeys.forEach(k => {
@@ -3822,6 +3832,7 @@ export function App() {
             else if (k === 'dk_staff') setStaff(sanitizeMasterStaff(sanitizedParsed));
             else if (k === 'dk_dealers') setDealers(sanitizedParsed);
             else if (k === 'dk_defects') setDefects(sanitizedParsed);
+            else if (k === 'dk_part_evaluations') setPartEvaluations(sanitizedParsed);
             else if (k === 'dk_fmea') setFmea(sanitizedParsed);
             else if (k === 'dk_improvement_actions') setImprovementActions(sanitizedParsed);
           } catch (e) { }
@@ -3921,7 +3932,7 @@ export function App() {
           'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
           'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
           'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions'
+          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions', 'dk_part_evaluations'
         ];
 
         const rawDocMap: Record<string, any> = {};
@@ -4037,7 +4048,7 @@ export function App() {
         'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
         'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
         'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-        'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions'
+        'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions', 'dk_part_evaluations'
       ];
 
       ALL_RECONCILE_KEYS.forEach((key) => {
@@ -4244,6 +4255,11 @@ export function App() {
       if (serverData.dk_defects !== undefined && Array.isArray(serverData.dk_defects) && !isDefectsDirty) {
         setDefects(serverData.dk_defects);
         safeStorage.setItem('dk_defects', JSON.stringify(serverData.dk_defects));
+      }
+      const isPartEvalsDirty = localStorage.getItem('dk_part_evaluations_is_dirty') === 'true';
+      if (serverData.dk_part_evaluations !== undefined && Array.isArray(serverData.dk_part_evaluations) && !isPartEvalsDirty) {
+        setPartEvaluations(serverData.dk_part_evaluations);
+        safeStorage.setItem('dk_part_evaluations', JSON.stringify(serverData.dk_part_evaluations));
       }
       if (serverData.dk_copqs !== undefined) setCopqs(serverData.dk_copqs);
       if (serverData.dk_fmea !== undefined) setFmea(serverData.dk_fmea);
@@ -4515,6 +4531,7 @@ export function App() {
           else if (key === 'dk_iqc_records') setIqcRecords(finalDisplayData);
           else if (key === 'dk_pqc_records') setPqcRecords(finalDisplayData);
           else if (key === 'dk_defects') setDefects(finalDisplayData);
+          else if (key === 'dk_part_evaluations') setPartEvaluations(finalDisplayData);
           else if (key === 'dk_fmea') setFmea(finalDisplayData);
           else if (key === 'dk_improvement_actions') setImprovementActions(finalDisplayData);
 
@@ -4558,6 +4575,7 @@ export function App() {
             else if (key === 'dk_iqc_records') setIqcRecords(sanitizedParsed);
             else if (key === 'dk_pqc_records') setPqcRecords(sanitizedParsed);
             else if (key === 'dk_defects') setDefects(sanitizedParsed);
+            else if (key === 'dk_part_evaluations') setPartEvaluations(sanitizedParsed);
             else if (key === 'dk_fmea') setFmea(sanitizedParsed);
             else if (key === 'dk_improvement_actions') setImprovementActions(sanitizedParsed);
           }
@@ -4970,6 +4988,47 @@ export function App() {
     }
   };
   const [defects, setDefects] = useState<MarketDefect[]>(() => getSavedState('dk_defects', INITIAL_DEFECTS));
+  const [partEvaluations, setPartEvaluations] = useState<PartEvaluation[]>(() => getSavedState('dk_part_evaluations', []));
+  const [marketFeedbackSubTab, setMarketFeedbackSubTab] = useState<'feedback' | 'part_eval'>('feedback');
+  const handleSavePartEvaluation = (item: PartEvaluation, isEdit: boolean): boolean => {
+    if (!isUserAuthorized()) {
+      safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).\n\nChỉ các thành viên được phân quyền Biên tập mới có quyền nhập/sửa đánh giá linh kiện lỗi.");
+      return false;
+    }
+    setPartEvaluations(prev => {
+      const exists = prev.some(x => x.id === item.id);
+      const updated = (isEdit || exists)
+        ? prev.map(x => x.id === item.id ? item : x)
+        : [item, ...prev];
+      safeStorage.setItem('dk_part_evaluations', JSON.stringify(updated));
+      safeStorage.setItem('dk_part_evaluations_is_dirty', 'true');
+      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_part_evaluations');
+      syncToServer('dk_part_evaluations', updated);
+      return updated;
+    });
+    triggerToast(
+      isEdit ? `Đã cập nhật biên bản đánh giá ${item.id}` : `Đã lưu đánh giá linh kiện: ${item.partName} (${item.id})`,
+      'success'
+    );
+    return true;
+  };
+  const handleDeletePartEvaluation = (id: string) => {
+    if (!isUserAuthorized()) {
+      safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
+      return;
+    }
+    if (!window.confirm(`Anh có chắc muốn xóa biên bản đánh giá linh kiện [${id}] không?`)) return;
+    trackDeletedId('dk_part_evaluations', id);
+    setPartEvaluations(prev => {
+      const updated = prev.filter(x => x.id !== id);
+      safeStorage.setItem('dk_part_evaluations', JSON.stringify(updated));
+      safeStorage.setItem('dk_part_evaluations_is_dirty', 'true');
+      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_part_evaluations');
+      syncToServer('dk_part_evaluations', updated);
+      return updated;
+    });
+    triggerToast(`Đã xóa biên bản đánh giá ${id}`, 'info');
+  };
   const [marketDefectsSearch, setMarketDefectsSearch] = useState('');
   const [marketDefectsFilterSeverity, setMarketDefectsFilterSeverity] = useState('All');
   const [marketDefectsFilterStatus, setMarketDefectsFilterStatus] = useState('All');
@@ -7972,6 +8031,12 @@ export function App() {
       syncToServer('dk_defects', defects);
     }
   }, [defects]);
+
+  useEffect(() => {
+    if (localStorage.getItem('dk_part_evaluations_is_dirty') === 'true') {
+      syncToServer('dk_part_evaluations', partEvaluations);
+    }
+  }, [partEvaluations]);
 
   useEffect(() => {
     if (localStorage.getItem('dk_ecos_is_dirty') === 'true') {
@@ -25774,6 +25839,36 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
           {/* ==================================== TAB 5: MARKET DEFECTS ==================================== */}
           {activeTab === 'defects' && (
             <div className="space-y-6" id="view_defects_content">
+              {/* Sub-Tabs Navigation: Tab 1 Phản ánh thị trường | Tab 2 Tổng hợp đánh giá linh kiện lỗi */}
+              <div className="flex flex-col sm:flex-row border border-slate-300 gap-1.5 bg-slate-100 p-1.5 rounded-xl shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => setMarketFeedbackSubTab('feedback')}
+                  className={`flex-1 py-2.5 px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    marketFeedbackSubTab === 'feedback'
+                      ? 'bg-white text-orange-700 shadow-sm border border-orange-200'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                  }`}
+                >
+                  <Car className="w-4 h-4 shrink-0" />
+                  <span>Phản ánh thị trường ({filteredMarketDefects.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMarketFeedbackSubTab('part_eval')}
+                  className={`flex-1 py-2.5 px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    marketFeedbackSubTab === 'part_eval'
+                      ? 'bg-white text-indigo-700 shadow-sm border border-indigo-200'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                  }`}
+                >
+                  <Wrench className="w-4 h-4 shrink-0" />
+                  <span>Tổng hợp đánh giá linh kiện lỗi ({partEvaluations.length})</span>
+                </button>
+              </div>
+
+              {marketFeedbackSubTab === 'feedback' && (
+                <>
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-4 rounded-xl border border-slate-300 shadow-sm">
                 <div>
                   <h2 className="text-xl font-extrabold text-slate-800">Quản lý Phản ánh Thị trường</h2>
@@ -27259,6 +27354,21 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   </table>
                 </div>
               </div>
+                </>
+              )}
+
+              {marketFeedbackSubTab === 'part_eval' && (
+                <PartEvaluationsTab
+                  evaluations={partEvaluations}
+                  onSaveEvaluation={handleSavePartEvaluation}
+                  onDeleteEvaluation={handleDeletePartEvaluation}
+                  models={models.map(m => m.name || m.code || '').filter(Boolean)}
+                  dealers={dealers.map(d => d.name).filter(Boolean)}
+                  suppliers={suppliers.map(s => s.SupplierName || s.name || '').filter(Boolean)}
+                  defaultInspector="Nguyễn Văn Diệm"
+                  triggerToast={triggerToast}
+                />
+              )}
             </div>
           )}
 

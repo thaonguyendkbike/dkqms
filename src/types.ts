@@ -666,5 +666,35 @@ export interface ChatNoteMessage {
   fileType?: 'image' | 'file';
 }
 
+// ==========================================
+// 17. PART EVALUATIONS TABLE (Tổng hợp đánh giá linh kiện lỗi theo BM-KTTD-01)
+// ==========================================
+export type PartEvaluationRootCause = 'Lỗi NCC' | 'Lỗi SX' | 'Lỗi KH';
+export type PartEvaluationResolution = 'Đổi mới BH' | 'Sửa chữa / Tái chế' | 'Từ chối BH';
+
+export interface PartEvaluation {
+  id: string;                      // Mã biên bản giám định (VD: KTTD-261113-01)
+  receivedDate: string;            // Ngày tiếp nhận / đánh giá (YYYY-MM-DD)
+  inspector: string;               // Nhân sự kiểm tra đánh giá (mặc định: Nguyễn Văn Diệm)
+  partName: string;                // Tên linh kiện lỗi / yêu cầu bảo hành
+  partCode?: string;               // Mã linh kiện (tùy chọn)
+  quantity: number;                // Số lượng (mặc định: 1)
+  model?: string;                  // Dòng xe DKBike (tùy chọn)
+  dealer?: string;                 // Đại lý / Khách hàng gửi (tùy chọn)
+  supplierName?: string;           // Nhà cung cấp (tùy chọn)
+  rootCauseCategory: PartEvaluationRootCause; // Phân định nguyên nhân gốc
+  resolution: PartEvaluationResolution;       // Phương án xử lý
+  findingNote?: string;            // Hiện trạng thực tế & Kết quả mổ xẻ giám định
+  vin?: string;                    // Số khung xe (VIN) - tùy chọn mở rộng
+  engineNo?: string;               // Số động cơ / Cụm chi tiết - tùy chọn mở rộng
+  usageDuration?: string;          // Thời gian đã sử dụng (km / tháng) - tùy chọn mở rộng
+  warrantyStatus?: string;         // Hạn bảo hành - tùy chọn mở rộng
+  nccFeedbackAction?: string;      // Hành động phản hồi NCC / Bộ phận chịu chi phí
+  images?: string[];               // Ảnh minh chứng (nén <30KB bằng compressImageFile)
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+
 
 
