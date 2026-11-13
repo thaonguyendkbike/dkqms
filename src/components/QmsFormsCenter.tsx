@@ -48,10 +48,10 @@ const isDotOnlyTemplate = (val: string | number): boolean => {
   return s.length >= 3 && /^[.\s/]+$/.test(s) && s.includes('...');
 };
 
-// Kiểm tra ô bảng có cho phép nhập trực tiếp hay không (kể cả ô trống trừ cột STT, hoặc ô chứa '...' như BM-QC-04)
-const isEditableTableCell = (cell: string | number, cIdx?: number): boolean => {
+// Kiểm tra ô bảng có cho phép nhập trực tiếp hay không (kể cả ô trống trừ cột STT, hoặc ô 1 cột dạng khung nội dung, hoặc ô chứa '...' như BM-QC-04)
+const isEditableTableCell = (cell: string | number, cIdx?: number, rowLen?: number): boolean => {
   const s = String(cell ?? '');
-  return s.includes('...') || (s.trim() === '' && (cIdx === undefined || cIdx > 0));
+  return s.includes('...') || (s.trim() === '' && (cIdx === undefined || cIdx > 0 || rowLen === 1));
 };
 
 const escapeHtml = (unsafe: string): string => {
@@ -500,6 +500,10 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       : '';
     const bgStyle = forWord ? 'background-color:#f3f4f6; font-weight:bold; text-align:center;' : '';
 
+    if ((!tbl.headerGroups || tbl.headerGroups.length === 0) && (!tbl.headers || tbl.headers.length === 0)) {
+      return '';
+    }
+
     if (tbl.headerGroups && tbl.headerGroups.length > 0) {
       const skipped = getRowSpanSkippedCols(tbl.headerGroups);
       const row1 = `<tr style="${bgStyle}">${tbl.headerGroups
@@ -584,10 +588,11 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     const tablesHtml = form.tables
       .map((tbl, tIdx) => {
         const isFirstColStt = Boolean(tbl.headers[0] && tbl.headers[0].trim().toUpperCase() === 'STT');
+        const isHeaderless = (!tbl.headerGroups || tbl.headerGroups.length === 0) && tbl.headers.length === 0;
         return `
           <div class="table-section">
             <div class="section-title">${escapeHtml(tbl.title)}</div>
-            <table class="qms-table">
+            <table class="qms-table${isHeaderless ? ' headerless-box-table' : ''}">
               ${renderTableTheadHtml(tbl, isFirstColStt, false, isCompactTable)}
               <tbody>
                 ${tbl.rows
@@ -599,7 +604,15 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                         const cellKey = `${tIdx}_${rIdx}_${cIdx}`;
                         const displayVal = resolveDisplayCellText(filled.tableCells[cellKey], cell);
                         const isCenter = cIdx === 0 && isFirstColStt;
-                        return `<td class="${isCenter ? 'text-center font-bold' : ''}">${renderFormattedCellHtml(displayVal)}</td>`;
+                        const isHeaderlessLabel = isHeaderless && row.length === 2 && cIdx === 0 && String(cell ?? '').trim() !== '';
+                        const tdClass = isCenter
+                          ? 'text-center font-bold'
+                          : isHeaderlessLabel
+                            ? 'headerless-label-cell'
+                            : isHeaderless && row.length === 1
+                              ? 'headerless-box-cell'
+                              : '';
+                        return `<td class="${tdClass}">${renderFormattedCellHtml(displayVal)}</td>`;
                       })
                       .join('')}
                   </tr>
@@ -830,6 +843,14 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       text-align: center;
       vertical-align: middle;
     }
+    table.qms-table.headerless-box-table td.headerless-label-cell {
+      width: 210px;
+      background-color: #f8fafc !important;
+      font-weight: bold;
+    }
+    table.qms-table.headerless-box-table td.headerless-box-cell {
+      height: 54px;
+    }
     .text-center { text-align: center; }
     .font-bold { font-weight: bold; }
     .cb-row {
@@ -1048,6 +1069,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       let tablesHtml = '';
       form.tables.forEach((t, tIdx) => {
         const isFirstColStt = Boolean(t.headers[0] && t.headers[0].trim().toUpperCase() === 'STT');
+        const isHeaderless = (!t.headerGroups || t.headerGroups.length === 0) && t.headers.length === 0;
         tablesHtml += `
           <div style="margin:8pt 0 6pt 0;">
             <p style="font-size:9.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 3pt 0; font-family:'Times New Roman', serif;">${escapeHtml(t.title)}</p>
@@ -1059,8 +1081,17 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                     ${row.map((cell, cIdx) => {
                       const cellKey = `${tIdx}_${rIdx}_${cIdx}`;
                       const cellVal = resolveDisplayCellText(filled.tableCells[cellKey], cell);
+                      const isHeaderlessLabel = isHeaderless && row.length === 2 && cIdx === 0 && String(cell ?? '').trim() !== '';
+                      const isHeaderlessBox = isHeaderless && row.length === 1;
+                      const extraCellStyle = isHeaderlessLabel
+                        ? ' width:165pt; background-color:#f8fafc; font-weight:bold;'
+                        : isHeaderlessBox
+                          ? ' height:44pt;'
+                          : isCompactWord
+                            ? ' height:18pt;'
+                            : '';
                       return `
-                        <td style="padding:${isCompactWord ? '2.5pt 2.5pt' : '3.5pt 4pt'}; border:1pt solid #000; text-align:${cIdx === 0 && isFirstColStt ? 'center' : 'left'}; vertical-align:middle;${isCompactWord ? ' height:18pt;' : ''}">
+                        <td style="padding:${isCompactWord ? '2.5pt 2.5pt' : '3.5pt 4pt'}; border:1pt solid #000; text-align:${cIdx === 0 && isFirstColStt ? 'center' : 'left'}; vertical-align:${isHeaderless ? 'top' : 'middle'};${extraCellStyle}">
                           ${renderFormattedCellHtml(cellVal, true)}
                         </td>
                       `;
@@ -2130,6 +2161,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                 {/* Các Bảng Biểu Kỹ Thuật / Nghiệm Thu */}
                 {previewForm.tables.map((tbl, tIdx) => {
                   const isFirstColStt = Boolean(tbl.headers[0] && tbl.headers[0].trim().toUpperCase() === 'STT');
+                  const isHeaderless = (!tbl.headerGroups || tbl.headerGroups.length === 0) && tbl.headers.length === 0;
                   const skippedCols = getRowSpanSkippedCols(tbl.headerGroups);
                   return (
                     <div key={tIdx} className="my-3">
@@ -2137,32 +2169,34 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                         {tbl.title}
                       </h4>
                       <table className={`qms-table w-full border-collapse border border-black ${previewForm.orientation === 'landscape' ? 'text-[10px]' : 'text-[11px]'}`}>
-                        <thead>
-                          {tbl.headerGroups && tbl.headerGroups.length > 0 && (
+                        {!isHeaderless && (
+                          <thead>
+                            {tbl.headerGroups && tbl.headerGroups.length > 0 && (
+                              <tr className="bg-slate-100 font-bold">
+                                {tbl.headerGroups.map((g, gIdx) => (
+                                  <th
+                                    key={gIdx}
+                                    colSpan={g.colSpan}
+                                    rowSpan={g.rowSpan || 1}
+                                    className={`border border-black p-1 text-center whitespace-pre-line ${gIdx === 0 && g.colSpan === 1 && isFirstColStt ? 'w-9' : ''}`}
+                                  >
+                                    {g.label}
+                                  </th>
+                                ))}
+                              </tr>
+                            )}
                             <tr className="bg-slate-100 font-bold">
-                              {tbl.headerGroups.map((g, gIdx) => (
-                                <th
-                                  key={gIdx}
-                                  colSpan={g.colSpan}
-                                  rowSpan={g.rowSpan || 1}
-                                  className={`border border-black p-1 text-center whitespace-pre-line ${gIdx === 0 && g.colSpan === 1 && isFirstColStt ? 'w-9' : ''}`}
-                                >
-                                  {g.label}
-                                </th>
-                              ))}
+                              {tbl.headers.map((h, hIdx) => {
+                                if (skippedCols.has(hIdx)) return null;
+                                return (
+                                  <th key={hIdx} className={`border border-black p-1 text-center whitespace-pre-line ${hIdx === 0 && isFirstColStt ? 'w-10' : ''}`}>
+                                    {h}
+                                  </th>
+                                );
+                              })}
                             </tr>
-                          )}
-                          <tr className="bg-slate-100 font-bold">
-                            {tbl.headers.map((h, hIdx) => {
-                              if (skippedCols.has(hIdx)) return null;
-                              return (
-                                <th key={hIdx} className={`border border-black p-1 text-center whitespace-pre-line ${hIdx === 0 && isFirstColStt ? 'w-10' : ''}`}>
-                                  {h}
-                                </th>
-                              );
-                            })}
-                          </tr>
-                        </thead>
+                          </thead>
+                        )}
                         <tbody>
                           {tbl.rows.map((row, rIdx) => (
                             <tr key={rIdx}>
@@ -2172,12 +2206,22 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                                 const templateStr = String(cell ?? '');
                                 const cellVal = rawStored ?? templateStr;
                                 const hasCheckboxes = cellVal.includes('□') || cellVal.includes('☑');
-                                const editable = isEditableTableCell(templateStr, cIdx);
+                                const editable = isEditableTableCell(templateStr, cIdx, row.length);
                                 const cleanDisplayVal = resolveDisplayCellText(rawStored, cell);
                                 const isCompactCol = tbl.headers.length >= 9;
+                                const isHeaderlessLabel = isHeaderless && row.length === 2 && cIdx === 0 && templateStr.trim() !== '';
 
                                 return (
-                                  <td key={cIdx} className={`border border-black ${isCompactCol ? 'p-1' : 'p-1.5'} align-top ${cIdx === 0 && isFirstColStt ? `text-center ${isCompactCol ? 'w-8' : 'w-10'} font-bold` : 'text-left'}`}>
+                                  <td
+                                    key={cIdx}
+                                    className={`border border-black ${isCompactCol ? 'p-1' : 'p-1.5'} align-top ${
+                                      cIdx === 0 && isFirstColStt
+                                        ? `text-center ${isCompactCol ? 'w-8' : 'w-10'} font-bold`
+                                        : isHeaderlessLabel
+                                          ? 'text-left w-56 font-bold bg-slate-50 text-slate-800'
+                                          : 'text-left'
+                                    }`}
+                                  >
                                     {hasCheckboxes ? (
                                       /* Ô có ô vuông tick: Có thể bấm trực tiếp để toggle □ và ☑ */
                                       <div className="space-y-0.5">
@@ -2213,7 +2257,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                                     ) : modalMode === 'interactive' && editable ? (
                                       /* Ô cần điền kết quả / thông số (tự giãn chiều cao theo nội dung nhập) */
                                       <AutoResizeTextarea
-                                        minRows={tbl.headers.length >= 9 ? 1 : 2}
+                                        minRows={tbl.headers.length >= 9 ? 1 : isHeaderless && row.length === 1 ? 3 : 2}
                                         value={isDotOnlyTemplate(cellVal) ? '' : cellVal}
                                         onChange={(val) => {
                                           setCurrentFilledData(prev => ({
@@ -2226,7 +2270,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                                       />
                                     ) : (
                                       /* Chế độ xem in A4 hoặc nội dung chữ cố định */
-                                      <div className={`font-serif whitespace-pre-wrap break-words ${tbl.headers.length >= 9 ? 'min-h-[20px]' : ''}`}>
+                                      <div className={`font-serif whitespace-pre-wrap break-words ${tbl.headers.length >= 9 ? 'min-h-[20px]' : isHeaderless && row.length === 1 ? 'min-h-[54px]' : isHeaderless ? 'min-h-[32px]' : ''}`}>
                                         {cleanDisplayVal.split('\n').map((line, lIdx) => (
                                           <div key={lIdx}>{line || '\u00A0'}</div>
                                         ))}

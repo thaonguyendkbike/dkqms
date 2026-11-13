@@ -408,41 +408,58 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
     id: 'bm-qa-03',
     code: 'BM-QA-03',
     procedureCode: 'QT-QA-02',
-    title: 'PHIẾU YÊU CẦU HÀNH ĐỘNG KHẮC PHỤC / PHÒNG NGỪA (CAR/PAR)',
-    subtitle: 'Văn bản kiểm soát nguyên nhân gốc rễ và giám sát lộ trình cải tiến theo chu trình 8D / 5-Whys',
+    title: 'BIÊN BẢN BAN HÀNH & GIÁM SÁT HÀNH ĐỘNG KHẮC PHỤC PHÒNG NGỪA (CAPA)',
+    subtitle: 'Corrective Action & Preventive Action - CAPA Report',
     department: 'Bộ phận QA/QE',
     revision: '01',
-    effectiveDate: '01/11/2026',
-    scope: 'Các sự cố chất lượng lặp lại, lỗi hàng loạt tại IQC, IPQC, OQC hoặc khiếu nại Đại lý',
-    purpose: 'Yêu cầu đơn vị gây lỗi điều tra nguyên nhân gốc rễ bằng 4M/5-Whys và cam kết biện pháp ngăn ngừa tái phát dứt điểm.',
+    effectiveDate: '13/11/2026',
+    scope: 'Các sự cố chất lượng lặp lại, lỗi hàng loạt tại IQC, IPQC, OQC, tồn kho thành phẩm hoặc khiếu nại thị trường / Đại lý',
+    purpose: 'Ban hành yêu cầu điều tra nguyên nhân gốc rễ (5-Why), triển khai biện pháp khắc phục tức thì, hành động khắc phục triệt để (CA) và phòng ngừa diện rộng (PA).',
     signRoles: [
-      { role: 'Thực thi [T]', type: 'T', title: 'Kỹ sư QA phát hành phiếu' },
-      { role: 'Xác nhận [C]', type: 'C', title: 'Đơn vị nhận yêu cầu (Xưởng / NCC)' },
-      { role: 'Phê duyệt [P]', type: 'P', title: 'Trưởng phòng QLCL' }
+      { role: 'Người Lập Phiếu & Báo Cáo', type: 'T', title: 'Ký và ghi rõ họ tên' },
+      { role: 'Bộ Phận Lỗi / Nhà Cung Cấp', type: 'C', title: 'Xác nhận triển khai CA' },
+      { role: 'Phê Duyệt Trưởng Ban QLCL', type: 'P', title: 'Ký duyệt ban hành ISO' }
     ],
     fields: [
-      { label: 'Mã phiếu CAR/PAR' },
-      { label: 'Ngày phát hành' },
-      { label: 'Đơn vị nhận yêu cầu (Xưởng / NCC)' },
-      { label: 'Hạn chót gửi báo cáo khắc phục' },
-      { label: 'Kỹ sư QA theo dõi' }
+      { label: 'Mã Số Phiếu (CAPA ID)' },
+      { label: 'Trạng Thái Hiện Tại' },
+      { label: 'Mẫu Xe Liên Kết (Model)' },
+      { label: 'Nhà Cung Cấp Hỏng (Vendor)' },
+      { label: 'Kỹ Sư Phụ Trách (Assignee)' },
+      { label: 'Nguồn Phát Hiện Sự Cố' },
+      { label: 'Nơi Phát Sinh Sự Cố' },
+      { label: 'Mục Tiêu Hoàn Thành (Target)' }
     ],
     tables: [
       {
-        title: 'I. PHÂN TÍCH NGUYÊN NHÂN GỐC RỄ (4M & 5-WHYS)',
-        headers: ['Yếu tố 4M', 'Phân tích chi tiết nguyên nhân gốc rễ (5-Whys)', 'Hành động khắc phục (Corrective Action)', 'Thời hạn cam kết'],
+        title: 'I. PHÂN TÍCH HIỆN TRƯỜNG & SỰ CỐ PHÁT SINH (NON-CONFORMANCE DESCRIPTION)',
+        headers: [],
         rows: [
-          ['Man (Con người)', '................................................................................', '................................................................................', '........................'],
-          ['Machine (Máy móc)', '................................................................................', '................................................................................', '........................'],
-          ['Material (Vật tư)', '................................................................................', '................................................................................', '........................'],
-          ['Method (Phương pháp)', '................................................................................', '................................................................................', '........................']
+          ['Mô tả vấn đề:', ''],
+          ['Phân tích nguyên nhân gốc rễ (5-Why Analysis):', '']
+        ]
+      },
+      {
+        title: 'II. BIỆN PHÁP KHẮC PHỤC SỬA LỖI TỨC THÌ (IMMEDIATE CORRECTION)',
+        headers: [],
+        rows: [
+          ['']
+        ]
+      },
+      {
+        title: 'III. HÀNH ĐỘNG KHẮC PHỤC TRIỆT ĐỂ (CORRECTIVE ACTION - CA)',
+        headers: [],
+        rows: [
+          ['']
+        ]
+      },
+      {
+        title: 'IV. HÀNH ĐỘNG PHÒNG NGỪA DIỆN RỘNG (PREVENTIVE ACTION - PA)',
+        headers: [],
+        rows: [
+          ['']
         ]
       }
-    ],
-    conclusions: [
-      { label: 'Hành động phòng ngừa diện rộng (PA)', content: '................................................................................................................................................' },
-      { label: 'Kết quả đánh giá hiệu lực sau 30 ngày', content: '□ ĐẠT HIỆU LỰC (Đóng phiếu CAR/PAR)\n□ CHƯA ĐẠT HIỆU LỰC (Tái phát hành phiếu CAR mới & yêu cầu giải trình lại)' },
-      { label: 'Ghi chú xác nhận của QA', content: '................................................................................................................................................' }
     ]
   },
   {
