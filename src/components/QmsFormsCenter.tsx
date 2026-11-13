@@ -32,7 +32,66 @@ interface QmsFormsCenterProps {
 
 // Storage keys
 const CUSTOM_TEMPLATES_KEY = 'dk_qms_custom_form_templates';
+const CUSTOM_DOCS_KEY = 'dk_qms_custom_documents';
 const FILLED_FORMS_KEY_PREFIX = 'dk_qms_filled_form_';
+
+const DOC_CATEGORIES: { value: QmsDocumentItem['category']; label: string }[] = [
+  { value: 'ho-so-to-chuc', label: 'Hồ sơ Tổ chức & Khung năng lực' },
+  { value: 'quy-trinh', label: 'Hệ thống Quy trình Chuẩn SOP' },
+  { value: 'mtcv-ban-giao', label: 'MTCV & Biên bản Bàn giao Nhân sự' },
+  { value: 'bieu-mau-goc', label: 'Bộ Biểu mẫu Gốc Word' }
+];
+
+// Kiểm tra chuỗi mẫu chỉ toàn dấu chấm (để làm placeholder gọn khi nhập)
+const isDotOnlyTemplate = (val: string | number): boolean => {
+  const s = String(val || '').trim();
+  return s.length >= 3 && /^[.\s/]+$/.test(s) && s.includes('...');
+};
+
+// Kiểm tra ô bảng có cho phép nhập trực tiếp hay không (kể cả cột đầu như Khung giờ ở BM-QC-04)
+const isEditableTableCell = (cell: string | number): boolean => {
+  const s = String(cell ?? '');
+  return s.includes('...');
+};
+
+const escapeHtml = (unsafe: string): string => {
+  return String(unsafe ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
+// Textarea tự giãn chiều cao theo nội dung nhập
+const AutoResizeTextarea: React.FC<{
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  minRows?: number;
+  className?: string;
+}> = ({ value, onChange, placeholder, minRows = 2, className = '' }) => {
+  const ref = React.useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.max(el.scrollHeight, minRows * 20)}px`;
+  }, [value, minRows]);
+
+  return (
+    <textarea
+      ref={ref}
+      rows={minRows}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className={className}
+      style={{ overflow: 'hidden' }}
+    />
+  );
+};
 
 // Cấu trúc dữ liệu đã điền vào biểu mẫu
 interface FilledFormData {
@@ -41,6 +100,34 @@ interface FilledFormData {
   conclusions: Record<string, string>;        // `${cIdx}` -> value
   signers: Record<string, string>;            // `${sIdx}` -> signer name
 }
+
+const buildEmptyFilledData = (form: QmsFormTemplate): FilledFormData => {
+  const initialTableCells: Record<string, string> = {};
+  form.tables.forEach((t, tIdx) => {
+    t.rows.forEach((row, rIdx) => {
+      row.forEach((cell, cIdx) => {
+        const s = String(cell ?? '');
+        // Ô chỉ toàn dấu chấm -> khởi tạo rỗng để người dùng bấm là gõ luôn
+        initialTableCells[`${tIdx}_${rIdx}_${cIdx}`] = isDotOnlyTemplate(s) ? '' : s;
+      });
+    });
+  });
+
+  const initialConclusions: Record<string, string> = {};
+  if (form.conclusions) {
+    form.conclusions.forEach((c, cIdx) => {
+      const s = String(c.content || '');
+      initialConclusions[`${cIdx}`] = isDotOnlyTemplate(s) ? '' : s;
+    });
+  }
+
+  return {
+    fields: {},
+    tableCells: initialTableCells,
+    conclusions: initialConclusions,
+    signers: {}
+  };
+};
 
 export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
   // Tab chính: Biểu mẫu chuẩn (forms) HOẶC Kho Hồ sơ tài liệu P-QLCL (documents)
@@ -89,14 +176,50 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
   const [editingTemplate, setEditingTemplate] = useState<QmsFormTemplate | null>(null);
   const [editorActiveTab, setEditorActiveTab] = useState<'general' | 'fields' | 'tables' | 'conclusions' | 'signs'>('general');
 
-  // State cho Tab 2: Kho Hồ sơ tài liệu P-QLCL
+  // State cho Tab 2: Kho Hồ sơ tài liệu P-QLCL (hỗ trợ chỉnh sửa trực tiếp ngay tại web)
+  const [customDocumentsMap, setCustomDocumentsMap] = useState<Record<string, QmsDocumentItem>>(() => {
+    try {
+      const raw = safeStorage.getItem(CUSTOM_DOCS_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {
+      console.error('Lỗi đọc custom documents:', e);
+    }
+    return {};
+  });
+
+  const allDocuments = useMemo(() => {
+    return QMS_DOCUMENT_LIST.map(doc => {
+      if (customDocumentsMap[doc.id]) {
+        return customDocumentsMap[doc.id];
+      }
+      return doc;
+    });
+  }, [customDocumentsMap]);
+
   const [selectedDocCategory, setSelectedDocCategory] = useState<string>('all');
   const [docSearchKeyword, setDocSearchKeyword] = useState<string>('');
   const [previewDoc, setPreviewDoc] = useState<QmsDocumentItem | null>(null);
+  const [editingDoc, setEditingDoc] = useState<QmsDocumentItem | null>(null);
   const [docViewMode, setDocViewMode] = useState<'list' | 'grid'>('list');
 
   // Copy link state
   const [copiedLink, setCopiedLink] = useState(false);
+
+  // Nạp dữ liệu đã điền cho một biểu mẫu bất kỳ (ưu tiên state đang mở trên màn hình)
+  const getFilledDataForForm = (form: QmsFormTemplate): FilledFormData => {
+    if (previewForm && previewForm.id === form.id) {
+      return currentFilledData;
+    }
+    try {
+      const raw = safeStorage.getItem(`${FILLED_FORMS_KEY_PREFIX}${form.id}`);
+      if (raw) {
+        return JSON.parse(raw) as FilledFormData;
+      }
+    } catch (err) {
+      console.error('Lỗi đọc dữ liệu đã điền:', err);
+    }
+    return buildEmptyFilledData(form);
+  };
 
   // Khi mở 1 biểu mẫu, nạp dữ liệu đã điền trước đó (nếu có)
   useEffect(() => {
@@ -105,37 +228,29 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       try {
         const raw = safeStorage.getItem(savedKey);
         if (raw) {
-          const parsed = JSON.parse(raw);
-          setCurrentFilledData(parsed);
+          const parsed = JSON.parse(raw) as FilledFormData;
+          // Làm sạch các ô cũ chỉ toàn dấu chấm để người dùng gõ luôn không phải xóa
+          const cleanedCells: Record<string, string> = {};
+          Object.entries(parsed.tableCells || {}).forEach(([k, v]) => {
+            cleanedCells[k] = isDotOnlyTemplate(v) ? '' : v;
+          });
+          const cleanedConclusions: Record<string, string> = {};
+          Object.entries(parsed.conclusions || {}).forEach(([k, v]) => {
+            cleanedConclusions[k] = isDotOnlyTemplate(v) ? '' : v;
+          });
+          setCurrentFilledData({
+            fields: parsed.fields || {},
+            tableCells: cleanedCells,
+            conclusions: cleanedConclusions,
+            signers: parsed.signers || {}
+          });
           return;
         }
       } catch (err) {
         console.error('Lỗi nạp dữ liệu đã điền:', err);
       }
 
-      // Khởi tạo mặc định nếu chưa có
-      const initialTableCells: Record<string, string> = {};
-      previewForm.tables.forEach((t, tIdx) => {
-        t.rows.forEach((row, rIdx) => {
-          row.forEach((cell, cIdx) => {
-            initialTableCells[`${tIdx}_${rIdx}_${cIdx}`] = String(cell);
-          });
-        });
-      });
-
-      const initialConclusions: Record<string, string> = {};
-      if (previewForm.conclusions) {
-        previewForm.conclusions.forEach((c, cIdx) => {
-          initialConclusions[`${cIdx}`] = c.content || '';
-        });
-      }
-
-      setCurrentFilledData({
-        fields: {},
-        tableCells: initialTableCells,
-        conclusions: initialConclusions,
-        signers: {}
-      });
+      setCurrentFilledData(buildEmptyFilledData(previewForm));
     }
   }, [previewForm]);
 
@@ -152,33 +267,42 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
   const handleResetFilledData = () => {
     if (!previewForm) return;
     if (window.confirm('Anh có chắc muốn xóa toàn bộ nội dung đã điền trên phiếu này không?')) {
-      const initialTableCells: Record<string, string> = {};
-      previewForm.tables.forEach((t, tIdx) => {
-        t.rows.forEach((row, rIdx) => {
-          row.forEach((cell, cIdx) => {
-            initialTableCells[`${tIdx}_${rIdx}_${cIdx}`] = String(cell);
-          });
-        });
-      });
-
-      const initialConclusions: Record<string, string> = {};
-      if (previewForm.conclusions) {
-        previewForm.conclusions.forEach((c, cIdx) => {
-          initialConclusions[`${cIdx}`] = c.content || '';
-        });
-      }
-
-      const emptyData: FilledFormData = {
-        fields: {},
-        tableCells: initialTableCells,
-        conclusions: initialConclusions,
-        signers: {}
-      };
+      const emptyData = buildEmptyFilledData(previewForm);
       setCurrentFilledData(emptyData);
       const savedKey = `${FILLED_FORMS_KEY_PREFIX}${previewForm.id}`;
       safeStorage.removeItem(savedKey);
       setSaveSuccessMsg('Đã đưa phiếu về mẫu trắng ban đầu.');
       setTimeout(() => setSaveSuccessMsg(null), 2500);
+    }
+  };
+
+  // Lưu chỉnh sửa tài liệu / hồ sơ quy trình P-QLCL
+  const handleSaveCustomDoc = (updated: QmsDocumentItem) => {
+    const newMap = { ...customDocumentsMap, [updated.id]: updated };
+    setCustomDocumentsMap(newMap);
+    safeStorage.setItem(CUSTOM_DOCS_KEY, JSON.stringify(newMap));
+    setEditingDoc(null);
+    if (previewDoc && previewDoc.id === updated.id) {
+      setPreviewDoc(updated);
+    }
+    setSaveSuccessMsg(`Đã lưu chỉnh sửa hồ sơ ${updated.code || updated.title}!`);
+    setTimeout(() => setSaveSuccessMsg(null), 3000);
+  };
+
+  // Khôi phục nội dung gốc của tài liệu / quy trình
+  const handleResetDocToDefault = (docId: string) => {
+    if (window.confirm('Anh có chắc muốn khôi phục tiêu đề và nội dung hồ sơ này về bản gốc ban đầu không?')) {
+      const newMap = { ...customDocumentsMap };
+      delete newMap[docId];
+      setCustomDocumentsMap(newMap);
+      safeStorage.setItem(CUSTOM_DOCS_KEY, JSON.stringify(newMap));
+      setEditingDoc(null);
+      const original = QMS_DOCUMENT_LIST.find(d => d.id === docId);
+      if (original && previewDoc && previewDoc.id === docId) {
+        setPreviewDoc(original);
+      }
+      setSaveSuccessMsg('Đã khôi phục nội dung hồ sơ về bản gốc.');
+      setTimeout(() => setSaveSuccessMsg(null), 3000);
     }
   };
 
@@ -245,7 +369,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
 
   // Bộ lọc danh sách tài liệu (Tab 2)
   const filteredDocs = useMemo(() => {
-    return QMS_DOCUMENT_LIST.filter(doc => {
+    return allDocuments.filter(doc => {
       const matchCat = selectedDocCategory === 'all' || doc.category === selectedDocCategory;
       const q = docSearchKeyword.trim().toLowerCase();
       const matchSearch = !q ||
@@ -256,7 +380,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
         doc.fileName.toLowerCase().includes(q);
       return matchCat && matchSearch;
     });
-  }, [selectedDocCategory, docSearchKeyword]);
+  }, [allDocuments, selectedDocCategory, docSearchKeyword]);
 
   // Thống kê nhanh biểu mẫu (Tab 1)
   const formStats = useMemo(() => {
@@ -270,13 +394,13 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
 
   // Thống kê nhanh tài liệu (Tab 2)
   const docStats = useMemo(() => {
-    const total = QMS_DOCUMENT_LIST.length;
-    const hoSoToChuc = QMS_DOCUMENT_LIST.filter(d => d.category === 'ho-so-to-chuc').length;
-    const quyTrinh = QMS_DOCUMENT_LIST.filter(d => d.category === 'quy-trinh').length;
-    const mtcv = QMS_DOCUMENT_LIST.filter(d => d.category === 'mtcv-ban-giao').length;
-    const bieuMauGoc = QMS_DOCUMENT_LIST.filter(d => d.category === 'bieu-mau-goc').length;
+    const total = allDocuments.length;
+    const hoSoToChuc = allDocuments.filter(d => d.category === 'ho-so-to-chuc').length;
+    const quyTrinh = allDocuments.filter(d => d.category === 'quy-trinh').length;
+    const mtcv = allDocuments.filter(d => d.category === 'mtcv-ban-giao').length;
+    const bieuMauGoc = allDocuments.filter(d => d.category === 'bieu-mau-goc').length;
     return { total, hoSoToChuc, quyTrinh, mtcv, bieuMauGoc };
-  }, []);
+  }, [allDocuments]);
 
   // Sao chép đường dẫn dkqms.cloud/bm
   const handleCopyLink = () => {
@@ -319,13 +443,38 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     `;
   };
 
-  // In trực tiếp biểu mẫu qua Dedicated Print Engine Iframe A4 độc lập
-  const handlePrintForm = (form: QmsFormTemplate) => {
-    const zone = document.getElementById('qms-form-printable-document');
-    if (!zone) {
-      window.print();
-      return;
+  // Chuẩn hóa giá trị hiển thị khi In / Xuất Word / CSV
+  const resolveDisplayCellText = (filledVal: string | undefined, templateCell: string | number): string => {
+    const rawTemplate = String(templateCell ?? '');
+    if (filledVal !== undefined) {
+      if (filledVal.trim() !== '') return filledVal;
+      return isDotOnlyTemplate(rawTemplate) ? rawTemplate : (rawTemplate.includes('...') ? rawTemplate : '');
     }
+    return rawTemplate;
+  };
+
+  // Render ô có checkbox □ / ☑ thành HTML chuẩn in A4 (mỗi lựa chọn 1 dòng, ô vuông sắc nét)
+  const renderFormattedCellHtml = (text: string, forWord = false): string => {
+    const lines = String(text ?? '').split('\n');
+    return lines
+      .map(line => {
+        const isChecked = line.startsWith('☑');
+        const isUnchecked = line.startsWith('□');
+        if (isChecked || isUnchecked) {
+          const label = escapeHtml(line.substring(2).trimStart());
+          if (forWord) {
+            return `<div style="margin:1pt 0;">${isChecked ? '☑' : '□'} ${label}</div>`;
+          }
+          return `<div class="cb-row"><span class="cb-box ${isChecked ? 'cb-checked' : ''}">${isChecked ? '&#10003;' : ''}</span><span class="${isChecked ? 'cb-label-checked' : ''}">${label}</span></div>`;
+        }
+        return `<div>${escapeHtml(line) || '&nbsp;'}</div>`;
+      })
+      .join('');
+  };
+
+  // In trực tiếp biểu mẫu qua Dedicated Print Engine Iframe A4 độc lập (HTML thuần từ state, không clone input/textarea)
+  const handlePrintForm = (form: QmsFormTemplate) => {
+    const filled = getFilledDataForForm(form);
 
     const iframe = document.createElement('iframe');
     iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:1024px;height:768px;border:0;opacity:0;pointer-events:none;z-index:-9999;';
@@ -341,16 +490,129 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
 
     const docTitle = `DKBike_${form.code}_${form.title.replace(/[\/\s,:]/g, '_')}`;
 
+    // Build Fields 2 cột cân đối
+    let fieldsRowsHtml = '';
+    for (let i = 0; i < form.fields.length; i += 2) {
+      const f1 = form.fields[i];
+      const f2 = form.fields[i + 1];
+      const v1 = (filled.fields[f1.label] || '').trim();
+      const v2 = f2 ? (filled.fields[f2.label] || '').trim() : '';
+
+      fieldsRowsHtml += `
+        <tr>
+          <td class="field-cell">
+            <div class="field-line">
+              <span class="field-label">${escapeHtml(f1.label)}:</span>
+              <span class="field-value ${v1 ? 'filled' : 'empty'}">${v1 ? escapeHtml(v1).replace(/\n/g, '<br/>') : '................................................'}</span>
+            </div>
+          </td>
+          <td class="field-cell">
+            ${f2 ? `
+              <div class="field-line">
+                <span class="field-label">${escapeHtml(f2.label)}:</span>
+                <span class="field-value ${v2 ? 'filled' : 'empty'}">${v2 ? escapeHtml(v2).replace(/\n/g, '<br/>') : '................................................'}</span>
+              </div>
+            ` : ''}
+          </td>
+        </tr>
+      `;
+    }
+
+    // Build Tables
+    const tablesHtml = form.tables
+      .map((tbl, tIdx) => {
+        const isFirstColStt = tbl.headers[0] && tbl.headers[0].trim().toUpperCase() === 'STT';
+        return `
+          <div class="table-section">
+            <div class="section-title">${escapeHtml(tbl.title)}</div>
+            <table class="qms-table">
+              <thead>
+                <tr>
+                  ${tbl.headers
+                    .map((h, hIdx) => `<th style="${hIdx === 0 && isFirstColStt ? 'width:34px;' : ''}">${escapeHtml(h)}</th>`)
+                    .join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${tbl.rows
+                  .map(
+                    (row, rIdx) => `
+                  <tr>
+                    ${row
+                      .map((cell, cIdx) => {
+                        const cellKey = `${tIdx}_${rIdx}_${cIdx}`;
+                        const displayVal = resolveDisplayCellText(filled.tableCells[cellKey], cell);
+                        const isCenter = cIdx === 0 && isFirstColStt;
+                        return `<td class="${isCenter ? 'text-center font-bold' : ''}">${renderFormattedCellHtml(displayVal)}</td>`;
+                      })
+                      .join('')}
+                  </tr>
+                `
+                  )
+                  .join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      })
+      .join('');
+
+    // Build Conclusions
+    const conclusionsHtml =
+      form.conclusions && form.conclusions.length > 0
+        ? `
+      <div class="conclusions-box">
+        <div class="conclusions-title">KẾT LUẬN &amp; PHÁN QUYẾT XỬ LÝ:</div>
+        ${form.conclusions
+          .map((c, cIdx) => {
+            const rawVal = filled.conclusions[String(cIdx)];
+            const displayVal =
+              rawVal !== undefined && rawVal.trim() !== ''
+                ? rawVal
+                : c.content || '....................................................................................................................';
+            return `
+              <div class="conclusion-item">
+                <div class="conclusion-label">&bull; ${escapeHtml(c.label)}:</div>
+                <div class="conclusion-body">${renderFormattedCellHtml(displayVal)}</div>
+              </div>
+            `;
+          })
+          .join('')}
+      </div>
+    `
+        : '';
+
+    // Build Signatures
+    const signaturesHtml = `
+      <table class="signatures-table">
+        <tr>
+          ${form.signRoles
+            .map((s, sIdx) => {
+              const signerName = (filled.signers[String(sIdx)] || '').trim();
+              return `
+              <td style="width:${(100 / Math.max(form.signRoles.length, 1)).toFixed(2)}%;">
+                <div class="sign-role">${escapeHtml(s.role)}</div>
+                <div class="sign-sub">(${escapeHtml(s.title)})</div>
+                <div class="sign-space">${signerName ? `<div class="sign-name">${escapeHtml(signerName)}</div>` : ''}</div>
+                <div class="sign-hint">(Ký và ghi rõ họ tên)</div>
+              </td>
+            `;
+            })
+            .join('')}
+        </tr>
+      </table>
+    `;
+
     idoc.open();
     idoc.write(`<!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="utf-8">
-  <title>${docTitle}</title>
+  <title>${escapeHtml(docTitle)}</title>
   <style>
-    @page { 
-      size: A4 portrait; 
-      margin: 10mm 12mm 10mm 12mm; 
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm 10mm 12mm;
     }
     html, body {
       background: #ffffff !important;
@@ -358,9 +620,8 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       padding: 0 !important;
       font-family: "Times New Roman", Times, serif;
       color: #000000 !important;
-      font-size: 12px;
-      line-height: 1.35;
-      height: 100%;
+      font-size: 11.5px;
+      line-height: 1.38;
     }
     * {
       box-sizing: border-box !important;
@@ -368,32 +629,39 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       print-color-adjust: exact !important;
     }
     .print-document {
-      width: 100% !important;
-      max-width: 100% !important;
+      width: 100%;
       margin: 0 auto;
-      padding: 0 !important;
-      page-break-inside: avoid !important;
-      break-inside: avoid !important;
     }
     table.header-table {
-      width: 100% !important;
-      border: 1px solid #000 !important;
-      border-collapse: collapse !important;
-      margin-bottom: 8px !important;
+      width: 100%;
+      border: 1px solid #000;
+      border-collapse: collapse;
+      margin-bottom: 10px;
     }
     table.header-table td {
-      border: 1px solid #000 !important;
-      padding: 4px 8px !important;
+      border: 1px solid #000;
+      padding: 6px 8px;
+      vertical-align: middle;
+    }
+    table.header-meta {
+      width: 100%;
+      border: none;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    table.header-meta td {
+      border: none !important;
+      padding: 1.5px 0 !important;
     }
     .form-main-title {
       text-align: center;
       margin: 8px 0 10px 0;
     }
     .form-main-title h1 {
-      font-size: 15px;
+      font-size: 14.5px;
       font-weight: bold;
       text-transform: uppercase;
-      margin: 0 0 2px 0;
+      margin: 0 0 3px 0;
     }
     .form-main-title p {
       font-size: 11px;
@@ -401,89 +669,219 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       margin: 0;
       color: #333;
     }
-    .info-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6px 16px;
+    table.info-table {
+      width: 100%;
+      border-collapse: collapse;
       margin-bottom: 10px;
       font-size: 11.5px;
+      table-layout: fixed;
     }
-    .info-item {
+    table.info-table td.field-cell {
+      width: 50%;
+      padding: 3px 8px 3px 0;
+      vertical-align: top;
+    }
+    table.info-table td.field-cell:last-child {
+      padding-left: 8px;
+      padding-right: 0;
+    }
+    .field-line {
       border-bottom: 1px dotted #555;
       padding-bottom: 2px;
       display: flex;
       justify-content: space-between;
+      align-items: flex-start;
+      gap: 6px;
     }
-    table.qms-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 8px 0;
-      font-size: 11px;
-    }
-    table.qms-table th, table.qms-table td {
-      border: 1px solid #000;
-      padding: 4px 6px;
-      vertical-align: middle;
-    }
-    table.qms-table th {
-      background-color: #f3f4f6 !important;
+    .field-label {
       font-weight: bold;
-      text-align: center;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .field-value {
+      text-align: right;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .field-value.filled {
+      font-weight: bold;
+      color: #000;
+    }
+    .field-value.empty {
+      color: #555;
+    }
+    .table-section {
+      margin: 8px 0;
     }
     .section-title {
       font-size: 11.5px;
       font-weight: bold;
       text-transform: uppercase;
-      margin: 8px 0 4px 0;
+      margin: 0 0 4px 0;
+    }
+    table.qms-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    table.qms-table tr {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    table.qms-table th, table.qms-table td {
+      border: 1px solid #000;
+      padding: 4px 6px;
+      vertical-align: top;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+    table.qms-table th {
+      background-color: #f3f4f6 !important;
+      font-weight: bold;
+      text-align: center;
+      vertical-align: middle;
+    }
+    .text-center { text-align: center; }
+    .font-bold { font-weight: bold; }
+    .cb-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 5px;
+      margin: 1.5px 0;
+      white-space: normal;
+    }
+    .cb-box {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 11px;
+      height: 11px;
+      border: 1px solid #000;
+      font-size: 9px;
+      line-height: 1;
+      margin-top: 2px;
+      flex-shrink: 0;
+      font-weight: bold;
+    }
+    .cb-checked {
+      background-color: #000 !important;
+      color: #fff !important;
+    }
+    .cb-label-checked {
+      font-weight: bold;
     }
     .conclusions-box {
-      margin: 8px 0;
-      padding: 6px 8px;
-      border: 1px solid #555;
+      margin: 10px 0;
+      padding: 7px 9px;
+      border: 1px solid #000;
       font-size: 11px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .conclusions-title {
+      font-weight: bold;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .conclusion-item {
+      margin: 4px 0;
+    }
+    .conclusion-label {
+      font-weight: bold;
+    }
+    .conclusion-body {
+      padding-left: 12px;
+      margin-top: 2px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     .signatures-table {
       width: 100%;
       margin-top: 14px;
       border: none !important;
+      border-collapse: collapse;
       text-align: center;
       page-break-inside: avoid !important;
       break-inside: avoid !important;
     }
     .signatures-table td {
       border: none !important;
-      padding: 2px 4px;
+      padding: 2px 6px;
       vertical-align: top;
-      width: 33.33%;
     }
     .sign-role {
       font-weight: bold;
-      font-size: 11.5px;
+      font-size: 11px;
       text-transform: uppercase;
     }
     .sign-sub {
       font-size: 10px;
       font-style: italic;
       color: #333;
+      margin-top: 1px;
     }
     .sign-space {
-      height: 60px;
+      height: 50px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: center;
     }
-    input, textarea {
-      border: none !important;
-      background: transparent !important;
-      font-family: inherit !important;
-      font-size: inherit !important;
-      color: #000 !important;
-      padding: 0 !important;
-      margin: 0 !important;
-      width: auto !important;
+    .sign-name {
+      font-weight: bold;
+      font-size: 11px;
+      color: #000;
+    }
+    .sign-hint {
+      font-size: 9.5px;
+      font-style: italic;
+      color: #555;
+      margin-top: 2px;
     }
   </style>
 </head>
 <body>
   <div class="print-document">
-    ${zone.innerHTML}
+    <table class="header-table">
+      <tr>
+        <td style="width:50%; text-align:center;">
+          <div style="font-weight:bold; font-size:12px; text-transform:uppercase; line-height:1.25;">CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT</div>
+          <div style="font-weight:bold; font-size:11px; text-transform:uppercase; margin-top:2px;">PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL)</div>
+          <div style="font-size:10px; font-style:italic; margin-top:2px; color:#333;">Tiêu chuẩn: ISO 9001:2015</div>
+        </td>
+        <td style="width:50%;">
+          <table class="header-meta">
+            <tr>
+              <td style="width:42%; font-weight:bold;">Mã Biểu Mẫu:</td>
+              <td style="font-weight:bold;">${escapeHtml(form.code)}</td>
+            </tr>
+            <tr>
+              <td style="font-weight:bold;">Mã Quy Trình:</td>
+              <td>${escapeHtml(form.procedureCode)}</td>
+            </tr>
+            <tr>
+              <td style="font-weight:bold;">Lần Ban Hành:</td>
+              <td>${escapeHtml(form.revision)} | Ngày: ${escapeHtml(form.effectiveDate)}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <div class="form-main-title">
+      <h1>${escapeHtml(form.title)}</h1>
+      <p>(${escapeHtml(form.subtitle || form.purpose)})</p>
+    </div>
+
+    <table class="info-table">
+      ${fieldsRowsHtml}
+    </table>
+
+    ${tablesHtml}
+    ${conclusionsHtml}
+    ${signaturesHtml}
   </div>
 </body>
 </html>`);
@@ -507,18 +905,19 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
         doCleanup();
         window.print();
       }
-    }, 450);
+    }, 350);
   };
 
   // Xuất file Microsoft Word (.doc) hoàn chỉnh - kèm theo các giá trị đã điền
   const handleExportWord = (form: QmsFormTemplate) => {
     try {
+      const filled = getFilledDataForForm(form);
       const headerContent = renderBalancedHeaderHtml(form);
 
       const titleContent = `
         <div style="text-align:center; margin:10pt 0 8pt 0;">
-          <h1 style="font-size:13.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 2pt 0; font-family:'Times New Roman', serif;">${form.title}</h1>
-          <p style="font-size:9.5pt; font-style:italic; margin:0; color:#333; font-family:'Times New Roman', serif;">(${form.subtitle || form.purpose})</p>
+          <h1 style="font-size:13.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 2pt 0; font-family:'Times New Roman', serif;">${escapeHtml(form.title)}</h1>
+          <p style="font-size:9.5pt; font-style:italic; margin:0; color:#333; font-family:'Times New Roman', serif;">(${escapeHtml(form.subtitle || form.purpose)})</p>
         </div>
       `;
 
@@ -526,15 +925,15 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       for (let i = 0; i < form.fields.length; i += 2) {
         const f1 = form.fields[i];
         const f2 = form.fields[i + 1];
-        const val1 = currentFilledData.fields[f1.label] || '....................................................................';
-        const val2 = f2 ? (currentFilledData.fields[f2.label] || '....................................................................') : '';
+        const val1 = (filled.fields[f1.label] || '').trim() || '....................................................................';
+        const val2 = f2 ? ((filled.fields[f2.label] || '').trim() || '....................................................................') : '';
         fieldsHtml += `
           <tr>
             <td style="width:50%; padding:2.5pt 6pt 2.5pt 0; border-bottom:1pt dotted #666;">
-              <b>${f1.label}:</b> <span style="color:#0f172a; font-weight:bold;">${val1}</span>
+              <b>${escapeHtml(f1.label)}:</b> <span style="color:#0f172a; font-weight:bold;">${escapeHtml(val1)}</span>
             </td>
             <td style="width:50%; padding:2.5pt 0 2.5pt 6pt; border-bottom:1pt dotted #666;">
-              ${f2 ? `<b>${f2.label}:</b> <span style="color:#0f172a; font-weight:bold;">${val2}</span>` : ''}
+              ${f2 ? `<b>${escapeHtml(f2.label)}:</b> <span style="color:#0f172a; font-weight:bold;">${escapeHtml(val2)}</span>` : ''}
             </td>
           </tr>
         `;
@@ -545,11 +944,11 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       form.tables.forEach((t, tIdx) => {
         tablesHtml += `
           <div style="margin:8pt 0 6pt 0;">
-            <p style="font-size:9.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 3pt 0; font-family:'Times New Roman', serif;">${t.title}</p>
+            <p style="font-size:9.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 3pt 0; font-family:'Times New Roman', serif;">${escapeHtml(t.title)}</p>
             <table style="width:100%; border-collapse:collapse; font-size:9pt; font-family:'Times New Roman', serif;" border="1" cellpadding="4">
               <thead>
                 <tr style="background-color:#f3f4f6; font-weight:bold; text-align:center;">
-                  ${t.headers.map(h => `<th style="padding:4pt; border:1pt solid #000;">${h}</th>`).join('')}
+                  ${t.headers.map(h => `<th style="padding:4pt; border:1pt solid #000;">${escapeHtml(h)}</th>`).join('')}
                 </tr>
               </thead>
               <tbody>
@@ -557,11 +956,10 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                   <tr>
                     ${row.map((cell, cIdx) => {
                       const cellKey = `${tIdx}_${rIdx}_${cIdx}`;
-                      const cellVal = currentFilledData.tableCells[cellKey] ?? String(cell);
-                      const formattedCell = cellVal.replace(/\n/g, '<br/>');
+                      const cellVal = resolveDisplayCellText(filled.tableCells[cellKey], cell);
                       return `
-                        <td style="padding:3.5pt 4pt; border:1pt solid #000; text-align:${cIdx === 0 ? 'center' : 'left'}; vertical-align:middle;">
-                          ${formattedCell}
+                        <td style="padding:3.5pt 4pt; border:1pt solid #000; text-align:${cIdx === 0 && t.headers[0]?.toUpperCase() === 'STT' ? 'center' : 'left'}; vertical-align:middle;">
+                          ${renderFormattedCellHtml(cellVal, true)}
                         </td>
                       `;
                     }).join('')}
@@ -579,12 +977,12 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
           <div style="margin:8pt 0; padding:6pt; border:1pt solid #000; font-family:'Times New Roman', serif;">
             <p style="font-size:9.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 4pt 0;">KẾT LUẬN & PHÁN QUYẾT XỬ LÝ:</p>
             ${form.conclusions.map((c, cIdx) => {
-              const cVal = currentFilledData.conclusions[String(cIdx)] ?? (c.content || '....................................................................................................................');
-              const formattedContent = cVal.replace(/\n/g, '<br/>');
+              const rawVal = filled.conclusions[String(cIdx)];
+              const cVal = (rawVal !== undefined && rawVal.trim() !== '') ? rawVal : (c.content || '....................................................................................................................');
               return `
                 <div style="margin:2.5pt 0; font-size:9.5pt; line-height:1.35;">
-                  <b>• ${c.label}:</b><br/>
-                  <div style="padding-left:10pt;">${formattedContent}</div>
+                  <b>• ${escapeHtml(c.label)}:</b><br/>
+                  <div style="padding-left:10pt;">${renderFormattedCellHtml(cVal, true)}</div>
                 </div>
               `;
             }).join('')}
@@ -597,13 +995,13 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
           <table style="width:100%; border:none; text-align:center; font-size:9.5pt; font-family:'Times New Roman', serif;">
             <tr>
               ${form.signRoles.map((s, sIdx) => {
-                const signerName = currentFilledData.signers[String(sIdx)] || '';
+                const signerName = filled.signers[String(sIdx)] || '';
                 return `
                   <td style="width:33.33%; padding:2pt; vertical-align:top; border:none;">
-                    <p style="margin:0; font-weight:bold; text-transform:uppercase; font-size:9.5pt;">${s.role}</p>
-                    <p style="margin:1pt 0 0 0; font-style:italic; font-size:8.5pt; color:#444;">(${s.title})</p>
+                    <p style="margin:0; font-weight:bold; text-transform:uppercase; font-size:9.5pt;">${escapeHtml(s.role)}</p>
+                    <p style="margin:1pt 0 0 0; font-style:italic; font-size:8.5pt; color:#444;">(${escapeHtml(s.title)})</p>
                     <div style="height:45pt;"></div>
-                    <p style="margin:0; font-weight:bold; font-size:9pt; color:#000;">${signerName}</p>
+                    <p style="margin:0; font-weight:bold; font-size:9pt; color:#000;">${escapeHtml(signerName)}</p>
                     <p style="margin:1pt 0 0 0; font-style:italic; font-size:8pt; color:#666;">(Ký & ghi rõ họ tên)</p>
                   </td>
                 `;
@@ -617,7 +1015,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
         <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
         <head>
           <meta charset='utf-8'>
-          <title>${form.code} - ${form.title}</title>
+          <title>${escapeHtml(form.code)} - ${escapeHtml(form.title)}</title>
           <style>
             @page WordSection1 { 
               size:595.35pt 841.95pt; 
@@ -660,6 +1058,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
   // Xuất file CSV
   const handleExportCsv = (form: QmsFormTemplate) => {
     try {
+      const filled = getFilledDataForForm(form);
       const csvLines: string[] = [];
       csvLines.push(`"CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT - PHÒNG QUẢN LÝ CHẤT LƯỢNG (QLCL)"`);
       csvLines.push(`"${form.code} - ${form.title}"`);
@@ -668,7 +1067,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
 
       // Phần trường thông tin
       form.fields.forEach(f => {
-        const val = currentFilledData.fields[f.label] || '........................................................';
+        const val = filled.fields[f.label] || '........................................................';
         csvLines.push(`"${f.label}","${val.replace(/"/g, '""')}"`);
       });
       csvLines.push(`""`);
@@ -680,7 +1079,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
         t.rows.forEach((r, rIdx) => {
           csvLines.push(r.map((cell, cIdx) => {
             const cellKey = `${tIdx}_${rIdx}_${cIdx}`;
-            const cellVal = currentFilledData.tableCells[cellKey] ?? String(cell);
+            const cellVal = resolveDisplayCellText(filled.tableCells[cellKey], cell);
             return `"${cellVal.replace(/\n/g, ' / ').replace(/"/g, '""')}"`;
           }).join(','));
         });
@@ -691,7 +1090,8 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       if (form.conclusions) {
         csvLines.push(`"KẾT LUẬN & PHÁN QUYẾT"`);
         form.conclusions.forEach((c, cIdx) => {
-          const cVal = currentFilledData.conclusions[String(cIdx)] ?? (c.content || '');
+          const rawVal = filled.conclusions[String(cIdx)];
+          const cVal = (rawVal !== undefined && rawVal.trim() !== '') ? rawVal : (c.content || '');
           csvLines.push(`"${c.label}","${cVal.replace(/\n/g, ' / ').replace(/"/g, '""')}"`);
         });
         csvLines.push(`""`);
@@ -700,7 +1100,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       // Chữ ký
       csvLines.push(`"BỘ PHẬN PHÊ DUYỆT RACI"`);
       csvLines.push(form.signRoles.map(s => `"${s.role} - ${s.title}"`).join(','));
-      csvLines.push(form.signRoles.map((_, sIdx) => `"${currentFilledData.signers[String(sIdx)] || '(Ký và ghi rõ họ tên)'}"`).join(','));
+      csvLines.push(form.signRoles.map((_, sIdx) => `"${filled.signers[String(sIdx)] || '(Ký và ghi rõ họ tên)'}"`).join(','));
 
       const csvString = '\uFEFF' + csvLines.join('\n');
       const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
@@ -796,7 +1196,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
             <FileSpreadsheet className="w-4 h-4" />
             <span>Biểu Mẫu Nghiệp Vụ Chuẩn</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-black ${mainTab === 'forms' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'}`}>
-              10 BM
+              {allFormTemplates.length} BM
             </span>
           </button>
 
@@ -812,7 +1212,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
             <FolderArchive className="w-4 h-4" />
             <span>Hồ Sơ & Quy Trình Vận Hành P-QLCL</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-black ${mainTab === 'documents' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'}`}>
-              30 tài liệu
+              {allDocuments.length} tài liệu
             </span>
           </button>
         </div>
@@ -989,10 +1389,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
 
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setPreviewForm(form);
-                                  setTimeout(() => handlePrintForm(form), 100);
-                                }}
+                                onClick={() => handlePrintForm(form)}
                                 className="p-1 text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded border border-slate-300 transition cursor-pointer"
                                 title="In trực tiếp A4"
                               >
@@ -1126,7 +1523,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                   Kho Hồ Sơ & Tài Liệu Vận Hành P-QLCL DKBike
                 </h2>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  Lưu trữ 30 tài liệu Word chuẩn hóa: Hồ sơ tổ chức, Ma trận phân nhiệm, 9 Quy trình SOP, MTCV theo RACI và Biên bản bàn giao nhiệm vụ.
+                  Lưu trữ {allDocuments.length} tài liệu Word chuẩn hóa: Hồ sơ tổ chức, Ma trận phân nhiệm, Quy trình SOP, MTCV theo RACI và Biên bản bàn giao nhiệm vụ. (Có thể bấm nút <b>Sửa</b> để chỉnh sửa tiêu đề và nội dung ngay tại web)
                 </p>
               </div>
 
@@ -1259,7 +1656,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                         <th className="py-3 px-4 border-r border-slate-200">Tên Tài Liệu & Nội dung</th>
                         <th className="py-3 px-3 w-48 border-r border-slate-200">Chuyên mục</th>
                         <th className="py-3 px-3 w-24 text-center border-r border-slate-200">Dung lượng</th>
-                        <th className="py-3 px-3 text-right w-44">Thao tác</th>
+                        <th className="py-3 px-3 text-right w-56">Thao tác</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
@@ -1274,7 +1671,14 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                             </span>
                           </td>
                           <td className="py-3 px-4 border-r border-slate-200">
-                            <div className="font-extrabold text-slate-900 leading-snug">{doc.title}</div>
+                            <div className="font-extrabold text-slate-900 leading-snug flex items-center gap-1.5 flex-wrap">
+                              <span>{doc.title}</span>
+                              {customDocumentsMap[doc.id] && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                  Đã sửa
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{doc.summary}</div>
                           </td>
                           <td className="py-3 px-3 border-r border-slate-200">
@@ -1290,16 +1694,25 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                               <button
                                 type="button"
                                 onClick={() => setPreviewDoc(doc)}
-                                className="px-2.5 py-1 text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded border border-slate-300 transition flex items-center gap-1 font-bold text-[11px] cursor-pointer"
+                                className="px-2 py-1 text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded border border-slate-300 transition flex items-center gap-1 font-bold text-[11px] cursor-pointer"
                                 title="Xem tóm tắt nội dung tài liệu"
                               >
                                 <Eye className="w-3 h-3" />
                                 <span>Xem</span>
                               </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingDoc(JSON.parse(JSON.stringify(doc)))}
+                                className="px-2 py-1 text-amber-800 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 rounded border border-amber-300 transition flex items-center gap-1 font-bold text-[11px] cursor-pointer"
+                                title="Chỉnh sửa tiêu đề & nội dung hồ sơ quy trình này"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                                <span>Sửa</span>
+                              </button>
                               <a
                                 href={encodeURI(`/docs/P_QLCL/${doc.relPath}`)}
                                 download={doc.fileName}
-                                className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded transition flex items-center gap-1 font-bold text-[11px] shadow-2xs"
+                                className="px-2 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded transition flex items-center gap-1 font-bold text-[11px] shadow-2xs"
                                 title={`Tải tệp ${doc.fileName}`}
                               >
                                 <Download className="w-3 h-3" />
@@ -1322,9 +1735,16 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2 mb-2">
-                        <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-slate-900 text-white">
-                          {doc.code || 'DOCX'}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-slate-900 text-white">
+                            {doc.code || 'DOCX'}
+                          </span>
+                          {customDocumentsMap[doc.id] && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                              Đã sửa
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 truncate max-w-[200px]">
                           {doc.categoryName}
                         </span>
@@ -1345,14 +1765,25 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                     </div>
 
                     <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewDoc(doc)}
-                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-slate-50 text-xs font-bold text-slate-700 hover:bg-slate-100 transition flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Xem tóm tắt</span>
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewDoc(doc)}
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-slate-50 text-xs font-bold text-slate-700 hover:bg-slate-100 transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Xem tóm tắt</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingDoc(JSON.parse(JSON.stringify(doc)))}
+                          className="px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-xs font-bold text-amber-800 transition flex items-center gap-1 cursor-pointer"
+                          title="Chỉnh sửa tiêu đề & nội dung hồ sơ quy trình"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Sửa</span>
+                        </button>
+                      </div>
 
                       <a
                         href={encodeURI(`/docs/P_QLCL/${doc.relPath}`)}
@@ -1553,7 +1984,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                             className="flex-1 text-right text-slate-900 font-bold bg-indigo-50/20 hover:bg-indigo-50/40 focus:bg-white focus:outline-none px-1 rounded transition text-xs border border-transparent focus:border-indigo-400"
                           />
                         ) : (
-                          <span className="text-slate-900 font-bold truncate">
+                          <span className="text-slate-900 font-bold text-right break-words whitespace-pre-wrap">
                             {val || <span className="text-slate-400 font-normal">....................................................</span>}
                           </span>
                         )}
@@ -1563,95 +1994,101 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                 </div>
 
                 {/* Các Bảng Biểu Kỹ Thuật / Nghiệm Thu */}
-                {previewForm.tables.map((tbl, tIdx) => (
-                  <div key={tIdx} className="my-3">
-                    <h4 className="section-title text-[11.5px] font-bold text-black uppercase mb-1.5">
-                      {tbl.title}
-                    </h4>
-                    <table className="qms-table w-full border-collapse border border-black text-[11px]">
-                      <thead>
-                        <tr className="bg-slate-100 font-bold">
-                          {tbl.headers.map((h, hIdx) => (
-                            <th key={hIdx} className="border border-black p-1.5 text-center">
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tbl.rows.map((row, rIdx) => (
-                          <tr key={rIdx}>
-                            {row.map((cell, cIdx) => {
-                              const cellKey = `${tIdx}_${rIdx}_${cIdx}`;
-                              const cellVal = currentFilledData.tableCells[cellKey] ?? String(cell);
-                              const hasCheckboxes = cellVal.includes('□') || cellVal.includes('☑');
-
-                              return (
-                                <td key={cIdx} className={`border border-black p-1.5 ${cIdx === 0 ? 'text-center w-10 font-bold' : 'text-left'}`}>
-                                  {hasCheckboxes ? (
-                                    /* Ô có ô vuông tick: Có thể bấm trực tiếp để toggle □ và ☑ */
-                                    <div className="space-y-0.5">
-                                      {cellVal.split('\n').map((line, lIdx) => {
-                                        const isChecked = line.startsWith('☑');
-                                        const isBox = line.startsWith('□') || isChecked;
-                                        return (
-                                          <div
-                                            key={lIdx}
-                                            onClick={() => {
-                                              if (modalMode === 'interactive' && isBox) {
-                                                const updated = toggleCheckboxText(cellVal, line);
-                                                setCurrentFilledData(prev => ({
-                                                  ...prev,
-                                                  tableCells: { ...prev.tableCells, [cellKey]: updated }
-                                                }));
-                                              }
-                                            }}
-                                            className={`flex items-center gap-1.5 ${isBox && modalMode === 'interactive' ? 'cursor-pointer hover:text-indigo-700 py-0.5 select-none' : ''}`}
-                                          >
-                                            {isChecked ? (
-                                              <CheckSquare className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
-                                            ) : isBox ? (
-                                              <Square className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                            ) : null}
-                                            <span className={isChecked ? 'font-bold text-indigo-900' : ''}>
-                                              {isBox ? line.substring(2) : line}
-                                            </span>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  ) : modalMode === 'interactive' && cIdx > 0 && String(cell).includes('....') ? (
-                                    /* Ô cần điền kết quả / thông số */
-                                    <textarea
-                                      rows={2}
-                                      value={cellVal.includes('....') && currentFilledData.tableCells[cellKey] === undefined ? '' : cellVal}
-                                      onChange={(e) => {
-                                        const val = e.target.value;
-                                        setCurrentFilledData(prev => ({
-                                          ...prev,
-                                          tableCells: { ...prev.tableCells, [cellKey]: val }
-                                        }));
-                                      }}
-                                      placeholder="Gõ kết quả..."
-                                      className="w-full text-slate-900 font-bold bg-indigo-50/20 hover:bg-indigo-50/40 focus:bg-white focus:outline-none p-1 rounded transition text-xs border border-transparent focus:border-indigo-400 resize-none"
-                                    />
-                                  ) : (
-                                    /* Chế độ xem in hoặc nội dung chữ cố định */
-                                    <div className="font-serif">
-                                      {cellVal.split('\n').map((line, lIdx) => (
-                                        <div key={lIdx}>{line}</div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </td>
-                              );
-                            })}
+                {previewForm.tables.map((tbl, tIdx) => {
+                  const isFirstColStt = tbl.headers[0] && tbl.headers[0].trim().toUpperCase() === 'STT';
+                  return (
+                    <div key={tIdx} className="my-3">
+                      <h4 className="section-title text-[11.5px] font-bold text-black uppercase mb-1.5">
+                        {tbl.title}
+                      </h4>
+                      <table className="qms-table w-full border-collapse border border-black text-[11px]">
+                        <thead>
+                          <tr className="bg-slate-100 font-bold">
+                            {tbl.headers.map((h, hIdx) => (
+                              <th key={hIdx} className={`border border-black p-1.5 text-center ${hIdx === 0 && isFirstColStt ? 'w-10' : ''}`}>
+                                {h}
+                              </th>
+                            ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ))}
+                        </thead>
+                        <tbody>
+                          {tbl.rows.map((row, rIdx) => (
+                            <tr key={rIdx}>
+                              {row.map((cell, cIdx) => {
+                                const cellKey = `${tIdx}_${rIdx}_${cIdx}`;
+                                const rawStored = currentFilledData.tableCells[cellKey];
+                                const templateStr = String(cell ?? '');
+                                const cellVal = rawStored ?? templateStr;
+                                const hasCheckboxes = cellVal.includes('□') || cellVal.includes('☑');
+                                const editable = isEditableTableCell(templateStr);
+                                const cleanDisplayVal = resolveDisplayCellText(rawStored, cell);
+
+                                return (
+                                  <td key={cIdx} className={`border border-black p-1.5 align-top ${cIdx === 0 && isFirstColStt ? 'text-center w-10 font-bold' : 'text-left'}`}>
+                                    {hasCheckboxes ? (
+                                      /* Ô có ô vuông tick: Có thể bấm trực tiếp để toggle □ và ☑ */
+                                      <div className="space-y-0.5">
+                                        {cellVal.split('\n').map((line, lIdx) => {
+                                          const isChecked = line.startsWith('☑');
+                                          const isBox = line.startsWith('□') || isChecked;
+                                          return (
+                                            <div
+                                              key={lIdx}
+                                              onClick={() => {
+                                                if (modalMode === 'interactive' && isBox) {
+                                                  const updated = toggleCheckboxText(cellVal, line);
+                                                  setCurrentFilledData(prev => ({
+                                                    ...prev,
+                                                    tableCells: { ...prev.tableCells, [cellKey]: updated }
+                                                  }));
+                                                }
+                                              }}
+                                              className={`flex items-center gap-1.5 ${isBox && modalMode === 'interactive' ? 'cursor-pointer hover:text-indigo-700 py-0.5 select-none' : ''}`}
+                                            >
+                                              {isChecked ? (
+                                                <CheckSquare className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
+                                              ) : isBox ? (
+                                                <Square className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                              ) : null}
+                                              <span className={isChecked ? 'font-bold text-indigo-900' : ''}>
+                                                {isBox ? line.substring(2) : line}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : modalMode === 'interactive' && editable ? (
+                                      /* Ô cần điền kết quả / thông số (tự giãn chiều cao theo nội dung nhập) */
+                                      <AutoResizeTextarea
+                                        minRows={2}
+                                        value={isDotOnlyTemplate(cellVal) ? '' : cellVal}
+                                        onChange={(val) => {
+                                          setCurrentFilledData(prev => ({
+                                            ...prev,
+                                            tableCells: { ...prev.tableCells, [cellKey]: val }
+                                          }));
+                                        }}
+                                        placeholder="Gõ nội dung..."
+                                        className="w-full text-slate-900 font-bold bg-indigo-50/20 hover:bg-indigo-50/40 focus:bg-white focus:outline-none p-1 rounded transition text-xs border border-transparent focus:border-indigo-400 resize-none leading-snug"
+                                      />
+                                    ) : (
+                                      /* Chế độ xem in A4 hoặc nội dung chữ cố định */
+                                      <div className="font-serif whitespace-pre-wrap break-words">
+                                        {cleanDisplayVal.split('\n').map((line, lIdx) => (
+                                          <div key={lIdx}>{line || '\u00A0'}</div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
 
                 {/* Kết luận & Phán quyết */}
                 {previewForm.conclusions && previewForm.conclusions.length > 0 && (
@@ -1661,8 +2098,13 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                     </div>
                     {previewForm.conclusions.map((c, cIdx) => {
                       const cKey = String(cIdx);
-                      const cVal = currentFilledData.conclusions[cKey] ?? (c.content || '');
+                      const rawStored = currentFilledData.conclusions[cKey];
+                      const cVal = rawStored ?? (c.content || '');
                       const hasCheckboxes = cVal.includes('□') || cVal.includes('☑');
+                      const cleanDisplayVal =
+                        rawStored !== undefined && rawStored.trim() !== ''
+                          ? rawStored
+                          : c.content || '....................................................................................................................';
 
                       return (
                         <div key={cIdx} className="my-1.5">
@@ -1700,23 +2142,22 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                                 })}
                               </div>
                             ) : modalMode === 'interactive' ? (
-                              <textarea
-                                rows={2}
-                                value={cVal.includes('....') && currentFilledData.conclusions[cKey] === undefined ? '' : cVal}
-                                onChange={(e) => {
-                                  const val = e.target.value;
+                              <AutoResizeTextarea
+                                minRows={2}
+                                value={isDotOnlyTemplate(cVal) ? '' : cVal}
+                                onChange={(val) => {
                                   setCurrentFilledData(prev => ({
                                     ...prev,
                                     conclusions: { ...prev.conclusions, [cKey]: val }
                                   }));
                                 }}
                                 placeholder="Gõ kết luận / biện pháp xử lý..."
-                                className="w-full text-slate-900 font-bold bg-indigo-50/20 hover:bg-indigo-50/40 focus:bg-white focus:outline-none p-1 rounded transition text-xs border border-transparent focus:border-indigo-400"
+                                className="w-full text-slate-900 font-bold bg-indigo-50/20 hover:bg-indigo-50/40 focus:bg-white focus:outline-none p-1 rounded transition text-xs border border-transparent focus:border-indigo-400 resize-none leading-snug"
                               />
                             ) : (
-                              <div>
-                                {cVal.split('\n').map((line, lIdx) => (
-                                  <div key={lIdx}>{line}</div>
+                              <div className="whitespace-pre-wrap break-words">
+                                {cleanDisplayVal.split('\n').map((line, lIdx) => (
+                                  <div key={lIdx}>{line || '\u00A0'}</div>
                                 ))}
                               </div>
                             )}
@@ -1995,12 +2436,17 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                           type="button"
                           onClick={() => {
                             const updatedTables = [...editingTemplate.tables];
-                            const newRow = [
-                              String(tbl.rows.length + 1),
-                              '................................',
-                              '................................',
-                              '□ Đạt\n□ Không đạt'
-                            ];
+                            const templateLastRow = tbl.rows[tbl.rows.length - 1] || [];
+                            const newRow = tbl.headers.map((h, colIdx) => {
+                              if (colIdx === 0 && h.trim().toUpperCase() === 'STT') {
+                                return String(tbl.rows.length + 1);
+                              }
+                              const sample = String(templateLastRow[colIdx] ?? '');
+                              if (sample.includes('□') || sample.includes('☑')) {
+                                return sample.replace(/☑/g, '□');
+                              }
+                              return '................................';
+                            });
                             updatedTables[tIdx] = { ...updatedTables[tIdx], rows: [...tbl.rows, newRow] };
                             setEditingTemplate({ ...editingTemplate, tables: updatedTables });
                           }}
@@ -2014,24 +2460,28 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                       <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                         {tbl.rows.map((row, rIdx) => (
                           <div key={rIdx} className="bg-white p-2 rounded border border-slate-200 flex items-start gap-2">
-                            <span className="font-mono font-bold text-slate-500 mt-2 w-6 text-center">{rIdx + 1}</span>
-                            <div className="flex-1 grid grid-cols-3 gap-2">
+                            <span className="font-mono font-bold text-slate-500 mt-5 w-6 text-center">{rIdx + 1}</span>
+                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                               {row.map((cell, cIdx) => (
-                                <textarea
-                                  key={cIdx}
-                                  rows={2}
-                                  value={String(cell)}
-                                  onChange={(e) => {
-                                    const updatedTables = [...editingTemplate.tables];
-                                    const updatedRows = [...tbl.rows];
-                                    const updatedRow = [...updatedRows[rIdx]];
-                                    updatedRow[cIdx] = e.target.value;
-                                    updatedRows[rIdx] = updatedRow;
-                                    updatedTables[tIdx] = { ...updatedTables[tIdx], rows: updatedRows };
-                                    setEditingTemplate({ ...editingTemplate, tables: updatedTables });
-                                  }}
-                                  className="w-full border border-slate-300 rounded p-1 text-[11px] font-sans resize-none"
-                                />
+                                <div key={cIdx}>
+                                  <span className="text-[10px] font-bold text-slate-500 block mb-0.5 truncate" title={tbl.headers[cIdx]}>
+                                    {tbl.headers[cIdx] || `Cột ${cIdx + 1}`}
+                                  </span>
+                                  <textarea
+                                    rows={2}
+                                    value={String(cell)}
+                                    onChange={(e) => {
+                                      const updatedTables = [...editingTemplate.tables];
+                                      const updatedRows = [...tbl.rows];
+                                      const updatedRow = [...updatedRows[rIdx]];
+                                      updatedRow[cIdx] = e.target.value;
+                                      updatedRows[rIdx] = updatedRow;
+                                      updatedTables[tIdx] = { ...updatedTables[tIdx], rows: updatedRows };
+                                      setEditingTemplate({ ...editingTemplate, tables: updatedTables });
+                                    }}
+                                    className="w-full border border-slate-300 rounded p-1 text-[11px] font-sans resize-y"
+                                  />
+                                </div>
                               ))}
                             </div>
                             <button
@@ -2169,6 +2619,15 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingDoc(JSON.parse(JSON.stringify(previewDoc)))}
+                  className="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                  title="Chỉnh sửa tiêu đề & nội dung tài liệu này ngay tại web"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Chỉnh sửa</span>
+                </button>
                 <a
                   href={encodeURI(`/docs/P_QLCL/${previewDoc.relPath}`)}
                   download={previewDoc.fileName}
@@ -2202,8 +2661,8 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                   <span className="font-mono text-[11px] text-slate-700 break-all">{previewDoc.fileName}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block">Dung lượng:</span>
-                  <span className="font-mono font-bold text-slate-800">{previewDoc.fileSizeKB} KB</span>
+                  <span className="text-slate-500 block">Dung lượng &amp; Cập nhật:</span>
+                  <span className="font-mono font-bold text-slate-800">{previewDoc.fileSizeKB} KB • {previewDoc.updatedDate}</span>
                 </div>
               </div>
 
@@ -2211,7 +2670,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                 <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide mb-1">
                   1. Tóm tắt nội dung tài liệu
                 </h4>
-                <p className="text-slate-700 leading-relaxed bg-white p-3 rounded-lg border border-slate-200">
+                <p className="text-slate-700 leading-relaxed bg-white p-3 rounded-lg border border-slate-200 whitespace-pre-wrap">
                   {previewDoc.summary}
                 </p>
               </div>
@@ -2221,7 +2680,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                   <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wide mb-1">
                     2. Phạm vi áp dụng
                   </h4>
-                  <p className="text-slate-700 leading-relaxed bg-white p-3 rounded-lg border border-slate-200">
+                  <p className="text-slate-700 leading-relaxed bg-white p-3 rounded-lg border border-slate-200 whitespace-pre-wrap">
                     {previewDoc.scope}
                   </p>
                 </div>
@@ -2255,6 +2714,196 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
               >
                 Đóng
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL CHỈNH SỬA TIÊU ĐỀ & NỘI DUNG HỒ SƠ QUY TRÌNH (TAB 2)
+          ========================================================================= */}
+      {editingDoc && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className="bg-white border border-slate-300 rounded-xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-slate-900 text-white px-5 py-3 border-b border-slate-800 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-amber-300" />
+                <h3 className="font-black text-sm">
+                  Chỉnh Sửa Hồ Sơ / Quy Trình: <span className="text-amber-300 font-mono">{editingDoc.code || 'DOCX'}</span>
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingDoc(null)}
+                className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded transition font-bold cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 overflow-y-auto space-y-4 text-xs flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Mã Tài Liệu / Quy Trình:</label>
+                  <input
+                    type="text"
+                    value={editingDoc.code || ''}
+                    onChange={(e) => setEditingDoc({ ...editingDoc, code: e.target.value })}
+                    placeholder="VD: QT-QLCL-01"
+                    className="w-full border border-slate-300 rounded-lg p-2 font-mono font-bold text-indigo-700 focus:outline-none focus:border-indigo-600"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Chuyên mục:</label>
+                  <select
+                    value={editingDoc.category}
+                    onChange={(e) => {
+                      const catVal = e.target.value as QmsDocumentItem['category'];
+                      const matched = DOC_CATEGORIES.find(c => c.value === catVal);
+                      setEditingDoc({
+                        ...editingDoc,
+                        category: catVal,
+                        categoryName: matched ? matched.label : editingDoc.categoryName
+                      });
+                    }}
+                    className="w-full border border-slate-300 rounded-lg p-2 font-bold text-slate-800 bg-white focus:outline-none focus:border-indigo-600"
+                  >
+                    {DOC_CATEGORIES.map(c => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Tiêu đề Hồ sơ / Quy trình:</label>
+                <input
+                  type="text"
+                  value={editingDoc.title}
+                  onChange={(e) => setEditingDoc({ ...editingDoc, title: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg p-2 font-bold text-slate-900 focus:outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Bộ phận áp dụng:</label>
+                  <input
+                    type="text"
+                    value={editingDoc.department}
+                    onChange={(e) => setEditingDoc({ ...editingDoc, department: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2 font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Ngày ban hành / cập nhật:</label>
+                  <input
+                    type="text"
+                    value={editingDoc.updatedDate}
+                    onChange={(e) => setEditingDoc({ ...editingDoc, updatedDate: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2 font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">1. Tóm tắt nội dung tài liệu:</label>
+                <textarea
+                  rows={3}
+                  value={editingDoc.summary}
+                  onChange={(e) => setEditingDoc({ ...editingDoc, summary: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">2. Phạm vi áp dụng:</label>
+                <textarea
+                  rows={2}
+                  value={editingDoc.scope || ''}
+                  onChange={(e) => setEditingDoc({ ...editingDoc, scope: e.target.value })}
+                  className="w-full border border-slate-300 rounded-lg p-2 text-slate-800 focus:outline-none focus:border-indigo-600"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="font-bold text-slate-700">3. Các đề mục &amp; nội dung cốt lõi ({editingDoc.keyContents.length}):</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingDoc({
+                        ...editingDoc,
+                        keyContents: [...editingDoc.keyContents, '']
+                      });
+                    }}
+                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Thêm đề mục</span>
+                  </button>
+                </div>
+
+                {editingDoc.keyContents.map((kc, kIdx) => (
+                  <div key={kIdx} className="flex items-start gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                    <span className="font-mono font-bold text-slate-500 mt-1.5 w-6 text-center">{kIdx + 1}.</span>
+                    <textarea
+                      rows={2}
+                      value={kc}
+                      onChange={(e) => {
+                        const updated = [...editingDoc.keyContents];
+                        updated[kIdx] = e.target.value;
+                        setEditingDoc({ ...editingDoc, keyContents: updated });
+                      }}
+                      className="flex-1 border border-slate-300 bg-white rounded p-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-600"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = editingDoc.keyContents.filter((_, idx) => idx !== kIdx);
+                        setEditingDoc({ ...editingDoc, keyContents: updated });
+                      }}
+                      className="p-1.5 text-rose-600 hover:bg-rose-100 rounded transition cursor-pointer mt-1"
+                      title="Xóa đề mục này"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-slate-100 px-5 py-3 border-t border-slate-300 flex justify-between items-center text-xs">
+              <button
+                type="button"
+                onClick={() => handleResetDocToDefault(editingDoc.id)}
+                className="text-rose-700 hover:text-rose-900 font-bold flex items-center gap-1 cursor-pointer"
+                title="Khôi phục tiêu đề & nội dung gốc ban đầu"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Khôi phục bản gốc</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingDoc(null)}
+                  className="px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold rounded-lg transition cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveCustomDoc(editingDoc)}
+                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition cursor-pointer shadow-2xs flex items-center gap-1.5"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Lưu thay đổi</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
