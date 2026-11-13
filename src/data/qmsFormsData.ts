@@ -107,11 +107,11 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
         title: 'I. KẾT QUẢ ĐO KIỂM THỰC TẾ THEO TIÊU CHUẨN QA',
         headers: ['STT', 'Hạng mục kiểm tra', 'Tiêu chuẩn kỹ thuật (QA)', 'Dụng cụ đo', 'Kết quả đo thực tế', 'Đánh giá'],
         rows: [
-          ['1', 'Kích thước / Dung sai lắp ráp', 'Bản vẽ kỹ thuật: ±0.05 mm', '........................', '....................................', '□ Đạt\n□ Không đạt'],
-          ['2', 'Ngoại quan / Bề mặt sơn / Xi mạ', 'Không xước, đều màu, không rộp', 'Bàn kiểm quang học', '....................................', '□ Đạt\n□ Không đạt'],
-          ['3', 'Tính năng điện / Cơ lý', 'Điện áp, dòng tải đúng thông số', 'Đồng hồ VOM/Tải giả', '....................................', '□ Đạt\n□ Không đạt'],
-          ['4', 'Lắp ráp thử nghiệm (Trial)', 'Khớp 100% mẫu đối chứng R&D', 'Dưỡng mẫu chuẩn', '....................................', '□ Đạt\n□ Không đạt'],
-          ['5', 'Quy cách đóng gói & Tem nhãn', 'Đầy đủ tem nhãn và truy xuất', 'Quan sát thực tế', '....................................', '□ Đạt\n□ Không đạt']
+          ['1', 'Kích thước / Dung sai lắp ráp', '', '', '', ''],
+          ['2', 'Ngoại quan / Bề mặt sơn / Xi mạ', '', '', '', ''],
+          ['3', 'Tính năng điện / Cơ lý', '', '', '', ''],
+          ['4', 'Lắp ráp thử nghiệm (Trial)', '', '', '', ''],
+          ['5', 'Quy cách đóng gói & Tem nhãn', '', '', '', '']
         ]
       }
     ],
