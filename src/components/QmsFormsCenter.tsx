@@ -48,10 +48,10 @@ const isDotOnlyTemplate = (val: string | number): boolean => {
   return s.length >= 3 && /^[.\s/]+$/.test(s) && s.includes('...');
 };
 
-// Kiểm tra ô bảng có cho phép nhập trực tiếp hay không (kể cả cột đầu như Khung giờ ở BM-QC-04)
-const isEditableTableCell = (cell: string | number): boolean => {
+// Kiểm tra ô bảng có cho phép nhập trực tiếp hay không (kể cả ô trống trừ cột STT, hoặc ô chứa '...' như BM-QC-04)
+const isEditableTableCell = (cell: string | number, cIdx?: number): boolean => {
   const s = String(cell ?? '');
-  return s.includes('...');
+  return s.includes('...') || (s.trim() === '' && (cIdx === undefined || cIdx > 0));
 };
 
 const escapeHtml = (unsafe: string): string => {
@@ -492,16 +492,19 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
   const renderTableTheadHtml = (
     tbl: QmsFormTemplate['tables'][number],
     isFirstColStt: boolean,
-    forWord: boolean
+    forWord: boolean,
+    isCompact = false
   ): string => {
-    const thStyle = forWord ? 'padding:4pt; border:1pt solid #000;' : '';
+    const thStyle = forWord
+      ? `padding:${isCompact ? '2pt 2.5pt' : '4pt'}; border:1pt solid #000;${isCompact ? ' font-size:7.5pt;' : ''}`
+      : '';
     const bgStyle = forWord ? 'background-color:#f3f4f6; font-weight:bold; text-align:center;' : '';
 
     if (tbl.headerGroups && tbl.headerGroups.length > 0) {
       const skipped = getRowSpanSkippedCols(tbl.headerGroups);
       const row1 = `<tr style="${bgStyle}">${tbl.headerGroups
         .map((g, idx) => {
-          const sttWidth = idx === 0 && g.colSpan === 1 && isFirstColStt ? 'width:32px;' : '';
+          const sttWidth = idx === 0 && g.colSpan === 1 && isFirstColStt ? `width:${isCompact ? '22px' : '32px'};` : '';
           return `<th colspan="${g.colSpan}" rowspan="${g.rowSpan || 1}" style="${thStyle}${sttWidth}">${escapeHtml(g.label).replace(/\n/g, '<br/>')}</th>`;
         })
         .join('')}</tr>`;
@@ -515,7 +518,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     }
 
     return `<thead><tr style="${bgStyle}">${tbl.headers
-      .map((h, hIdx) => `<th style="${thStyle}${hIdx === 0 && isFirstColStt ? 'width:34px;' : ''}">${escapeHtml(h).replace(/\n/g, '<br/>')}</th>`)
+      .map((h, hIdx) => `<th style="${thStyle}${hIdx === 0 && isFirstColStt ? `width:${isCompact ? '22px' : '34px'};` : ''}">${escapeHtml(h).replace(/\n/g, '<br/>')}</th>`)
       .join('')}</tr></thead>`;
   };
 
@@ -523,6 +526,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
   const handlePrintForm = (form: QmsFormTemplate) => {
     const filled = getFilledDataForForm(form);
     const isLandscape = form.orientation === 'landscape';
+    const isCompactTable = !isLandscape && form.tables.some(t => t.headers.length >= 9);
 
     const iframe = document.createElement('iframe');
     iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:1024px;height:768px;border:0;opacity:0;pointer-events:none;z-index:-9999;';
@@ -589,7 +593,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
           <div class="table-section">
             <div class="section-title">${escapeHtml(tbl.title)}</div>
             <table class="qms-table">
-              ${renderTableTheadHtml(tbl, isFirstColStt, false)}
+              ${renderTableTheadHtml(tbl, isFirstColStt, false, isCompactTable)}
               <tbody>
                 ${tbl.rows
                   .map(
@@ -669,7 +673,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
   <style>
     @page {
       size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-      margin: ${isLandscape ? '8mm 10mm 8mm 10mm' : '10mm 12mm 10mm 12mm'};
+      margin: ${isCompactTable ? '8mm 8mm 8mm 8mm' : isLandscape ? '8mm 10mm 8mm 10mm' : '10mm 12mm 10mm 12mm'};
     }
     html, body {
       background: #ffffff !important;
@@ -677,8 +681,8 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       padding: 0 !important;
       font-family: "Times New Roman", Times, serif;
       color: #000000 !important;
-      font-size: 11.5px;
-      line-height: 1.38;
+      font-size: ${isCompactTable ? '11px' : '11.5px'};
+      line-height: ${isCompactTable ? '1.3' : '1.38'};
     }
     * {
       box-sizing: border-box !important;
@@ -693,18 +697,18 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       width: 100%;
       border: 1px solid #000;
       border-collapse: collapse;
-      margin-bottom: 10px;
+      margin-bottom: ${isCompactTable ? '6px' : '10px'};
     }
     table.header-table td {
       border: 1px solid #000;
-      padding: 6px 8px;
+      padding: ${isCompactTable ? '4px 6px' : '6px 8px'};
       vertical-align: middle;
     }
     table.header-meta {
       width: 100%;
       border: none;
       border-collapse: collapse;
-      font-size: 11px;
+      font-size: ${isCompactTable ? '10px' : '11px'};
     }
     table.header-meta td {
       border: none !important;
@@ -712,16 +716,16 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     }
     .form-main-title {
       text-align: center;
-      margin: 8px 0 10px 0;
+      margin: ${isCompactTable ? '4px 0 6px 0' : '8px 0 10px 0'};
     }
     .form-main-title h1 {
-      font-size: 14.5px;
+      font-size: ${isCompactTable ? '13.5px' : '14.5px'};
       font-weight: bold;
       text-transform: uppercase;
       margin: 0 0 3px 0;
     }
     .form-main-title p {
-      font-size: 11px;
+      font-size: ${isCompactTable ? '10px' : '11px'};
       font-style: italic;
       margin: 0;
       color: #333;
@@ -729,8 +733,8 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     table.info-table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 10px;
-      font-size: 11.5px;
+      margin-bottom: ${isCompactTable ? '6px' : '10px'};
+      font-size: ${isCompactTable ? '10.5px' : '11.5px'};
       table-layout: fixed;
     }
     table.info-table td.field-cell {
@@ -770,9 +774,9 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     .pre-table-note {
       background-color: #f3f4f6 !important;
       border: 1px solid #000;
-      padding: 5px 8px;
-      margin: 6px 0 8px 0;
-      font-size: 10.5px;
+      padding: ${isCompactTable ? '4px 7px' : '5px 8px'};
+      margin: ${isCompactTable ? '4px 0 6px 0' : '6px 0 8px 0'};
+      font-size: ${isCompactTable ? '10px' : '10.5px'};
     }
     .pre-table-note-title {
       font-weight: bold;
@@ -786,10 +790,10 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       font-weight: bold;
     }
     .table-section {
-      margin: 8px 0;
+      margin: ${isCompactTable ? '5px 0' : '8px 0'};
     }
     .section-title {
-      font-size: 11.5px;
+      font-size: ${isCompactTable ? '10.5px' : '11.5px'};
       font-weight: bold;
       text-transform: uppercase;
       margin: 0 0 4px 0;
@@ -797,7 +801,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     table.qms-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: ${isLandscape ? '9.5px' : '11px'};
+      font-size: ${isCompactTable ? '8.5px' : isLandscape ? '9.5px' : '11px'};
     }
     table.qms-table tr {
       page-break-inside: avoid;
@@ -805,12 +809,22 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     }
     table.qms-table th, table.qms-table td {
       border: 1px solid #000;
-      padding: ${isLandscape ? '3px 4px' : '4px 6px'};
+      padding: ${isCompactTable ? '2px 3px' : isLandscape ? '3px 4px' : '4px 6px'};
       vertical-align: top;
       word-break: break-word;
       overflow-wrap: anywhere;
       white-space: pre-wrap;
     }
+    ${isCompactTable ? `
+    table.qms-table th {
+      font-size: 8px;
+      line-height: 1.2;
+    }
+    table.qms-table tbody td {
+      height: 29px;
+      vertical-align: middle;
+    }
+    ` : ''}
     table.qms-table th {
       background-color: #f3f4f6 !important;
       font-weight: bold;
@@ -847,10 +861,10 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       font-weight: bold;
     }
     .conclusions-box {
-      margin: 10px 0;
-      padding: 7px 9px;
+      margin: ${isCompactTable ? '6px 0' : '10px 0'};
+      padding: ${isCompactTable ? '5px 7px' : '7px 9px'};
       border: 1px solid #000;
-      font-size: 11px;
+      font-size: ${isCompactTable ? '10px' : '11px'};
       page-break-inside: avoid;
       break-inside: avoid;
     }
@@ -874,7 +888,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     }
     .signatures-table {
       width: 100%;
-      margin-top: 14px;
+      margin-top: ${isCompactTable ? '8px' : '14px'};
       border: none !important;
       border-collapse: collapse;
       text-align: center;
@@ -898,7 +912,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       margin-top: 1px;
     }
     .sign-space {
-      height: 50px;
+      height: ${isCompactTable ? '36px' : '50px'};
       display: flex;
       flex-direction: column;
       justify-content: flex-end;
@@ -1031,14 +1045,15 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       `
         : '';
 
+      const isCompactWord = !isLandscape && form.tables.some(t => t.headers.length >= 9);
       let tablesHtml = '';
       form.tables.forEach((t, tIdx) => {
         const isFirstColStt = Boolean(t.headers[0] && t.headers[0].trim().toUpperCase() === 'STT');
         tablesHtml += `
           <div style="margin:8pt 0 6pt 0;">
             <p style="font-size:9.5pt; font-weight:bold; text-transform:uppercase; margin:0 0 3pt 0; font-family:'Times New Roman', serif;">${escapeHtml(t.title)}</p>
-            <table style="width:100%; border-collapse:collapse; font-size:${isLandscape ? '8pt' : '9pt'}; font-family:'Times New Roman', serif;" border="1" cellpadding="4">
-              ${renderTableTheadHtml(t, isFirstColStt, true)}
+            <table style="width:100%; border-collapse:collapse; font-size:${isCompactWord ? '7.5pt' : isLandscape ? '8pt' : '9pt'}; font-family:'Times New Roman', serif;" border="1" cellpadding="${isCompactWord ? '2' : '4'}">
+              ${renderTableTheadHtml(t, isFirstColStt, true, isCompactWord)}
               <tbody>
                 ${t.rows.map((row, rIdx) => `
                   <tr>
@@ -1046,7 +1061,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                       const cellKey = `${tIdx}_${rIdx}_${cIdx}`;
                       const cellVal = resolveDisplayCellText(filled.tableCells[cellKey], cell);
                       return `
-                        <td style="padding:3.5pt 4pt; border:1pt solid #000; text-align:${cIdx === 0 && isFirstColStt ? 'center' : 'left'}; vertical-align:middle;">
+                        <td style="padding:${isCompactWord ? '2.5pt 2.5pt' : '3.5pt 4pt'}; border:1pt solid #000; text-align:${cIdx === 0 && isFirstColStt ? 'center' : 'left'}; vertical-align:middle;${isCompactWord ? ' height:18pt;' : ''}">
                           ${renderFormattedCellHtml(cellVal, true)}
                         </td>
                       `;
@@ -2158,11 +2173,12 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                                 const templateStr = String(cell ?? '');
                                 const cellVal = rawStored ?? templateStr;
                                 const hasCheckboxes = cellVal.includes('□') || cellVal.includes('☑');
-                                const editable = isEditableTableCell(templateStr);
+                                const editable = isEditableTableCell(templateStr, cIdx);
                                 const cleanDisplayVal = resolveDisplayCellText(rawStored, cell);
+                                const isCompactCol = tbl.headers.length >= 9;
 
                                 return (
-                                  <td key={cIdx} className={`border border-black p-1.5 align-top ${cIdx === 0 && isFirstColStt ? 'text-center w-10 font-bold' : 'text-left'}`}>
+                                  <td key={cIdx} className={`border border-black ${isCompactCol ? 'p-1' : 'p-1.5'} align-top ${cIdx === 0 && isFirstColStt ? `text-center ${isCompactCol ? 'w-8' : 'w-10'} font-bold` : 'text-left'}`}>
                                     {hasCheckboxes ? (
                                       /* Ô có ô vuông tick: Có thể bấm trực tiếp để toggle □ và ☑ */
                                       <div className="space-y-0.5">
@@ -2198,7 +2214,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                                     ) : modalMode === 'interactive' && editable ? (
                                       /* Ô cần điền kết quả / thông số (tự giãn chiều cao theo nội dung nhập) */
                                       <AutoResizeTextarea
-                                        minRows={2}
+                                        minRows={tbl.headers.length >= 9 ? 1 : 2}
                                         value={isDotOnlyTemplate(cellVal) ? '' : cellVal}
                                         onChange={(val) => {
                                           setCurrentFilledData(prev => ({
@@ -2206,12 +2222,12 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
                                             tableCells: { ...prev.tableCells, [cellKey]: val }
                                           }));
                                         }}
-                                        placeholder="Gõ nội dung..."
+                                        placeholder={tbl.headers.length >= 9 ? '' : 'Gõ nội dung...'}
                                         className="w-full text-slate-900 font-bold bg-indigo-50/20 hover:bg-indigo-50/40 focus:bg-white focus:outline-none p-1 rounded transition text-xs border border-transparent focus:border-indigo-400 resize-none leading-snug"
                                       />
                                     ) : (
                                       /* Chế độ xem in A4 hoặc nội dung chữ cố định */
-                                      <div className="font-serif whitespace-pre-wrap break-words">
+                                      <div className={`font-serif whitespace-pre-wrap break-words ${tbl.headers.length >= 9 ? 'min-h-[20px]' : ''}`}>
                                         {cleanDisplayVal.split('\n').map((line, lIdx) => (
                                           <div key={lIdx}>{line || '\u00A0'}</div>
                                         ))}

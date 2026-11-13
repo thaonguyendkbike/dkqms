@@ -296,7 +296,7 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
     department: 'Bộ phận QC Hiện trường',
     revision: '01',
     effectiveDate: '13/11/2026',
-    orientation: 'landscape',
+    orientation: 'portrait',
     scope: 'Kiểm tra xe thành phẩm tại kho trước khi đóng lên xe tải vận chuyển giao cho Đại lý / Khách hàng',
     purpose: 'Kiểm tra độc lập từng xe trước khi đóng lên xe hàng giao cho khách hàng: định danh Model/Số Seri, soi ngoại quan sơn nhựa, lắp pin rời QC thử điện, rà soát lỗi phản ánh KH, vệ sinh và phụ kiện kèm theo.',
     signRoles: [
@@ -341,13 +341,19 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
           'KẾT LUẬN XUẤT KHO\n(✓ Cho xuất / ✗ Giữ/Đổi)',
           'MÔ TẢ LỖI PHÁT HIỆN & CHỮ KÝ XÁC NHẬN ĐÃ XỬ LÝ'
         ],
-        rows: [
-          ['1', '....................', '....................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Cho xuất\n□ Giữ/Đổi', '........................................'],
-          ['2', '....................', '....................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Cho xuất\n□ Giữ/Đổi', '........................................'],
-          ['3', '....................', '....................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Cho xuất\n□ Giữ/Đổi', '........................................'],
-          ['4', '....................', '....................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Cho xuất\n□ Giữ/Đổi', '........................................'],
-          ['5', '....................', '....................', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Đạt\n□ Lỗi', '□ Cho xuất\n□ Giữ/Đổi', '........................................']
-        ]
+        rows: Array.from({ length: 15 }, (_, idx) => [
+          String(idx + 1),
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          ''
+        ])
       }
     ],
     conclusions: [
