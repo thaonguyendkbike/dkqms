@@ -1038,11 +1038,26 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
 
           {/* Hàng nhập chính: ít trường nhất có thể */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-            {/* Tên linh kiện */}
+            {/* Tên linh kiện & Hạn bảo hành */}
             <div className="md:col-span-4">
-              <label className="text-[11px] font-extrabold text-slate-700 block mb-1">
-                1. Linh kiện lỗi <span className="text-rose-600">*</span>
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <label className="text-[11px] font-extrabold text-slate-700">
+                  1. Linh kiện lỗi <span className="text-rose-600">*</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-bold text-slate-500">Hạn BH:</span>
+                  <select
+                    value={warrantyStatus}
+                    onChange={(e) => setWarrantyStatus(e.target.value)}
+                    aria-label="Hạn bảo hành"
+                    className="border border-slate-300 bg-indigo-50/70 rounded px-1.5 py-0.5 text-[11px] font-bold text-indigo-800 focus:outline-none focus:border-indigo-600 cursor-pointer"
+                  >
+                    <option value="Còn bảo hành">Còn bảo hành</option>
+                    <option value="Hết bảo hành">Hết bảo hành</option>
+                    <option value="Chưa rõ">Chưa rõ</option>
+                  </select>
+                </div>
+              </div>
               <input
                 type="text"
                 required
@@ -1262,19 +1277,7 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                     className="w-full border border-slate-300 bg-white rounded px-2.5 py-1.5 text-xs"
                   />
                 </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Hạn bảo hành</label>
-                  <select
-                    value={warrantyStatus}
-                    onChange={(e) => setWarrantyStatus(e.target.value)}
-                    className="w-full border border-slate-300 bg-white rounded px-2.5 py-1.5 text-xs font-semibold"
-                  >
-                    <option value="Còn bảo hành">Còn bảo hành</option>
-                    <option value="Hết bảo hành">Hết bảo hành</option>
-                    <option value="Chưa rõ">Chưa rõ</option>
-                  </select>
-                </div>
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-2 lg:col-span-3">
                   <label className="text-[10px] font-bold text-slate-500 block mb-0.5">Hành động phản hồi NCC / Bộ phận chịu phí</label>
                   <input
                     type="text"
@@ -1709,13 +1712,13 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
             <thead className="bg-slate-100 text-[10px] font-bold uppercase text-slate-700 border-b border-slate-300">
               <tr>
                 <th className="p-2.5 text-center w-10 border-r border-slate-200">STT</th>
-                <th className="p-2.5 border-r border-slate-200 w-36">Mã BB &amp; Ngày</th>
-                <th className="p-2.5 border-r border-slate-200 w-44">Linh kiện &amp; SL</th>
-                <th className="p-2.5 border-r border-slate-200 w-48">Dòng xe / Đại lý / NCC</th>
-                <th className="p-2.5 border-r border-slate-200">Hiện trạng &amp; Kết quả giám định</th>
-                <th className="p-2.5 text-center border-r border-slate-200 w-32">Nguyên nhân gốc</th>
+                <th className="p-2.5 border-r border-slate-200 w-32">Mã BB &amp; Ngày</th>
+                <th className="p-2.5 border-r border-slate-200 w-40">Linh kiện &amp; SL</th>
+                <th className="p-2.5 border-r border-slate-200 min-w-[230px]">Dòng xe / Đại lý / NCC</th>
+                <th className="p-2.5 border-r border-slate-200 w-56 max-w-[240px]">Hiện trạng &amp; Kết quả giám định</th>
+                <th className="p-2.5 text-center border-r border-slate-200 w-28">Nguyên nhân gốc</th>
                 <th className="p-2.5 text-center border-r border-slate-200 w-32">Phương án xử lý</th>
-                <th className="p-2.5 text-center w-28">Thao tác</th>
+                <th className="p-2.5 text-center w-24">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -1754,7 +1757,7 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                         {ev.supplierName && <div className="text-rose-700 font-semibold">NCC: {ev.supplierName}</div>}
                         {!ev.model && !ev.dealer && !ev.supplierName && <span className="text-slate-400 italic">--</span>}
                       </td>
-                      <td className="p-2.5 border-r border-slate-200 text-[11px] text-slate-700">
+                      <td className="p-2.5 border-r border-slate-200 text-[11px] text-slate-700 max-w-[240px] break-words">
                         <p className="whitespace-pre-line">{ev.findingNote || <span className="text-slate-400 italic">Chưa ghi chú chi tiết</span>}</p>
                         {(ev.vin || ev.engineNo || ev.nccFeedbackAction) && (
                           <div className="mt-1 text-[10px] text-slate-500 space-x-2">
