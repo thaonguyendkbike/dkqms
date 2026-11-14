@@ -7,6 +7,7 @@ import { useState, useMemo, memo, useCallback, FormEvent, useEffect, useRef, Fra
 import { safeStorage, safeStorage as localStorage, sanitizeFirestorePayload, onSafeStorageReady } from './safeStorage';
 import { calculateAQLSample } from './utils/aqlUtils';
 import { exportIqcRecordToExcel, getAqlGroupName } from './utils/iqcLineItems';
+import { getLocalYmd, parseFlexibleDate, getWeekAndMonthFromDate as getWeekAndMonthFromDateUtil } from './utils/dateUtils';
 import { ReportsHub } from './reports/ReportsHub';
 import XLSXStyle from 'xlsx-js-style';
 import {
@@ -551,39 +552,7 @@ export function getMondayOfWeek(year: number, month: number, weekNum: number): D
 }
 
 export function parseLogDate(dateStr: string): Date | null {
-  if (!dateStr) return null;
-  const cleanStr = dateStr.trim();
-  // If format is like YYYY-MM-DD
-  if (cleanStr.includes('-')) {
-    const parts = cleanStr.split('-');
-    if (parts.length === 3) {
-      const year = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      const day = parseInt(parts[2], 10);
-      return new Date(year, month, day);
-    }
-  }
-  // If format is like D/M/YYYY, DD/MM/YYYY or DD/MM
-  if (cleanStr.includes('/')) {
-    const parts = cleanStr.split('/');
-    if (parts.length === 3) {
-      const day = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      const year = parseInt(parts[2], 10);
-      return new Date(year, month, day);
-    } else if (parts.length === 2) {
-      const day = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      const year = new Date().getFullYear();
-      return new Date(year, month, day);
-    }
-  }
-  // Fallback to standard javascript Date parse
-  const parsed = new Date(cleanStr);
-  if (!isNaN(parsed.getTime())) {
-    return parsed;
-  }
-  return null;
+  return parseFlexibleDate(dateStr);
 }
 
 export function isOqcRecordPassed(r: any): boolean {
@@ -601,81 +570,8 @@ export function isOqcRecordPassed(r: any): boolean {
   return false;
 }
 
-const appDateWeekMonthCache = new Map<string, { week: string; month: number; year: number }>();
-
 export function getWeekAndMonthFromDate(dateStr: string): { week: string; month: number; year: number } {
-  if (!dateStr || typeof dateStr !== 'string') {
-    const today = new Date();
-    return { week: 'T1', month: today.getMonth() + 1, year: today.getFullYear() };
-  }
-
-  const clean = dateStr.trim();
-  const cached = appDateWeekMonthCache.get(clean);
-  if (cached) return cached;
-
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  const currentMonth = today.getMonth() + 1;
-  const currentDay = today.getDate();
-
-  let day = 1;
-  let month = currentMonth;
-  let year = currentYear;
-
-  const matchesYMD = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-  const matchesDMY = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
-
-  if (matchesYMD) {
-    year = Number(matchesYMD[1]) || currentYear;
-    month = Number(matchesYMD[2]) || currentMonth;
-    day = Number(matchesYMD[3]) || 1;
-  } else if (matchesDMY) {
-    day = Number(matchesDMY[1]) || 1;
-    month = Number(matchesDMY[2]) || currentMonth;
-    const yrPart = matchesDMY[3];
-    year = yrPart ? (yrPart.length === 2 ? 2000 + Number(yrPart) : Number(yrPart)) : currentYear;
-  } else {
-    const parts = clean.split(/[-/. ]+/);
-    if (parts.length >= 3) {
-      if (parts[0].length === 4) {
-        year = Number(parts[0]) || currentYear;
-        month = Number(parts[1]) || currentMonth;
-        day = Number(parts[2]) || 1;
-      } else {
-        day = Number(parts[0]) || 1;
-        month = Number(parts[1]) || currentMonth;
-        const yrPart = parts[2];
-        year = yrPart ? (yrPart.length === 2 ? 2000 + Number(yrPart) : Number(yrPart)) : currentYear;
-      }
-    }
-  }
-
-  const targetDate = new Date(year, month - 1, day);
-
-  let weekStr = 'T1';
-  for (let w = 1; w <= 5; w++) {
-    const mon = getMondayOfWeek(year, month, w);
-    const sun = new Date(mon);
-    sun.setDate(mon.getDate() + 6);
-
-    if (w === 1 && targetDate < mon) {
-      weekStr = 'T1';
-      break;
-    }
-    if (w === 5 && targetDate > sun) {
-      weekStr = 'T5';
-      break;
-    }
-    if (targetDate >= mon && targetDate <= sun) {
-      weekStr = `T${w}`;
-      break;
-    }
-  }
-
-  const result = { week: weekStr, month, year };
-  if (appDateWeekMonthCache.size > 3000) appDateWeekMonthCache.clear();
-  appDateWeekMonthCache.set(clean, result);
-  return result;
+  return getWeekAndMonthFromDateUtil(dateStr);
 }
 
 export function getWeekDatesForMonthYear(year: number, month: number, weekKey: string): string {
@@ -9580,7 +9476,7 @@ Hãy phân tích dữ liệu trên và cuộc trò chuyện trước đó để 
     const fpyThisWeekValue = oqcThisWeek.length > 0 ? (oqcWeekPassedCount / oqcThisWeek.length) * 100 : 97.5;
 
     const todayStr = new Date().toLocaleDateString('vi-VN');
-    const todayYmd = new Date().toISOString().split('T')[0];
+    const todayYmd = getLocalYmd();
     const oqcToday = oqcRecords.filter(r => r.date === todayStr || r.date === todayYmd);
     const oqcTodayPassedCount = oqcToday.filter(r => r.result === 'Đạt' || r.status === 'Đạt').length;
     const fpyTodayValue = oqcToday.length > 0 ? (oqcTodayPassedCount / oqcToday.length) * 100 : 98.2;
@@ -9752,7 +9648,7 @@ Lưu ý: Nếu không có yêu cầu thêm dữ liệu, đừng đính kèm kh�
                 const payload = actionData.data || actionData.payload;
                 const newTask: Task = {
                   id: `TSK-${Date.now().toString().slice(-4)}`,
-                  date: new Date().toISOString().split('T')[0],
+                  date: getLocalYmd(),
                   week: 20,
                   month: 5,
                   assignee: payload.assignee || 'Nguyễn Xuân Thao',
@@ -9937,7 +9833,7 @@ Tập hợp số liệu gốc:
     const idSuffix = Date.now().toString().slice(-4);
     const newTask: Task = {
       id: `TSK-${idSuffix}`,
-      date: new Date().toISOString().split('T')[0],
+      date: getLocalYmd(),
       week: 20,
       month: 5,
       assignee: 'Nguyễn Xuân Thao',
@@ -9985,8 +9881,8 @@ Tập hợp số liệu gốc:
       source: 'Cảnh báo rủi ro Dashboard',
       assignee: 'Nguyễn Xuân Thao',
       Owner: 'Nguyễn Xuân Thao',
-      targetDate: new Date().toISOString().split('T')[0],
-      DueDate: new Date().toISOString().split('T')[0],
+      targetDate: getLocalYmd(),
+      DueDate: getLocalYmd(),
       status: 'Mở',
       Status: 'Mở',
       priority: 'Khẩn cấp',
@@ -10091,7 +9987,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
     const isCompleted = taskResult >= taskTarget;
     const newTask: Task = {
       id: `TSK-${Date.now().toString().slice(-4)}`,
-      date: new Date().toISOString().split('T')[0],
+      date: getLocalYmd(),
       week: 20,
       month: 5,
       assignee: taskAssignee,
@@ -12399,7 +12295,7 @@ Hãy xưng hô tôn trọng là "anh Thao" hoặc "anh" (tuyệt đối không g
       }
 
       const wb = XLSXStyle.utils.book_new();
-      const dateFileStr = new Date().toISOString().split('T')[0];
+      const dateFileStr = getLocalYmd();
 
       // Mẫu chuẩn 21 cột đối chiếu khớp 100% với tính năng Nhập Hàng Loạt (Copy Excel / CSV)
       const headers = [
@@ -12735,7 +12631,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             ],
             relatedKPIs: [formCategory === 'KCS đầu ra' ? 'Tỷ lệ lỗi chất lượng hoàn thiện KCS (OQC Yield)' : 'Tỷ lệ lỗi linh kiện đầu vào (IQC Defect Rate)'],
             suggestedDashboard: `Bảng dữ liệu giám sát ${formCategory} tập trung`,
-            createdAt: new Date().toISOString().split('T')[0]
+            createdAt: getLocalYmd()
           };
           setCustomForms(prev => [autoForm, ...prev]);
           setActiveTab('dashboard');
@@ -15063,8 +14959,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           source: newCapaSource,
                           assignee: newCapaAssignee || 'Kỹ sư chưa chỉ định',
                           Owner: newCapaAssignee || 'Kỹ sư chưa chỉ định',
-                          targetDate: newCapaTargetDate || new Date().toISOString().split('T')[0],
-                          DueDate: newCapaTargetDate || new Date().toISOString().split('T')[0],
+                          targetDate: newCapaTargetDate || getLocalYmd(),
+                          DueDate: newCapaTargetDate || getLocalYmd(),
                           status: newCapaStatus,
                           Status: newCapaStatus as any,
                           rootCause: newCapaRootCause.trim() || '',
@@ -20920,7 +20816,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                             setNewCapaCorrectiveAction(d.correctiveAction || 'Rà soát quy trình lắp sườn, kiểm nghiệm mối hàn và bổ sung dưỡng gá chặn phòng vệ.');
                                             setNewCapaPreventiveAction(d.preventiveAction || 'Đào tạo kỹ năng lắp ráp và cập nhật SOP giám sát IQC/OQC mới.');
                                             setNewCapaLocationOfOrigin(d.locationOfOrigin || `Thị trường / Đại lý: ${d.dealer || 'DKBike'}`);
-                                            setNewCapaTargetDate(d.targetDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+                                            setNewCapaTargetDate(d.targetDate || getLocalYmd(new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)));
                                             setNewCapaIsRepeated(true);
                                             if (d.imageUrl) {
                                               setNewCapaImage(d.imageUrl);
@@ -22182,7 +22078,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     <span className="text-2xl font-black text-slate-800">
                       {(() => {
                         const todayStr = new Date().toLocaleDateString('vi-VN');
-                        const todayYmd = new Date().toISOString().split('T')[0];
+                        const todayYmd = getLocalYmd();
                         const oqcToday = oqcRecords.filter(r => r.date === todayStr || r.date === todayYmd);
                         const oqcTodayPassed = oqcToday.filter(r => r.result === 'Đạt' || r.status === 'Đạt').length;
                         return oqcToday.length > 0 ? `${((oqcTodayPassed / oqcToday.length) * 100).toFixed(1)}%` : '98.2%';
@@ -26985,7 +26881,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 </div>
                 <div>
                   <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Ngày bắt đầu dự án</label>
-                  <input type="date" name="startDate" defaultValue={new Date().toISOString().split('T')[0]} className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850" required />
+                  <input type="date" name="startDate" defaultValue={getLocalYmd()} className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850" required />
                 </div>
               </div>
 
@@ -27674,7 +27570,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 </div>
                 <div>
                   <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Thời hạn hoàn thành</label>
-                  <input type="date" name="targetDate" defaultValue={new Date().toISOString().split('T')[0]} className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850 font-mono font-bold" required />
+                  <input type="date" name="targetDate" defaultValue={getLocalYmd()} className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850 font-mono font-bold" required />
                 </div>
               </div>
 
@@ -27895,7 +27791,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     <input
                       type="date"
                       name="startDate"
-                      defaultValue={editingPtspTask?.startDate ?? new Date().toISOString().split('T')[0]}
+                      defaultValue={editingPtspTask?.startDate ?? getLocalYmd()}
                       className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850 font-mono"
                       required
                     />
@@ -27905,7 +27801,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     <input
                       type="date"
                       name="endDate"
-                      defaultValue={editingPtspTask?.endDate ?? new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                      defaultValue={editingPtspTask?.endDate ?? getLocalYmd(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000))}
                       className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850 font-mono"
                       required
                     />
@@ -28949,7 +28845,7 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
 
               <div>
                 <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Cam kết hạn chót hoàn thành (Target Date)</label>
-                <input type="date" name="targetDate" defaultValue={new Date().toISOString().split('T')[0]} className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850 font-mono font-bold" />
+                <input type="date" name="targetDate" defaultValue={getLocalYmd()} className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850 font-mono font-bold" />
               </div>
 
               <div>

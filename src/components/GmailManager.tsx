@@ -30,6 +30,7 @@ import {
 import { QualityStaff, CAPA } from '../types';
 import { DailyLogRecord } from '../dailyLogsData';
 import { safeStorage } from '../safeStorage';
+import { getLocalYmd } from '../utils/dateUtils';
 
 interface GmailManagerProps {
   dailyLogs: DailyLogRecord[];
@@ -75,16 +76,12 @@ export default function GmailManager({
   const [presetMode, setPresetMode] = useState<'custom' | 'daily_log' | 'capa' | 'two_days'>('two_days');
   
   // Presets states
-  const [selectedLogDate, setSelectedLogDate] = useState(() => {
-    return new Date().toISOString().split('T')[0];
-  });
-  const [selectedReportDate, setSelectedReportDate] = useState(() => {
-    return new Date().toISOString().split('T')[0];
-  });
+  const [selectedLogDate, setSelectedLogDate] = useState(() => getLocalYmd());
+  const [selectedReportDate, setSelectedReportDate] = useState(() => getLocalYmd());
   const [selectedPlanDate, setSelectedPlanDate] = useState(() => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
+    return getLocalYmd(tomorrow);
   });
   const [selectedCapaId, setSelectedCapaId] = useState('');
   

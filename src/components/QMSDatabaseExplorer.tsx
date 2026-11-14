@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { safeStorage, safeStorage as localStorage } from '../safeStorage';
+import { getLocalYmd } from '../utils/dateUtils';
 import { 
   Building2, 
   Calendar, 
@@ -370,7 +371,7 @@ export default function QMSDatabaseExplorer({
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup, null, 2));
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `Backup_QMS_DKBike_${new Date().toISOString().split('T')[0]}.json`);
+      downloadAnchor.setAttribute("download", `Backup_QMS_DKBike_${getLocalYmd()}.json`);
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
@@ -604,7 +605,7 @@ export default function QMSDatabaseExplorer({
     e.preventDefault();
     if (selectedModule === 1) { // WorkItem
       const id = newWorkItem.WorkID || `WS-${Date.now().toString().slice(-4)}`;
-      const date = new Date().toISOString().split('T')[0];
+      const date = getLocalYmd();
       const item: WorkItem = {
         WorkID: id,
         Date: date,

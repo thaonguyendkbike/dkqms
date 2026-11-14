@@ -1,4 +1,5 @@
 import React, { useState, useEffect, FormEvent, useMemo, useCallback, useRef } from 'react';
+import { getLocalYmd, getWeekAndMonthFromDate } from '../utils/dateUtils';
 // flushSync removed (Change 1: replaced with regular setState for smoother UX)
 import XLSXStyle from 'xlsx-js-style';
 import * as htmlToImage from 'html-to-image';
@@ -1687,82 +1688,7 @@ function getMondayOfWeek(year: number, month: number, weekNum: number): Date {
   return new Date(year, month - 1, mon1Day + (weekNum - 1) * 7);
 }
 
-const dateWeekMonthCache = new Map<string, { week: string; month: number; year: number }>();
-
-function getWeekAndMonthFromDate(dateStr: string): { week: string; month: number; year: number } {
-  if (!dateStr || typeof dateStr !== 'string') {
-    const today = new Date();
-    return { week: 'T1', month: today.getMonth() + 1, year: today.getFullYear() };
-  }
-
-  const clean = dateStr.trim();
-  const cached = dateWeekMonthCache.get(clean);
-  if (cached) return cached;
-
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  const currentMonth = today.getMonth() + 1;
-  const currentDay = today.getDate();
-
-  let day = 1;
-  let month = currentMonth;
-  let year = currentYear;
-
-  const matchesYMD = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-  const matchesDMY = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
-
-  if (matchesYMD) {
-    year = Number(matchesYMD[1]) || currentYear;
-    month = Number(matchesYMD[2]) || currentMonth;
-    day = Number(matchesYMD[3]) || 1;
-  } else if (matchesDMY) {
-    day = Number(matchesDMY[1]) || 1;
-    month = Number(matchesDMY[2]) || currentMonth;
-    const yrPart = matchesDMY[3];
-    year = yrPart ? (yrPart.length === 2 ? 2000 + Number(yrPart) : Number(yrPart)) : currentYear;
-  } else {
-    const parts = clean.split(/[-/. ]+/);
-    if (parts.length >= 3) {
-      if (parts[0].length === 4) {
-        year = Number(parts[0]) || currentYear;
-        month = Number(parts[1]) || currentMonth;
-        day = Number(parts[2]) || 1;
-      } else {
-        day = Number(parts[0]) || 1;
-        month = Number(parts[1]) || currentMonth;
-        const yrPart = parts[2];
-        year = yrPart ? (yrPart.length === 2 ? 2000 + Number(yrPart) : Number(yrPart)) : currentYear;
-      }
-    }
-  }
-
-  const targetDate = new Date(year, month - 1, day);
-
-  let weekStr = 'T1';
-  for (let w = 1; w <= 5; w++) {
-    const mon = getMondayOfWeek(year, month, w);
-    const sun = new Date(mon);
-    sun.setDate(mon.getDate() + 6);
-
-    if (w === 1 && targetDate < mon) {
-      weekStr = 'T1';
-      break;
-    }
-    if (w === 5 && targetDate > sun) {
-      weekStr = 'T5';
-      break;
-    }
-    if (targetDate >= mon && targetDate <= sun) {
-      weekStr = `T${w}`;
-      break;
-    }
-  }
-
-  const result = { week: weekStr, month, year };
-  if (dateWeekMonthCache.size > 3000) dateWeekMonthCache.clear();
-  dateWeekMonthCache.set(clean, result);
-  return result;
-}
+// getWeekAndMonthFromDate imported from ../utils/dateUtils
 
 function getWeekDatesForReporting(year: number, month: number, weekNum: number): string {
   const firstDayOfMonth = new Date(year, month - 1, 1);
@@ -2581,9 +2507,9 @@ export default function QualityInspectionRecords({
       assignee: draftOwner || 'Tổ trưởng QA/QC',
       Owner: draftOwner || 'Tổ trưởng QA/QC',
       owner: draftOwner || 'Tổ trưởng QA/QC',
-      targetDate: draftDue || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-      DueDate: draftDue || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-      dueDate: draftDue || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      targetDate: draftDue || getLocalYmd(new Date(Date.now() + 7 * 86400000)),
+      DueDate: draftDue || getLocalYmd(new Date(Date.now() + 7 * 86400000)),
+      dueDate: draftDue || getLocalYmd(new Date(Date.now() + 7 * 86400000)),
       status: 'Mở',
       Status: 'Mở',
       rootCause: draftRootCause || 'Đang phân tích nguyên nhân cốt lõi tại dây chuyền KCS',
@@ -5106,7 +5032,7 @@ export default function QualityInspectionRecords({
       alert('Vui lòng nhập chỉ tiêu / thông số kỹ thuật yêu cầu!');
       return;
     }
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalYmd();
     const linkedLog = dailyLogs.find(log => log.stt === newAuditLinkedDailyLogStt);
     const newAudit: SupplierProductionAudit = {
       id: `SPA-${Date.now().toString().slice(-4)}`,

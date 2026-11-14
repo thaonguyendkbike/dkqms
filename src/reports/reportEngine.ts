@@ -13,6 +13,27 @@ import {
 } from '../types';
 import { DailyLogRecord } from '../dailyLogsData';
 import { IQCRecord, OQCRecord, PQCRecord } from '../qualityTestData';
+import {
+  formatDateShortVi,
+  formatDateStrVi,
+  getIsoWeekInfo,
+  getIsoWeekRange,
+  getIsoWeeksInYear,
+  getWeekdayIndexMonFirst,
+  parseFlexibleDate,
+  WEEKDAY_LABELS_MON_FIRST
+} from '../utils/dateUtils';
+
+export {
+  formatDateShortVi,
+  formatDateStrVi,
+  getIsoWeekInfo,
+  getIsoWeekRange,
+  getIsoWeeksInYear,
+  getWeekdayIndexMonFirst,
+  parseFlexibleDate,
+  WEEKDAY_LABELS_MON_FIRST
+};
 
 export type ReportPeriodType = 'week' | 'month';
 
@@ -194,87 +215,8 @@ export interface ReportSnapshot {
 }
 
 // ==========================================
-// DATE & ISO 8601 HELPERS
+// DATE & ISO 8601 HELPERS (re-exported from ../utils/dateUtils)
 // ==========================================
-
-export function parseFlexibleDate(dateStr?: string | null): Date | null {
-  if (!dateStr || typeof dateStr !== 'string') return null;
-  const clean = dateStr.trim();
-  if (!clean) return null;
-
-  // YYYY-MM-DD or YYYY/MM/DD (optionally with time)
-  const ymd = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-  if (ymd) {
-    const y = Number(ymd[1]);
-    const m = Number(ymd[2]);
-    const d = Number(ymd[3]);
-    if (y >= 2000 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-      return new Date(y, m - 1, d, 12, 0, 0, 0);
-    }
-  }
-
-  // DD/MM/YYYY or DD-MM-YYYY
-  const dmy = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
-  if (dmy) {
-    const d = Number(dmy[1]);
-    const m = Number(dmy[2]);
-    const rawY = dmy[3];
-    const y = rawY.length === 2 ? 2000 + Number(rawY) : Number(rawY);
-    if (y >= 2000 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
-      return new Date(y, m - 1, d, 12, 0, 0, 0);
-    }
-  }
-
-  return null;
-}
-
-export function formatDateShortVi(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  return `${dd}/${mm}/${yyyy}`;
-}
-
-export function formatDateStrVi(dateStr?: string | null): string {
-  const d = parseFlexibleDate(dateStr);
-  return d ? formatDateShortVi(d) : (dateStr || '--');
-}
-
-export function getIsoWeekInfo(date: Date): { isoYear: number; isoWeek: number } {
-  const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = utc.getUTCDay() || 7; // Mon=1..Sun=7
-  utc.setUTCDate(utc.getUTCDate() + 4 - dayNum); // Thursday of current ISO week
-  const isoYear = utc.getUTCFullYear();
-  const yearStart = new Date(Date.UTC(isoYear, 0, 1));
-  const isoWeek = Math.ceil((((utc.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-  return { isoYear, isoWeek };
-}
-
-export function getIsoWeeksInYear(isoYear: number): number {
-  const dec28 = new Date(isoYear, 11, 28, 12, 0, 0);
-  return getIsoWeekInfo(dec28).isoWeek;
-}
-
-export function getIsoWeekRange(isoYear: number, isoWeek: number): { start: Date; end: Date } {
-  const jan4 = new Date(Date.UTC(isoYear, 0, 4));
-  const jan4Day = jan4.getUTCDay() || 7; // Mon=1..Sun=7
-  const week1Monday = new Date(jan4);
-  week1Monday.setUTCDate(jan4.getUTCDate() - jan4Day + 1);
-
-  const targetMonday = new Date(week1Monday);
-  targetMonday.setUTCDate(week1Monday.getUTCDate() + (isoWeek - 1) * 7);
-
-  const start = new Date(
-    targetMonday.getUTCFullYear(),
-    targetMonday.getUTCMonth(),
-    targetMonday.getUTCDate(),
-    0, 0, 0, 0
-  );
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
-  return { start, end };
-}
 
 export function getMonthRange(year: number, month: number): { start: Date; end: Date } {
   const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
@@ -871,12 +813,11 @@ export function buildReportSnapshot(
   // Tool 1: Check Sheet (defect types x time columns)
   const colLabels =
     period.type === 'week'
-      ? ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
+      ? [...WEEKDAY_LABELS_MON_FIRST]
       : ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5'];
   const getColIdx = (d: Date): number => {
     if (period.type === 'week') {
-      const day = d.getDay(); // 0=Sun..6=Sat
-      return day === 0 ? 6 : day - 1;
+      return getWeekdayIndexMonFirst(d);
     }
     return Math.min(4, Math.floor((d.getDate() - 1) / 7));
   };
