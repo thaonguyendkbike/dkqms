@@ -719,9 +719,12 @@ export function sanitizeDailyLogs(raw: any[]): DailyLogRecord[] {
       content.includes('[ghi nhận đề xuất cải tiến thị trường]') ||
       content.includes('[nhập hàng loạt - đề xuất cải tiến]') ||
       content.includes('[nhập hàng loạt - phản ánh kh]') ||
+      content.includes('[cập nhật đề xuất cải tiến]') ||
+      content.includes('[cập nhật lỗi thị trường]') ||
       note.includes('tự động tạo lịch sử phản ánh') ||
       note.includes('tự động tạo từ phản ánh thị trường') ||
-      note.includes('tự động tạo từ phân hệ phản ánh')
+      note.includes('tự động tạo từ phân hệ phản ánh') ||
+      note.includes('cập nhật tự động cho hồ sơ')
     ) {
       return false; // Exclude auto-generated market defects from Daily Logs
     }
@@ -23287,39 +23290,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         syncToServer('dk_defects', updated);
                         return updated;
                       });
-
-                      const isEditImprovement = (data.feedbackType || 'Lỗi xe từ khách hàng') === 'Đề xuất cải tiến';
-                      const editLogContent = isEditImprovement
-                        ? `[Cập nhật đề xuất cải tiến] Cập nhật hồ sơ đề xuất ${data.id} (Lĩnh vực: ${data.type}). Nội dung cập nhật: ${data.description || 'Không có mô tả'}.`
-                        : `[Cập nhật lỗi thị trường] Cập nhật hồ sơ sự cố ${data.id} (Dòng xe: ${data.model}). Nội dung cập nhật chi tiết: ${data.description || 'Không có mô tả'}.`;
-
-                      const stdToday = standardizeDate(new Date().toLocaleDateString('vi-VN'));
-                      const dateInfo = getWeekAndMonthFromDate(stdToday);
-
-                      // Tự động mô tả lỗi trong lịch sử nhật ký chất lượng khi sửa đổi
-                      const editLogRecord: DailyLogRecord = {
-                        id: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
-                        stt: dailyLogs.length > 0 ? Math.max(...dailyLogs.map(l => l.stt || 0)) + 1 : 1,
-                        date: stdToday,
-                        week: dateInfo.week || "T1",
-                        category: "Khách hàng/Bảo hành",
-                        content: editLogContent,
-                        target: "1",
-                        unit: "Vụ việc",
-                        assignee: data.assignee || 'Trưởng nhóm QA/QC',
-                        timeWork: ["Ok", "Ok", "", "", "", "", "", ""],
-                        result: "1",
-                        deadline: data.targetDate ? standardizeDate(data.targetDate) : stdToday,
-                        statusPercent: data.status === 'Đã xử lý' ? "100%" : "50%",
-                        note: `Cập nhật tự động cho hồ sơ ${data.id}. Tiến độ xử lý: ${data.status}.`,
-                        year: dateInfo.year
-                      };
-                      const updatedDailyLogs = sanitizeDailyLogs([editLogRecord, ...dailyLogs]);
-                      setDailyLogs(updatedDailyLogs);
-                      safeStorage.setItem('dk_daily_logs', JSON.stringify(updatedDailyLogs));
-                      safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
-                      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
-                      syncToServer('dk_daily_logs', updatedDailyLogs);
                       break;
                     }
                     case 'fmea':
