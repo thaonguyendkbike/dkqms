@@ -3692,8 +3692,7 @@ export default function QualityPlanning({
     }
 
     const finalDeadline = newTaskDeadline || (planningMode === 'weekly' ? getDateInWeek(selectedYear, selectedMonth, selectedWeek) : `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-28`);
-    const { month: taskM, year: taskY } = parseDateYearMonth(finalDeadline, selectedMonth, selectedYear);
-    const calculatedWeek = getWeekFromDateString(finalDeadline);
+    const calculatedWeek = planningMode === 'weekly' ? selectedWeek : getWeekFromDateString(finalDeadline);
 
     const newTask: QualityTask = {
       id: `T-USER-${Math.floor(100+Math.random()*900)}`,
@@ -3704,8 +3703,8 @@ export default function QualityPlanning({
       status: newTaskStatus || 'Pending',
       priority: newTaskPriority,
       modelOrSupplier: refStr || undefined,
-      month: taskM,
-      year: taskY,
+      month: selectedMonth,
+      year: selectedYear,
       week: calculatedWeek
     };
 
@@ -4523,10 +4522,14 @@ export default function QualityPlanning({
       let taskWeek = t.week;
 
       if (t.deadline && typeof t.deadline === 'string') {
-        const parsed = parseDateYearMonth(t.deadline, taskMonth || selectedMonth, taskYear || selectedYear);
-        taskYear = parsed.year;
-        taskMonth = parsed.month;
-        taskWeek = getWeekFromDateString(t.deadline);
+        if (!taskMonth || !taskYear) {
+          const parsed = parseDateYearMonth(t.deadline, selectedMonth, selectedYear);
+          taskYear = taskYear || parsed.year;
+          taskMonth = taskMonth || parsed.month;
+        }
+        if (!taskWeek) {
+          taskWeek = getWeekFromDateString(t.deadline);
+        }
       }
 
       const isMonthMatch = (taskMonth === selectedMonth) && (taskYear === selectedYear);
@@ -4534,7 +4537,8 @@ export default function QualityPlanning({
 
       // Filter by week strictly when planningMode === 'weekly'
       if (planningMode === 'weekly') {
-        if (taskWeek !== selectedWeek) {
+        const normTaskWeek = taskWeek ? `W${String(taskWeek).replace(/\D/g, '') || '1'}` : '';
+        if (normTaskWeek !== selectedWeek) {
           return false;
         }
       }
