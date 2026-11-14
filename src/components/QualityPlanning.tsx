@@ -686,7 +686,6 @@ export default function QualityPlanning({
 
   const [planningMode, setPlanningMode] = useState<'weekly' | 'monthly'>('weekly');
   const [forceRefresh, setForceRefresh] = useState(0);
-  const [planStatus, setPlanStatus] = useState<'Draft' | 'Chờ phê duyệt' | 'Đã phê duyệt'>('Draft');
   const [selectedMonth, setSelectedMonth] = useState<number>(defaultMonth);
   const [selectedYear, setSelectedYear] = useState<number>(defaultYear);
   const [selectedWeek, setSelectedWeek] = useState<string>(defaultWeek);
@@ -4617,53 +4616,6 @@ export default function QualityPlanning({
           <p className="text-sm text-slate-500 max-w-3xl">
             Tự động hóa luồng dữ liệu từ <strong className="text-indigo-600 font-semibold">Kế hoạch Sản xuất & Nhập hàng</strong> sang các tác vụ kiểm tra chất lượng thực nghiệm <span className="font-semibold font-mono bg-slate-50 border px-1.5 py-0.5 rounded text-indigo-700">IQC - SQC - PQC - OQC</span>.
           </p>
-        </div>
-
-        {/* Bảng trạng thái & Trình duyệt */}
-        <div className="flex flex-wrap items-center gap-3 bg-slate-50 border border-slate-200 p-2.5 rounded-xl">
-          <div className="text-xs font-bold text-slate-500 pl-1">Trình trạng:</div>
-          <div className="flex items-center gap-1.5">
-            <span className={`px-3 py-1 text-xs font-black rounded-lg uppercase ${
-              planStatus === 'Draft' 
-                ? 'bg-slate-200 text-slate-700 border border-slate-300' 
-                : planStatus === 'Chờ phê duyệt' 
-                  ? 'bg-amber-100 text-amber-700 border border-amber-200' 
-                  : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-            }`}>
-              {planStatus === 'Draft' ? 'Bản Nháp (Draft)' : planStatus === 'Chờ phê duyệt' ? 'Chờ Phê Duyệt' : 'Đã Ký Duyệt ✓'}
-            </span>
-          </div>
-          <div className="h-4 w-px bg-slate-300"></div>
-
-          {planStatus === 'Draft' ? (
-            <button
-              onClick={() => {
-                setPlanStatus('Chờ phê duyệt');
-                alert("Hồ sơ kế hoạch chất lượng tổng thể đang được đẩy lên Trưởng phòng Nguyễn Xuân Thao và Giám đốc Nhà máy phê duyệt.");
-              }}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-lg shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-            >
-              <Check className="w-3.5 h-3.5" /> Trình duyệt
-            </button>
-          ) : planStatus === 'Chờ phê duyệt' ? (
-            <button
-              onClick={() => {
-                setPlanStatus('Đã phê duyệt');
-                handleSyncPlansToReportsSystem(true);
-                alert("Kế hoạch chất lượng đã được Trưởng phòng duyệt thành công. Phân ban IQC/SQC/PQC/OQC bắt đầu thực thi bổn phận chỉ tiêu, đồng thời tự động đồng bộ sang phân hệ báo cáo tương ứng.");
-              }}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer"
-            >
-              <FileCheck className="w-3.5 h-3.5" /> Phê Duyệt Kế Hoạch
-            </button>
-          ) : (
-            <button
-              onClick={() => setPlanStatus('Draft')}
-              className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold text-xs px-3.5 py-1.5 rounded-lg shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" /> Mở lại mấu cũ
-            </button>
-          )}
         </div>
       </div>
 
