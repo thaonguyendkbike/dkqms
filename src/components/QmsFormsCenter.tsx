@@ -1522,7 +1522,7 @@ export default function QmsFormsCenter({
       {/* ==================== NỘI DUNG CHÍNH ==================== */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 w-full flex-1 space-y-4">
         {mainTab === '5s' ? (
-          <Qms5sTab bmRecords={bmRecords} onSaveBmRecord={onSaveBmRecord} />
+          <Qms5sTab />
         ) : mainTab === 'forms' ? (
           /* =========================================================================
              TAB 1: BIỂU MẪU CHUẨN ISO (10 BIỂU MẪU)
