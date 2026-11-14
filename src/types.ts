@@ -713,8 +713,8 @@ export interface ReportNote {
 }
 
 export interface QmsBmSyncRecord {
-  id: string;                      // 'tpl:<formId>' | 'doc:<docId>' | 'fill:<formId>'
-  kind: 'template' | 'document' | 'filled';
+  id: string;                      // 'tpl:<formId>' | 'doc:<docId>' | 'fill:<formId>' | '5s:<YYYY-MM>'
+  kind: 'template' | 'document' | 'filled' | '5s';
   targetId: string;
   payload: any;
   updatedAt: string;
