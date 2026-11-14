@@ -483,9 +483,10 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
       return;
     }
 
+    const sanitizedCustomId = customId.trim().replace(/[\/\s.#$\[\]]+/g, '-');
     const finalId = editingId
-      ? customId.trim() || editingId
-      : customId.trim() || generateNextEvalId(evaluations, receivedDate);
+      ? sanitizedCustomId || editingId
+      : sanitizedCustomId || generateNextEvalId(evaluations, receivedDate);
     const nowIso = new Date().toISOString();
     const existing = editingId ? evaluations.find((x) => x.id === editingId) : undefined;
 

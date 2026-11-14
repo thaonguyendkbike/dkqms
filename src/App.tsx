@@ -1956,9 +1956,10 @@ export function App() {
     localDirtyKeys.current = s;
   }
 
-  // Massive datasets stored as high-efficiency document chunks to optimize Firestore reads (15 reads instead of 29,000 reads)
+  // Massive datasets stored as high-efficiency document chunks to optimize Firestore reads & bypass 1MB single-doc limit
   const CHUNKED_KEYS = [
-    'dk_oqc_records'
+    'dk_oqc_records',
+    'dk_part_evaluations'
   ];
 
   // Large and relational transaction data to be stored as independent subcollections
@@ -1973,7 +1974,6 @@ export function App() {
     'dk_capas',
     'dk_ecos',
     'dk_defects',
-    'dk_part_evaluations',
     'dk_report_notes',
     'dk_qms_bm_records',
     'dk_fmea',
@@ -2475,7 +2475,7 @@ export function App() {
               const cd = cs.data();
               if (cd && Array.isArray(cd.data)) assembled = assembled.concat(cd.data);
             });
-            serverRecords = deduplicateOqcRecords(assembled);
+            serverRecords = key === 'dk_oqc_records' ? deduplicateOqcRecords(assembled) : assembled;
           } else if (docData && Array.isArray(docData.data)) {
             serverRecords = docData.data;
           }
@@ -2573,7 +2573,7 @@ export function App() {
               const cd = cs.data();
               if (cd && Array.isArray(cd.data)) assembled = assembled.concat(cd.data);
             });
-            serverRecords = deduplicateOqcRecords(assembled);
+            serverRecords = key === 'dk_oqc_records' ? deduplicateOqcRecords(assembled) : assembled;
           } else if (docData && Array.isArray(docData.data)) {
             serverRecords = docData.data;
           }
@@ -2785,13 +2785,13 @@ export function App() {
         const docRef = doc(db, 'dk_db_sync', key);
 
         if (CHUNKED_KEYS.includes(key)) {
-          // Process massive dataset into high-efficiency minified chunked documents (500 records/chunk)
+          // Process dataset into chunked documents (500 records/chunk for OQC, 8 records/chunk for Part Evaluations with images)
           const rawList = Array.isArray(val) ? val : [];
-          const currentList = rawList.map(minifyOqcChunkRecord);
+          const currentList = key === 'dk_oqc_records' ? rawList.map(minifyOqcChunkRecord) : rawList;
           lastLocalWriteTimestamps.current[key] = timestamp;
           serverTimestamps.current[key] = timestamp;
 
-          const CHUNK_SIZE = 500;
+          const CHUNK_SIZE = key === 'dk_part_evaluations' ? 8 : 500;
           const totalChunks = Math.ceil(currentList.length / CHUNK_SIZE) || 1;
 
           for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
@@ -3436,7 +3436,9 @@ export function App() {
 
       // 2. Chuyển đổi dữ liệu và đóng gói thao tác bằng thuật toán so khớp tối ưu
       localKeys.forEach((key) => {
-        const rawStored = localStorage.getItem(key);
+        const rawStored = (key === 'dk_oqc_records' || key === 'dk_part_evaluations')
+          ? (safeStorage.getItem(key) || localStorage.getItem(key))
+          : localStorage.getItem(key);
         if (!rawStored) return;
 
         let parsed: any = null;
@@ -3451,7 +3453,7 @@ export function App() {
 
         if (CHUNKED_KEYS.includes(key)) {
           const currentList = Array.isArray(parsed) ? parsed : [];
-          const CHUNK_SIZE = 400;
+          const CHUNK_SIZE = key === 'dk_part_evaluations' ? 8 : 400;
           const totalChunks = Math.ceil(currentList.length / CHUNK_SIZE) || 1;
 
           for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
@@ -3723,8 +3725,8 @@ export function App() {
         'dk_oqc_color_changes'
       ];
       localKeys.forEach(k => {
-        // dk_oqc_records phải đọc từ safeStorage (memoryStore/IndexedDB) vì đã bị xóa khỏi native localStorage
-        const val = (k === 'dk_oqc_records')
+        // dk_oqc_records và dk_part_evaluations ưu tiên đọc từ safeStorage (memoryStore/IndexedDB)
+        const val = (k === 'dk_oqc_records' || k === 'dk_part_evaluations')
           ? (safeStorage.getItem(k) || localStorage.getItem(k))
           : localStorage.getItem(k);
         if (val) {
@@ -4591,9 +4593,9 @@ export function App() {
             registerOqcServerSnapshot(assembledList, Array.isArray(metaData?.deletedIds) ? metaData.deletedIds : []);
           }
 
-          // Lưu mã băm (hash) chuẩn hóa theo từng chunk 500 bản ghi để khi thao tác Đạt/Lỗi chỉ đẩy đúng 1 chunk thay đổi
+          // Lưu mã băm (hash) chuẩn hóa theo từng chunk để chỉ đẩy đúng chunk thay đổi
           if (assembledList.length > 0) {
-            const CHUNK_SIZE = 500;
+            const CHUNK_SIZE = key === 'dk_part_evaluations' ? 8 : 500;
             const minifiedForHash = key === 'dk_oqc_records' ? assembledList.map(minifyOqcChunkRecord) : assembledList;
             const totalLoadedChunks = Math.ceil(minifiedForHash.length / CHUNK_SIZE) || 1;
             for (let cIdx = 0; cIdx < totalLoadedChunks; cIdx++) {
@@ -4623,8 +4625,8 @@ export function App() {
           let finalDisplayData = assembledList;
 
           if (parsedLocalData.length > 0 && assembledList.length > 0) {
-            if (!isDirty && key === 'dk_oqc_records') {
-              // Máy hiện tại không có thay đổi bẩn chưa đồng bộ -> Nhận chuẩn 100% danh sách từ Cloud (tránh hồi sinh các xe đã xóa ở máy khác)
+            if (!isDirty && (key === 'dk_oqc_records' || key === 'dk_part_evaluations')) {
+              // Máy hiện tại không có thay đổi bẩn chưa đồng bộ -> Nhận chuẩn 100% danh sách từ Cloud (tránh hồi sinh bản ghi đã xóa ở máy khác)
               let localDelSet = new Set<string>();
               try {
                 const delStr = localStorage.getItem(`${key}_deleted_ids`);
@@ -4700,6 +4702,10 @@ export function App() {
             isRemoteUpdateRef.current[key] = true;
             setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
             setOqcRecords(finalDisplayData);
+          } else if (key === 'dk_part_evaluations') {
+            isRemoteUpdateRef.current[key] = true;
+            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
+            setPartEvaluations(finalDisplayData);
           }
 
           listenersInitialized++;
@@ -5031,17 +5037,15 @@ export function App() {
       safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).\n\nChỉ các thành viên được phân quyền Biên tập mới có quyền nhập/sửa đánh giá linh kiện lỗi.");
       return false;
     }
-    setPartEvaluations(prev => {
-      const exists = prev.some(x => x.id === item.id);
-      const updated = (isEdit || exists)
-        ? prev.map(x => x.id === item.id ? item : x)
-        : [item, ...prev];
-      safeStorage.setItem('dk_part_evaluations', JSON.stringify(updated));
-      safeStorage.setItem('dk_part_evaluations_is_dirty', 'true');
-      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_part_evaluations');
-      syncToServer('dk_part_evaluations', updated);
-      return updated;
-    });
+    const exists = partEvaluations.some(x => x.id === item.id);
+    const updated = (isEdit || exists)
+      ? partEvaluations.map(x => x.id === item.id ? item : x)
+      : [item, ...partEvaluations];
+    setPartEvaluations(updated);
+    safeStorage.setItem('dk_part_evaluations', JSON.stringify(updated));
+    try { localStorage.setItem('dk_part_evaluations_is_dirty', 'true'); } catch (e) { }
+    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_part_evaluations');
+    syncToServer('dk_part_evaluations', updated);
     triggerToast(
       isEdit ? `Đã cập nhật biên bản đánh giá ${item.id}` : `Đã lưu đánh giá linh kiện: ${item.partName} (${item.id})`,
       'success'
@@ -5055,14 +5059,12 @@ export function App() {
     }
     if (!window.confirm(`Anh có chắc muốn xóa biên bản đánh giá linh kiện [${id}] không?`)) return;
     trackDeletedId('dk_part_evaluations', id);
-    setPartEvaluations(prev => {
-      const updated = prev.filter(x => x.id !== id);
-      safeStorage.setItem('dk_part_evaluations', JSON.stringify(updated));
-      safeStorage.setItem('dk_part_evaluations_is_dirty', 'true');
-      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_part_evaluations');
-      syncToServer('dk_part_evaluations', updated);
-      return updated;
-    });
+    const updated = partEvaluations.filter(x => x.id !== id);
+    setPartEvaluations(updated);
+    safeStorage.setItem('dk_part_evaluations', JSON.stringify(updated));
+    try { localStorage.setItem('dk_part_evaluations_is_dirty', 'true'); } catch (e) { }
+    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_part_evaluations');
+    syncToServer('dk_part_evaluations', updated);
     triggerToast(`Đã xóa biên bản đánh giá ${id}`, 'info');
   };
   const [marketDefectsSearch, setMarketDefectsSearch] = useState('');
