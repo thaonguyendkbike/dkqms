@@ -876,8 +876,8 @@ export function buildReportSnapshot(
   // Tool 1: Check Sheet (defect types x time columns)
   const colLabels =
     period.type === 'week'
-        ? [...WEEKDAY_LABELS_MON_FIRST]
-        : ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5'];
+      ? [...WEEKDAY_LABELS_MON_FIRST]
+      : ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5'];
   const getColIdx = (d: Date): number => {
     if (period.type === 'week') {
       return getWeekdayIndexMonFirst(d);
@@ -1023,7 +1023,7 @@ export function buildReportSnapshot(
       category: 'OQC',
       title: `Tỷ lệ đạt xuất xưởng OQC đạt ${oqcYield}%`,
       detail: `${oqcPassed}/${oqcTotal} xe đạt chuẩn xuất xưởng trong ${period.label}.`,
-      targetTab: 'quality_inspection'
+      targetTab: 'quality_inspection_records'
     });
   }
   if (iqcTotal > 0 && iqcPassRateCheck(iqcRate)) {
@@ -1033,7 +1033,7 @@ export function buildReportSnapshot(
       category: 'IQC',
       title: `Kiểm soát đầu vào IQC đạt ${iqcRate}%`,
       detail: `${iqcPassed}/${iqcTotal} lô linh kiện đạt yêu cầu thông quan.`,
-      targetTab: 'quality_inspection'
+      targetTab: 'quality_inspection_records'
     });
   }
   if (mktTotal > 0 && mktRate >= 85) {
@@ -1055,7 +1055,7 @@ export function buildReportSnapshot(
       title: `OQC Yield (${oqcYield}%) thấp hơn ngưỡng 95%`,
       detail: `Có ${oqcFailed} xe lỗi trên tổng ${oqcTotal} xe kiểm tra.`,
       action: 'Rà soát lỗi OQC đứng đầu Pareto và khoanh vùng LSX liên quan.',
-      targetTab: 'quality_inspection'
+      targetTab: 'quality_inspection_records'
     });
   }
   if (deterioratingSuppliers.length > 0) {
@@ -1088,7 +1088,7 @@ export function buildReportSnapshot(
       title: `Có ${overdueCapas.length} hồ sơ CAPA quá hạn`,
       detail: overdueCapas.slice(0, 3).map(c => `${c.id || c.CAPAID}: ${c.title || c.issue || c.Issue || ''}`).join(' • '),
       action: 'Đôn đốc PIC hoàn thành khắc phục và đánh giá hiệu quả ngay.',
-      targetTab: 'capa'
+      targetTab: 'tasks'
     });
   }
   if (mktSevA > 0) {

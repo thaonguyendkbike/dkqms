@@ -17212,7 +17212,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 onSaveNote={handleSaveReportNote}
                 onDeleteNote={handleDeleteReportNote}
                 onOpenAddWeekTask={() => setShowAddWeekTaskModal(true)}
-                onNavigateTab={(tab) => setActiveTab(tab)}
+                onNavigateTab={(tab) => {
+                  setActiveTab(tab);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
                 onToast={triggerToast}
               />
               {showAddWeekTaskModal && (

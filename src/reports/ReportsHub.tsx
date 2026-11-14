@@ -1038,7 +1038,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => onNavigateTab('capa')}
+                onClick={() => onNavigateTab('tasks')}
                 className="text-xs font-bold text-blue-700 hover:underline"
               >
                 Mở phân hệ CAPA →
@@ -1144,7 +1144,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => onNavigateTab('eco')}
+                onClick={() => onNavigateTab('ecos')}
                 className="text-xs font-bold text-blue-700 hover:underline"
               >
                 Mở phân hệ ECO →
