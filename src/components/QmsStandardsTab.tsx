@@ -7,9 +7,14 @@ import {
   Edit3,
   ExternalLink,
   Link2,
+  Pencil,
+  Plus,
   Printer,
+  RotateCcw,
   Search,
-  Wrench
+  Trash2,
+  Wrench,
+  X
 } from 'lucide-react';
 import { safeStorage } from '../safeStorage';
 
@@ -46,6 +51,7 @@ interface VehicleGuideCDRow {
 }
 
 const COMPONENT_LINK_STORAGE_KEY = 'dk_qms_component_standards_link';
+const STANDARDS_DATA_STORAGE_KEY = 'dk_qms_standards_custom_v1';
 
 const SAMPLE_EVAL_ROWS: SampleEvalRow[] = [
   // I. Ngoại quan
@@ -745,6 +751,34 @@ const VEHICLE_GUIDE_CD_ROWS: VehicleGuideCDRow[] = [
 const esc = (v: string) =>
   v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+interface SavedStandardsPayload {
+  sampleRows?: SampleEvalRow[];
+  vehicleABRows?: VehicleGuideABRow[];
+  vehicleCDRows?: VehicleGuideCDRow[];
+}
+
+function loadSavedStandards(): SavedStandardsPayload | null {
+  try {
+    const raw = safeStorage.getItem(STANDARDS_DATA_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as SavedStandardsPayload;
+  } catch {
+    return null;
+  }
+}
+
+const SAMPLE_GROUP_TITLES: Record<'I' | 'II' | 'III' | 'IV', string> = {
+  I: 'I. Ngoại quan',
+  II: 'II. Hệ thống điện',
+  III: 'III. Hệ thống lái',
+  IV: 'IV. Thông số chạy'
+};
+
+type EditingTarget =
+  | { kind: 'sample'; index: number | null; draft: SampleEvalRow }
+  | { kind: 'ab'; index: number | null; draft: VehicleGuideABRow }
+  | { kind: 'cd'; index: number | null; draft: VehicleGuideCDRow };
+
 export default function QmsStandardsTab() {
   const [section, setSection] = useState<StandardMainSection>('sample_eval');
   const [vehicleSub, setVehicleSub] = useState<VehicleSubFilter>('all');
@@ -753,33 +787,176 @@ export default function QmsStandardsTab() {
   const [editingLink, setEditingLink] = useState(false);
   const [draftLink, setDraftLink] = useState(partsLink);
 
+  const initialSaved = useMemo(() => loadSavedStandards(), []);
+  const [sampleRows, setSampleRows] = useState<SampleEvalRow[]>(() => initialSaved?.sampleRows || SAMPLE_EVAL_ROWS);
+  const [vehicleABRows, setVehicleABRows] = useState<VehicleGuideABRow[]>(() => initialSaved?.vehicleABRows || VEHICLE_GUIDE_AB_ROWS);
+  const [vehicleCDRows, setVehicleCDRows] = useState<VehicleGuideCDRow[]>(() => initialSaved?.vehicleCDRows || VEHICLE_GUIDE_CD_ROWS);
+  const [hasCustomEdits, setHasCustomEdits] = useState<boolean>(() => Boolean(initialSaved));
+  const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
+
+  const persistStandards = (
+    nextSample: SampleEvalRow[],
+    nextAB: VehicleGuideABRow[],
+    nextCD: VehicleGuideCDRow[]
+  ) => {
+    setSampleRows(nextSample);
+    setVehicleABRows(nextAB);
+    setVehicleCDRows(nextCD);
+    setHasCustomEdits(true);
+    safeStorage.setItem(
+      STANDARDS_DATA_STORAGE_KEY,
+      JSON.stringify({ sampleRows: nextSample, vehicleABRows: nextAB, vehicleCDRows: nextCD })
+    );
+  };
+
+  const handleResetDefault = () => {
+    if (!window.confirm('Khôi phục toàn bộ bảng tiêu chuẩn về nội dung mặc định ban đầu?')) return;
+    setSampleRows(SAMPLE_EVAL_ROWS);
+    setVehicleABRows(VEHICLE_GUIDE_AB_ROWS);
+    setVehicleCDRows(VEHICLE_GUIDE_CD_ROWS);
+    setHasCustomEdits(false);
+    safeStorage.removeItem(STANDARDS_DATA_STORAGE_KEY);
+  };
+
   const q = searchQuery.trim().toLowerCase();
 
-  const filteredSampleRows = useMemo(() => {
-    if (!q) return SAMPLE_EVAL_ROWS;
-    return SAMPLE_EVAL_ROWS.filter((r) =>
+  const indexedSampleRows = useMemo(() => {
+    const mapped = sampleRows.map((row, idx) => ({ row, idx }));
+    if (!q) return mapped;
+    return mapped.filter(({ row: r }) =>
       [r.groupTitle, r.item, r.checkPoint, r.description, r.standard, r.method]
         .join(' ')
         .toLowerCase()
         .includes(q)
     );
-  }, [q]);
+  }, [sampleRows, q]);
 
-  const filteredABRows = useMemo(() => {
-    return VEHICLE_GUIDE_AB_ROWS.filter((r) => {
-      if (vehicleSub !== 'all' && r.section !== vehicleSub) return false;
-      if (!q) return true;
-      return [r.position, r.guide, r.standard, r.tool, r.frequency].join(' ').toLowerCase().includes(q);
-    });
-  }, [vehicleSub, q]);
+  const filteredSampleRows = useMemo(() => indexedSampleRows.map((x) => x.row), [indexedSampleRows]);
 
-  const filteredCDRows = useMemo(() => {
-    return VEHICLE_GUIDE_CD_ROWS.filter((r) => {
-      if (vehicleSub !== 'all' && r.section !== vehicleSub) return false;
-      if (!q) return true;
-      return [r.item, r.standard].join(' ').toLowerCase().includes(q);
+  const indexedABRows = useMemo(() => {
+    return vehicleABRows
+      .map((row, idx) => ({ row, idx }))
+      .filter(({ row: r }) => {
+        if (vehicleSub !== 'all' && r.section !== vehicleSub) return false;
+        if (!q) return true;
+        return [r.position, r.guide, r.standard, r.tool, r.frequency].join(' ').toLowerCase().includes(q);
+      });
+  }, [vehicleABRows, vehicleSub, q]);
+
+  const filteredABRows = useMemo(() => indexedABRows.map((x) => x.row), [indexedABRows]);
+
+  const indexedCDRows = useMemo(() => {
+    return vehicleCDRows
+      .map((row, idx) => ({ row, idx }))
+      .filter(({ row: r }) => {
+        if (vehicleSub !== 'all' && r.section !== vehicleSub) return false;
+        if (!q) return true;
+        return [r.item, r.standard].join(' ').toLowerCase().includes(q);
+      });
+  }, [vehicleCDRows, vehicleSub, q]);
+
+  const filteredCDRows = useMemo(() => indexedCDRows.map((x) => x.row), [indexedCDRows]);
+
+  const openAddModal = () => {
+    if (section === 'sample_eval') {
+      setEditingTarget({
+        kind: 'sample',
+        index: null,
+        draft: {
+          groupId: 'I',
+          groupTitle: SAMPLE_GROUP_TITLES.I,
+          sttGroup: '',
+          sttPoint: String(sampleRows.length + 1),
+          item: '',
+          checkPoint: '',
+          description: '',
+          standard: '',
+          method: ''
+        }
+      });
+      return;
+    }
+    if (vehicleSub === 'C' || vehicleSub === 'D') {
+      setEditingTarget({
+        kind: 'cd',
+        index: null,
+        draft: {
+          section: vehicleSub,
+          stt: '',
+          item: '',
+          standard: ''
+        }
+      });
+      return;
+    }
+    setEditingTarget({
+      kind: 'ab',
+      index: null,
+      draft: {
+        section: vehicleSub === 'B' ? 'B' : 'A',
+        stt: '',
+        position: '',
+        guide: '',
+        standard: '',
+        tool: 'Mắt thường',
+        frequency: '100% xe xuất xưởng'
+      }
     });
-  }, [vehicleSub, q]);
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTarget) return;
+    if (editingTarget.kind === 'sample') {
+      const normalized: SampleEvalRow = {
+        ...editingTarget.draft,
+        groupTitle: SAMPLE_GROUP_TITLES[editingTarget.draft.groupId]
+      };
+      const next =
+        editingTarget.index === null
+          ? [...sampleRows, normalized]
+          : sampleRows.map((r, i) => (i === editingTarget.index ? normalized : r));
+      persistStandards(next, vehicleABRows, vehicleCDRows);
+    } else if (editingTarget.kind === 'ab') {
+      const next =
+        editingTarget.index === null
+          ? [...vehicleABRows, editingTarget.draft]
+          : vehicleABRows.map((r, i) => (i === editingTarget.index ? editingTarget.draft : r));
+      persistStandards(sampleRows, next, vehicleCDRows);
+    } else {
+      const next =
+        editingTarget.index === null
+          ? [...vehicleCDRows, editingTarget.draft]
+          : vehicleCDRows.map((r, i) => (i === editingTarget.index ? editingTarget.draft : r));
+      persistStandards(sampleRows, vehicleABRows, next);
+    }
+    setEditingTarget(null);
+  };
+
+  const handleDeleteTarget = () => {
+    if (!editingTarget || editingTarget.index === null) return;
+    if (!window.confirm('Xóa dòng tiêu chuẩn này?')) return;
+    if (editingTarget.kind === 'sample') {
+      persistStandards(
+        sampleRows.filter((_, i) => i !== editingTarget.index),
+        vehicleABRows,
+        vehicleCDRows
+      );
+    } else if (editingTarget.kind === 'ab') {
+      persistStandards(
+        sampleRows,
+        vehicleABRows.filter((_, i) => i !== editingTarget.index),
+        vehicleCDRows
+      );
+    } else {
+      persistStandards(
+        sampleRows,
+        vehicleABRows,
+        vehicleCDRows.filter((_, i) => i !== editingTarget.index)
+      );
+    }
+    setEditingTarget(null);
+  };
 
   const handleSavePartsLink = (e: React.FormEvent) => {
     e.preventDefault();
@@ -999,14 +1176,35 @@ export default function QmsStandardsTab() {
             )}
 
             {section !== 'parts_link' && (
-              <button
-                type="button"
-                onClick={handlePrint}
-                className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-              >
-                <Printer className="w-4 h-4" />
-                <span>In biểu mẫu A4</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={openAddModal}
+                  className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Thêm dòng</span>
+                </button>
+                {hasCustomEdits && (
+                  <button
+                    type="button"
+                    onClick={handleResetDefault}
+                    className="px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                    title="Khôi phục nội dung mặc định"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Mặc định</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handlePrint}
+                  className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>In A4</span>
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -1023,7 +1221,7 @@ export default function QmsStandardsTab() {
             }`}
           >
             <Link2 className="w-3.5 h-3.5" />
-            <span>1. Tiêu chuẩn linh kiện (Link riêng)</span>
+            <span>1. Linh kiện</span>
           </button>
 
           <button
@@ -1036,7 +1234,7 @@ export default function QmsStandardsTab() {
             }`}
           >
             <ClipboardCheck className="w-3.5 h-3.5" />
-            <span>2. Tiêu chuẩn / Danh mục đánh giá mẫu</span>
+            <span>2. Đánh giá mẫu</span>
           </button>
 
           <button
@@ -1049,7 +1247,7 @@ export default function QmsStandardsTab() {
             }`}
           >
             <Car className="w-3.5 h-3.5" />
-            <span>3. Tiêu chuẩn / Hướng dẫn kiểm tra xe DK (4 hạng mục)</span>
+            <span>3. Kiểm tra xe DK (A–D)</span>
           </button>
         </div>
       </div>
@@ -1173,21 +1371,22 @@ export default function QmsStandardsTab() {
                   <th className="border border-slate-400 px-2.5 py-2 w-32 text-center">Phương pháp</th>
                   <th className="border border-slate-400 px-2 py-2 w-20 text-center">Kết quả</th>
                   <th className="border border-slate-400 px-2.5 py-2 w-36 text-left">Đánh giá / Vấn đề</th>
+                  <th className="border border-slate-400 px-2 py-2 w-14 text-center">Sửa</th>
                 </tr>
               </thead>
               <tbody>
                 {(['I', 'II', 'III', 'IV'] as const).map((grp) => {
-                  const rows = filteredSampleRows.filter((r) => r.groupId === grp);
+                  const rows = indexedSampleRows.filter((item) => item.row.groupId === grp);
                   if (rows.length === 0) return null;
                   return (
                     <React.Fragment key={grp}>
                       <tr className="bg-indigo-50 text-indigo-950 font-extrabold">
-                        <td colSpan={8} className="border border-slate-400 px-3 py-2 text-xs uppercase">
-                          {rows[0].groupTitle}
+                        <td colSpan={9} className="border border-slate-400 px-3 py-2 text-xs uppercase">
+                          {rows[0].row.groupTitle}
                         </td>
                       </tr>
-                      {rows.map((r, idx) => (
-                        <tr key={`${grp}-${r.sttPoint}-${idx}`} className={idx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}>
+                      {rows.map(({ row: r, idx: origIdx }, idx) => (
+                        <tr key={`${grp}-${r.sttPoint}-${origIdx}`} className={idx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}>
                           <td className="border border-slate-400 px-2 py-2 text-center font-bold text-slate-700 align-top">
                             {r.sttPoint || r.sttGroup}
                           </td>
@@ -1208,6 +1407,16 @@ export default function QmsStandardsTab() {
                           </td>
                           <td className="border border-slate-400 px-2 py-2" />
                           <td className="border border-slate-400 px-2.5 py-2" />
+                          <td className="border border-slate-400 px-1.5 py-1.5 text-center align-top">
+                            <button
+                              type="button"
+                              onClick={() => setEditingTarget({ kind: 'sample', index: origIdx, draft: { ...r } })}
+                              className="p-1.5 rounded-md hover:bg-indigo-50 text-slate-500 hover:text-indigo-700 transition cursor-pointer"
+                              title="Chỉnh sửa dòng tiêu chuẩn này"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </React.Fragment>
@@ -1215,7 +1424,7 @@ export default function QmsStandardsTab() {
                 })}
                 {filteredSampleRows.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="border border-slate-400 p-6 text-center text-slate-500">
+                    <td colSpan={9} className="border border-slate-400 p-6 text-center text-slate-500">
                       Không tìm thấy hạng mục nào khớp với từ khóa "{searchQuery}".
                     </td>
                   </tr>
@@ -1306,7 +1515,7 @@ export default function QmsStandardsTab() {
 
             {/* A & B */}
             {(['A', 'B'] as const).map((sec) => {
-              const rows = filteredABRows.filter((r) => r.section === sec);
+              const rows = indexedABRows.filter((item) => item.row.section === sec);
               if (rows.length === 0) return null;
               const title =
                 sec === 'A'
@@ -1329,11 +1538,12 @@ export default function QmsStandardsTab() {
                           <th className="border border-slate-400 px-2.5 py-2 w-36 text-center">Tần suất KT</th>
                           <th className="border border-slate-400 px-2 py-2 w-20 text-center">Kết quả KT</th>
                           <th className="border border-slate-400 px-2 py-2 w-28 text-left">Ghi chú</th>
+                          <th className="border border-slate-400 px-2 py-2 w-14 text-center">Sửa</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {rows.map((r, idx) => (
-                          <tr key={`${sec}-${idx}`} className={idx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}>
+                        {rows.map(({ row: r, idx: origIdx }, idx) => (
+                          <tr key={`${sec}-${origIdx}`} className={idx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}>
                             <td className="border border-slate-400 px-2 py-2 text-center font-bold text-slate-800 align-top">
                               {r.stt}
                             </td>
@@ -1354,6 +1564,16 @@ export default function QmsStandardsTab() {
                             </td>
                             <td className="border border-slate-400 px-2 py-2" />
                             <td className="border border-slate-400 px-2 py-2" />
+                            <td className="border border-slate-400 px-1.5 py-1.5 text-center align-top">
+                              <button
+                                type="button"
+                                onClick={() => setEditingTarget({ kind: 'ab', index: origIdx, draft: { ...r } })}
+                                className="p-1.5 rounded-md hover:bg-indigo-50 text-slate-500 hover:text-indigo-700 transition cursor-pointer"
+                                title="Chỉnh sửa dòng tiêu chuẩn này"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1365,7 +1585,7 @@ export default function QmsStandardsTab() {
 
             {/* C & D */}
             {(['C', 'D'] as const).map((sec) => {
-              const rows = filteredCDRows.filter((r) => r.section === sec);
+              const rows = indexedCDRows.filter((item) => item.row.section === sec);
               if (rows.length === 0) return null;
               const title =
                 sec === 'C'
@@ -1385,11 +1605,12 @@ export default function QmsStandardsTab() {
                           <th className="border border-slate-400 px-3 py-2 text-left">Tiêu chuẩn</th>
                           <th className="border border-slate-400 px-2.5 py-2 w-32 text-center">Kết quả KT</th>
                           <th className="border border-slate-400 px-2.5 py-2 w-40 text-left">Ghi chú</th>
+                          <th className="border border-slate-400 px-2 py-2 w-14 text-center">Sửa</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {rows.map((r, idx) => (
-                          <tr key={`${sec}-${r.stt}-${idx}`} className={idx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}>
+                        {rows.map(({ row: r, idx: origIdx }, idx) => (
+                          <tr key={`${sec}-${r.stt}-${origIdx}`} className={idx % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}>
                             <td className="border border-slate-400 px-2 py-2 text-center font-bold text-slate-800 align-top">
                               {r.stt}
                             </td>
@@ -1401,6 +1622,16 @@ export default function QmsStandardsTab() {
                             </td>
                             <td className="border border-slate-400 px-2.5 py-2" />
                             <td className="border border-slate-400 px-2.5 py-2" />
+                            <td className="border border-slate-400 px-1.5 py-1.5 text-center align-top">
+                              <button
+                                type="button"
+                                onClick={() => setEditingTarget({ kind: 'cd', index: origIdx, draft: { ...r } })}
+                                className="p-1.5 rounded-md hover:bg-indigo-50 text-slate-500 hover:text-indigo-700 transition cursor-pointer"
+                                title="Chỉnh sửa dòng tiêu chuẩn này"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1416,6 +1647,353 @@ export default function QmsStandardsTab() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Modal Chỉnh sửa / Thêm mới dòng tiêu chuẩn */}
+      {editingTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4">
+          <form
+            onSubmit={handleSaveEdit}
+            className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 sticky top-0 bg-white z-10">
+              <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                {editingTarget.index === null ? 'Thêm dòng tiêu chuẩn mới' : 'Chỉnh sửa tiêu chuẩn'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingTarget(null)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3 text-xs">
+              {editingTarget.kind === 'sample' && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Nhóm</label>
+                      <select
+                        value={editingTarget.draft.groupId}
+                        onChange={(e) => {
+                          const g = e.target.value as 'I' | 'II' | 'III' | 'IV';
+                          setEditingTarget({
+                            ...editingTarget,
+                            draft: { ...editingTarget.draft, groupId: g, groupTitle: SAMPLE_GROUP_TITLES[g] }
+                          });
+                        }}
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
+                      >
+                        {(['I', 'II', 'III', 'IV'] as const).map((g) => (
+                          <option key={g} value={g}>{SAMPLE_GROUP_TITLES[g]}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">STT</label>
+                      <input
+                        type="text"
+                        value={editingTarget.draft.sttPoint}
+                        onChange={(e) =>
+                          setEditingTarget({
+                            ...editingTarget,
+                            draft: { ...editingTarget.draft, sttPoint: e.target.value }
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Phương pháp</label>
+                      <input
+                        type="text"
+                        value={editingTarget.draft.method}
+                        onChange={(e) =>
+                          setEditingTarget({
+                            ...editingTarget,
+                            draft: { ...editingTarget.draft, method: e.target.value }
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Hạng mục</label>
+                      <input
+                        type="text"
+                        required
+                        value={editingTarget.draft.item}
+                        onChange={(e) =>
+                          setEditingTarget({
+                            ...editingTarget,
+                            draft: { ...editingTarget.draft, item: e.target.value }
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Điểm KT</label>
+                      <input
+                        type="text"
+                        value={editingTarget.draft.checkPoint}
+                        onChange={(e) =>
+                          setEditingTarget({
+                            ...editingTarget,
+                            draft: { ...editingTarget.draft, checkPoint: e.target.value }
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Diễn giải</label>
+                    <textarea
+                      rows={3}
+                      value={editingTarget.draft.description}
+                      onChange={(e) =>
+                        setEditingTarget({
+                          ...editingTarget,
+                          draft: { ...editingTarget.draft, description: e.target.value }
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Tiêu chuẩn chấp nhận</label>
+                    <textarea
+                      rows={4}
+                      required
+                      value={editingTarget.draft.standard}
+                      onChange={(e) =>
+                        setEditingTarget({
+                          ...editingTarget,
+                          draft: { ...editingTarget.draft, standard: e.target.value }
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    />
+                  </div>
+                </>
+              )}
+
+              {editingTarget.kind === 'ab' && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Hạng mục</label>
+                      <select
+                        value={editingTarget.draft.section}
+                        onChange={(e) =>
+                          setEditingTarget({
+                            ...editingTarget,
+                            draft: { ...editingTarget.draft, section: e.target.value as 'A' | 'B' }
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
+                      >
+                        <option value="A">A. Kiểm tra ngoại quan</option>
+                        <option value="B">B. Điện, dừng, rẽ, lái</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">STT</label>
+                      <input
+                        type="text"
+                        value={editingTarget.draft.stt}
+                        onChange={(e) =>
+                          setEditingTarget({
+                            ...editingTarget,
+                            draft: { ...editingTarget.draft, stt: e.target.value }
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Vị trí</label>
+                      <input
+                        type="text"
+                        required
+                        value={editingTarget.draft.position}
+                        onChange={(e) =>
+                          setEditingTarget({
+                            ...editingTarget,
+                            draft: { ...editingTarget.draft, position: e.target.value }
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Hạng mục, hướng dẫn kiểm tra</label>
+                    <textarea
+                      rows={3}
+                      value={editingTarget.draft.guide}
+                      onChange={(e) =>
+                        setEditingTarget({
+                          ...editingTarget,
+                          draft: { ...editingTarget.draft, guide: e.target.value }
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Tiêu chuẩn</label>
+                    <textarea
+                      rows={4}
+                      required
+                      value={editingTarget.draft.standard}
+                      onChange={(e) =>
+                        setEditingTarget({
+                          ...editingTarget,
+                          draft: { ...editingTarget.draft, standard: e.target.value }
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Phương tiện</label>
+                      <input
+                        type="text"
+                        value={editingTarget.draft.tool}
+                        onChange={(e) =>
+                          setEditingTarget({
+                            ...editingTarget,
+                            draft: { ...editingTarget.draft, tool: e.target.value }
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Tần suất KT</label>
+                      <input
+                        type="text"
+                        value={editingTarget.draft.frequency}
+                        onChange={(e) =>
+                          setEditingTarget({
+                            ...editingTarget,
+                            draft: { ...editingTarget.draft, frequency: e.target.value }
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {editingTarget.kind === 'cd' && (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Hạng mục</label>
+                      <select
+                        value={editingTarget.draft.section}
+                        onChange={(e) =>
+                          setEditingTarget({
+                            ...editingTarget,
+                            draft: { ...editingTarget.draft, section: e.target.value as 'C' | 'D' }
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
+                      >
+                        <option value="C">C. Thiết bị đăng kiểm</option>
+                        <option value="D">D. Đường chạy thử</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">STT</label>
+                      <input
+                        type="text"
+                        value={editingTarget.draft.stt}
+                        onChange={(e) =>
+                          setEditingTarget({
+                            ...editingTarget,
+                            draft: { ...editingTarget.draft, stt: e.target.value }
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Tên hạng mục</label>
+                      <input
+                        type="text"
+                        required
+                        value={editingTarget.draft.item}
+                        onChange={(e) =>
+                          setEditingTarget({
+                            ...editingTarget,
+                            draft: { ...editingTarget.draft, item: e.target.value }
+                          })
+                        }
+                        className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Tiêu chuẩn</label>
+                    <textarea
+                      rows={4}
+                      required
+                      value={editingTarget.draft.standard}
+                      onChange={(e) =>
+                        setEditingTarget({
+                          ...editingTarget,
+                          draft: { ...editingTarget.draft, standard: e.target.value }
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50">
+              <div>
+                {editingTarget.index !== null && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteTarget}
+                    className="px-3 py-2 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xóa dòng</span>
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingTarget(null)}
+                  className="px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Lưu thay đổi</span>
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
       )}
     </div>

@@ -21,7 +21,8 @@ import {
   Square,
   Sliders,
   Loader2,
-  X
+  X,
+  Bike
 } from 'lucide-react';
 import { QMS_FORM_TEMPLATES, QmsFormTemplate } from '../data/qmsFormsData';
 import { QMS_DOCUMENT_LIST, QmsDocumentItem } from '../data/qmsDocumentsData';
@@ -30,6 +31,7 @@ import { QmsBmSyncRecord } from '../types';
 import { renderAsync } from 'docx-preview';
 import Qms5sTab from './Qms5sTab';
 import QmsStandardsTab from './QmsStandardsTab';
+import QmsProductsTab from './QmsProductsTab';
 
 interface QmsFormsCenterProps {
   onBackToApp?: () => void;
@@ -144,7 +146,7 @@ export default function QmsFormsCenter({
   onDeleteBmRecord
 }: QmsFormsCenterProps) {
   // Tab chính: Biểu mẫu chuẩn (forms) HOẶC Kho Hồ sơ tài liệu P-QLCL (documents)
-  const [mainTab, setMainTab] = useState<'forms' | 'documents' | '5s' | 'standards'>('forms');
+  const [mainTab, setMainTab] = useState<'forms' | 'documents' | '5s' | 'standards' | 'products'>('forms');
 
   // Danh sách biểu mẫu (hỗ trợ tùy biến cấu trúc mẫu)
   const [customTemplatesMap, setCustomTemplatesMap] = useState<Record<string, QmsFormTemplate>>(() => {
@@ -1472,55 +1474,56 @@ export default function QmsFormsCenter({
         </div>
 
         {/* ==================== 2 TAB CHÍNH CỦA TRANG /BM ==================== */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-2 border-t border-slate-200 pt-1">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-wrap items-center gap-1.5 border-t border-slate-200 pt-1">
           <button
             type="button"
             onClick={() => setMainTab('forms')}
-            className={`px-4 py-2.5 text-xs sm:text-sm font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${mainTab === 'forms'
+            className={`px-3.5 py-2.5 text-xs sm:text-sm font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${mainTab === 'forms'
                 ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
                 : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
           >
             <FileSpreadsheet className="w-4 h-4" />
-            <span>Biểu Mẫu Nghiệp Vụ Chuẩn</span>
+            <span>Biểu mẫu</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-black ${mainTab === 'forms' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'}`}>
-              {allFormTemplates.length} BM
+              {allFormTemplates.length}
             </span>
           </button>
 
           <button
             type="button"
             onClick={() => setMainTab('documents')}
-            className={`px-4 py-2.5 text-xs sm:text-sm font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${mainTab === 'documents'
+            className={`px-3.5 py-2.5 text-xs sm:text-sm font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${mainTab === 'documents'
                 ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
                 : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
           >
             <FolderArchive className="w-4 h-4" />
-            <span>Hồ Sơ & Quy Trình Vận Hành P-QLCL</span>
+            <span>Hồ sơ & Quy trình</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-black ${mainTab === 'documents' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'}`}>
-              {allDocuments.length} tài liệu
+              {allDocuments.length}
             </span>
           </button>
 
           <button
             type="button"
             onClick={() => setMainTab('5s')}
-            className={`px-4 py-2.5 text-xs sm:text-sm font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${mainTab === '5s'
+            className={`px-3.5 py-2.5 text-xs sm:text-sm font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${mainTab === '5s'
                 ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
                 : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
           >
             <CheckSquare className="w-4 h-4" />
-            <span>5S Khu vực QLCL</span>
+            <span>5S QLCL</span>
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-black ${mainTab === '5s' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'}`}>
-              14 vị trí
+              14
             </span>
           </button>
+
           <button
             type="button"
             onClick={() => setMainTab('standards')}
-            className={`px-4 py-2.5 text-xs sm:text-sm font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${mainTab === 'standards'
+            className={`px-3.5 py-2.5 text-xs sm:text-sm font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${mainTab === 'standards'
                 ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
                 : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
@@ -1528,12 +1531,26 @@ export default function QmsFormsCenter({
             <FileText className="w-4 h-4" />
             <span>Tiêu chuẩn</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setMainTab('products')}
+            className={`px-3.5 py-2.5 text-xs sm:text-sm font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${mainTab === 'products'
+                ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+          >
+            <Bike className="w-4 h-4" />
+            <span>Sản phẩm</span>
+          </button>
         </div>
       </header>
 
       {/* ==================== NỘI DUNG CHÍNH ==================== */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 w-full flex-1 space-y-4">
-        {mainTab === 'standards' ? (
+        {mainTab === 'products' ? (
+          <QmsProductsTab />
+        ) : mainTab === 'standards' ? (
           <QmsStandardsTab />
         ) : mainTab === '5s' ? (
           <Qms5sTab />
