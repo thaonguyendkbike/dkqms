@@ -268,10 +268,28 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
       p.resolution || '--',
       p.findingNote || ''
     ]);
-    const qcRows: (string | number)[][] = [
-      ...qcTools.checkSheet.rows.map((r) => ['Phiếu kiểm tra', r.label, ...r.counts.map(String), r.total]),
-      ...qcTools.paretoDefects.map((p) => ['Pareto Lỗi', p.name, p.count, `${p.pct.toFixed(1)}%`, `${(p.cumPct ?? 0).toFixed(1)}%`])
-    ];
+    const checkSheetRows: (string | number)[][] = qcTools.checkSheet.rows.map((r, idx) => [
+      idx + 1,
+      r.label,
+      ...r.counts,
+      r.total
+    ]);
+    if (checkSheetRows.length > 0) {
+      checkSheetRows.push([
+        '',
+        'Tổng cộng',
+        ...qcTools.checkSheet.colTotals,
+        qcTools.checkSheet.grandTotal
+      ]);
+    }
+    const paretoRows: (string | number)[][] = qcTools.paretoDefects.map((p, idx) => [
+      idx + 1,
+      p.name,
+      p.count,
+      `${p.pct.toFixed(1)}%`,
+      `${(p.cumPct ?? 0).toFixed(1)}%`,
+      (p.cumPct ?? 0) <= 80 ? 'Trọng tâm (≤80%)' : 'Còn lại'
+    ]);
     XLSXStyle.utils.book_append_sheet(
       wb,
       buildMultiSectionSheet(
@@ -281,70 +299,70 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
         [
           { title: '1. PHẢN ÁNH THỊ TRƯỜNG', headers: ['Ngày', 'Đại lý', 'Dòng xe', 'Nhóm lỗi', 'Loại phản ánh', 'Mức độ', 'Trạng thái', 'Mô tả'], rows: marketRows },
           { title: '2. THẨM ĐỊNH LINH KIỆN LỖI (BM-KTTD-01)', headers: ['Ngày', 'Mã BB', 'Linh kiện', 'SL', 'Dòng xe', 'Đại lý', 'NCC', 'Hạn BH', 'Nguyên nhân gốc', 'Phương án XL', 'Hiện trạng'], rows: partRows },
-          { title: '3. CÔNG CỤ QC (CHECK SHEET & PARETO)', headers: ['Công cụ', 'Hạng mục', ...qcTools.checkSheet.columns, 'Tổng / Tích lũy'], rows: qcRows }
+          { title: '3. CÔNG CỤ QC - PHIẾU KIỂM TRA (CHECK SHEET)', headers: ['STT', 'Nhóm lỗi', ...qcTools.checkSheet.columns, 'Tổng cộng'], rows: checkSheetRows },
+          { title: '4. CÔNG CỤ QC - BIỂU ĐỒ PARETO LỖI (80/20)', headers: ['STT', 'Nhóm lỗi / Hạng mục', 'Số lượng', 'Tỷ trọng (%)', 'Tích lũy (%)', 'Phân loại 80/20'], rows: paretoRows }
         ],
-        [14, 18, 22, 12, 16, 18, 18, 16, 18, 16, 30]
+        [10, 26, 16, 14, 16, 18, 18, 16, 18, 16, 30]
       ),
       'Thi truong & LK'
     );
 
     // =========================================================
-    // SHEET 4: CAPA, ECO & CÔNG VIỆC (BAO GỒM TỒN ĐỌNG KỲ CŨ)
+    // SHEET 4: CAPA, ECO & CÔNG VIỆC
     // =========================================================
-    const capaEcoRows: (string | number)[][] = [
+    const capaEcoItems: (string | number)[][] = [
       ...capaEco.capasAll
         .filter((c) => (c.status !== 'Closed' && c.status !== 'Đã đóng') || capaEco.capasInPeriod.some((p) => p.id === c.id))
         .map((c) => [
           'CAPA',
-          c.CAPAID || c.id,
           c.title || c.issue || '--',
-          c.source || '--',
-          c.priority || '--',
-          c.status || '--',
           c.owner || c.assignee || '--',
-          formatDateStrVi(c.dueDate || c.targetDate)
+          formatDateStrVi(c.dueDate || c.targetDate),
+          c.status || '--',
+          c.CAPAID || c.id,
+          c.source || '--',
+          c.priority || '--'
         ]),
       ...capaEco.ecosInPeriod.map((e) => [
         'ECO',
-        e.ecrId || e.id,
         e.content || e.component || '--',
-        e.category || '--',
-        e.model || '--',
-        e.status || '--',
         e.proposer || '--',
-        formatDateStrVi(e.applyDate)
+        formatDateStrVi(e.applyDate),
+        e.status || '--',
+        e.ecrId || e.id,
+        e.category || '--',
+        e.model || '--'
       ])
     ];
-    const workRows: (string | number)[][] = work.dailyLogsInPeriod.map((w) => [
-      formatDateStrVi(w.date),
-      w.assignee || '--',
+    const capaEcoRows: (string | number)[][] = capaEcoItems.map((row, idx) => [idx + 1, ...row]);
+
+    const workRows: (string | number)[][] = work.dailyLogsInPeriod.map((w, idx) => [
+      idx + 1,
       w.category || '--',
+      w.content || '',
+      w.assignee || '--',
+      formatDateStrVi(w.date),
       w.statusPercent || '--',
       w.result || '--',
-      w.content || '',
       w.note || ''
     ]);
-    const backlogRows: (string | number)[][] = [
-      ...work.pendingDailyLogs.map((w) => [
-        `Việc tồn ${period.type === 'week' ? 'tuần trước' : 'tháng trước'}`,
-        w.id || String(w.stt),
-        w.content,
-        w.assignee || '--',
-        `${formatDateStrVi(w.date)} (${w.statusPercent || 'Chưa 100%'})`
-      ]),
-      ...capaEco.overdueCapas.map((c) => ['CAPA quá hạn', c.CAPAID || c.id, c.title || c.issue || '--', c.owner || c.assignee || '--', formatDateStrVi(c.dueDate || c.targetDate)]),
-      ...work.ptspOverdue.map((t) => ['PTSP trễ hạn', t.id, t.name, t.executor || '--', formatDateStrVi(t.endDate)]),
-      ...work.planningTasksOverdue.map((t) => ['Kế hoạch quá hạn', t.id, t.title, t.assignee || '--', t.deadline ? formatDateStrVi(t.deadline) : t.week || '--'])
-    ];
-    const planTaskRows: (string | number)[][] = work.planningTasksInPeriod.map((t) => [
-      t.section.toUpperCase(),
+
+    const sectionViMap: Record<string, string> = {
+      backlog: 'Tồn đọng',
+      capa: 'CAPA',
+      ptsp: 'PTSP',
+      coordination: 'Phối hợp',
+      eco: 'ECO'
+    };
+    const planTaskRows: (string | number)[][] = work.planningTasksInPeriod.map((t, idx) => [
+      idx + 1,
+      sectionViMap[t.section] || t.section.toUpperCase(),
       t.title,
       t.assignee || '--',
       t.deadline ? formatDateStrVi(t.deadline) : t.week || '--',
       t.priority,
       t.status === 'Completed' ? 'Hoàn thành' : t.status === 'In_Progress' ? 'Đang làm' : 'Chờ xử lý',
-      t.modelOrSupplier || '--',
-      t.notes || ''
+      [t.modelOrSupplier, t.notes].filter(Boolean).join(' • ') || '--'
     ]);
     XLSXStyle.utils.book_append_sheet(
       wb,
@@ -353,12 +371,23 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
         pLabel,
         rLabel,
         [
-          { title: '1. THEO DÕI CAPA & ECO', headers: ['Phân loại', 'Mã', 'Tiêu đề / Nội dung', 'Nguồn / Nhóm', 'Mức độ / Model', 'Trạng thái', 'Phụ trách / Đề xuất', 'Hạn / Áp dụng'], rows: capaEcoRows },
-          { title: '2. CÔNG VIỆC BÁO CÁO NGÀY TRONG KỲ', headers: ['Ngày', 'Nhân sự', 'Nhóm', 'Tiến độ', 'Kết quả', 'Nội dung công việc', 'Ghi chú'], rows: workRows },
-          { title: '3. CÔNG VIỆC TỒN ĐỌNG TỪ KỲ TRƯỚC & QUÁ HẠN', headers: ['Loại tồn đọng', 'Mã', 'Nội dung', 'Phụ trách', 'Ngày / Hạn'], rows: backlogRows },
-          { title: '4. TÁC VỤ TỪ LẬP KẾ HOẠCH CHẤT LƯỢNG TRONG KỲ', headers: ['Nhóm', 'Nội dung tác vụ', 'Phụ trách', 'Hạn / Tuần', 'Ưu tiên', 'Trạng thái', 'Model / NCC', 'Ghi chú'], rows: planTaskRows }
+          {
+            title: '1. THEO DÕI CAPA & ECO',
+            headers: ['STT', 'Nhóm', 'Công việc / Tác vụ', 'Người làm', 'Thời gian (Hạn / Áp dụng)', 'Trạng thái', 'Mã', 'Nguồn / Mức độ'],
+            rows: capaEcoRows
+          },
+          {
+            title: '2. CÔNG VIỆC BÁO CÁO NGÀY TRONG KỲ',
+            headers: ['STT', 'Nhóm', 'Công việc / Tác vụ', 'Người làm', 'Thời gian (Ngày)', 'Tiến độ', 'Kết quả', 'Ghi chú'],
+            rows: workRows
+          },
+          {
+            title: '3. TÁC VỤ TỪ LẬP KẾ HOẠCH CHẤT LƯỢNG TRONG KỲ',
+            headers: ['STT', 'Nhóm', 'Công việc / Tác vụ', 'Người làm', 'Thời gian (Hạn / Tuần)', 'Ưu tiên', 'Trạng thái', 'Model / NCC & Ghi chú'],
+            rows: planTaskRows
+          }
         ],
-        [22, 16, 38, 18, 18, 16, 22, 16]
+        [8, 18, 44, 20, 18, 14, 16, 26]
       ),
       'CAPA, ECO & Cong viec'
     );
