@@ -2572,21 +2572,30 @@ export default function QualityPlanning({
 
   // --- HÀM XUẤT TOÀN BỘ KẾ HOẠCH RA FILE EXCEL (XLSX STYLE) ---
   const handleExportPlanningExcel = () => {
-    const COLOR_ACCENT = "0F172A"; // Slate Accent
+    const COLOR_ACCENT = "1E3A8A"; // Navy DKBike Accent
     const COLOR_BG_LIGHT = "F8FAFC"; // Light Slate background
     const cellBordersNormal = {
-      top: { style: "thin", color: { rgb: "E2E8F0" } },
-      bottom: { style: "thin", color: { rgb: "E2E8F0" } },
-      left: { style: "thin", color: { rgb: "E2E8F0" } },
-      right: { style: "thin", color: { rgb: "E2E8F0" } }
+      top: { style: "thin", color: { rgb: "CBD5E1" } },
+      bottom: { style: "thin", color: { rgb: "CBD5E1" } },
+      left: { style: "thin", color: { rgb: "CBD5E1" } },
+      right: { style: "thin", color: { rgb: "CBD5E1" } }
     };
 
     const styleSheet = (ws: any, rowTracker: any[], columnsCount: number) => {
       const decodedRange = XLSXStyle.utils.decode_range(ws['!ref'] || `A1:K1`);
-      
+      let dataStripeIdx = 0;
+
       for (let r = decodedRange.s.r; r <= decodedRange.e.r; r++) {
         const rowInfo = rowTracker[r];
         const type = rowInfo?.type;
+        const isDataType =
+          type === 'table-data-model-plan' ||
+          type === 'table-data-supplier-plan' ||
+          type === 'table-data-plan-target' ||
+          type === 'table-data-log';
+        const isZebra = isDataType && dataStripeIdx % 2 === 1;
+        if (isDataType) dataStripeIdx++;
+        else if (type === 'table-header' || type === 'section-heading') dataStripeIdx = 0;
 
         for (let c = decodedRange.s.c; c < columnsCount; c++) {
           const cellRef = XLSXStyle.utils.encode_cell({ r, c });
@@ -2603,18 +2612,22 @@ export default function QualityPlanning({
 
           if (type === 'header-company') {
             cell.s = {
-              font: { name: "Arial", sz: 9.5, bold: true, color: { rgb: "334155" } },
-              alignment: { horizontal: c >= 4 ? "center" : "left", vertical: "center", wrapText: true }
+              fill: { fgColor: { rgb: COLOR_ACCENT } },
+              font: { name: "Arial", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+              alignment: { horizontal: c >= 4 ? "right" : "left", vertical: "center", wrapText: true }
             };
           } else if (type === 'header-slogan') {
             cell.s = {
-              font: { name: "Arial", sz: 9.5, bold: true, color: { rgb: "1E293B" } },
-              alignment: { horizontal: c >= 4 ? "center" : "left", vertical: "center", wrapText: true }
+              fill: { fgColor: { rgb: "EFF6FF" } },
+              font: { name: "Arial", sz: 9.5, italic: true, bold: true, color: { rgb: COLOR_ACCENT } },
+              border: { bottom: { style: "thin", color: { rgb: "93C5FD" } } },
+              alignment: { horizontal: c >= 4 ? "right" : "left", vertical: "center", wrapText: true }
             };
           } else if (type === 'header-meta') {
             cell.s = {
               font: { name: "Arial", sz: 8.5, italic: true, color: { rgb: "64748B" } },
-              alignment: { horizontal: c >= 4 ? "center" : "left", vertical: "center", wrapText: true }
+              border: { bottom: { style: "thin", color: { rgb: "CBD5E1" } } },
+              alignment: { horizontal: c >= 4 ? "right" : "left", vertical: "center", wrapText: true }
             };
           } else if (type === 'main-title') {
             cell.s = {
@@ -2628,17 +2641,34 @@ export default function QualityPlanning({
             };
           } else if (type === 'section-heading') {
             cell.s = {
-              fill: { fgColor: { rgb: rowInfo?.bgColor || COLOR_ACCENT } },
-              font: { name: "Arial", sz: 10.5, bold: true, color: { rgb: "FFFFFF" } },
+              fill: { fgColor: { rgb: "E0E7FF" } },
+              font: { name: "Arial", sz: 10.5, bold: true, color: { rgb: COLOR_ACCENT } },
               alignment: { horizontal: "left", vertical: "center", indent: 1, wrapText: true },
-              border: cellBordersNormal
+              border: {
+                top: { style: "thin", color: { rgb: "93C5FD" } },
+                bottom: { style: "thin", color: { rgb: "93C5FD" } },
+                left: { style: c === 0 ? "medium" : "thin", color: { rgb: c === 0 ? "1D4ED8" : "93C5FD" } },
+                right: { style: "thin", color: { rgb: "93C5FD" } }
+              }
             };
           } else if (type === 'table-header') {
             cell.s = {
-              fill: { fgColor: { rgb: "E2E8F0" } },
-              font: { name: "Arial", sz: 9.5, bold: true, color: { rgb: COLOR_ACCENT } },
+              fill: { fgColor: { rgb: "1E40AF" } },
+              font: { name: "Arial", sz: 9.5, bold: true, color: { rgb: "FFFFFF" } },
               alignment: { horizontal: "center", vertical: "center", wrapText: true },
               border: cellBordersNormal
+            };
+          } else if (type === 'total-row') {
+            cell.s = {
+              fill: { fgColor: { rgb: "E2E8F0" } },
+              font: { name: "Arial", sz: 10, bold: true, color: { rgb: "0F172A" } },
+              alignment: { horizontal: c === 0 || c === columnsCount - 1 ? "center" : "right", vertical: "center", wrapText: true },
+              border: {
+                top: { style: "medium", color: { rgb: "64748B" } },
+                bottom: { style: "medium", color: { rgb: "64748B" } },
+                left: { style: "thin", color: { rgb: "CBD5E1" } },
+                right: { style: "thin", color: { rgb: "CBD5E1" } }
+              }
             };
           } else if (type === 'table-header-group') {
             cell.s = {
@@ -2649,16 +2679,18 @@ export default function QualityPlanning({
             };
           } else if (type === 'table-data-model-plan') {
             cell.s = {
-              font: { name: "Arial", sz: 9.5 },
+              fill: isZebra ? { fgColor: { rgb: COLOR_BG_LIGHT } } : undefined,
+              font: { name: "Arial", sz: 9.5, color: { rgb: "0F172A" } },
               alignment: (c === 0 || c >= 2) ? { horizontal: "center", vertical: "center", wrapText: true } : { horizontal: "left", vertical: "center", wrapText: true },
               border: cellBordersNormal
             };
             if (c === 1) {
-              cell.s.font = { name: "Arial", sz: 9.5, bold: true };
+              cell.s.font = { name: "Arial", sz: 9.5, bold: true, color: { rgb: "0F172A" } };
             }
           } else if (type === 'table-data-supplier-plan') {
             cell.s = {
-              font: { name: "Arial", sz: 9.5 },
+              fill: isZebra ? { fgColor: { rgb: COLOR_BG_LIGHT } } : undefined,
+              font: { name: "Arial", sz: 9.5, color: { rgb: "0F172A" } },
               alignment: (c === 0 || c === 1 || c === columnsCount - 1) ? { horizontal: "center", vertical: "center", wrapText: true } : { horizontal: "left", vertical: "center", wrapText: true },
               border: cellBordersNormal
             };
@@ -2669,7 +2701,8 @@ export default function QualityPlanning({
             }
           } else if (type === 'table-data-plan-target') {
             cell.s = {
-              font: { name: "Arial", sz: 9.5 },
+              fill: isZebra ? { fgColor: { rgb: COLOR_BG_LIGHT } } : undefined,
+              font: { name: "Arial", sz: 9.5, color: { rgb: "0F172A" } },
               alignment: (c === 0 || c === 1 || c === 3 || c === 4 || c === 5 || c === 6) ? { horizontal: "center", vertical: "center", wrapText: true } : { horizontal: "left", vertical: "center", wrapText: true },
               border: cellBordersNormal
             };
@@ -2680,7 +2713,8 @@ export default function QualityPlanning({
             }
           } else if (type === 'table-data-log') {
             cell.s = {
-              font: { name: "Arial", sz: 9.5 },
+              fill: isZebra ? { fgColor: { rgb: COLOR_BG_LIGHT } } : undefined,
+              font: { name: "Arial", sz: 9.5, color: { rgb: "0F172A" } },
               alignment: (c === 0 || c === 1 || c === 3 || c === 4 || c === 5 || c === 6 || c === 7) ? { horizontal: "center", vertical: "center", wrapText: true } : { horizontal: "left", vertical: "center", wrapText: true },
               border: cellBordersNormal
             };
@@ -2713,6 +2747,7 @@ export default function QualityPlanning({
           }
         }
       }
+      ws['!pageSetup'] = { paperSize: 9, orientation: 'landscape', fitToWidth: 1, fitToHeight: 0 };
     };
 
     const setRowHeights = (ws: any, rowTracker: any[], aoaData: any[][], colWidths: { wch: number }[]) => {
@@ -2754,7 +2789,7 @@ export default function QualityPlanning({
     const today = new Date();
     const dateStrLoc = `Lạng Sơn, ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1).toString().padStart(2, '0')} năm ${today.getFullYear()}`;
     const curPeriodLabel = planningMode === 'weekly' 
-      ? `TUÂN ${selectedWeek} - THÁNG ${selectedMonth}/${selectedYear}`
+      ? `TUẦN ${selectedWeek} - THÁNG ${selectedMonth}/${selectedYear}`
       : `THÁNG ${selectedMonth}/${selectedYear}`;
 
     // Tính toán số lượt hàng về trên toàn bộ nhà cung cấp
@@ -2789,7 +2824,7 @@ export default function QualityPlanning({
     addMerge1(0, 0, 0, 3);
     addMerge1(0, totalCols1 - 3, 0, totalCols1 - 1);
 
-    aoaData1.push(["Phân hệ: Lập kế hoạch chất lượng Tổng thể", "", "", "", ...new Array(Math.max(0, totalCols1 - 4)).fill(""), "Tiêu chuẩn ISO 9001:2015"]);
+    aoaData1.push(["DKBike — Xe cho cả gia đình | Phòng Quản lý chất lượng (QLCL / DK QMS)", "", "", "", ...new Array(Math.max(0, totalCols1 - 4)).fill(""), "Tiêu chuẩn ISO 9001:2015"]);
     rowTracker1.push({ type: 'header-slogan' });
     addMerge1(1, 0, 1, 3);
     addMerge1(1, totalCols1 - 3, 1, totalCols1 - 1);
@@ -2846,7 +2881,7 @@ export default function QualityPlanning({
     const assemblyModels = Object.keys(assemblyDataset);
 
     if (assemblyModels.length === 0) {
-      aoaData1.push(["-", "Chưa điền danh sách model và số lượng sụt sạt xe nào cho kỳ này.", ...new Array(totalCols1 - 2).fill("")]);
+      aoaData1.push(["-", "Chưa điền danh sách model và số lượng lắp ráp cho kỳ này.", ...new Array(totalCols1 - 2).fill("")]);
       rowTracker1.push({ type: 'table-data-empty' });
       addMerge1(aoaData1.length - 1, 1, aoaData1.length - 1, totalCols1 - 1);
     } else {
@@ -2869,7 +2904,7 @@ export default function QualityPlanning({
 
     // Grand total row
     aoaData1.push(["", "TỔNG SẢN LƯỢNG LẮP RÁP TOÀN BAN", ...new Array(timelineKeys.length).fill(""), grandTotalProduction]);
-    rowTracker1.push({ type: 'table-data-model-plan' });
+    rowTracker1.push({ type: 'total-row' });
     addMerge1(aoaData1.length - 1, 1, aoaData1.length - 1, timelineKeys.length + 1);
 
     // Spacer
@@ -2915,7 +2950,7 @@ export default function QualityPlanning({
     addMerge1(aoaData1.length - 1, Math.floor(totalCols1/2), aoaData1.length - 1, totalCols1 - 3);
     addMerge1(aoaData1.length - 1, totalCols1 - 2, aoaData1.length - 1, totalCols1 - 1);
 
-    aoaData1.push(["(Bản điện tử phê chuẩn)", ...new Array(Math.floor(totalCols1/2)-1).fill(""), "(Đã duyệt ký trực tuyến)", ...new Array(Math.ceil(totalCols1/2)-1).fill(""), "(Hồ sơ lưu trữ tự động)"]);
+    aoaData1.push(["(Ký và ghi rõ họ tên)", ...new Array(Math.floor(totalCols1/2)-1).fill(""), "(Ký và ghi rõ họ tên)", ...new Array(Math.ceil(totalCols1/2)-1).fill(""), "(Phê duyệt / Chỉ đạo)"]);
     rowTracker1.push({ type: 'signature-sub' });
     addMerge1(aoaData1.length - 1, 0, aoaData1.length - 1, Math.floor(totalCols1/2)-1);
     addMerge1(aoaData1.length - 1, Math.floor(totalCols1/2), aoaData1.length - 1, totalCols1 - 3);
@@ -3589,7 +3624,7 @@ export default function QualityPlanning({
     addMerge3(aoaData3.length - 1, 2, aoaData3.length - 1, 4);
     addMerge3(aoaData3.length - 1, 5, aoaData3.length - 1, 7);
 
-    aoaData3.push(["(Bản điện tử phê chuẩn)", "", "(Đã duyệt ký trực tuyến)", "", "", "(Hồ sơ lưu trữ tự động)", "", ""]);
+    aoaData3.push(["(Ký và ghi rõ họ tên)", "", "(Ký và ghi rõ họ tên)", "", "", "(Phê duyệt / Chỉ đạo)", "", ""]);
     rowTracker3.push({ type: 'signature-sub' });
     addMerge3(aoaData3.length - 1, 0, aoaData3.length - 1, 1);
     addMerge3(aoaData3.length - 1, 2, aoaData3.length - 1, 4);
