@@ -184,12 +184,12 @@ const STANDARD_ROWS: StandardRow[] = [
 ];
 
 const SCHEDULE_STAFF = [
-  { stt: 1, name: 'Thao', offset: 0 },
-  { stt: 2, name: 'Diệm', offset: 1 },
-  { stt: 3, name: 'Việt', offset: 2 },
-  { stt: 4, name: 'Quảng', offset: 3 },
-  { stt: 5, name: 'Phấn', offset: 4 },
-  { stt: 6, name: 'Hùng', offset: 5 }
+  { stt: 1, name: 'Thao', weekday: 1 },
+  { stt: 2, name: 'Diệm', weekday: 2 },
+  { stt: 3, name: 'Việt', weekday: 3 },
+  { stt: 4, name: 'Quảng', weekday: 4 },
+  { stt: 5, name: 'Phấn', weekday: 5 },
+  { stt: 6, name: 'Hùng', weekday: 6 }
 ];
 
 interface ChecksheetRow {
@@ -241,11 +241,14 @@ export default function Qms5sTab() {
     const y = Number(yStr) || 2026;
     const m = Number(mStr) || 11;
     const total = new Date(y, m, 0).getDate();
+    const dowNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
     const meta = Array.from({ length: total }, (_, idx) => {
       const day = idx + 1;
       const dow = new Date(y, m - 1, day).getDay(); // 0 = CN, 6 = T7
       return {
         day,
+        dow,
+        dowLabel: dowNames[dow],
         isSunday: dow === 0,
         isSaturday: dow === 6
       };
@@ -589,7 +592,8 @@ export default function Qms5sTab() {
                         d.isSunday ? 'bg-slate-200 text-slate-500' : ''
                       }`}
                     >
-                      {d.day}
+                      <div>{d.day}</div>
+                      <div className="text-[9px] font-semibold text-slate-500">{d.dowLabel}</div>
                     </th>
                   ))}
                 </tr>
@@ -604,7 +608,7 @@ export default function Qms5sTab() {
                       {person.name}
                     </td>
                     {dayMeta.map((d) => {
-                      const isScheduled = !d.isSunday && ((d.day - 1 - person.offset) % 7 === 0);
+                      const isScheduled = d.dow === person.weekday;
                       return (
                         <td
                           key={d.day}
@@ -650,7 +654,7 @@ export default function Qms5sTab() {
                 </tr>
               </thead>
               <tbody>
-                {Array.from({ length: 10 }, (_, idx) => (
+                {Array.from({ length: 12 }, (_, idx) => (
                   <tr key={idx}>
                     <td className="border border-slate-800 px-1.5 py-2 text-center font-bold">
                       {idx + 1}
@@ -835,7 +839,7 @@ function buildPrintableHtml(
   doc: 'standards' | 'schedule' | 'checksheet',
   month: number,
   year: number,
-  dayMeta: Array<{ day: number; isSunday: boolean; isSaturday: boolean }>
+  dayMeta: Array<{ day: number; dow: number; dowLabel: string; isSunday: boolean; isSaturday: boolean }>
 ): string {
   if (doc === 'standards') {
     const rows = STANDARD_ROWS.map((row) => {
@@ -864,13 +868,16 @@ function buildPrintableHtml(
 
   if (doc === 'schedule') {
     const dayHeaders = dayMeta
-      .map((d) => `<th class="${d.isSunday ? 'sunday-col' : ''}" style="width: 20px;">${d.day}</th>`)
+      .map(
+        (d) =>
+          `<th class="${d.isSunday ? 'sunday-col' : ''}" style="width: 20px;">${d.day}<br/><span style="font-size:7.5px;font-weight:400;color:#475569;">${d.dowLabel}</span></th>`
+      )
       .join('');
 
     const staffRows = SCHEDULE_STAFF.map((p) => {
       const cells = dayMeta
         .map((d) => {
-          const isScheduled = !d.isSunday && ((d.day - 1 - p.offset) % 7 === 0);
+          const isScheduled = d.dow === p.weekday;
           return `<td class="center ${d.isSunday ? 'sunday-col' : ''}"><strong>${isScheduled ? 'O' : ''}</strong></td>`;
         })
         .join('');
@@ -885,9 +892,9 @@ function buildPrintableHtml(
       .map((d) => `<td class="${d.isSunday ? 'sunday-col' : ''}" style="height: 20px;"></td>`)
       .join('');
 
-    const issueRows = Array.from({ length: 10 }, (_, idx) => `
+    const issueRows = Array.from({ length: 12 }, (_, idx) => `
       <tr>
-        <td class="center" style="height: 22px;"><strong>${idx + 1}</strong></td>
+        <td class="center" style="height: 20px;"><strong>${idx + 1}</strong></td>
         <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
       </tr>
     `).join('');
