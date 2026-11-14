@@ -26,10 +26,14 @@ import {
 import { QMS_FORM_TEMPLATES, QmsFormTemplate } from '../data/qmsFormsData';
 import { QMS_DOCUMENT_LIST, QmsDocumentItem } from '../data/qmsDocumentsData';
 import { safeStorage } from '../safeStorage';
+import { QmsBmSyncRecord } from '../types';
 import { renderAsync } from 'docx-preview';
 
 interface QmsFormsCenterProps {
   onBackToApp?: () => void;
+  bmRecords?: QmsBmSyncRecord[];
+  onSaveBmRecord?: (record: QmsBmSyncRecord) => boolean | void;
+  onDeleteBmRecord?: (id: string) => void;
 }
 
 // Storage keys
@@ -131,7 +135,12 @@ const buildEmptyFilledData = (form: QmsFormTemplate): FilledFormData => {
   };
 };
 
-export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
+export default function QmsFormsCenter({
+  onBackToApp,
+  bmRecords = [],
+  onSaveBmRecord,
+  onDeleteBmRecord
+}: QmsFormsCenterProps) {
   // Tab chính: Biểu mẫu chuẩn (forms) HOẶC Kho Hồ sơ tài liệu P-QLCL (documents)
   const [mainTab, setMainTab] = useState<'forms' | 'documents'>('forms');
 
@@ -145,6 +154,38 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     }
     return {};
   });
+
+  // Đồng bộ dữ liệu từ Cloud Firestore (bmRecords) vào state local khi có cập nhật từ máy khác
+  useEffect(() => {
+    if (!bmRecords || bmRecords.length === 0) return;
+
+    const nextTemplates: Record<string, QmsFormTemplate> = {};
+    const nextDocs: Record<string, QmsDocumentItem> = {};
+    bmRecords.forEach((rec) => {
+      if (rec.kind === 'template' && rec.payload) {
+        nextTemplates[rec.targetId] = rec.payload as QmsFormTemplate;
+      } else if (rec.kind === 'document' && rec.payload) {
+        nextDocs[rec.targetId] = rec.payload as QmsDocumentItem;
+      } else if (rec.kind === 'filled' && rec.payload) {
+        safeStorage.setItem(`${FILLED_FORMS_KEY_PREFIX}${rec.targetId}`, JSON.stringify(rec.payload));
+      }
+    });
+
+    if (Object.keys(nextTemplates).length > 0) {
+      setCustomTemplatesMap((prev) => {
+        const merged = { ...prev, ...nextTemplates };
+        safeStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(merged));
+        return merged;
+      });
+    }
+    if (Object.keys(nextDocs).length > 0) {
+      setCustomDocumentsMap((prev) => {
+        const merged = { ...prev, ...nextDocs };
+        safeStorage.setItem(CUSTOM_DOCS_KEY, JSON.stringify(merged));
+        return merged;
+      });
+    }
+  }, [bmRecords]);
 
   // Danh sách mẫu hoàn chỉnh đã gộp mẫu tùy biến
   const allFormTemplates = useMemo(() => {
@@ -289,6 +330,10 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     if (previewForm && previewForm.id === form.id) {
       return currentFilledData;
     }
+    const cloudRec = bmRecords.find((r) => r.kind === 'filled' && r.targetId === form.id);
+    if (cloudRec && cloudRec.payload) {
+      return cloudRec.payload as FilledFormData;
+    }
     try {
       const raw = safeStorage.getItem(`${FILLED_FORMS_KEY_PREFIX}${form.id}`);
       if (raw) {
@@ -305,9 +350,14 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     if (previewForm) {
       const savedKey = `${FILLED_FORMS_KEY_PREFIX}${previewForm.id}`;
       try {
+        const cloudRec = bmRecords.find((r) => r.kind === 'filled' && r.targetId === previewForm.id);
         const raw = safeStorage.getItem(savedKey);
-        if (raw) {
-          const parsed = JSON.parse(raw) as FilledFormData;
+        const parsed: FilledFormData | null = cloudRec?.payload
+          ? (cloudRec.payload as FilledFormData)
+          : raw
+            ? (JSON.parse(raw) as FilledFormData)
+            : null;
+        if (parsed) {
           // Làm sạch các ô cũ chỉ toàn dấu chấm để người dùng gõ luôn không phải xóa
           const cleanedCells: Record<string, string> = {};
           Object.entries(parsed.tableCells || {}).forEach(([k, v]) => {
@@ -331,14 +381,21 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
 
       setCurrentFilledData(buildEmptyFilledData(previewForm));
     }
-  }, [previewForm]);
+  }, [previewForm, bmRecords]);
 
   // Lưu dữ liệu người dùng đã điền vào biểu mẫu
   const handleSaveFilledData = () => {
     if (!previewForm) return;
     const savedKey = `${FILLED_FORMS_KEY_PREFIX}${previewForm.id}`;
     safeStorage.setItem(savedKey, JSON.stringify(currentFilledData));
-    setSaveSuccessMsg('Đã lưu nội dung điền vào hệ thống!');
+    onSaveBmRecord?.({
+      id: `fill:${previewForm.id}`,
+      kind: 'filled',
+      targetId: previewForm.id,
+      payload: currentFilledData,
+      updatedAt: new Date().toISOString()
+    });
+    setSaveSuccessMsg('Đã lưu & đồng bộ nội dung điền lên Cloud!');
     setTimeout(() => setSaveSuccessMsg(null), 2500);
   };
 
@@ -350,6 +407,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       setCurrentFilledData(emptyData);
       const savedKey = `${FILLED_FORMS_KEY_PREFIX}${previewForm.id}`;
       safeStorage.removeItem(savedKey);
+      onDeleteBmRecord?.(`fill:${previewForm.id}`);
       setSaveSuccessMsg('Đã đưa phiếu về mẫu trắng ban đầu.');
       setTimeout(() => setSaveSuccessMsg(null), 2500);
     }
@@ -360,11 +418,18 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     const newMap = { ...customDocumentsMap, [updated.id]: updated };
     setCustomDocumentsMap(newMap);
     safeStorage.setItem(CUSTOM_DOCS_KEY, JSON.stringify(newMap));
+    onSaveBmRecord?.({
+      id: `doc:${updated.id}`,
+      kind: 'document',
+      targetId: updated.id,
+      payload: updated,
+      updatedAt: new Date().toISOString()
+    });
     setEditingDoc(null);
     if (previewDoc && previewDoc.id === updated.id) {
       setPreviewDoc(updated);
     }
-    setSaveSuccessMsg(`Đã lưu chỉnh sửa hồ sơ ${updated.code || updated.title}!`);
+    setSaveSuccessMsg(`Đã lưu & đồng bộ hồ sơ ${updated.code || updated.title}!`);
     setTimeout(() => setSaveSuccessMsg(null), 3000);
   };
 
@@ -375,6 +440,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       delete newMap[docId];
       setCustomDocumentsMap(newMap);
       safeStorage.setItem(CUSTOM_DOCS_KEY, JSON.stringify(newMap));
+      onDeleteBmRecord?.(`doc:${docId}`);
       setEditingDoc(null);
       const original = QMS_DOCUMENT_LIST.find(d => d.id === docId);
       if (original && previewDoc && previewDoc.id === docId) {
@@ -406,11 +472,18 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
     const newMap = { ...customTemplatesMap, [updated.id]: updated };
     setCustomTemplatesMap(newMap);
     safeStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(newMap));
+    onSaveBmRecord?.({
+      id: `tpl:${updated.id}`,
+      kind: 'template',
+      targetId: updated.id,
+      payload: updated,
+      updatedAt: new Date().toISOString()
+    });
     setEditingTemplate(null);
     if (previewForm && previewForm.id === updated.id) {
       setPreviewForm(updated);
     }
-    setSaveSuccessMsg(`Đã cập nhật cấu trúc mẫu ${updated.code}!`);
+    setSaveSuccessMsg(`Đã cập nhật & đồng bộ cấu trúc mẫu ${updated.code}!`);
     setTimeout(() => setSaveSuccessMsg(null), 3000);
   };
 
@@ -421,6 +494,7 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
       delete newMap[formId];
       setCustomTemplatesMap(newMap);
       safeStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(newMap));
+      onDeleteBmRecord?.(`tpl:${formId}`);
       setEditingTemplate(null);
       const original = QMS_FORM_TEMPLATES.find(f => f.id === formId);
       if (original && previewForm && previewForm.id === formId) {

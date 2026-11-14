@@ -93,7 +93,7 @@ import {
   INITIAL_EQUIPMENT_INCIDENTS,
   INITIAL_DEALERS
 } from './initialData';
-import { Task, KPI, Supplier, CAPA, PTSPProject, PTSPTask, MarketDefect, ECOChange, COPQMetric, CustomForm, QualityStaff, DKBikeModel, PlanTarget, WeeklyPlan, MonthlyPlan, EquipmentItem, MaintenanceLog, EquipmentIncident, SupplierProductionAudit, Dealer, ImprovementAction, PartEvaluation, ReportNote } from './types';
+import { Task, KPI, Supplier, CAPA, PTSPProject, PTSPTask, MarketDefect, ECOChange, COPQMetric, CustomForm, QualityStaff, DKBikeModel, PlanTarget, WeeklyPlan, MonthlyPlan, EquipmentItem, MaintenanceLog, EquipmentIncident, SupplierProductionAudit, Dealer, ImprovementAction, PartEvaluation, ReportNote, QmsBmSyncRecord } from './types';
 import { DAILY_LOG_DATA, DailyLogRecord } from './dailyLogsData';
 import { INITIAL_PTSP_TASKS } from './ptspTasksData';
 import {
@@ -1972,6 +1972,7 @@ export function App() {
     'dk_defects',
     'dk_part_evaluations',
     'dk_report_notes',
+    'dk_qms_bm_records',
     'dk_fmea',
     'dk_improvement_actions',
     'dk_qms_quality_planning_tasks'
@@ -2416,6 +2417,7 @@ export function App() {
       dk_defects: 'Danh mục lỗi chất lượng',
       dk_part_evaluations: 'Đánh giá linh kiện lỗi (BM-KTTD-01)',
       dk_report_notes: 'Nhận xét báo cáo Tuần / Tháng',
+      dk_qms_bm_records: 'Biểu mẫu & Hồ sơ QMS (/bm)',
       dk_fmea: 'Phân tích FMEA',
       dk_improvement_actions: 'Hành động cải tiến chất lượng',
       dk_kpis: 'Chỉ số chất lượng KPIs',
@@ -2521,6 +2523,7 @@ export function App() {
         else if (key === 'dk_defects') setDefects(serverRecords);
         else if (key === 'dk_part_evaluations') setPartEvaluations(serverRecords);
         else if (key === 'dk_report_notes') setReportNotes(serverRecords);
+        else if (key === 'dk_qms_bm_records') setQmsBmRecords(serverRecords);
         else if (key === 'dk_fmea') setFmea(serverRecords);
         else if (key === 'dk_improvement_actions') setImprovementActions(serverRecords);
         else if (key === 'dk_kpis') setKpis(serverRecords);
@@ -2613,6 +2616,7 @@ export function App() {
         else if (key === 'dk_defects') setDefects(mergedList);
         else if (key === 'dk_part_evaluations') setPartEvaluations(mergedList);
         else if (key === 'dk_report_notes') setReportNotes(mergedList);
+        else if (key === 'dk_qms_bm_records') setQmsBmRecords(mergedList);
         else if (key === 'dk_fmea') setFmea(mergedList);
         else if (key === 'dk_improvement_actions') setImprovementActions(mergedList);
         else if (key === 'dk_kpis') setKpis(mergedList);
@@ -3196,6 +3200,7 @@ export function App() {
       'dk_defects': 'Sự cố lỗi thị trường (Market Defects)',
       'dk_part_evaluations': 'Tổng hợp đánh giá linh kiện lỗi (BM-KTTD-01)',
       'dk_report_notes': 'Nhận xét báo cáo Tuần / Tháng',
+      'dk_qms_bm_records': 'Biểu mẫu & Hồ sơ QMS (/bm)',
       'dk_improvement_actions': 'Hành động cải tiến ECO (Improvement Actions)',
       'dk_fmea': 'Phân tích FMEA',
       'dk_capas': 'Hồ sơ khắc phục CAPA',
@@ -3282,6 +3287,10 @@ export function App() {
           displayTitle = `Nhận xét BC [${item.id || itemId}] (${item.author || 'QLCL'})`;
           details = item.summary || '';
           date = item.updatedAt || item.createdAt || '';
+        } else if (key === 'dk_qms_bm_records') {
+          displayTitle = `Hồ sơ/BM [${item.targetId || itemId}] (${item.kind || 'bm'})`;
+          details = item.payload?.title || item.payload?.code || 'Nội dung biểu mẫu QMS';
+          date = item.updatedAt || '';
         } else {
           displayTitle = `${item.title || item.name || item.TaskDescription || item.TaskName || 'Bản ghi'} [${itemId}]`;
           details = item.description || item.NextAction || item.explanation || item.note || '';
@@ -3415,7 +3424,7 @@ export function App() {
           'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
           'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
           'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_part_evaluations', 'dk_report_notes'
+          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records'
         ];
         defaultKeys.forEach(dk => {
           if (!localKeys.includes(dk)) localKeys.push(dk);
@@ -3707,7 +3716,7 @@ export function App() {
         'dk_tasks', 'dk_weekly_plans', 'dk_monthly_plans', 'dk_ptsp_tasks',
         'dk_capas', 'dk_ecos', 'dk_daily_logs', 'dk_iqc_records',
         'dk_pqc_records', 'dk_oqc_records', 'dk_staff', 'dk_dealers',
-        'dk_defects', 'dk_part_evaluations', 'dk_report_notes', 'dk_fmea', 'dk_improvement_actions', 'dk_oqc_handover_list',
+        'dk_defects', 'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records', 'dk_fmea', 'dk_improvement_actions', 'dk_oqc_handover_list',
         'dk_oqc_color_changes'
       ];
       localKeys.forEach(k => {
@@ -3740,6 +3749,7 @@ export function App() {
             else if (k === 'dk_defects') setDefects(sanitizedParsed);
             else if (k === 'dk_part_evaluations') setPartEvaluations(sanitizedParsed);
             else if (k === 'dk_report_notes') setReportNotes(sanitizedParsed);
+            else if (k === 'dk_qms_bm_records') setQmsBmRecords(sanitizedParsed);
             else if (k === 'dk_fmea') setFmea(sanitizedParsed);
             else if (k === 'dk_improvement_actions') setImprovementActions(sanitizedParsed);
           } catch (e) { }
@@ -3839,7 +3849,7 @@ export function App() {
           'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
           'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
           'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions', 'dk_part_evaluations', 'dk_report_notes'
+          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions', 'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records'
         ];
 
         const rawDocMap: Record<string, any> = {};
@@ -3955,7 +3965,7 @@ export function App() {
         'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
         'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
         'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-        'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions', 'dk_part_evaluations', 'dk_report_notes'
+        'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions', 'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records'
       ];
 
       ALL_RECONCILE_KEYS.forEach((key) => {
@@ -4172,6 +4182,11 @@ export function App() {
       if (serverData.dk_report_notes !== undefined && Array.isArray(serverData.dk_report_notes) && !isReportNotesDirty) {
         setReportNotes(serverData.dk_report_notes);
         safeStorage.setItem('dk_report_notes', JSON.stringify(serverData.dk_report_notes));
+      }
+      const isQmsBmDirty = localStorage.getItem('dk_qms_bm_records_is_dirty') === 'true';
+      if (serverData.dk_qms_bm_records !== undefined && Array.isArray(serverData.dk_qms_bm_records) && !isQmsBmDirty) {
+        setQmsBmRecords(serverData.dk_qms_bm_records);
+        safeStorage.setItem('dk_qms_bm_records', JSON.stringify(serverData.dk_qms_bm_records));
       }
       if (serverData.dk_copqs !== undefined) setCopqs(serverData.dk_copqs);
       if (serverData.dk_fmea !== undefined) setFmea(serverData.dk_fmea);
@@ -4445,6 +4460,7 @@ export function App() {
           else if (key === 'dk_defects') setDefects(finalDisplayData);
           else if (key === 'dk_part_evaluations') setPartEvaluations(finalDisplayData);
           else if (key === 'dk_report_notes') setReportNotes(finalDisplayData);
+          else if (key === 'dk_qms_bm_records') setQmsBmRecords(finalDisplayData);
           else if (key === 'dk_fmea') setFmea(finalDisplayData);
           else if (key === 'dk_improvement_actions') setImprovementActions(finalDisplayData);
 
@@ -4490,6 +4506,7 @@ export function App() {
             else if (key === 'dk_defects') setDefects(sanitizedParsed);
             else if (key === 'dk_part_evaluations') setPartEvaluations(sanitizedParsed);
             else if (key === 'dk_report_notes') setReportNotes(sanitizedParsed);
+            else if (key === 'dk_qms_bm_records') setQmsBmRecords(sanitizedParsed);
             else if (key === 'dk_fmea') setFmea(sanitizedParsed);
             else if (key === 'dk_improvement_actions') setImprovementActions(sanitizedParsed);
           }
@@ -4904,6 +4921,74 @@ export function App() {
   const [defects, setDefects] = useState<MarketDefect[]>(() => getSavedState('dk_defects', INITIAL_DEFECTS));
   const [partEvaluations, setPartEvaluations] = useState<PartEvaluation[]>(() => getSavedState('dk_part_evaluations', []));
   const [reportNotes, setReportNotes] = useState<ReportNote[]>(() => getSavedState('dk_report_notes', []));
+  const [qmsBmRecords, setQmsBmRecords] = useState<QmsBmSyncRecord[]>(() => {
+    const existing = getSavedState<QmsBmSyncRecord[]>('dk_qms_bm_records', []);
+    if (existing.length > 0) return existing;
+    const migrated: QmsBmSyncRecord[] = [];
+    const nowIso = new Date().toISOString();
+    try {
+      const tplRaw = safeStorage.getItem('dk_qms_custom_form_templates');
+      if (tplRaw) {
+        const tplMap = JSON.parse(tplRaw) as Record<string, any>;
+        Object.entries(tplMap).forEach(([targetId, payload]) => {
+          migrated.push({ id: `tpl:${targetId}`, kind: 'template', targetId, payload, updatedAt: nowIso });
+        });
+      }
+      const docRaw = safeStorage.getItem('dk_qms_custom_documents');
+      if (docRaw) {
+        const docMap = JSON.parse(docRaw) as Record<string, any>;
+        Object.entries(docMap).forEach(([targetId, payload]) => {
+          migrated.push({ id: `doc:${targetId}`, kind: 'document', targetId, payload, updatedAt: nowIso });
+        });
+      }
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i);
+        if (k && k.startsWith('dk_qms_filled_form_')) {
+          const targetId = k.replace('dk_qms_filled_form_', '');
+          const raw = safeStorage.getItem(k);
+          if (raw) {
+            migrated.push({ id: `fill:${targetId}`, kind: 'filled', targetId, payload: JSON.parse(raw), updatedAt: nowIso });
+          }
+        }
+      }
+    } catch (e) { }
+    if (migrated.length > 0) {
+      safeStorage.setItem('dk_qms_bm_records', JSON.stringify(migrated));
+      safeStorage.setItem('dk_qms_bm_records_is_dirty', 'true');
+    }
+    return migrated;
+  });
+  const handleSaveQmsBmRecord = (rec: QmsBmSyncRecord): boolean => {
+    if (!isUserAuthorized()) {
+      safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
+      return false;
+    }
+    setQmsBmRecords(prev => {
+      const exists = prev.some(x => x.id === rec.id);
+      const updated = exists ? prev.map(x => x.id === rec.id ? rec : x) : [rec, ...prev];
+      safeStorage.setItem('dk_qms_bm_records', JSON.stringify(updated));
+      safeStorage.setItem('dk_qms_bm_records_is_dirty', 'true');
+      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_qms_bm_records');
+      syncToServer('dk_qms_bm_records', updated);
+      return updated;
+    });
+    return true;
+  };
+  const handleDeleteQmsBmRecord = (id: string) => {
+    if (!isUserAuthorized()) {
+      safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
+      return;
+    }
+    trackDeletedId('dk_qms_bm_records', id);
+    setQmsBmRecords(prev => {
+      const updated = prev.filter(x => x.id !== id);
+      safeStorage.setItem('dk_qms_bm_records', JSON.stringify(updated));
+      safeStorage.setItem('dk_qms_bm_records_is_dirty', 'true');
+      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_qms_bm_records');
+      syncToServer('dk_qms_bm_records', updated);
+      return updated;
+    });
+  };
   const handleSaveReportNote = (note: ReportNote): boolean => {
     if (!isUserAuthorized()) {
       safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
@@ -7991,6 +8076,12 @@ export function App() {
       syncToServer('dk_report_notes', reportNotes);
     }
   }, [reportNotes]);
+
+  useEffect(() => {
+    if (localStorage.getItem('dk_qms_bm_records_is_dirty') === 'true') {
+      syncToServer('dk_qms_bm_records', qmsBmRecords);
+    }
+  }, [qmsBmRecords]);
 
   useEffect(() => {
     if (localStorage.getItem('dk_ecos_is_dirty') === 'true') {
@@ -12937,6 +13028,9 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
     return (
       <div className="w-full h-full min-h-screen overflow-y-auto overflow-x-hidden bg-slate-50">
         <QmsFormsCenter
+          bmRecords={qmsBmRecords}
+          onSaveBmRecord={handleSaveQmsBmRecord}
+          onDeleteBmRecord={handleDeleteQmsBmRecord}
           onBackToApp={() => {
             if (typeof window !== 'undefined' && window.location.pathname.includes('/bm')) {
               window.history.pushState({}, '', '/');
