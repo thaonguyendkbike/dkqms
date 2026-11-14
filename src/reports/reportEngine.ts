@@ -138,10 +138,19 @@ export interface ReportAlert {
   targetTab?: string;
 }
 
+export interface MissingDateRecord {
+  source: 'Báo cáo ngày' | 'IQC' | 'PQC' | 'OQC' | 'Phản ánh thị trường';
+  targetTab: 'daily_logs' | 'quality_inspection_records' | 'defects';
+  code: string;
+  summary: string;
+  rawDate: string;
+}
+
 export interface ReportSnapshot {
   period: PeriodDescriptor;
   generatedAt: string;
   missingDateCount: number;
+  missingDateRecords: MissingDateRecord[];
   qIndex: {
     score: number;
     grade: 'Xuất sắc' | 'Đạt chuẩn' | 'Cần cải thiện' | 'Cảnh báo';
@@ -429,13 +438,35 @@ export function buildReportSnapshot(
   const { start, end, prev } = period;
   const now = new Date();
   let missingDateCount = 0;
+  const missingDateRecords: MissingDateRecord[] = [];
 
-  const filterDated = <T,>(items: T[], getDate: (x: T) => string | undefined | null, s: Date, e: Date, countMissing = false): T[] => {
+  const filterDated = <T,>(
+    items: T[],
+    getDate: (x: T) => string | undefined | null,
+    s: Date,
+    e: Date,
+    missingMeta?: {
+      source: MissingDateRecord['source'];
+      targetTab: MissingDateRecord['targetTab'];
+      getCode: (x: T) => string;
+      getSummary: (x: T) => string;
+    }
+  ): T[] => {
     const out: T[] = [];
     for (const item of items) {
-      const d = parseFlexibleDate(getDate(item));
+      const raw = getDate(item);
+      const d = parseFlexibleDate(raw);
       if (!d) {
-        if (countMissing) missingDateCount++;
+        if (missingMeta) {
+          missingDateCount++;
+          missingDateRecords.push({
+            source: missingMeta.source,
+            targetTab: missingMeta.targetTab,
+            code: missingMeta.getCode(item),
+            summary: missingMeta.getSummary(item),
+            rawDate: raw ? String(raw) : '(Trống)'
+          });
+        }
         continue;
       }
       if (isInRange(d, s, e)) out.push(item);
@@ -444,15 +475,40 @@ export function buildReportSnapshot(
   };
 
   // Current period slices
-  const curDaily = filterDated(input.dailyLogs, x => x.date, start, end, true);
-  const curIqc = filterDated(input.iqcRecords, x => x.date, start, end, true);
-  const curPqc = filterDated(input.pqcRecords, x => x.date, start, end, true);
-  const curOqc = filterDated(input.oqcRecords, x => x.date, start, end, true);
-  const curDefects = filterDated(input.defects, x => x.defectDate || x.sourceDate || x.saleDate, start, end, true);
-  const curPartEvals = filterDated(input.partEvaluations, x => x.receivedDate, start, end, false);
-  const curEcos = filterDated(input.ecos, x => x.applyDate, start, end, false);
-  const curImprovements = filterDated(input.improvementActions, x => x.applyDate || x.targetDate, start, end, false);
-  const curAudits = filterDated(input.supplierProductionAudits, x => x.requestDate, start, end, false);
+  const curDaily = filterDated(input.dailyLogs, x => x.date, start, end, {
+    source: 'Báo cáo ngày',
+    targetTab: 'daily_logs',
+    getCode: x => x.id || `STT-${x.stt}`,
+    getSummary: x => `${x.assignee || '--'}: ${x.content || ''}`
+  });
+  const curIqc = filterDated(input.iqcRecords, x => x.date, start, end, {
+    source: 'IQC',
+    targetTab: 'quality_inspection_records',
+    getCode: x => x.id || '--',
+    getSummary: x => `${x.supplierName || '--'} • ${x.itemSummary || x.content || '--'}`
+  });
+  const curPqc = filterDated(input.pqcRecords, x => x.date, start, end, {
+    source: 'PQC',
+    targetTab: 'quality_inspection_records',
+    getCode: x => x.id || '--',
+    getSummary: x => `${x.model || '--'} • ${x.findings || x.lsx || '--'}`
+  });
+  const curOqc = filterDated(input.oqcRecords, x => x.date, start, end, {
+    source: 'OQC',
+    targetTab: 'quality_inspection_records',
+    getCode: x => x.id || x.lsx || '--',
+    getSummary: x => `${x.model || '--'} (LSX: ${x.lsx || '--'})`
+  });
+  const curDefects = filterDated(input.defects, x => x.defectDate || x.sourceDate || x.saleDate, start, end, {
+    source: 'Phản ánh thị trường',
+    targetTab: 'defects',
+    getCode: x => x.id || '--',
+    getSummary: x => `${x.model || '--'} • ${x.description || x.type || '--'}`
+  });
+  const curPartEvals = filterDated(input.partEvaluations, x => x.receivedDate, start, end);
+  const curEcos = filterDated(input.ecos, x => x.applyDate, start, end);
+  const curImprovements = filterDated(input.improvementActions, x => x.applyDate || x.targetDate, start, end);
+  const curAudits = filterDated(input.supplierProductionAudits, x => x.requestDate, start, end);
 
   // Previous period slices
   const prevDaily = filterDated(input.dailyLogs, x => x.date, prev.start, prev.end);
@@ -692,7 +748,7 @@ export function buildReportSnapshot(
   });
   const closedCapas = input.capas.filter(c => getCapaStatus(c) === 'Đã đóng');
   const effectiveCapas = closedCapas.filter(c => (c.effectiveness || c.Effectiveness) === 'Hiệu quả');
-  const capasInPeriod = filterDated(input.capas, c => c.targetDate || c.dueDate || c.DueDate, start, end, false);
+  const capasInPeriod = filterDated(input.capas, c => c.targetDate || c.dueDate || c.DueDate, start, end);
   const capaOnTimeScore =
     openCapas.length + closedCapas.length > 0
       ? Math.round(((openCapas.length - overdueCapas.length + closedCapas.length) / (openCapas.length + closedCapas.length)) * 100)
@@ -1143,6 +1199,7 @@ export function buildReportSnapshot(
     period,
     generatedAt: now.toISOString(),
     missingDateCount,
+    missingDateRecords,
     qIndex: {
       score: qScore,
       grade: qGrade,

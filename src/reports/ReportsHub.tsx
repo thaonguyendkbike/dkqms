@@ -99,6 +99,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
   const [subTab, setSubTab] = useState<ReportSubTab>('overview');
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showMissingDateModal, setShowMissingDateModal] = useState(false);
 
   // Sync mode when user clicks top sidebar Weekly vs Monthly Reports
   useEffect(() => {
@@ -457,9 +458,14 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
             <span className="font-extrabold text-slate-900 text-sm">{period.label}</span>
             <span>({period.rangeLabel} — Chuẩn ISO 8601)</span>
             {snapshot.missingDateCount > 0 && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-300">
-                <AlertTriangle className="w-3 h-3" /> {snapshot.missingDateCount} bản ghi thiếu ngày
-              </span>
+              <button
+                type="button"
+                onClick={() => setShowMissingDateModal(true)}
+                title="Bấm để xem chi tiết các bản ghi thiếu ngày hoặc sai định dạng ngày"
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold border border-amber-300 transition cursor-pointer"
+              >
+                <AlertTriangle className="w-3 h-3" /> {snapshot.missingDateCount} bản ghi thiếu ngày (Xem chi tiết)
+              </button>
             )}
           </div>
 
@@ -1567,6 +1573,100 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal Chi tiết các bản ghi thiếu ngày */}
+      {showMissingDateModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-amber-50">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  Chi tiết {snapshot.missingDateCount} bản ghi thiếu ngày / sai định dạng ngày
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Các bản ghi dưới đây chưa có ngày hợp lệ nên chưa được tính vào báo cáo Tuần/Tháng.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMissingDateModal(false)}
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-amber-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-wrap gap-2">
+              {(
+                [
+                  { source: 'Báo cáo ngày', tab: 'daily_logs' },
+                  { source: 'IQC', tab: 'quality_inspection_records' },
+                  { source: 'PQC', tab: 'quality_inspection_records' },
+                  { source: 'OQC', tab: 'quality_inspection_records' },
+                  { source: 'Phản ánh thị trường', tab: 'defects' }
+                ] as const
+              ).map((g) => {
+                const cnt = snapshot.missingDateRecords.filter((r) => r.source === g.source).length;
+                if (cnt === 0) return null;
+                return (
+                  <div
+                    key={g.source}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-xs"
+                  >
+                    <span className="font-bold text-slate-800">{g.source}:</span>
+                    <span className="font-extrabold text-amber-700">{cnt} bản ghi</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMissingDateModal(false);
+                        onNavigateTab(g.tab);
+                      }}
+                      className="text-blue-700 font-bold hover:underline ml-1"
+                    >
+                      Mở phân hệ →
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
+                    <th className="p-2 text-center font-bold w-12">STT</th>
+                    <th className="p-2 text-left font-bold w-36">Phân hệ</th>
+                    <th className="p-2 text-left font-bold w-32">Mã / STT</th>
+                    <th className="p-2 text-left font-bold">Nội dung / Model / Lỗi</th>
+                    <th className="p-2 text-left font-bold w-32">Ngày đang lưu</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {snapshot.missingDateRecords.map((rec, idx) => (
+                    <tr key={`${rec.source}-${rec.code}-${idx}`} className="border-b border-slate-200 hover:bg-slate-50">
+                      <td className="p-2 text-center text-slate-500 font-semibold">{idx + 1}</td>
+                      <td className="p-2 font-bold text-slate-800">{rec.source}</td>
+                      <td className="p-2 font-mono text-slate-700">{rec.code}</td>
+                      <td className="p-2 text-slate-800">{rec.summary}</td>
+                      <td className="p-2 font-mono text-rose-700">{rec.rawDate}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowMissingDateModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}
