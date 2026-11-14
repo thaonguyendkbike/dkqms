@@ -26,6 +26,7 @@ import {
 import { QMS_FORM_TEMPLATES, QmsFormTemplate } from '../data/qmsFormsData';
 import { QMS_DOCUMENT_LIST, QmsDocumentItem } from '../data/qmsDocumentsData';
 import { safeStorage } from '../safeStorage';
+import { renderAsync } from 'docx-preview';
 
 interface QmsFormsCenterProps {
   onBackToApp?: () => void;
@@ -244,7 +245,6 @@ export default function QmsFormsCenter({ onBackToApp }: QmsFormsCenterProps) {
         }
 
         const blob = await res.blob();
-        const { renderAsync } = await import('docx-preview');
         if (cancelled || !docxContainerRef.current) return;
 
         docxContainerRef.current.innerHTML = '';
