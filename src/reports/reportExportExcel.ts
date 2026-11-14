@@ -8,12 +8,28 @@ const BRAND_SUB = 'DKBike — Xe cho cả gia đình | Phòng Quản lý chất 
 
 const HEADER_FILL = { fgColor: { rgb: '1E3A8A' } };
 const SUBHEADER_FILL = { fgColor: { rgb: 'EFF6FF' } };
-const SECTION_FILL = { fgColor: { rgb: 'DBEAFE' } };
-const TH_FILL = { fgColor: { rgb: '1D4ED8' } };
+const SECTION_FILL = { fgColor: { rgb: 'E0E7FF' } };
+const TH_FILL = { fgColor: { rgb: '1E40AF' } };
 const ZEBRA_FILL = { fgColor: { rgb: 'F8FAFC' } };
+const TOTAL_FILL = { fgColor: { rgb: 'E2E8F0' } };
+const POSITIVE_FILL = { fgColor: { rgb: 'ECFDF5' } };
+const NEGATIVE_FILL = { fgColor: { rgb: 'FFF1F2' } };
+const WARN_FILL = { fgColor: { rgb: 'FFFBEB' } };
 const BORDER_THIN = {
   top: { style: 'thin', color: { rgb: 'CBD5E1' } },
   bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+  left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+  right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+};
+const BORDER_SECTION = {
+  top: { style: 'thin', color: { rgb: '93C5FD' } },
+  bottom: { style: 'thin', color: { rgb: '93C5FD' } },
+  left: { style: 'medium', color: { rgb: '1D4ED8' } },
+  right: { style: 'thin', color: { rgb: '93C5FD' } }
+};
+const BORDER_TOTAL = {
+  top: { style: 'medium', color: { rgb: '64748B' } },
+  bottom: { style: 'medium', color: { rgb: '64748B' } },
   left: { style: 'thin', color: { rgb: 'CBD5E1' } },
   right: { style: 'thin', color: { rgb: 'CBD5E1' } }
 };
@@ -24,19 +40,92 @@ interface ExcelSection {
   rows: (string | number)[][];
 }
 
+function getHeaderAlign(header: string): 'center' | 'right' | 'left' {
+  const h = header.trim().toLowerCase();
+  if (
+    h === 'stt' ||
+    h.includes('ngày') ||
+    h.includes('hạn') ||
+    h.includes('thời gian') ||
+    h.includes('trạng thái') ||
+    h.includes('kết quả') ||
+    h.includes('mức độ') ||
+    h.includes('ưu tiên') ||
+    h.includes('tiến độ') ||
+    h.includes('phân loại') ||
+    h === 'nhóm' ||
+    h === 'mã' ||
+    h === 'mã bb' ||
+    h === 'số phiếu' ||
+    h === 'lsx' ||
+    /^t[2-7]$/.test(h) ||
+    h === 'cn' ||
+    /^tuần\s*\d+/.test(h)
+  ) {
+    return 'center';
+  }
+  if (
+    h.includes('sl') ||
+    h.includes('số lượng') ||
+    h.includes('tổng') ||
+    h.includes('trọng số') ||
+    h.includes('điểm') ||
+    h.includes('tỷ trọng') ||
+    h.includes('tích lũy')
+  ) {
+    return 'right';
+  }
+  return 'left';
+}
+
+function getStatusBadgeStyle(val: string): { fill: { fgColor: { rgb: string } }; color: string; bold: boolean } | null {
+  const v = val.trim().toLowerCase();
+  if (
+    v === 'hoàn thành' ||
+    v === 'đạt' ||
+    v === 'đạt hoàn toàn' ||
+    v === 'đã xử lý' ||
+    v === 'đã đóng' ||
+    v === 'điểm sáng' ||
+    v === 'đạt chuẩn'
+  ) {
+    return { fill: POSITIVE_FILL, color: '065F46', bold: true };
+  }
+  if (
+    v === 'lỗi' ||
+    v === 'quá hạn' ||
+    v === 'cảnh báo' ||
+    v === 'chưa xử lý' ||
+    v === 'cần cải tiến' ||
+    v.includes('trọng tâm')
+  ) {
+    return { fill: NEGATIVE_FILL, color: '9F1239', bold: true };
+  }
+  if (
+    v === 'đang làm' ||
+    v === 'đang xử lý' ||
+    v === 'đang cải tiến' ||
+    v === 'chờ xử lý'
+  ) {
+    return { fill: WARN_FILL, color: '92400E', bold: true };
+  }
+  return null;
+}
+
 function buildMultiSectionSheet(
   sheetTitle: string,
   periodLabel: string,
   rangeLabel: string,
   sections: ExcelSection[],
-  colWidths: number[]
+  colWidths: number[],
+  signatureAuthor?: string
 ) {
   const maxCols = Math.max(4, colWidths.length, ...sections.map((s) => s.headers.length));
   const aoa: (string | number)[][] = [
     [BRAND_TITLE],
     [BRAND_SUB],
     [`${sheetTitle} — ${periodLabel} (${rangeLabel})`],
-    [`Ngày xuất: ${new Date().toLocaleString('vi-VN')}`],
+    [`Xuất lúc: ${new Date().toLocaleString('vi-VN')} | Chuẩn báo cáo ISO 8601`],
     []
   ];
 
@@ -47,28 +136,44 @@ function buildMultiSectionSheet(
     { s: { r: 3, c: 0 }, e: { r: 3, c: maxCols - 1 } }
   ];
 
-  const sectionRowIndices: number[] = [];
-  const headerRowMeta: { rowIdx: number; colCount: number }[] = [];
-  const dataRowMeta: { rowIdx: number; colCount: number; zebra: boolean }[] = [];
+  const sectionRowMeta: { rowIdx: number; colCount: number }[] = [];
+  const headerRowMeta: { rowIdx: number; headers: string[] }[] = [];
+  const emptyRowMeta: { rowIdx: number; colCount: number }[] = [];
+  const dataRowMeta: { rowIdx: number; headers: string[]; zebra: boolean; isTotal: boolean }[] = [];
 
   for (const sec of sections) {
+    const secColSpan = Math.max(sec.headers.length, maxCols);
     const secRowIdx = aoa.length;
     aoa.push([sec.title]);
-    merges.push({ s: { r: secRowIdx, c: 0 }, e: { r: secRowIdx, c: maxCols - 1 } });
-    sectionRowIndices.push(secRowIdx);
+    merges.push({ s: { r: secRowIdx, c: 0 }, e: { r: secRowIdx, c: secColSpan - 1 } });
+    sectionRowMeta.push({ rowIdx: secRowIdx, colCount: secColSpan });
 
     const thRowIdx = aoa.length;
     aoa.push(sec.headers);
-    headerRowMeta.push({ rowIdx: thRowIdx, colCount: sec.headers.length });
+    headerRowMeta.push({ rowIdx: thRowIdx, headers: sec.headers });
 
-    const effectiveRows = sec.rows.length > 0 ? sec.rows : [['Không phát sinh dữ liệu trong kỳ']];
-    effectiveRows.forEach((row, idx) => {
-      const absR = aoa.length;
-      aoa.push(row);
-      dataRowMeta.push({ rowIdx: absR, colCount: sec.headers.length, zebra: idx % 2 === 1 });
-    });
+    if (sec.rows.length === 0) {
+      const emptyR = aoa.length;
+      aoa.push(['Không phát sinh dữ liệu trong kỳ']);
+      merges.push({ s: { r: emptyR, c: 0 }, e: { r: emptyR, c: sec.headers.length - 1 } });
+      emptyRowMeta.push({ rowIdx: emptyR, colCount: sec.headers.length });
+    } else {
+      sec.rows.forEach((row, idx) => {
+        const absR = aoa.length;
+        aoa.push(row);
+        const isTotal = String(row[1] ?? row[0] ?? '').trim().toLowerCase() === 'tổng cộng';
+        dataRowMeta.push({ rowIdx: absR, headers: sec.headers, zebra: idx % 2 === 1, isTotal });
+      });
+    }
 
     aoa.push([]);
+  }
+
+  let sigStartRow = -1;
+  if (signatureAuthor !== undefined) {
+    sigStartRow = aoa.length;
+    aoa.push(['NGƯỜI LẬP BÁO CÁO', 'TRƯỞNG PHÒNG QLCL', 'BAN GIÁM ĐỐC']);
+    aoa.push([signatureAuthor || '(Ký và ghi rõ họ tên)', '(Ký và ghi rõ họ tên)', '(Phê duyệt / Chỉ đạo)']);
   }
 
   const ws = XLSXStyle.utils.aoa_to_sheet(aoa);
@@ -80,38 +185,47 @@ function buildMultiSectionSheet(
     ws[addr].s = s;
   };
 
-  setCellStyle(0, 0, {
-    font: { bold: true, sz: 13, color: { rgb: 'FFFFFF' } },
-    fill: HEADER_FILL,
-    alignment: { horizontal: 'left', vertical: 'center' }
-  });
-  setCellStyle(1, 0, {
-    font: { italic: true, sz: 10, color: { rgb: '1E3A8A' } },
-    fill: SUBHEADER_FILL,
-    alignment: { horizontal: 'left', vertical: 'center' }
-  });
-  setCellStyle(2, 0, {
-    font: { bold: true, sz: 11, color: { rgb: '0F172A' } },
-    alignment: { horizontal: 'left', vertical: 'center' }
-  });
-  setCellStyle(3, 0, {
-    font: { sz: 9, color: { rgb: '64748B' } },
-    alignment: { horizontal: 'left', vertical: 'center' }
-  });
-
-  for (const r of sectionRowIndices) {
-    setCellStyle(r, 0, {
-      font: { bold: true, sz: 10.5, color: { rgb: '1E3A8A' } },
-      fill: SECTION_FILL,
-      border: BORDER_THIN,
+  for (let c = 0; c < maxCols; c++) {
+    setCellStyle(0, c, {
+      font: { name: 'Arial', bold: true, sz: 13, color: { rgb: 'FFFFFF' } },
+      fill: HEADER_FILL,
+      alignment: { horizontal: 'left', vertical: 'center' }
+    });
+    setCellStyle(1, c, {
+      font: { name: 'Arial', italic: true, sz: 10, color: { rgb: '1E3A8A' } },
+      fill: SUBHEADER_FILL,
+      border: { bottom: { style: 'thin', color: { rgb: '93C5FD' } } },
+      alignment: { horizontal: 'left', vertical: 'center' }
+    });
+    setCellStyle(2, c, {
+      font: { name: 'Arial', bold: true, sz: 11.5, color: { rgb: '0F172A' } },
+      alignment: { horizontal: 'left', vertical: 'center' }
+    });
+    setCellStyle(3, c, {
+      font: { name: 'Arial', sz: 9, color: { rgb: '64748B' } },
+      border: { bottom: { style: 'thin', color: { rgb: 'CBD5E1' } } },
       alignment: { horizontal: 'left', vertical: 'center' }
     });
   }
 
-  for (const { rowIdx, colCount } of headerRowMeta) {
+  for (const { rowIdx, colCount } of sectionRowMeta) {
     for (let c = 0; c < colCount; c++) {
       setCellStyle(rowIdx, c, {
-        font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } },
+        font: { name: 'Arial', bold: true, sz: 10.5, color: { rgb: '1E3A8A' } },
+        fill: SECTION_FILL,
+        border: {
+          ...BORDER_SECTION,
+          left: c === 0 ? BORDER_SECTION.left : { style: 'thin', color: { rgb: '93C5FD' } }
+        },
+        alignment: { horizontal: 'left', vertical: 'center' }
+      });
+    }
+  }
+
+  for (const { rowIdx, headers } of headerRowMeta) {
+    for (let c = 0; c < headers.length; c++) {
+      setCellStyle(rowIdx, c, {
+        font: { name: 'Arial', bold: true, sz: 10, color: { rgb: 'FFFFFF' } },
         fill: TH_FILL,
         border: BORDER_THIN,
         alignment: { horizontal: 'center', vertical: 'center', wrapText: true }
@@ -119,27 +233,89 @@ function buildMultiSectionSheet(
     }
   }
 
-  for (const { rowIdx, colCount, zebra } of dataRowMeta) {
+  for (const { rowIdx, colCount } of emptyRowMeta) {
     for (let c = 0; c < colCount; c++) {
+      setCellStyle(rowIdx, c, {
+        font: { name: 'Arial', italic: true, sz: 10, color: { rgb: '64748B' } },
+        border: BORDER_THIN,
+        alignment: { horizontal: 'center', vertical: 'center' }
+      });
+    }
+  }
+
+  const rowHeights: { hpt: number }[] = [
+    { hpt: 28 },
+    { hpt: 20 },
+    { hpt: 24 },
+    { hpt: 18 },
+    { hpt: 10 }
+  ];
+  const setRowHeight = (r: number, hpt: number) => {
+    while (rowHeights.length <= r) rowHeights.push({ hpt: 18 });
+    rowHeights[r] = { hpt: Math.max(rowHeights[r]?.hpt || 0, hpt) };
+  };
+  sectionRowMeta.forEach(({ rowIdx }) => setRowHeight(rowIdx, 22));
+  headerRowMeta.forEach(({ rowIdx }) => setRowHeight(rowIdx, 26));
+  emptyRowMeta.forEach(({ rowIdx }) => setRowHeight(rowIdx, 22));
+
+  for (const { rowIdx, headers, zebra, isTotal } of dataRowMeta) {
+    let maxLines = 1;
+    for (let c = 0; c < headers.length; c++) {
       const addr = XLSXStyle.utils.encode_cell({ r: rowIdx, c });
       const cell = ws[addr];
+      const rawVal = cell ? String(cell.v ?? '') : '';
       const isNumber = cell && typeof cell.v === 'number';
+      const colW = Math.max((colWidths[c] || 16) - 2, 8);
+      const explicitLines = rawVal.split(/\r?\n/);
+      const wrappedCount = explicitLines.reduce((sum, part) => sum + Math.max(1, Math.ceil(part.length / colW)), 0);
+      if (wrappedCount > maxLines) maxLines = wrappedCount;
+
+      const headerAlign = getHeaderAlign(headers[c] || '');
+      const horizontal = headers[c]?.trim().toLowerCase() === 'stt'
+        ? 'center'
+        : isNumber
+          ? 'right'
+          : headerAlign;
+      const badge = !isTotal ? getStatusBadgeStyle(rawVal) : null;
+
       setCellStyle(rowIdx, c, {
-        font: { sz: 10, color: { rgb: '0F172A' } },
-        fill: zebra ? ZEBRA_FILL : undefined,
-        border: BORDER_THIN,
+        font: {
+          name: 'Arial',
+          sz: 10,
+          bold: isTotal || Boolean(badge?.bold),
+          color: { rgb: badge ? badge.color : '0F172A' }
+        },
+        fill: isTotal ? TOTAL_FILL : badge ? badge.fill : zebra ? ZEBRA_FILL : undefined,
+        border: isTotal ? BORDER_TOTAL : BORDER_THIN,
         alignment: {
-          horizontal: isNumber ? 'right' : 'left',
+          horizontal,
           vertical: 'center',
           wrapText: true
         }
       });
     }
+    setRowHeight(rowIdx, Math.min(120, Math.max(21, maxLines * 14.5 + 6)));
+  }
+
+  if (sigStartRow !== -1) {
+    setRowHeight(sigStartRow, 22);
+    setRowHeight(sigStartRow + 1, 36);
+    for (let c = 0; c < 3; c++) {
+      setCellStyle(sigStartRow, c, {
+        font: { name: 'Arial', bold: true, sz: 10, color: { rgb: '0F172A' } },
+        alignment: { horizontal: 'center', vertical: 'center' }
+      });
+      setCellStyle(sigStartRow + 1, c, {
+        font: { name: 'Arial', italic: true, sz: 9.5, color: { rgb: '475569' } },
+        alignment: { horizontal: 'center', vertical: 'bottom' }
+      });
+    }
   }
 
   ws['!cols'] = colWidths.map((wch) => ({ wch }));
-  ws['!rows'] = [{ hpt: 24 }, { hpt: 18 }, { hpt: 20 }, { hpt: 16 }];
+  ws['!rows'] = rowHeights;
   ws['!views'] = [{ state: 'frozen', ySplit: 4 }];
+  ws['!pageSetup'] = { paperSize: 9, orientation: 'landscape', fitToWidth: 1, fitToHeight: 0 };
   return ws;
 }
 
@@ -186,7 +362,8 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
           { title: '2. THÀNH PHẦN CHỈ SỐ Q-INDEX', headers: ['Thành phần', 'Trọng số', 'Điểm', 'Diễn giải'], rows: qIndexRows },
           { title: '3. ĐIỂM SÁNG & CẢNH BÁO TRONG KỲ', headers: ['Nhóm', 'Phân hệ', 'Tiêu đề', 'Chi tiết'], rows: alertRows }
         ],
-        [34, 24, 34, 52]
+        [34, 24, 34, 52],
+        note?.author || ''
       ),
       'Tong quan & KPI'
     );
