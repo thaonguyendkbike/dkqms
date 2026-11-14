@@ -795,39 +795,52 @@ export function buildReportSnapshot(
     if (!match) return null;
     const wNum = Number(match[1]);
     if (!wNum || wNum < 1 || wNum > 5) return null;
-    const daysInM = new Date(y, m, 0).getDate();
-    const startDay = Math.min((wNum - 1) * 7 + 1, daysInM);
-    const endDay = Math.min(wNum * 7, daysInM);
-    return {
-      start: new Date(y, m - 1, startDay, 0, 0, 0, 0).getTime(),
-      end: new Date(y, m - 1, endDay, 23, 59, 59, 999).getTime()
-    };
+    const firstDay = new Date(y, m - 1, 1);
+    const dow = firstDay.getDay();
+    let mon1Day = 1;
+    if (dow === 1) mon1Day = 1;
+    else if (dow === 2) mon1Day = 0;
+    else if (dow === 3) mon1Day = -1;
+    else if (dow === 4) mon1Day = -2;
+    else if (dow === 5) mon1Day = 4;
+    else if (dow === 6) mon1Day = 3;
+    else if (dow === 0) mon1Day = 2;
+    const mon = new Date(y, m - 1, mon1Day + (wNum - 1) * 7, 0, 0, 0, 0);
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    sun.setHours(23, 59, 59, 999);
+    return { start: mon.getTime(), end: sun.getTime() };
   };
 
   const pStartMs = period.start.getTime();
   const pEndMs = period.end.getTime();
 
+  const seenPlanKeys = new Set<string>();
   const planningTasksInPeriod = allPlanningTasks.filter(t => {
     const dDate = parseFlexibleDate(t.deadline);
+    let matches = false;
     if (dDate) {
       const dMs = dDate.getTime();
-      if (dMs >= pStartMs && dMs <= pEndMs) return true;
-    }
-    if (period.type === 'month') {
-      return t.year === period.year && t.month === period.value;
-    }
-    if (t.year && t.month) {
+      matches = dMs >= pStartMs && dMs <= pEndMs;
+    } else if (period.type === 'month') {
+      matches = t.year === period.year && t.month === period.value;
+    } else if (t.year && t.month) {
       const wRange = getPlanWeekRange(t.year, t.month, t.week);
       if (wRange) {
-        return wRange.start <= pEndMs && wRange.end >= pStartMs;
+        matches = wRange.start <= pEndMs && wRange.end >= pStartMs;
+      } else {
+        const startM = period.start.getMonth() + 1;
+        const startY = period.start.getFullYear();
+        const endM = period.end.getMonth() + 1;
+        const endY = period.end.getFullYear();
+        matches = (t.year === startY && t.month === startM) || (t.year === endY && t.month === endM);
       }
-      const startM = period.start.getMonth() + 1;
-      const startY = period.start.getFullYear();
-      const endM = period.end.getMonth() + 1;
-      const endY = period.end.getFullYear();
-      return !dDate && ((t.year === startY && t.month === startM) || (t.year === endY && t.month === endM));
     }
-    return false;
+    if (!matches) return false;
+    const dedupKey = `${t.section}|${(t.title || '').trim()}|${(t.assignee || '').trim()}|${(t.deadline || '').trim()}`;
+    if (seenPlanKeys.has(dedupKey)) return false;
+    seenPlanKeys.add(dedupKey);
+    return true;
   });
 
   const planningTasksOverdue = allPlanningTasks.filter(t => {

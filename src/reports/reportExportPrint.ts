@@ -232,7 +232,7 @@ export function printReportA4(snapshot: ReportSnapshot, onToast?: ToastFn): void
   </div>
 
   ${
-    snapshot.work.planningTasksInPeriod.length > 0 || snapshot.work.planningTasksOverdue.length > 0
+    snapshot.work.planningTasksInPeriod.length > 0
       ? `<div class="section">
     <div class="section-title">4. Tác vụ từ Lập kế hoạch Chất lượng (${snapshot.work.planningTasksInPeriod.length} việc trong kỳ • ${snapshot.work.planningTasksCompleted} hoàn thành)</div>
     <table>
@@ -246,12 +246,7 @@ export function printReportA4(snapshot: ReportSnapshot, onToast?: ToastFn): void
         </tr>
       </thead>
       <tbody>
-        ${[
-          ...snapshot.work.planningTasksInPeriod,
-          ...snapshot.work.planningTasksOverdue.filter(
-            (o) => !snapshot.work.planningTasksInPeriod.some((p) => p.id === o.id)
-          )
-        ]
+        ${snapshot.work.planningTasksInPeriod
           .slice(0, 20)
           .map(
             (t) => `<tr>
@@ -270,7 +265,7 @@ export function printReportA4(snapshot: ReportSnapshot, onToast?: ToastFn): void
   }
 
   <div class="section">
-    <div class="section-title">${snapshot.work.planningTasksInPeriod.length > 0 || snapshot.work.planningTasksOverdue.length > 0 ? '5' : '4'}. Nhận xét & Kết luận của Phòng QLCL</div>
+    <div class="section-title">${snapshot.work.planningTasksInPeriod.length > 0 ? '5' : '4'}. Nhận xét & Kết luận của Phòng QLCL</div>
     <div class="note-box">
       ${
         note
