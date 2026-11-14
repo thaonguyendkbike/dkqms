@@ -244,6 +244,61 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
     { id: 'qc_tools', label: 'Công cụ QC (4)' }
   ];
 
+  const renderQlclNoteCard = (extraClass = '') => (
+    <div
+      className={`bg-white rounded-2xl border-2 border-blue-300 p-5 shadow-sm flex flex-col justify-between ${extraClass}`}
+    >
+      <div>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-blue-600" />
+            <span className="text-base font-extrabold text-slate-900">
+              Nhận xét & Kết luận QLCL
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={openNoteModal}
+            className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
+          >
+            {snapshot.note ? 'Sửa nhận xét' : 'Viết nhận xét'}
+          </button>
+        </div>
+
+        {snapshot.note ? (
+          <div className="space-y-2 text-sm text-slate-800">
+            <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 font-medium">
+              {snapshot.note.summary}
+            </div>
+            {snapshot.note.highlights && (
+              <div className="text-xs text-slate-700">
+                <span className="font-bold text-emerald-700">Điểm nhấn: </span>
+                {snapshot.note.highlights}
+              </div>
+            )}
+            {snapshot.note.nextActions && (
+              <div className="text-xs text-slate-700">
+                <span className="font-bold text-blue-700">Kế hoạch kỳ tới: </span>
+                {snapshot.note.nextActions}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="p-4 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500 text-center">
+            Chưa có nhận xét QLCL cho {period.label}. Bấm <strong>Viết nhận xét</strong> để bổ sung kết luận trước khi xuất báo cáo.
+          </div>
+        )}
+      </div>
+
+      {snapshot.note && (
+        <div className="pt-3 mt-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+          <span>Người lập: {snapshot.note.author}</span>
+          <span>Cập nhật: {new Date(snapshot.note.updatedAt).toLocaleString('vi-VN')}</span>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       id={periodType === 'week' ? 'view_weekly_reports_content' : 'view_monthly_reports_content'}
@@ -356,40 +411,40 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
             </button>
           </div>
 
-          {/* Right: 1-Click Actions */}
+          {/* Right: 1-Click Actions (màu đồng nhất, đơn giản) */}
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => exportReportToExcel(snapshot, onToast)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-sm"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
             >
               <Download className="w-4 h-4" /> Xuất Excel
             </button>
             <button
               type="button"
               onClick={() => printReportA4(snapshot, onToast)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold shadow-sm"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
             >
               <Printer className="w-4 h-4" /> In / PDF
             </button>
             <button
               type="button"
               onClick={handleCopySummary}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-bold"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
             >
               <Copy className="w-4 h-4" /> Copy
             </button>
             <button
               type="button"
               onClick={openNoteModal}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 border-blue-600 bg-blue-50 hover:bg-blue-100 text-blue-800 text-sm font-bold"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
             >
               <MessageSquarePlus className="w-4 h-4" /> Nhận xét QLCL
             </button>
             <button
               type="button"
               onClick={onOpenAddWeekTask}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-sm"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold"
             >
               <Plus className="w-4 h-4" /> Bổ sung việc
             </button>
@@ -414,10 +469,10 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
                 key={t.id}
                 type="button"
                 onClick={() => setSubTab(t.id)}
-                className={`px-3.5 py-1.5 rounded-xl text-sm font-bold transition ${
+                className={`px-3.5 py-1.5 rounded-xl text-sm font-bold border-2 transition ${
                   subTab === t.id
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                 }`}
               >
                 {t.label}
@@ -478,56 +533,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
             </div>
 
             {/* QLCL Note Card */}
-            <div className="lg:col-span-5 bg-white rounded-2xl border-2 border-blue-300 p-5 shadow-sm flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-blue-600" />
-                    <span className="text-base font-extrabold text-slate-900">
-                      Nhận xét & Kết luận QLCL
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={openNoteModal}
-                    className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
-                  >
-                    {snapshot.note ? 'Sửa nhận xét' : 'Viết nhận xét'}
-                  </button>
-                </div>
-
-                {snapshot.note ? (
-                  <div className="space-y-2 text-sm text-slate-800">
-                    <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 font-medium">
-                      {snapshot.note.summary}
-                    </div>
-                    {snapshot.note.highlights && (
-                      <div className="text-xs text-slate-700">
-                        <span className="font-bold text-emerald-700">Điểm nhấn: </span>
-                        {snapshot.note.highlights}
-                      </div>
-                    )}
-                    {snapshot.note.nextActions && (
-                      <div className="text-xs text-slate-700">
-                        <span className="font-bold text-blue-700">Kế hoạch kỳ tới: </span>
-                        {snapshot.note.nextActions}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="p-4 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500 text-center">
-                    Chưa có nhận xét QLCL cho {period.label}. Bấm <strong>Viết nhận xét</strong> để bổ sung kết luận trước khi xuất báo cáo.
-                  </div>
-                )}
-              </div>
-
-              {snapshot.note && (
-                <div className="pt-3 mt-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-                  <span>Người lập: {snapshot.note.author}</span>
-                  <span>Cập nhật: {new Date(snapshot.note.updatedAt).toLocaleString('vi-VN')}</span>
-                </div>
-              )}
-            </div>
+            {renderQlclNoteCard('lg:col-span-5')}
           </div>
 
           {/* 8 Large-Number KPI Cards */}
@@ -627,7 +633,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
                   : '--'}
               </div>
               <div className="text-xs text-slate-600 mt-1">
-                Xong {kpis.dailyCompliance.completed}/{kpis.dailyCompliance.total} việc | Tồn:{' '}
+                Xong {kpis.dailyCompliance.completed}/{kpis.dailyCompliance.total} việc | Tồn kỳ trước:{' '}
                 {kpis.dailyCompliance.pendingCount}
               </div>
               <div className="mt-2">
@@ -1044,7 +1050,62 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
                 .slice(0, 15)
                 .map((c) => {
                   const isOverdue = capaEco.overdueCapas.some((o) => o.id === c.id);
-                  return (
+                  const renderQlclNoteCard = (extraClass = '') => (
+    <div
+      className={`bg-white rounded-2xl border-2 border-blue-300 p-5 shadow-sm flex flex-col justify-between ${extraClass}`}
+    >
+      <div>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-blue-600" />
+            <span className="text-base font-extrabold text-slate-900">
+              Nhận xét & Kết luận QLCL
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={openNoteModal}
+            className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
+          >
+            {snapshot.note ? 'Sửa nhận xét' : 'Viết nhận xét'}
+          </button>
+        </div>
+
+        {snapshot.note ? (
+          <div className="space-y-2 text-sm text-slate-800">
+            <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 font-medium">
+              {snapshot.note.summary}
+            </div>
+            {snapshot.note.highlights && (
+              <div className="text-xs text-slate-700">
+                <span className="font-bold text-emerald-700">Điểm nhấn: </span>
+                {snapshot.note.highlights}
+              </div>
+            )}
+            {snapshot.note.nextActions && (
+              <div className="text-xs text-slate-700">
+                <span className="font-bold text-blue-700">Kế hoạch kỳ tới: </span>
+                {snapshot.note.nextActions}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="p-4 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500 text-center">
+            Chưa có nhận xét QLCL cho {period.label}. Bấm <strong>Viết nhận xét</strong> để bổ sung kết luận trước khi xuất báo cáo.
+          </div>
+        )}
+      </div>
+
+      {snapshot.note && (
+        <div className="pt-3 mt-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+          <span>Người lập: {snapshot.note.author}</span>
+          <span>Cập nhật: {new Date(snapshot.note.updatedAt).toLocaleString('vi-VN')}</span>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
                     <div
                       key={c.id}
                       className={`p-3 rounded-xl border text-xs ${
@@ -1119,7 +1180,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
           <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <div className="text-sm font-extrabold text-slate-900">
-                Việc tồn đọng theo Nhân sự ({work.pendingDailyLogs.length})
+                Công việc tồn đọng từ {periodType === 'week' ? 'tuần trước' : 'tháng trước'} ({work.pendingDailyLogs.length})
               </div>
               <button
                 type="button"
@@ -1130,7 +1191,9 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
               </button>
             </div>
             {work.pendingByAssignee.length === 0 ? (
-              <p className="text-xs text-slate-500">Không có việc tồn đọng trong kỳ.</p>
+              <p className="text-xs text-slate-500">
+                Không có công việc tồn đọng từ {periodType === 'week' ? 'tuần trước' : 'tháng trước'}.
+              </p>
             ) : (
               <div className="space-y-2">
                 {work.pendingByAssignee.map((a) => (
@@ -1311,6 +1374,9 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
           </div>
         </div>
       )}
+
+      {/* Thẻ Nhận xét & Kết luận QLCL hiển thị trên mọi tab còn lại */}
+      {subTab !== 'overview' && renderQlclNoteCard()}
 
       {/* ==================== MODAL: NHẬN XÉT QLCL ==================== */}
       {showNoteModal && (

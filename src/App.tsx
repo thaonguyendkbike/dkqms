@@ -536,7 +536,7 @@ export function standardizeDate(dateStr: string): string {
 export function getMondayOfWeek(year: number, month: number, weekNum: number): Date {
   const firstDayOfMonth = new Date(year, month - 1, 1);
   const dow = firstDayOfMonth.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
-  
+
   let mon1Day: number;
   if (dow === 1) mon1Day = 1;
   else if (dow === 2) mon1Day = 0;
@@ -547,7 +547,7 @@ export function getMondayOfWeek(year: number, month: number, weekNum: number): D
   else if (dow === 0) mon1Day = 2;
   else mon1Day = 1;
 
-return new Date(year, month - 1, mon1Day + (weekNum - 1) * 7);
+  return new Date(year, month - 1, mon1Day + (weekNum - 1) * 7);
 }
 
 export function parseLogDate(dateStr: string): Date | null {
@@ -6347,7 +6347,7 @@ export function App() {
         const mm = String(dateInfo.getUTCMonth() + 1).padStart(2, '0');
         const yyyy = dateInfo.getUTCFullYear();
         return `${dd}/${mm}/${yyyy}`;
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // 2. Bỏ phần giờ nếu có (ví dụ "20/07/2026 14:30:00" hoặc "2026-07-20T14:30:00")
@@ -6402,7 +6402,7 @@ export function App() {
           return `${dd}/${mm}/${yyyy}`;
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     return str;
   };
@@ -6717,8 +6717,8 @@ export function App() {
         } else {
           // --- THÊM MỚI BẢN GHI NẾU KHÔNG TRÙNG MÃ ---
           let generatedId = inputId;
-          const isIdAvailable = generatedId && 
-            !workingDefects.some(d => d.id.toLowerCase() === generatedId.toLowerCase()) && 
+          const isIdAvailable = generatedId &&
+            !workingDefects.some(d => d.id.toLowerCase() === generatedId.toLowerCase()) &&
             !newItems.some(d => d.id.toLowerCase() === generatedId.toLowerCase());
 
           if (!isIdAvailable) {
@@ -7950,7 +7950,7 @@ export function App() {
   // Auto-recovery: Khôi phục danh sách xe đổi màu từ oqcRecords nếu dk_oqc_color_changes bị rỗng (chỉ chạy khi số lượng xe thay đổi, không chạy mỗi lần bấm Đạt/Lỗi)
   useEffect(() => {
     if ((!oqcColorChanges || oqcColorChanges.length === 0) && Array.isArray(oqcRecords) && oqcRecords.length > 0) {
-      const candidates = oqcRecords.filter(r => 
+      const candidates = oqcRecords.filter(r =>
         Boolean(r && (r.isColorChanged || r.isStatusChanged || (r.oldColor && r.color && r.oldColor !== r.color) || (r.oldModel && r.model && r.oldModel !== r.model)))
       );
       if (candidates.length > 0) {
@@ -17224,153 +17224,153 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 onNavigateTab={(tab) => setActiveTab(tab)}
                 onToast={triggerToast}
               />
-                  {showAddWeekTaskModal && (
-                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                      <div className="bg-white rounded-xl border shadow-lg max-w-lg w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-                        <div className="flex justify-between items-center border-b pb-2">
-                          <h3 className="font-bold text-slate-800 text-sm uppercase text-indigo-700 flex items-center gap-1.5">
-                            <Plus className="w-4 h-4 shadow-sm" /> LẬP KẾ HOẠCH BỔ SUNG QUẢN TRỊ CHẤT LƯỢNG
-                          </h3>
-                          <button
-                            onClick={() => setShowAddWeekTaskModal(false)}
-                            className="text-slate-400 hover:text-slate-600 font-extrabold text-sm"
-                          >
-                            ✕
-                          </button>
-                        </div>
-
-                        <form onSubmit={handleAddNewWeeklyTask} className="space-y-4 text-xs">
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhóm quy trình kiểm toán</label>
-                            <select
-                              value={newWeekTaskCategory}
-                              onChange={(e) => setNewWeekTaskCategory(e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-700 font-bold cursor-pointer"
-                            >
-                              <option value="IQC">Kiểm soát linh kiện (IQC)</option>
-                              <option value="PQC">Kiểm soát quá trình sản xuất (PQC)</option>
-                              <option value="OQC">Kiểm tra chất lượng xuất xưởng (OQC)</option>
-                              <option value="SQC/QA">Nhà cung cấp & Cải tiến linh kiện (SQC/QA)</option>
-                              <option value="Phát triển sản phẩm">Phát triển sản phẩm mới (PTSP/R&D)</option>
-                              <option value="Huấn luyện / Đào tạo">Đào tạo nội bộ & Huấn luyện nghiệp vụ</option>
-                              <option value="Cải tiến hiện trường">Cải tiến hiện trường (6S/5S/Kaizen)</option>
-                              <option value="Khách hàng/Bảo hành">Khách hàng & Bảo hành (CS/Warranty)</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chi tiết việc QA/QC thực hiện bổ sung</label>
-                            <input
-                              type="text"
-                              value={newWeekTaskContent}
-                              onChange={(e) => setNewWeekTaskContent(e.target.value)}
-                              placeholder="Nội dung cụ thể (Ví dụ: Thí nghiệm sạc xả pin lô Nova mới...)"
-                              className="w-full bg-slate-50 border border-slate-200 rounded p-2 focus:bg-white focus:outline-none focus:border-indigo-600"
-                              required
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Định lượng chỉ tiêu lý thuyết</label>
-                              <input
-                                type="text"
-                                value={newWeekTaskTarget}
-                                onChange={(e) => setNewWeekTaskTarget(e.target.value)}
-                                placeholder="Số lượng (Ví dụ: 1)"
-                                className="w-full bg-slate-50 border border-slate-200 rounded p-2"
-                                required
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Đơn vị đo lường</label>
-                              <input
-                                type="text"
-                                value={newWeekTaskUnit}
-                                onChange={(e) => setNewWeekTaskUnit(e.target.value)}
-                                placeholder="Ví dụ: Xe, Model, Lượt..."
-                                className="w-full bg-slate-50 border border-slate-200 rounded p-2"
-                                required
-                              />
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhân sự chủ trì</label>
-                              <select
-                                value={newWeekTaskAssignee}
-                                onChange={(e) => setNewWeekTaskAssignee(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-700 font-semibold"
-                              >
-                                <option value="Nguyễn Xuân Thao">Nguyễn Xuân Thao (Trưởng phòng)</option>
-                                <option value="Hà Khắc Việt">Hà Khắc Việt (OQC Lead)</option>
-                                <option value="Hoàng Văn Phấn">Hoàng Văn Phấn (PQC Supervisor)</option>
-                                <option value="Đoàn Anh Hùng">Đoàn Anh Hùng (IQC Specialist)</option>
-                                <option value="Trần Thế Quảng">Trần Thế Quảng (Nhân viên kỹ thuật)</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chọn Tháng</label>
-                              <select
-                                value={newWeekTaskMonth}
-                                onChange={(e) => setNewWeekTaskMonth(Number(e.target.value))}
-                                className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-705 font-bold cursor-pointer"
-                              >
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
-                                  <option key={m} value={m}>Tháng {m}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chọn Ngày</label>
-                              <select
-                                value={newWeekTaskDate}
-                                onChange={(e) => setNewWeekTaskDate(e.target.value)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-705 font-bold cursor-pointer"
-                              >
-                                {newWeekTaskMonthDates.map(d => {
-                                  const parts = d.split('/');
-                                  const isSun = (parts.length === 2 || parts.length === 3) && new Date(parts[2] ? parseInt(parts[2], 10) : 2026, parseInt(parts[1], 10) - 1, parseInt(parts[0], 10)).getDay() === 0;
-                                  return (
-                                    <option key={d} value={d}>
-                                      {d} {isSun ? '(CN ⚠️)' : ''}
-                                    </option>
-                                  );
-                                })}
-                              </select>
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Diễn giải phương pháp / Giải pháp cụ thể</label>
-                            <textarea
-                              value={newWeekTaskNotes}
-                              onChange={(e) => setNewWeekTaskNotes(e.target.value)}
-                              placeholder="Phương pháp kiểm chuẩn đối chiếu bản vẽ gốc..."
-                              className="w-full bg-slate-50 border border-slate-200 rounded p-2 h-20 focus:bg-white focus:outline-none focus:border-indigo-600"
-                            />
-                          </div>
-
-                          <div className="flex justify-end gap-2 border-t pt-3.5">
-                            <button
-                              type="button"
-                              onClick={() => setShowAddWeekTaskModal(false)}
-                              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded text-xs transition"
-                            >
-                              Hủy bỏ
-                            </button>
-                            <button
-                              type="submit"
-                              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2 rounded text-xs transition shadow"
-                            >
-                              Lưu vào kế hoạch
-                            </button>
-                          </div>
-                        </form>
-                      </div>
+              {showAddWeekTaskModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                  <div className="bg-white rounded-xl border shadow-lg max-w-lg w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="flex justify-between items-center border-b pb-2">
+                      <h3 className="font-bold text-slate-800 text-sm uppercase text-indigo-700 flex items-center gap-1.5">
+                        <Plus className="w-4 h-4 shadow-sm" /> LẬP KẾ HOẠCH BỔ SUNG QUẢN TRỊ CHẤT LƯỢNG
+                      </h3>
+                      <button
+                        onClick={() => setShowAddWeekTaskModal(false)}
+                        className="text-slate-400 hover:text-slate-600 font-extrabold text-sm"
+                      >
+                        ✕
+                      </button>
                     </div>
-                  )}
+
+                    <form onSubmit={handleAddNewWeeklyTask} className="space-y-4 text-xs">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhóm quy trình kiểm toán</label>
+                        <select
+                          value={newWeekTaskCategory}
+                          onChange={(e) => setNewWeekTaskCategory(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-700 font-bold cursor-pointer"
+                        >
+                          <option value="IQC">Kiểm soát linh kiện (IQC)</option>
+                          <option value="PQC">Kiểm soát quá trình sản xuất (PQC)</option>
+                          <option value="OQC">Kiểm tra chất lượng xuất xưởng (OQC)</option>
+                          <option value="SQC/QA">Nhà cung cấp & Cải tiến linh kiện (SQC/QA)</option>
+                          <option value="Phát triển sản phẩm">Phát triển sản phẩm mới (PTSP/R&D)</option>
+                          <option value="Huấn luyện / Đào tạo">Đào tạo nội bộ & Huấn luyện nghiệp vụ</option>
+                          <option value="Cải tiến hiện trường">Cải tiến hiện trường (6S/5S/Kaizen)</option>
+                          <option value="Khách hàng/Bảo hành">Khách hàng & Bảo hành (CS/Warranty)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chi tiết việc QA/QC thực hiện bổ sung</label>
+                        <input
+                          type="text"
+                          value={newWeekTaskContent}
+                          onChange={(e) => setNewWeekTaskContent(e.target.value)}
+                          placeholder="Nội dung cụ thể (Ví dụ: Thí nghiệm sạc xả pin lô Nova mới...)"
+                          className="w-full bg-slate-50 border border-slate-200 rounded p-2 focus:bg-white focus:outline-none focus:border-indigo-600"
+                          required
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Định lượng chỉ tiêu lý thuyết</label>
+                          <input
+                            type="text"
+                            value={newWeekTaskTarget}
+                            onChange={(e) => setNewWeekTaskTarget(e.target.value)}
+                            placeholder="Số lượng (Ví dụ: 1)"
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-2"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Đơn vị đo lường</label>
+                          <input
+                            type="text"
+                            value={newWeekTaskUnit}
+                            onChange={(e) => setNewWeekTaskUnit(e.target.value)}
+                            placeholder="Ví dụ: Xe, Model, Lượt..."
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-2"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhân sự chủ trì</label>
+                          <select
+                            value={newWeekTaskAssignee}
+                            onChange={(e) => setNewWeekTaskAssignee(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-700 font-semibold"
+                          >
+                            <option value="Nguyễn Xuân Thao">Nguyễn Xuân Thao (Trưởng phòng)</option>
+                            <option value="Hà Khắc Việt">Hà Khắc Việt (OQC Lead)</option>
+                            <option value="Hoàng Văn Phấn">Hoàng Văn Phấn (PQC Supervisor)</option>
+                            <option value="Đoàn Anh Hùng">Đoàn Anh Hùng (IQC Specialist)</option>
+                            <option value="Trần Thế Quảng">Trần Thế Quảng (Nhân viên kỹ thuật)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chọn Tháng</label>
+                          <select
+                            value={newWeekTaskMonth}
+                            onChange={(e) => setNewWeekTaskMonth(Number(e.target.value))}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-705 font-bold cursor-pointer"
+                          >
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
+                              <option key={m} value={m}>Tháng {m}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chọn Ngày</label>
+                          <select
+                            value={newWeekTaskDate}
+                            onChange={(e) => setNewWeekTaskDate(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-705 font-bold cursor-pointer"
+                          >
+                            {newWeekTaskMonthDates.map(d => {
+                              const parts = d.split('/');
+                              const isSun = (parts.length === 2 || parts.length === 3) && new Date(parts[2] ? parseInt(parts[2], 10) : 2026, parseInt(parts[1], 10) - 1, parseInt(parts[0], 10)).getDay() === 0;
+                              return (
+                                <option key={d} value={d}>
+                                  {d} {isSun ? '(CN ⚠️)' : ''}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Diễn giải phương pháp / Giải pháp cụ thể</label>
+                        <textarea
+                          value={newWeekTaskNotes}
+                          onChange={(e) => setNewWeekTaskNotes(e.target.value)}
+                          placeholder="Phương pháp kiểm chuẩn đối chiếu bản vẽ gốc..."
+                          className="w-full bg-slate-50 border border-slate-200 rounded p-2 h-20 focus:bg-white focus:outline-none focus:border-indigo-600"
+                        />
+                      </div>
+
+                      <div className="flex justify-end gap-2 border-t pt-3.5">
+                        <button
+                          type="button"
+                          onClick={() => setShowAddWeekTaskModal(false)}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded text-xs transition"
+                        >
+                          Hủy bỏ
+                        </button>
+                        <button
+                          type="submit"
+                          className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2 rounded text-xs transition shadow"
+                        >
+                          Lưu vào kế hoạch
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
             </>
           )}
           {activeTab === 'quality_inspection_records' && (
@@ -19881,11 +19881,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 <button
                   type="button"
                   onClick={() => setMarketFeedbackSubTab('feedback')}
-                  className={`flex-1 py-2.5 px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                    marketFeedbackSubTab === 'feedback'
+                  className={`flex-1 py-2.5 px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${marketFeedbackSubTab === 'feedback'
                       ? 'bg-blue-600 text-white shadow-sm border border-blue-700'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                  }`}
+                    }`}
                 >
                   <Car className="w-4 h-4 shrink-0" />
                   <span>Phản ánh thị trường ({filteredMarketDefects.length})</span>
@@ -19893,11 +19892,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 <button
                   type="button"
                   onClick={() => setMarketFeedbackSubTab('part_eval')}
-                  className={`flex-1 py-2.5 px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                    marketFeedbackSubTab === 'part_eval'
+                  className={`flex-1 py-2.5 px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${marketFeedbackSubTab === 'part_eval'
                       ? 'bg-blue-600 text-white shadow-sm border border-blue-700'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                  }`}
+                    }`}
                 >
                   <Wrench className="w-4 h-4 shrink-0" />
                   <span>Tổng hợp đánh giá linh kiện lỗi ({partEvaluations.length})</span>
@@ -19906,1390 +19904,1390 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
 
               {marketFeedbackSubTab === 'feedback' && (
                 <>
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-4 rounded-xl border border-slate-300 shadow-sm">
-                <div>
-                  <h2 className="text-xl font-extrabold text-slate-800">Quản lý Phản ánh Thị trường</h2>
-                  <p className="text-xs text-slate-500">Tiếp nhận và quản lý song song phản ánh lỗi xe từ khách hàng và đề xuất cải tiến chất lượng. Tự động cảnh báo lỗi lặp lại từ 3 lần trở lên.</p>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => setShowDefectsDashboard(!showDefectsDashboard)}
-                    className={`font-bold text-xs p-2.5 rounded-lg transition shadow flex items-center justify-center cursor-pointer ${showDefectsDashboard
-                      ? 'bg-indigo-900 text-white ring-2 ring-indigo-400'
-                      : 'bg-indigo-700 hover:bg-indigo-800 text-white'
-                      }`}
-                    title={showDefectsDashboard ? "Thu gọn Dashboard Thống kê" : "Xem Dashboard Thống kê Lỗi & Cải tiến"}
-                  >
-                    <Activity className="w-4.5 h-4.5" />
-                  </button>
-                  <button
-                    onClick={() => setIsMarketDefectsFilterExpanded(!isMarketDefectsFilterExpanded)}
-                    className={`relative font-bold text-xs p-2.5 rounded-lg transition shadow flex items-center justify-center cursor-pointer ${isMarketDefectsFilterExpanded
-                      ? 'bg-slate-800 text-white ring-2 ring-slate-400'
-                      : (marketDefectsSearch ||
-                        marketDefectsFilterModel !== 'All' ||
-                        marketDefectsFilterStatus !== 'All' ||
-                        marketDefectsFilterSeverity !== 'All' ||
-                        marketDefectsFilterFeedbackType !== 'All' ||
-                        marketDefectsFilterMonth !== 'All' ||
-                        marketDefectsFilterYear !== 'All' ||
-                        marketDefectsFilterQuickTime !== 'All')
-                        ? 'bg-indigo-700 text-white ring-2 ring-indigo-400'
-                        : 'bg-slate-700 hover:bg-slate-800 text-white'
-                      }`}
-                    title={isMarketDefectsFilterExpanded ? "Thu gọn bộ lọc" : "Mở rộng bộ lọc tìm kiếm"}
-                  >
-                    <SlidersHorizontal className="w-4.5 h-4.5" />
-                    {(marketDefectsSearch ||
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-4 rounded-xl border border-slate-300 shadow-sm">
+                    <div>
+                      <h2 className="text-xl font-extrabold text-slate-800">Quản lý Phản ánh Thị trường</h2>
+                      <p className="text-xs text-slate-500">Tiếp nhận và quản lý song song phản ánh lỗi xe từ khách hàng và đề xuất cải tiến chất lượng. Tự động cảnh báo lỗi lặp lại từ 3 lần trở lên.</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => setShowDefectsDashboard(!showDefectsDashboard)}
+                        className={`font-bold text-xs p-2.5 rounded-lg transition shadow flex items-center justify-center cursor-pointer ${showDefectsDashboard
+                          ? 'bg-indigo-900 text-white ring-2 ring-indigo-400'
+                          : 'bg-indigo-700 hover:bg-indigo-800 text-white'
+                          }`}
+                        title={showDefectsDashboard ? "Thu gọn Dashboard Thống kê" : "Xem Dashboard Thống kê Lỗi & Cải tiến"}
+                      >
+                        <Activity className="w-4.5 h-4.5" />
+                      </button>
+                      <button
+                        onClick={() => setIsMarketDefectsFilterExpanded(!isMarketDefectsFilterExpanded)}
+                        className={`relative font-bold text-xs p-2.5 rounded-lg transition shadow flex items-center justify-center cursor-pointer ${isMarketDefectsFilterExpanded
+                          ? 'bg-slate-800 text-white ring-2 ring-slate-400'
+                          : (marketDefectsSearch ||
+                            marketDefectsFilterModel !== 'All' ||
+                            marketDefectsFilterStatus !== 'All' ||
+                            marketDefectsFilterSeverity !== 'All' ||
+                            marketDefectsFilterFeedbackType !== 'All' ||
+                            marketDefectsFilterMonth !== 'All' ||
+                            marketDefectsFilterYear !== 'All' ||
+                            marketDefectsFilterQuickTime !== 'All')
+                            ? 'bg-indigo-700 text-white ring-2 ring-indigo-400'
+                            : 'bg-slate-700 hover:bg-slate-800 text-white'
+                          }`}
+                        title={isMarketDefectsFilterExpanded ? "Thu gọn bộ lọc" : "Mở rộng bộ lọc tìm kiếm"}
+                      >
+                        <SlidersHorizontal className="w-4.5 h-4.5" />
+                        {(marketDefectsSearch ||
+                          marketDefectsFilterModel !== 'All' ||
+                          marketDefectsFilterStatus !== 'All' ||
+                          marketDefectsFilterSeverity !== 'All' ||
+                          marketDefectsFilterFeedbackType !== 'All' ||
+                          marketDefectsFilterMonth !== 'All' ||
+                          marketDefectsFilterYear !== 'All' ||
+                          marketDefectsFilterQuickTime !== 'All') && (
+                            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full border-2 border-white animate-pulse" />
+                          )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setBulkImportRawText('');
+                          setBulkImportParsedPreview([]);
+                          setShowBulkImportDefectsModal(true);
+                        }}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs p-2.5 rounded-lg transition shadow flex items-center justify-center cursor-pointer"
+                        title="Nhập hàng loạt phản ánh KH"
+                      >
+                        <FileSpreadsheet className="w-4.5 h-4.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExportCustomerFeedbackToExcel}
+                        className="bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs px-3 py-2.5 rounded-lg transition shadow flex items-center justify-center gap-1.5 cursor-pointer"
+                        title="Tải về file Excel chứa đầy đủ danh sách và các trường phản ánh khách hàng"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span className="hidden sm:inline">Tải về Excel ({filteredMarketDefects.length})</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Dashboard Thống kê Lỗi Xe & Đề Xuất Cải Tiến */}
+                  {showDefectsDashboard && (() => {
+                    // Thống kê động hoàn toàn theo mọi tiêu chí bộ lọc (Tìm kiếm / Model / Xử lý / Mức độ / Phân loại / Thời gian)
+                    const isDashboardFiltered = !!(marketDefectsSearch ||
                       marketDefectsFilterModel !== 'All' ||
                       marketDefectsFilterStatus !== 'All' ||
                       marketDefectsFilterSeverity !== 'All' ||
                       marketDefectsFilterFeedbackType !== 'All' ||
                       marketDefectsFilterMonth !== 'All' ||
                       marketDefectsFilterYear !== 'All' ||
-                      marketDefectsFilterQuickTime !== 'All') && (
-                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full border-2 border-white animate-pulse" />
-                      )}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setBulkImportRawText('');
-                      setBulkImportParsedPreview([]);
-                      setShowBulkImportDefectsModal(true);
-                    }}
-                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs p-2.5 rounded-lg transition shadow flex items-center justify-center cursor-pointer"
-                    title="Nhập hàng loạt phản ánh KH"
-                  >
-                    <FileSpreadsheet className="w-4.5 h-4.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExportCustomerFeedbackToExcel}
-                    className="bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs px-3 py-2.5 rounded-lg transition shadow flex items-center justify-center gap-1.5 cursor-pointer"
-                    title="Tải về file Excel chứa đầy đủ danh sách và các trường phản ánh khách hàng"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span className="hidden sm:inline">Tải về Excel ({filteredMarketDefects.length})</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Dashboard Thống kê Lỗi Xe & Đề Xuất Cải Tiến */}
-              {showDefectsDashboard && (() => {
-                // Thống kê động hoàn toàn theo mọi tiêu chí bộ lọc (Tìm kiếm / Model / Xử lý / Mức độ / Phân loại / Thời gian)
-                const isDashboardFiltered = !!(marketDefectsSearch ||
-                  marketDefectsFilterModel !== 'All' ||
-                  marketDefectsFilterStatus !== 'All' ||
-                  marketDefectsFilterSeverity !== 'All' ||
-                  marketDefectsFilterFeedbackType !== 'All' ||
-                  marketDefectsFilterMonth !== 'All' ||
-                  marketDefectsFilterYear !== 'All' ||
-                  marketDefectsFilterQuickTime !== 'All');
-                const dashboardDefects = filteredMarketDefects;
-                const dashboardDefectIds = new Set(dashboardDefects.map(d => d.id));
-                const dashboardActions = isDashboardFiltered
-                  ? improvementActions.filter(act => {
-                      if (act.defectId && dashboardDefectIds.has(act.defectId)) return true;
-                      if (marketDefectsFilterModel !== 'All' && act.model === marketDefectsFilterModel) return true;
-                      if (marketDefectsSearch) {
-                        const q = marketDefectsSearch.toLowerCase();
-                        if ((act.id || '').toLowerCase().includes(q) ||
+                      marketDefectsFilterQuickTime !== 'All');
+                    const dashboardDefects = filteredMarketDefects;
+                    const dashboardDefectIds = new Set(dashboardDefects.map(d => d.id));
+                    const dashboardActions = isDashboardFiltered
+                      ? improvementActions.filter(act => {
+                        if (act.defectId && dashboardDefectIds.has(act.defectId)) return true;
+                        if (marketDefectsFilterModel !== 'All' && act.model === marketDefectsFilterModel) return true;
+                        if (marketDefectsSearch) {
+                          const q = marketDefectsSearch.toLowerCase();
+                          if ((act.id || '').toLowerCase().includes(q) ||
                             (act.model || '').toLowerCase().includes(q) ||
                             (act.content || '').toLowerCase().includes(q) ||
                             (act.assignee || '').toLowerCase().includes(q) ||
                             (act.ecoResult || '').toLowerCase().includes(q)) {
-                          return true;
+                            return true;
+                          }
                         }
-                      }
-                      return false;
-                    })
-                  : improvementActions;
+                        return false;
+                      })
+                      : improvementActions;
 
-                const allCustomerDefects = dashboardDefects.filter(d => (d.feedbackType || 'Lỗi xe từ khách hàng') === 'Lỗi xe từ khách hàng');
-                const allSuggestions = dashboardDefects.filter(d => d.feedbackType === 'Đề xuất cải tiến');
+                    const allCustomerDefects = dashboardDefects.filter(d => (d.feedbackType || 'Lỗi xe từ khách hàng') === 'Lỗi xe từ khách hàng');
+                    const allSuggestions = dashboardDefects.filter(d => d.feedbackType === 'Đề xuất cải tiến');
 
-                const custUnprocessed = allCustomerDefects.filter(d => d.status === 'Chưa xử lý').length;
-                const custProcessing = allCustomerDefects.filter(d => d.status === 'Đang xử lý').length;
-                const custProcessed = allCustomerDefects.filter(d => d.status === 'Đã xử lý').length;
-                const custSevA = allCustomerDefects.filter(d => d.severity === 'A' || d.severity === 'Cao').length;
+                    const custUnprocessed = allCustomerDefects.filter(d => d.status === 'Chưa xử lý').length;
+                    const custProcessing = allCustomerDefects.filter(d => d.status === 'Đang xử lý').length;
+                    const custProcessed = allCustomerDefects.filter(d => d.status === 'Đã xử lý').length;
+                    const custSevA = allCustomerDefects.filter(d => d.severity === 'A' || d.severity === 'Cao').length;
 
-                const custRate = allCustomerDefects.length > 0 ? Math.round((custProcessed / allCustomerDefects.length) * 100) : 0;
+                    const custRate = allCustomerDefects.length > 0 ? Math.round((custProcessed / allCustomerDefects.length) * 100) : 0;
 
-                const sugConverted = allSuggestions.filter(d => d.capaId || d.status === 'Đang xử lý' || d.status === 'Đã xử lý').length;
-                const sugPending = allSuggestions.length - sugConverted;
-                const sugRate = allSuggestions.length > 0 ? Math.round((sugConverted / allSuggestions.length) * 100) : 0;
+                    const sugConverted = allSuggestions.filter(d => d.capaId || d.status === 'Đang xử lý' || d.status === 'Đã xử lý').length;
+                    const sugPending = allSuggestions.length - sugConverted;
+                    const sugRate = allSuggestions.length > 0 ? Math.round((sugConverted / allSuggestions.length) * 100) : 0;
 
-                const actTotal = dashboardActions.length;
-                const actDone = dashboardActions.filter(act => act.status === 'Đã hoàn thành').length;
-                const actInProg = actTotal - actDone;
-                const actRate = actTotal > 0 ? Math.round((actDone / actTotal) * 100) : 0;
+                    const actTotal = dashboardActions.length;
+                    const actDone = dashboardActions.filter(act => act.status === 'Đã hoàn thành').length;
+                    const actInProg = actTotal - actDone;
+                    const actRate = actTotal > 0 ? Math.round((actDone / actTotal) * 100) : 0;
 
-                const totalIssues = dashboardDefects.length;
-                const totalResolved = custProcessed + sugConverted;
-                const overallRate = totalIssues > 0 ? Math.round((totalResolved / totalIssues) * 100) : 0;
+                    const totalIssues = dashboardDefects.length;
+                    const totalResolved = custProcessed + sugConverted;
+                    const overallRate = totalIssues > 0 ? Math.round((totalResolved / totalIssues) * 100) : 0;
 
-                const handleClearAllFilters = () => {
-                  setMarketDefectsSearch('');
-                  setMarketDefectsFilterModel('All');
-                  setMarketDefectsFilterStatus('All');
-                  setMarketDefectsFilterSeverity('All');
-                  setMarketDefectsFilterFeedbackType('All');
-                  setMarketDefectsFilterMonth('All');
-                  setMarketDefectsFilterYear('All');
-                  setMarketDefectsFilterQuickTime('All');
-                };
+                    const handleClearAllFilters = () => {
+                      setMarketDefectsSearch('');
+                      setMarketDefectsFilterModel('All');
+                      setMarketDefectsFilterStatus('All');
+                      setMarketDefectsFilterSeverity('All');
+                      setMarketDefectsFilterFeedbackType('All');
+                      setMarketDefectsFilterMonth('All');
+                      setMarketDefectsFilterYear('All');
+                      setMarketDefectsFilterQuickTime('All');
+                    };
 
-                // --- TÍNH TOÁN DỮ LIỆU ĐỒ HỌA BIỂU ĐỒ BÁO CÁO (THEO BỘ LỌC ĐỘNG) ---
-                // 1. Thống kê theo Dòng Xe (Model)
-                const modelMap = new Map<string, { count: number; resolved: number; sevA: number }>();
-                dashboardDefects.forEach(d => {
-                  const m = (d.model || 'Khác').trim();
-                  const curr = modelMap.get(m) || { count: 0, resolved: 0, sevA: 0 };
-                  curr.count++;
-                  if (d.status === 'Đã xử lý') curr.resolved++;
-                  if (d.severity === 'A' || d.severity === 'Cao' || d.severity === 'Nghiêm trọng') curr.sevA++;
-                  modelMap.set(m, curr);
-                });
-                const modelChartData = Array.from(modelMap.entries())
-                  .map(([model, data]) => ({
-                    model,
-                    count: data.count,
-                    resolved: data.resolved,
-                    sevA: data.sevA,
-                    pct: dashboardDefects.length > 0 ? Math.round((data.count / dashboardDefects.length) * 100) : 0,
-                    resolveRate: data.count > 0 ? Math.round((data.resolved / data.count) * 100) : 0
-                  }))
-                  .sort((a, b) => b.count - a.count);
-                const maxModelCount = Math.max(...modelChartData.map(m => m.count), 1);
+                    // --- TÍNH TOÁN DỮ LIỆU ĐỒ HỌA BIỂU ĐỒ BÁO CÁO (THEO BỘ LỌC ĐỘNG) ---
+                    // 1. Thống kê theo Dòng Xe (Model)
+                    const modelMap = new Map<string, { count: number; resolved: number; sevA: number }>();
+                    dashboardDefects.forEach(d => {
+                      const m = (d.model || 'Khác').trim();
+                      const curr = modelMap.get(m) || { count: 0, resolved: 0, sevA: 0 };
+                      curr.count++;
+                      if (d.status === 'Đã xử lý') curr.resolved++;
+                      if (d.severity === 'A' || d.severity === 'Cao' || d.severity === 'Nghiêm trọng') curr.sevA++;
+                      modelMap.set(m, curr);
+                    });
+                    const modelChartData = Array.from(modelMap.entries())
+                      .map(([model, data]) => ({
+                        model,
+                        count: data.count,
+                        resolved: data.resolved,
+                        sevA: data.sevA,
+                        pct: dashboardDefects.length > 0 ? Math.round((data.count / dashboardDefects.length) * 100) : 0,
+                        resolveRate: data.count > 0 ? Math.round((data.resolved / data.count) * 100) : 0
+                      }))
+                      .sort((a, b) => b.count - a.count);
+                    const maxModelCount = Math.max(...modelChartData.map(m => m.count), 1);
 
-                // 2. Thống kê theo Khách Hàng / Đại Lý (Top Dealers)
-                const customerMap = new Map<string, { count: number; resolved: number; latestDate: string }>();
-                dashboardDefects.forEach(d => {
-                  const c = (d.customerName || d.dealer || 'Khách hàng vãng lai').trim();
-                  const curr = customerMap.get(c) || { count: 0, resolved: 0, latestDate: '' };
-                  curr.count++;
-                  if (d.status === 'Đã xử lý') curr.resolved++;
-                  if (d.defectDate && (!curr.latestDate || d.defectDate > curr.latestDate)) curr.latestDate = d.defectDate;
-                  customerMap.set(c, curr);
-                });
-                const customerChartData = Array.from(customerMap.entries())
-                  .map(([customer, data]) => ({
-                    customer,
-                    count: data.count,
-                    resolved: data.resolved,
-                    latestDate: data.latestDate,
-                    pct: dashboardDefects.length > 0 ? Math.round((data.count / dashboardDefects.length) * 100) : 0,
-                    resolveRate: data.count > 0 ? Math.round((data.resolved / data.count) * 100) : 0
-                  }))
-                  .sort((a, b) => b.count - a.count)
-                  .slice(0, 8); // Top 8 đại lý phản ánh nhiều nhất
-                const maxCustomerCount = Math.max(...customerChartData.map(c => c.count), 1);
+                    // 2. Thống kê theo Khách Hàng / Đại Lý (Top Dealers)
+                    const customerMap = new Map<string, { count: number; resolved: number; latestDate: string }>();
+                    dashboardDefects.forEach(d => {
+                      const c = (d.customerName || d.dealer || 'Khách hàng vãng lai').trim();
+                      const curr = customerMap.get(c) || { count: 0, resolved: 0, latestDate: '' };
+                      curr.count++;
+                      if (d.status === 'Đã xử lý') curr.resolved++;
+                      if (d.defectDate && (!curr.latestDate || d.defectDate > curr.latestDate)) curr.latestDate = d.defectDate;
+                      customerMap.set(c, curr);
+                    });
+                    const customerChartData = Array.from(customerMap.entries())
+                      .map(([customer, data]) => ({
+                        customer,
+                        count: data.count,
+                        resolved: data.resolved,
+                        latestDate: data.latestDate,
+                        pct: dashboardDefects.length > 0 ? Math.round((data.count / dashboardDefects.length) * 100) : 0,
+                        resolveRate: data.count > 0 ? Math.round((data.resolved / data.count) * 100) : 0
+                      }))
+                      .sort((a, b) => b.count - a.count)
+                      .slice(0, 8); // Top 8 đại lý phản ánh nhiều nhất
+                    const maxCustomerCount = Math.max(...customerChartData.map(c => c.count), 1);
 
-                // 3. Thống kê theo Nhóm Lỗi (Defect Categories - Pareto)
-                const typeMap = new Map<string, { count: number; resolved: number; sevA: number }>();
-                dashboardDefects.forEach(d => {
-                  const t = (d.type || 'Chưa phân loại').trim();
-                  const curr = typeMap.get(t) || { count: 0, resolved: 0, sevA: 0 };
-                  curr.count++;
-                  if (d.status === 'Đã xử lý') curr.resolved++;
-                  if (d.severity === 'A' || d.severity === 'Cao' || d.severity === 'Nghiêm trọng') curr.sevA++;
-                  typeMap.set(t, curr);
-                });
-                const typeChartData = Array.from(typeMap.entries())
-                  .map(([type, data]) => ({
-                    type,
-                    count: data.count,
-                    resolved: data.resolved,
-                    sevA: data.sevA,
-                    pct: dashboardDefects.length > 0 ? Math.round((data.count / dashboardDefects.length) * 100) : 0,
-                    resolveRate: data.count > 0 ? Math.round((data.resolved / data.count) * 100) : 0
-                  }))
-                  .sort((a, b) => b.count - a.count);
-                const maxTypeCount = Math.max(...typeChartData.map(t => t.count), 1);
+                    // 3. Thống kê theo Nhóm Lỗi (Defect Categories - Pareto)
+                    const typeMap = new Map<string, { count: number; resolved: number; sevA: number }>();
+                    dashboardDefects.forEach(d => {
+                      const t = (d.type || 'Chưa phân loại').trim();
+                      const curr = typeMap.get(t) || { count: 0, resolved: 0, sevA: 0 };
+                      curr.count++;
+                      if (d.status === 'Đã xử lý') curr.resolved++;
+                      if (d.severity === 'A' || d.severity === 'Cao' || d.severity === 'Nghiêm trọng') curr.sevA++;
+                      typeMap.set(t, curr);
+                    });
+                    const typeChartData = Array.from(typeMap.entries())
+                      .map(([type, data]) => ({
+                        type,
+                        count: data.count,
+                        resolved: data.resolved,
+                        sevA: data.sevA,
+                        pct: dashboardDefects.length > 0 ? Math.round((data.count / dashboardDefects.length) * 100) : 0,
+                        resolveRate: data.count > 0 ? Math.round((data.resolved / data.count) * 100) : 0
+                      }))
+                      .sort((a, b) => b.count - a.count);
+                    const maxTypeCount = Math.max(...typeChartData.map(t => t.count), 1);
 
-                return (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-5 animate-fadeIn" id="market_defects_dashboard">
-                    {/* Header */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-3.5 gap-2">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-600">
-                          <Activity className="w-5 h-5" />
+                    return (
+                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-5 animate-fadeIn" id="market_defects_dashboard">
+                        {/* Header */}
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-3.5 gap-2">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-600">
+                              <Activity className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wide">
+                                  Dashboard Phản ánh &amp; Cải tiến
+                                </h3>
+                                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                                  {dashboardDefects.length} hồ sơ
+                                </span>
+                                {custSevA > 0 && (
+                                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                                    {custSevA} mức A
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                Theo dõi tiến độ xử lý lỗi thị trường, đề xuất cải tiến và hành động ECO
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 self-end sm:self-center">
+                            {isDashboardFiltered && (
+                              <button
+                                type="button"
+                                onClick={handleClearAllFilters}
+                                className="text-blue-600 hover:text-blue-800 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold border border-blue-200 bg-white"
+                                title="Xóa toàn bộ bộ lọc đang áp dụng"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" /> Xóa lọc
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setShowDefectsDashboard(false)}
+                              className="text-slate-600 hover:text-slate-900 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold border border-slate-200 bg-slate-50"
+                              title="Thu gọn Dashboard"
+                            >
+                              <EyeOff className="w-3.5 h-3.5" /> Thu gọn
+                            </button>
+                          </div>
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wide">
-                              Dashboard Phản ánh &amp; Cải tiến
-                            </h3>
-                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                              {dashboardDefects.length} hồ sơ
+
+                        {/* Active Filter Tags Bar */}
+                        {isDashboardFiltered && (
+                          <div className="flex flex-wrap items-center gap-1.5 bg-blue-50/60 border border-blue-200 rounded-xl px-3 py-2 text-[11px] text-slate-700">
+                            <span className="font-extrabold text-blue-800 text-[10px] uppercase flex items-center gap-1 mr-1">
+                              <SlidersHorizontal className="w-3 h-3" /> Đang lọc ({dashboardDefects.length}/{defects.length}):
                             </span>
-                            {custSevA > 0 && (
-                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-                                {custSevA} mức A
+                            {marketDefectsSearch && (
+                              <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
+                                Tìm: <b className="text-blue-700">"{marketDefectsSearch}"</b>
+                                <button onClick={() => setMarketDefectsSearch('')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
+                              </span>
+                            )}
+                            {marketDefectsFilterModel !== 'All' && (
+                              <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
+                                Model: <b className="text-blue-700">{marketDefectsFilterModel}</b>
+                                <button onClick={() => setMarketDefectsFilterModel('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
+                              </span>
+                            )}
+                            {marketDefectsFilterStatus !== 'All' && (
+                              <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
+                                Xử lý: <b className="text-blue-700">{marketDefectsFilterStatus}</b>
+                                <button onClick={() => setMarketDefectsFilterStatus('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
+                              </span>
+                            )}
+                            {marketDefectsFilterSeverity !== 'All' && (
+                              <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
+                                Mức độ: <b className="text-blue-700">Mức {marketDefectsFilterSeverity}</b>
+                                <button onClick={() => setMarketDefectsFilterSeverity('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
+                              </span>
+                            )}
+                            {marketDefectsFilterFeedbackType !== 'All' && (
+                              <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
+                                Phân loại: <b className="text-blue-700">{marketDefectsFilterFeedbackType}</b>
+                                <button onClick={() => setMarketDefectsFilterFeedbackType('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
+                              </span>
+                            )}
+                            {marketDefectsFilterQuickTime !== 'All' && (
+                              <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
+                                Thời gian: <b className="text-blue-700">
+                                  {marketDefectsFilterQuickTime === 'today' ? 'Hôm nay' :
+                                    marketDefectsFilterQuickTime === 'this_week' ? 'Tuần này' :
+                                      marketDefectsFilterQuickTime === 'this_month' ? 'Tháng này' :
+                                        marketDefectsFilterQuickTime === 'this_quarter' ? 'Quý này' : 'Năm nay'}
+                                </b>
+                                <button onClick={() => setMarketDefectsFilterQuickTime('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
+                              </span>
+                            )}
+                            {marketDefectsFilterMonth !== 'All' && (
+                              <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
+                                Tháng: <b className="text-blue-700">{marketDefectsFilterMonth}</b>
+                                <button onClick={() => setMarketDefectsFilterMonth('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
+                              </span>
+                            )}
+                            {marketDefectsFilterYear !== 'All' && (
+                              <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
+                                Năm: <b className="text-blue-700">{marketDefectsFilterYear}</b>
+                                <button onClick={() => setMarketDefectsFilterYear('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            Theo dõi tiến độ xử lý lỗi thị trường, đề xuất cải tiến và hành động ECO
-                          </p>
+                        )}
+
+                        {/* 4 KPI Cards tối giản, đồng nhất */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
+                          {/* KPI 1: Lỗi xe từ KH */}
+                          <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-rose-300 transition">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Lỗi xe từ KH</span>
+                              <span className="p-1.5 rounded-lg bg-rose-100 text-rose-600">
+                                <Car className="w-3.5 h-3.5" />
+                              </span>
+                            </div>
+                            <div className="flex items-baseline justify-between">
+                              <span className="text-2xl font-black text-slate-900">{allCustomerDefects.length}</span>
+                              <span className="text-xs font-extrabold text-rose-600">{custRate}% đã xử lý</span>
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                              <div className="bg-rose-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${custRate}%` }} />
+                            </div>
+                            <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
+                              <span>Chưa: <b className="text-amber-600">{custUnprocessed}</b></span>
+                              <span>Đang: <b className="text-blue-600">{custProcessing}</b></span>
+                              <span>Xong: <b className="text-emerald-600">{custProcessed}</b></span>
+                            </div>
+                          </div>
+
+                          {/* KPI 2: Đề xuất Cải tiến */}
+                          <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-emerald-300 transition">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Đề xuất Cải tiến</span>
+                              <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-600">
+                                <Sparkles className="w-3.5 h-3.5" />
+                              </span>
+                            </div>
+                            <div className="flex items-baseline justify-between">
+                              <span className="text-2xl font-black text-slate-900">{allSuggestions.length}</span>
+                              <span className="text-xs font-extrabold text-emerald-600">{sugRate}% gắn CAPA/ECO</span>
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                              <div className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${sugRate}%` }} />
+                            </div>
+                            <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
+                              <span>Đã chuyển: <b className="text-emerald-600">{sugConverted}</b></span>
+                              <span>Chờ đánh giá: <b className="text-amber-600">{sugPending}</b></span>
+                            </div>
+                          </div>
+
+                          {/* KPI 3: Kế hoạch ECO */}
+                          <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-indigo-300 transition">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Kế hoạch ECO</span>
+                              <span className="p-1.5 rounded-lg bg-indigo-100 text-indigo-600">
+                                <Wrench className="w-3.5 h-3.5" />
+                              </span>
+                            </div>
+                            <div className="flex items-baseline justify-between">
+                              <span className="text-2xl font-black text-slate-900">{actTotal}</span>
+                              <span className="text-xs font-extrabold text-indigo-600">{actRate}% hoàn tất</span>
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                              <div className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${actRate}%` }} />
+                            </div>
+                            <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
+                              <span>Đang thực hiện: <b className="text-blue-600">{actInProg}</b></span>
+                              <span>Hoàn thành: <b className="text-emerald-600">{actDone}</b></span>
+                            </div>
+                          </div>
+
+                          {/* KPI 4: Tiến độ Toàn Phân hệ */}
+                          <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-amber-300 transition">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Tiến độ chung</span>
+                              <span className="p-1.5 rounded-lg bg-amber-100 text-amber-600">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                              </span>
+                            </div>
+                            <div className="flex items-baseline justify-between">
+                              <span className="text-2xl font-black text-slate-900">{overallRate}%</span>
+                              <span className="text-xs font-extrabold text-amber-700">{totalResolved}/{totalIssues} hồ sơ</span>
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                              <div className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${overallRate}%` }} />
+                            </div>
+                            <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
+                              <span>Tổng phản ánh: <b className="text-slate-800">{totalIssues}</b></span>
+                              <span>Đã xong: <b className="text-emerald-600">{totalResolved}</b></span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* ============================================================== */}
+                        {/* KHU VỰC BIỂU ĐỒ PHÂN TÍCH GỌN NHẸ */}
+                        {/* ============================================================== */}
+                        <div className="pt-2 space-y-3" id="market_defects_visual_charts">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                            <div className="flex items-center gap-2">
+                              <BarChart className="w-4 h-4 text-blue-600" />
+                              <span className="text-xs font-extrabold uppercase text-slate-800 tracking-wide">
+                                Biểu đồ phân tích
+                              </span>
+                              <span className="text-[11px] text-slate-400 hidden md:inline">
+                                • Bấm vào dòng để lọc nhanh danh sách
+                              </span>
+                            </div>
+
+                            {/* Chart View Switcher */}
+                            <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-bold">
+                              <button
+                                type="button"
+                                onClick={() => setDefectsChartTab('all')}
+                                className={`px-2.5 py-1 rounded-md transition cursor-pointer ${defectsChartTab === 'all'
+                                  ? 'bg-blue-600 text-white shadow-xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                                  }`}
+                              >
+                                Tất cả
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDefectsChartTab('model')}
+                                className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${defectsChartTab === 'model'
+                                  ? 'bg-blue-600 text-white shadow-xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                                  }`}
+                              >
+                                <Car className="w-3.5 h-3.5" />
+                                <span>Dòng xe</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDefectsChartTab('customer')}
+                                className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${defectsChartTab === 'customer'
+                                  ? 'bg-blue-600 text-white shadow-xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                                  }`}
+                              >
+                                <Building2 className="w-3.5 h-3.5" />
+                                <span>Khách hàng</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDefectsChartTab('type')}
+                                className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${defectsChartTab === 'type'
+                                  ? 'bg-blue-600 text-white shadow-xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                                  }`}
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                                <span>Nhóm lỗi</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {dashboardDefects.length === 0 ? (
+                            <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-500">
+                              <p className="text-xs font-bold">Không có dữ liệu phù hợp với bộ lọc hiện tại.</p>
+                            </div>
+                          ) : (
+                            <div className={`grid gap-3.5 ${defectsChartTab === 'all' ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1'}`}>
+                              {/* BIỂU ĐỒ 1: THEO DÒNG XE */}
+                              {(defectsChartTab === 'all' || defectsChartTab === 'model') && (
+                                <div className="bg-slate-50/40 border border-slate-200 rounded-xl p-4 flex flex-col">
+                                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200">
+                                    <div className="flex items-center gap-2">
+                                      <span className="p-1 bg-indigo-100 text-indigo-600 rounded-md">
+                                        <Car className="w-3.5 h-3.5" />
+                                      </span>
+                                      <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
+                                        Theo Dòng xe ({modelChartData.length})
+                                      </h4>
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                                    {modelChartData.map((item, idx) => {
+                                      const barWidth = Math.max(6, Math.round((item.count / maxModelCount) * 100));
+                                      const isSelected = marketDefectsFilterModel === item.model;
+                                      return (
+                                        <div
+                                          key={idx}
+                                          onClick={() => setMarketDefectsFilterModel(isSelected ? 'All' : item.model)}
+                                          className={`px-2.5 py-2 rounded-lg transition cursor-pointer ${isSelected
+                                            ? 'bg-indigo-50 ring-1 ring-indigo-400'
+                                            : 'hover:bg-white'
+                                            }`}
+                                          title={`${item.model}: ${item.resolved}/${item.count} đã xử lý (${item.resolveRate}%)${item.sevA > 0 ? ` • ${item.sevA} mức A` : ''} — Bấm để lọc`}
+                                        >
+                                          <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
+                                            <span className="font-bold text-slate-800 truncate flex items-center gap-1.5">
+                                              <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
+                                              <span className="truncate">{item.model}</span>
+                                            </span>
+                                            <span className="font-mono text-[11px] shrink-0 flex items-center gap-1.5">
+                                              {item.sevA > 0 && (
+                                                <span className="text-[10px] font-bold text-rose-600">{item.sevA}A</span>
+                                              )}
+                                              <b className="text-slate-900 font-black">{item.count}</b>
+                                              <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
+                                            </span>
+                                          </div>
+                                          <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
+                                            <div
+                                              className="bg-indigo-600 h-1.5 rounded-full transition-all duration-500"
+                                              style={{ width: `${barWidth}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* BIỂU ĐỒ 2: TOP KHÁCH HÀNG / ĐẠI LÝ */}
+                              {(defectsChartTab === 'all' || defectsChartTab === 'customer') && (
+                                <div className="bg-slate-50/40 border border-slate-200 rounded-xl p-4 flex flex-col">
+                                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200">
+                                    <div className="flex items-center gap-2">
+                                      <span className="p-1 bg-emerald-100 text-emerald-600 rounded-md">
+                                        <Building2 className="w-3.5 h-3.5" />
+                                      </span>
+                                      <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
+                                        Top Đại lý / KH ({customerChartData.length})
+                                      </h4>
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                                    {customerChartData.map((item, idx) => {
+                                      const barWidth = Math.max(6, Math.round((item.count / maxCustomerCount) * 100));
+                                      const isSelected = marketDefectsSearch === item.customer;
+                                      return (
+                                        <div
+                                          key={idx}
+                                          onClick={() => setMarketDefectsSearch(isSelected ? '' : item.customer)}
+                                          className={`px-2.5 py-2 rounded-lg transition cursor-pointer ${isSelected
+                                            ? 'bg-emerald-50 ring-1 ring-emerald-400'
+                                            : 'hover:bg-white'
+                                            }`}
+                                          title={`${item.customer}: ${item.resolved}/${item.count} đã xử lý (${item.resolveRate}%)${item.latestDate ? ` • Gần nhất: ${item.latestDate}` : ''} — Bấm để lọc`}
+                                        >
+                                          <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
+                                            <span className="font-bold text-slate-800 truncate flex items-center gap-1.5">
+                                              <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
+                                              <span className="truncate">{item.customer}</span>
+                                            </span>
+                                            <span className="font-mono text-[11px] shrink-0 flex items-center gap-1.5">
+                                              <b className="text-slate-900 font-black">{item.count}</b>
+                                              <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
+                                            </span>
+                                          </div>
+                                          <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
+                                            <div
+                                              className="bg-emerald-600 h-1.5 rounded-full transition-all duration-500"
+                                              style={{ width: `${barWidth}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* BIỂU ĐỒ 3: CƠ CẤU NHÓM LỖI */}
+                              {(defectsChartTab === 'all' || defectsChartTab === 'type') && (
+                                <div className="bg-slate-50/40 border border-slate-200 rounded-xl p-4 flex flex-col">
+                                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200">
+                                    <div className="flex items-center gap-2">
+                                      <span className="p-1 bg-amber-100 text-amber-600 rounded-md">
+                                        <AlertTriangle className="w-3.5 h-3.5" />
+                                      </span>
+                                      <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
+                                        Nhóm Lỗi Pareto ({typeChartData.length})
+                                      </h4>
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                                    {typeChartData.map((item, idx) => {
+                                      const barWidth = Math.max(6, Math.round((item.count / maxTypeCount) * 100));
+                                      const isSelected = marketDefectsSearch === item.type;
+                                      return (
+                                        <div
+                                          key={idx}
+                                          onClick={() => setMarketDefectsSearch(isSelected ? '' : item.type)}
+                                          className={`px-2.5 py-2 rounded-lg transition cursor-pointer ${isSelected
+                                            ? 'bg-amber-50 ring-1 ring-amber-400'
+                                            : 'hover:bg-white'
+                                            }`}
+                                          title={`${item.type}: ${item.resolved}/${item.count} đã xử lý (${item.resolveRate}%)${item.sevA > 0 ? ` • ${item.sevA} mức A` : ''} — Bấm để lọc`}
+                                        >
+                                          <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
+                                            <span className="font-bold text-slate-800 truncate flex items-center gap-1.5">
+                                              <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
+                                              <span className="truncate">{item.type}</span>
+                                            </span>
+                                            <span className="font-mono text-[11px] shrink-0 flex items-center gap-1.5">
+                                              {item.sevA > 0 && (
+                                                <span className="text-[10px] font-bold text-rose-600">{item.sevA}A</span>
+                                              )}
+                                              <b className="text-slate-900 font-black">{item.count}</b>
+                                              <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
+                                            </span>
+                                          </div>
+                                          <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
+                                            <div
+                                              className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
+                                              style={{ width: `${barWidth}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 self-end sm:self-center">
-                        {isDashboardFiltered && (
-                          <button
-                            type="button"
-                            onClick={handleClearAllFilters}
-                            className="text-blue-600 hover:text-blue-800 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold border border-blue-200 bg-white"
-                            title="Xóa toàn bộ bộ lọc đang áp dụng"
-                          >
-                            <RefreshCw className="w-3.5 h-3.5" /> Xóa lọc
-                          </button>
-                        )}
+                    );
+                  })()}
+
+                  {/* Defect Filter & Search Control Center */}
+                  {isMarketDefectsFilterExpanded && (
+                    <div className="bg-white border border-slate-300 rounded-xl p-4 shadow-sm space-y-3 animate-fadeIn" id="market_defects_filter_center">
+                      <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                        <div className="flex items-center gap-2">
+                          <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
+                          <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Bộ lọc tìm kiếm Phản ánh & Đề xuất</span>
+                        </div>
                         <button
-                          type="button"
-                          onClick={() => setShowDefectsDashboard(false)}
-                          className="text-slate-600 hover:text-slate-900 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold border border-slate-200 bg-slate-50"
-                          title="Thu gọn Dashboard"
+                          onClick={() => setIsMarketDefectsFilterExpanded(false)}
+                          className="flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-indigo-700 bg-slate-50 hover:bg-slate-100 border border-slate-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
                         >
-                          <EyeOff className="w-3.5 h-3.5" /> Thu gọn
+                          Thu gọn <ChevronUp className="w-3 h-3" />
                         </button>
                       </div>
-                    </div>
 
-                    {/* Active Filter Tags Bar */}
-                    {isDashboardFiltered && (
-                      <div className="flex flex-wrap items-center gap-1.5 bg-blue-50/60 border border-blue-200 rounded-xl px-3 py-2 text-[11px] text-slate-700">
-                        <span className="font-extrabold text-blue-800 text-[10px] uppercase flex items-center gap-1 mr-1">
-                          <SlidersHorizontal className="w-3 h-3" /> Đang lọc ({dashboardDefects.length}/{defects.length}):
-                        </span>
-                        {marketDefectsSearch && (
-                          <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
-                            Tìm: <b className="text-blue-700">"{marketDefectsSearch}"</b>
-                            <button onClick={() => setMarketDefectsSearch('')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
-                          </span>
-                        )}
-                        {marketDefectsFilterModel !== 'All' && (
-                          <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
-                            Model: <b className="text-blue-700">{marketDefectsFilterModel}</b>
-                            <button onClick={() => setMarketDefectsFilterModel('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
-                          </span>
-                        )}
-                        {marketDefectsFilterStatus !== 'All' && (
-                          <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
-                            Xử lý: <b className="text-blue-700">{marketDefectsFilterStatus}</b>
-                            <button onClick={() => setMarketDefectsFilterStatus('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
-                          </span>
-                        )}
-                        {marketDefectsFilterSeverity !== 'All' && (
-                          <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
-                            Mức độ: <b className="text-blue-700">Mức {marketDefectsFilterSeverity}</b>
-                            <button onClick={() => setMarketDefectsFilterSeverity('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
-                          </span>
-                        )}
-                        {marketDefectsFilterFeedbackType !== 'All' && (
-                          <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
-                            Phân loại: <b className="text-blue-700">{marketDefectsFilterFeedbackType}</b>
-                            <button onClick={() => setMarketDefectsFilterFeedbackType('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
-                          </span>
-                        )}
-                        {marketDefectsFilterQuickTime !== 'All' && (
-                          <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
-                            Thời gian: <b className="text-blue-700">
-                              {marketDefectsFilterQuickTime === 'today' ? 'Hôm nay' :
-                               marketDefectsFilterQuickTime === 'this_week' ? 'Tuần này' :
-                               marketDefectsFilterQuickTime === 'this_month' ? 'Tháng này' :
-                               marketDefectsFilterQuickTime === 'this_quarter' ? 'Quý này' : 'Năm nay'}
-                            </b>
-                            <button onClick={() => setMarketDefectsFilterQuickTime('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
-                          </span>
-                        )}
-                        {marketDefectsFilterMonth !== 'All' && (
-                          <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
-                            Tháng: <b className="text-blue-700">{marketDefectsFilterMonth}</b>
-                            <button onClick={() => setMarketDefectsFilterMonth('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
-                          </span>
-                        )}
-                        {marketDefectsFilterYear !== 'All' && (
-                          <span className="inline-flex items-center gap-1 bg-white border border-blue-200 rounded-md px-2 py-0.5 font-semibold text-slate-800">
-                            Năm: <b className="text-blue-700">{marketDefectsFilterYear}</b>
-                            <button onClick={() => setMarketDefectsFilterYear('All')} className="text-slate-400 hover:text-slate-700 cursor-pointer ml-0.5">✕</button>
-                          </span>
-                        )}
-                      </div>
-                    )}
+                      <div className="space-y-3">
+                        <div className="flex flex-col gap-3">
+                          {/* Search Bar */}
+                          <div className="relative w-full">
+                            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                            <input
+                              type="text"
+                              placeholder="Tìm theo Mã Sự Cố, Model, Loại lỗi, Mô tả, Đại lý, Số khung/máy..."
+                              value={marketDefectsSearch}
+                              onChange={(e) => setMarketDefectsSearch(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg py-2.5 pl-9 pr-8 text-xs font-semibold text-slate-700 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            />
+                            {marketDefectsSearch && (
+                              <button
+                                onClick={() => setMarketDefectsSearch('')}
+                                className="absolute right-2.5 top-3 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200/50 cursor-pointer"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
 
-                    {/* 4 KPI Cards tối giản, đồng nhất */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
-                      {/* KPI 1: Lỗi xe từ KH */}
-                      <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-rose-300 transition">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Lỗi xe từ KH</span>
-                          <span className="p-1.5 rounded-lg bg-rose-100 text-rose-600">
-                            <Car className="w-3.5 h-3.5" />
-                          </span>
-                        </div>
-                        <div className="flex items-baseline justify-between">
-                          <span className="text-2xl font-black text-slate-900">{allCustomerDefects.length}</span>
-                          <span className="text-xs font-extrabold text-rose-600">{custRate}% đã xử lý</span>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                          <div className="bg-rose-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${custRate}%` }} />
-                        </div>
-                        <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
-                          <span>Chưa: <b className="text-amber-600">{custUnprocessed}</b></span>
-                          <span>Đang: <b className="text-blue-600">{custProcessing}</b></span>
-                          <span>Xong: <b className="text-emerald-600">{custProcessed}</b></span>
-                        </div>
-                      </div>
-
-                      {/* KPI 2: Đề xuất Cải tiến */}
-                      <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-emerald-300 transition">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Đề xuất Cải tiến</span>
-                          <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-600">
-                            <Sparkles className="w-3.5 h-3.5" />
-                          </span>
-                        </div>
-                        <div className="flex items-baseline justify-between">
-                          <span className="text-2xl font-black text-slate-900">{allSuggestions.length}</span>
-                          <span className="text-xs font-extrabold text-emerald-600">{sugRate}% gắn CAPA/ECO</span>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                          <div className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${sugRate}%` }} />
-                        </div>
-                        <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
-                          <span>Đã chuyển: <b className="text-emerald-600">{sugConverted}</b></span>
-                          <span>Chờ đánh giá: <b className="text-amber-600">{sugPending}</b></span>
-                        </div>
-                      </div>
-
-                      {/* KPI 3: Kế hoạch ECO */}
-                      <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-indigo-300 transition">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Kế hoạch ECO</span>
-                          <span className="p-1.5 rounded-lg bg-indigo-100 text-indigo-600">
-                            <Wrench className="w-3.5 h-3.5" />
-                          </span>
-                        </div>
-                        <div className="flex items-baseline justify-between">
-                          <span className="text-2xl font-black text-slate-900">{actTotal}</span>
-                          <span className="text-xs font-extrabold text-indigo-600">{actRate}% hoàn tất</span>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                          <div className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${actRate}%` }} />
-                        </div>
-                        <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
-                          <span>Đang thực hiện: <b className="text-blue-600">{actInProg}</b></span>
-                          <span>Hoàn thành: <b className="text-emerald-600">{actDone}</b></span>
-                        </div>
-                      </div>
-
-                      {/* KPI 4: Tiến độ Toàn Phân hệ */}
-                      <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-amber-300 transition">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Tiến độ chung</span>
-                          <span className="p-1.5 rounded-lg bg-amber-100 text-amber-600">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                          </span>
-                        </div>
-                        <div className="flex items-baseline justify-between">
-                          <span className="text-2xl font-black text-slate-900">{overallRate}%</span>
-                          <span className="text-xs font-extrabold text-amber-700">{totalResolved}/{totalIssues} hồ sơ</span>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                          <div className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${overallRate}%` }} />
-                        </div>
-                        <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
-                          <span>Tổng phản ánh: <b className="text-slate-800">{totalIssues}</b></span>
-                          <span>Đã xong: <b className="text-emerald-600">{totalResolved}</b></span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* ============================================================== */}
-                    {/* KHU VỰC BIỂU ĐỒ PHÂN TÍCH GỌN NHẸ */}
-                    {/* ============================================================== */}
-                    <div className="pt-2 space-y-3" id="market_defects_visual_charts">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                        <div className="flex items-center gap-2">
-                          <BarChart className="w-4 h-4 text-blue-600" />
-                          <span className="text-xs font-extrabold uppercase text-slate-800 tracking-wide">
-                            Biểu đồ phân tích
-                          </span>
-                          <span className="text-[11px] text-slate-400 hidden md:inline">
-                            • Bấm vào dòng để lọc nhanh danh sách
-                          </span>
-                        </div>
-
-                        {/* Chart View Switcher */}
-                        <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-bold">
-                          <button
-                            type="button"
-                            onClick={() => setDefectsChartTab('all')}
-                            className={`px-2.5 py-1 rounded-md transition cursor-pointer ${defectsChartTab === 'all'
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                          >
-                            Tất cả
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDefectsChartTab('model')}
-                            className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${defectsChartTab === 'model'
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                          >
-                            <Car className="w-3.5 h-3.5" />
-                            <span>Dòng xe</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDefectsChartTab('customer')}
-                            className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${defectsChartTab === 'customer'
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                          >
-                            <Building2 className="w-3.5 h-3.5" />
-                            <span>Khách hàng</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDefectsChartTab('type')}
-                            className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${defectsChartTab === 'type'
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                              }`}
-                          >
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            <span>Nhóm lỗi</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {dashboardDefects.length === 0 ? (
-                        <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-6 text-center text-slate-500">
-                          <p className="text-xs font-bold">Không có dữ liệu phù hợp với bộ lọc hiện tại.</p>
-                        </div>
-                      ) : (
-                        <div className={`grid gap-3.5 ${defectsChartTab === 'all' ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1'}`}>
-                          {/* BIỂU ĐỒ 1: THEO DÒNG XE */}
-                          {(defectsChartTab === 'all' || defectsChartTab === 'model') && (
-                            <div className="bg-slate-50/40 border border-slate-200 rounded-xl p-4 flex flex-col">
-                              <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200">
-                                <div className="flex items-center gap-2">
-                                  <span className="p-1 bg-indigo-100 text-indigo-600 rounded-md">
-                                    <Car className="w-3.5 h-3.5" />
-                                  </span>
-                                  <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
-                                    Theo Dòng xe ({modelChartData.length})
-                                  </h4>
-                                </div>
-                              </div>
-
-                              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-                                {modelChartData.map((item, idx) => {
-                                  const barWidth = Math.max(6, Math.round((item.count / maxModelCount) * 100));
-                                  const isSelected = marketDefectsFilterModel === item.model;
-                                  return (
-                                    <div
-                                      key={idx}
-                                      onClick={() => setMarketDefectsFilterModel(isSelected ? 'All' : item.model)}
-                                      className={`px-2.5 py-2 rounded-lg transition cursor-pointer ${isSelected
-                                        ? 'bg-indigo-50 ring-1 ring-indigo-400'
-                                        : 'hover:bg-white'
-                                        }`}
-                                      title={`${item.model}: ${item.resolved}/${item.count} đã xử lý (${item.resolveRate}%)${item.sevA > 0 ? ` • ${item.sevA} mức A` : ''} — Bấm để lọc`}
-                                    >
-                                      <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
-                                        <span className="font-bold text-slate-800 truncate flex items-center gap-1.5">
-                                          <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
-                                          <span className="truncate">{item.model}</span>
-                                        </span>
-                                        <span className="font-mono text-[11px] shrink-0 flex items-center gap-1.5">
-                                          {item.sevA > 0 && (
-                                            <span className="text-[10px] font-bold text-rose-600">{item.sevA}A</span>
-                                          )}
-                                          <b className="text-slate-900 font-black">{item.count}</b>
-                                          <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
-                                        </span>
-                                      </div>
-                                      <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
-                                        <div
-                                          className="bg-indigo-600 h-1.5 rounded-full transition-all duration-500"
-                                          style={{ width: `${barWidth}%` }}
-                                        />
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                          {/* Dropdowns Row 1: Model, Status, Severity, Feedback Type */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                            {/* Model Filter */}
+                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+                              <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Model:</span>
+                              <select
+                                value={marketDefectsFilterModel}
+                                onChange={(e) => setMarketDefectsFilterModel(e.target.value)}
+                                className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
+                              >
+                                <option value="All">Tất cả xe</option>
+                                {uniqueMarketDefectModels.map(mod => (
+                                  <option key={mod} value={mod}>{mod}</option>
+                                ))}
+                              </select>
                             </div>
-                          )}
 
-                          {/* BIỂU ĐỒ 2: TOP KHÁCH HÀNG / ĐẠI LÝ */}
-                          {(defectsChartTab === 'all' || defectsChartTab === 'customer') && (
-                            <div className="bg-slate-50/40 border border-slate-200 rounded-xl p-4 flex flex-col">
-                              <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200">
-                                <div className="flex items-center gap-2">
-                                  <span className="p-1 bg-emerald-100 text-emerald-600 rounded-md">
-                                    <Building2 className="w-3.5 h-3.5" />
-                                  </span>
-                                  <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
-                                    Top Đại lý / KH ({customerChartData.length})
-                                  </h4>
-                                </div>
-                              </div>
-
-                              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-                                {customerChartData.map((item, idx) => {
-                                  const barWidth = Math.max(6, Math.round((item.count / maxCustomerCount) * 100));
-                                  const isSelected = marketDefectsSearch === item.customer;
-                                  return (
-                                    <div
-                                      key={idx}
-                                      onClick={() => setMarketDefectsSearch(isSelected ? '' : item.customer)}
-                                      className={`px-2.5 py-2 rounded-lg transition cursor-pointer ${isSelected
-                                        ? 'bg-emerald-50 ring-1 ring-emerald-400'
-                                        : 'hover:bg-white'
-                                        }`}
-                                      title={`${item.customer}: ${item.resolved}/${item.count} đã xử lý (${item.resolveRate}%)${item.latestDate ? ` • Gần nhất: ${item.latestDate}` : ''} — Bấm để lọc`}
-                                    >
-                                      <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
-                                        <span className="font-bold text-slate-800 truncate flex items-center gap-1.5">
-                                          <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
-                                          <span className="truncate">{item.customer}</span>
-                                        </span>
-                                        <span className="font-mono text-[11px] shrink-0 flex items-center gap-1.5">
-                                          <b className="text-slate-900 font-black">{item.count}</b>
-                                          <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
-                                        </span>
-                                      </div>
-                                      <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
-                                        <div
-                                          className="bg-emerald-600 h-1.5 rounded-full transition-all duration-500"
-                                          style={{ width: `${barWidth}%` }}
-                                        />
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                            {/* Status Filter */}
+                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+                              <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Xử lý:</span>
+                              <select
+                                value={marketDefectsFilterStatus}
+                                onChange={(e) => setMarketDefectsFilterStatus(e.target.value)}
+                                className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
+                              >
+                                <option value="All">Tất cả trạng thái</option>
+                                <option value="Chưa xử lý">Chưa xử lý</option>
+                                <option value="Đang xử lý">Đang xử lý</option>
+                                <option value="Đã xử lý">Đã xử lý</option>
+                              </select>
                             </div>
-                          )}
 
-                          {/* BIỂU ĐỒ 3: CƠ CẤU NHÓM LỖI */}
-                          {(defectsChartTab === 'all' || defectsChartTab === 'type') && (
-                            <div className="bg-slate-50/40 border border-slate-200 rounded-xl p-4 flex flex-col">
-                              <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200">
-                                <div className="flex items-center gap-2">
-                                  <span className="p-1 bg-amber-100 text-amber-600 rounded-md">
-                                    <AlertTriangle className="w-3.5 h-3.5" />
-                                  </span>
-                                  <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
-                                    Nhóm Lỗi Pareto ({typeChartData.length})
-                                  </h4>
-                                </div>
-                              </div>
-
-                              <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-                                {typeChartData.map((item, idx) => {
-                                  const barWidth = Math.max(6, Math.round((item.count / maxTypeCount) * 100));
-                                  const isSelected = marketDefectsSearch === item.type;
-                                  return (
-                                    <div
-                                      key={idx}
-                                      onClick={() => setMarketDefectsSearch(isSelected ? '' : item.type)}
-                                      className={`px-2.5 py-2 rounded-lg transition cursor-pointer ${isSelected
-                                        ? 'bg-amber-50 ring-1 ring-amber-400'
-                                        : 'hover:bg-white'
-                                        }`}
-                                      title={`${item.type}: ${item.resolved}/${item.count} đã xử lý (${item.resolveRate}%)${item.sevA > 0 ? ` • ${item.sevA} mức A` : ''} — Bấm để lọc`}
-                                    >
-                                      <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
-                                        <span className="font-bold text-slate-800 truncate flex items-center gap-1.5">
-                                          <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
-                                          <span className="truncate">{item.type}</span>
-                                        </span>
-                                        <span className="font-mono text-[11px] shrink-0 flex items-center gap-1.5">
-                                          {item.sevA > 0 && (
-                                            <span className="text-[10px] font-bold text-rose-600">{item.sevA}A</span>
-                                          )}
-                                          <b className="text-slate-900 font-black">{item.count}</b>
-                                          <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
-                                        </span>
-                                      </div>
-                                      <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
-                                        <div
-                                          className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
-                                          style={{ width: `${barWidth}%` }}
-                                        />
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                            {/* Severity Filter */}
+                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+                              <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Mức độ:</span>
+                              <select
+                                value={marketDefectsFilterSeverity}
+                                onChange={(e) => setMarketDefectsFilterSeverity(e.target.value)}
+                                className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
+                              >
+                                <option value="All">Tất cả mức độ</option>
+                                <option value="A">Mức A (Rất nghiêm trọng)</option>
+                                <option value="B">Mức B (Nghiêm trọng)</option>
+                                <option value="C">Mức C (Trung bình)</option>
+                                <option value="D">Mức D (Nhẹ)</option>
+                              </select>
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
 
-              {/* Defect Filter & Search Control Center */}
-              {isMarketDefectsFilterExpanded && (
-                <div className="bg-white border border-slate-300 rounded-xl p-4 shadow-sm space-y-3 animate-fadeIn" id="market_defects_filter_center">
-                  <div className="flex justify-between items-center pb-2 border-b border-slate-200">
-                    <div className="flex items-center gap-2">
-                      <SlidersHorizontal className="w-4 h-4 text-indigo-600" />
-                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Bộ lọc tìm kiếm Phản ánh & Đề xuất</span>
-                    </div>
-                    <button
-                      onClick={() => setIsMarketDefectsFilterExpanded(false)}
-                      className="flex items-center gap-1 text-[11px] font-bold text-slate-500 hover:text-indigo-700 bg-slate-50 hover:bg-slate-100 border border-slate-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
-                    >
-                      Thu gọn <ChevronUp className="w-3 h-3" />
-                    </button>
-                  </div>
+                            {/* Feedback Type Filter */}
+                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+                              <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Phân loại:</span>
+                              <select
+                                value={marketDefectsFilterFeedbackType}
+                                onChange={(e) => setMarketDefectsFilterFeedbackType(e.target.value)}
+                                className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
+                              >
+                                <option value="All">Tất cả phân loại</option>
+                                <option value="Lỗi xe từ khách hàng">🚗 Lỗi xe từ KH</option>
+                                <option value="Đề xuất cải tiến">💡 Đề xuất cải tiến</option>
+                              </select>
+                            </div>
+                          </div>
 
-                  <div className="space-y-3">
-                    <div className="flex flex-col gap-3">
-                      {/* Search Bar */}
-                      <div className="relative w-full">
-                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                        <input
-                          type="text"
-                          placeholder="Tìm theo Mã Sự Cố, Model, Loại lỗi, Mô tả, Đại lý, Số khung/máy..."
-                          value={marketDefectsSearch}
-                          onChange={(e) => setMarketDefectsSearch(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-300 rounded-lg py-2.5 pl-9 pr-8 text-xs font-semibold text-slate-700 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        />
-                        {marketDefectsSearch && (
-                          <button
-                            onClick={() => setMarketDefectsSearch('')}
-                            className="absolute right-2.5 top-3 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-200/50 cursor-pointer"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
+                          {/* Dropdowns Row 2: Time Filters */}
+                          <div className="pt-2 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {/* Quick Time Filter */}
+                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+                              <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Thời gian:</span>
+                              <select
+                                value={marketDefectsFilterQuickTime}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setMarketDefectsFilterQuickTime(val);
+                                  if (val !== 'All') {
+                                    setMarketDefectsFilterMonth('All');
+                                    setMarketDefectsFilterYear('All');
+                                  }
+                                }}
+                                className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
+                              >
+                                <option value="All">Tất cả thời gian</option>
+                                <option value="today">Hôm nay</option>
+                                <option value="this_week">Tuần này</option>
+                                <option value="this_month">Tháng này</option>
+                                <option value="this_quarter">Quý này</option>
+                                <option value="this_year">Năm nay</option>
+                              </select>
+                            </div>
 
-                      {/* Dropdowns Row 1: Model, Status, Severity, Feedback Type */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                        {/* Model Filter */}
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Model:</span>
-                          <select
-                            value={marketDefectsFilterModel}
-                            onChange={(e) => setMarketDefectsFilterModel(e.target.value)}
-                            className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
-                          >
-                            <option value="All">Tất cả xe</option>
-                            {uniqueMarketDefectModels.map(mod => (
-                              <option key={mod} value={mod}>{mod}</option>
-                            ))}
-                          </select>
-                        </div>
+                            {/* Month Filter */}
+                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+                              <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Tháng:</span>
+                              <select
+                                value={marketDefectsFilterMonth}
+                                onChange={(e) => {
+                                  setMarketDefectsFilterMonth(e.target.value === 'All' ? 'All' : Number(e.target.value));
+                                  if (e.target.value !== 'All') setMarketDefectsFilterQuickTime('All');
+                                }}
+                                className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
+                              >
+                                <option value="All">Tất cả tháng</option>
+                                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                                  <option key={m} value={m}>Tháng {m}</option>
+                                ))}
+                              </select>
+                            </div>
 
-                        {/* Status Filter */}
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Xử lý:</span>
-                          <select
-                            value={marketDefectsFilterStatus}
-                            onChange={(e) => setMarketDefectsFilterStatus(e.target.value)}
-                            className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
-                          >
-                            <option value="All">Tất cả trạng thái</option>
-                            <option value="Chưa xử lý">Chưa xử lý</option>
-                            <option value="Đang xử lý">Đang xử lý</option>
-                            <option value="Đã xử lý">Đã xử lý</option>
-                          </select>
-                        </div>
-
-                        {/* Severity Filter */}
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Mức độ:</span>
-                          <select
-                            value={marketDefectsFilterSeverity}
-                            onChange={(e) => setMarketDefectsFilterSeverity(e.target.value)}
-                            className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
-                          >
-                            <option value="All">Tất cả mức độ</option>
-                            <option value="A">Mức A (Rất nghiêm trọng)</option>
-                            <option value="B">Mức B (Nghiêm trọng)</option>
-                            <option value="C">Mức C (Trung bình)</option>
-                            <option value="D">Mức D (Nhẹ)</option>
-                          </select>
-                        </div>
-
-                        {/* Feedback Type Filter */}
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Phân loại:</span>
-                          <select
-                            value={marketDefectsFilterFeedbackType}
-                            onChange={(e) => setMarketDefectsFilterFeedbackType(e.target.value)}
-                            className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
-                          >
-                            <option value="All">Tất cả phân loại</option>
-                            <option value="Lỗi xe từ khách hàng">🚗 Lỗi xe từ KH</option>
-                            <option value="Đề xuất cải tiến">💡 Đề xuất cải tiến</option>
-                          </select>
+                            {/* Year Filter */}
+                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
+                              <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Năm:</span>
+                              <select
+                                value={marketDefectsFilterYear}
+                                onChange={(e) => {
+                                  setMarketDefectsFilterYear(e.target.value === 'All' ? 'All' : Number(e.target.value));
+                                  if (e.target.value !== 'All') setMarketDefectsFilterQuickTime('All');
+                                }}
+                                className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
+                              >
+                                <option value="All">Tất cả năm</option>
+                                <option value="2024">Năm 2024</option>
+                                <option value="2025">Năm 2025</option>
+                                <option value="2026">Năm 2026</option>
+                                <option value="2027">Năm 2027</option>
+                              </select>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Dropdowns Row 2: Time Filters */}
-                      <div className="pt-2 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        {/* Quick Time Filter */}
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Thời gian:</span>
-                          <select
-                            value={marketDefectsFilterQuickTime}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setMarketDefectsFilterQuickTime(val);
-                              if (val !== 'All') {
+                      {/* Filter Summary / Reset */}
+                      {(marketDefectsSearch ||
+                        marketDefectsFilterModel !== 'All' ||
+                        marketDefectsFilterStatus !== 'All' ||
+                        marketDefectsFilterSeverity !== 'All' ||
+                        marketDefectsFilterFeedbackType !== 'All' ||
+                        marketDefectsFilterMonth !== 'All' ||
+                        marketDefectsFilterYear !== 'All' ||
+                        marketDefectsFilterQuickTime !== 'All'
+                      ) && (
+                          <div className="flex items-center justify-between bg-indigo-50/50 border border-indigo-200 rounded-lg px-3 py-2 text-[11px] text-indigo-800">
+                            <div>
+                              Đang áp dụng bộ lọc: Tìm thấy <span className="font-extrabold text-indigo-700">{filteredMarketDefects.length}</span> / <span className="font-extrabold">{defects.length}</span> phản ánh phù hợp.
+                            </div>
+                            <button
+                              onClick={() => {
+                                setMarketDefectsSearch('');
+                                setMarketDefectsFilterModel('All');
+                                setMarketDefectsFilterStatus('All');
+                                setMarketDefectsFilterSeverity('All');
+                                setMarketDefectsFilterFeedbackType('All');
                                 setMarketDefectsFilterMonth('All');
                                 setMarketDefectsFilterYear('All');
-                              }
-                            }}
-                            className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
-                          >
-                            <option value="All">Tất cả thời gian</option>
-                            <option value="today">Hôm nay</option>
-                            <option value="this_week">Tuần này</option>
-                            <option value="this_month">Tháng này</option>
-                            <option value="this_quarter">Quý này</option>
-                            <option value="this_year">Năm nay</option>
-                          </select>
-                        </div>
+                                setMarketDefectsFilterQuickTime('All');
+                              }}
+                              className="text-indigo-600 hover:text-indigo-800 font-extrabold flex items-center gap-1.5 cursor-pointer bg-transparent border-none p-0"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin-slow" /> Thiết lập lại bộ lọc
+                            </button>
+                          </div>
+                        )}
+                    </div>
+                  )}
 
-                        {/* Month Filter */}
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Tháng:</span>
-                          <select
-                            value={marketDefectsFilterMonth}
-                            onChange={(e) => {
-                              setMarketDefectsFilterMonth(e.target.value === 'All' ? 'All' : Number(e.target.value));
-                              if (e.target.value !== 'All') setMarketDefectsFilterQuickTime('All');
-                            }}
-                            className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
-                          >
-                            <option value="All">Tất cả tháng</option>
-                            {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                              <option key={m} value={m}>Tháng {m}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Year Filter */}
-                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5">
-                          <span className="text-[10px] text-slate-500 font-bold uppercase whitespace-nowrap">Năm:</span>
-                          <select
-                            value={marketDefectsFilterYear}
-                            onChange={(e) => {
-                              setMarketDefectsFilterYear(e.target.value === 'All' ? 'All' : Number(e.target.value));
-                              if (e.target.value !== 'All') setMarketDefectsFilterQuickTime('All');
-                            }}
-                            className="bg-transparent border-none text-xs font-bold text-slate-700 focus:outline-none w-full cursor-pointer"
-                          >
-                            <option value="All">Tất cả năm</option>
-                            <option value="2024">Năm 2024</option>
-                            <option value="2025">Năm 2025</option>
-                            <option value="2026">Năm 2026</option>
-                            <option value="2027">Năm 2027</option>
-                          </select>
-                        </div>
+                  {/* Bảng 1: Lỗi thị trường */}
+                  <div className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden" id="market_defects_table_1">
+                    <div className="px-4 py-3 bg-red-50/60 border-b border-slate-300 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-extrabold text-red-700 uppercase flex items-center gap-1.5">🚗 Bảng 1: Lỗi thị trường ({customerDefects.length})</span>
+                        <span className="text-[11px] text-slate-500 mt-0.5">Mục tiêu dập lỗi triệt để và liên kết hồ sơ CAPA phòng vệ</span>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleExportCustomerFeedbackToExcel}
+                          className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-2.5 py-2 rounded-lg transition shadow flex items-center justify-center gap-1 cursor-pointer"
+                          title="Tải về toàn bộ bản ghi phản ánh khách hàng thành 1 bảng Excel"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Tải về Excel</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDefectDealerSearch('');
+                            setSelectedDefectDealer('');
+                            setIsDefectDealerDropdownOpen(false);
+                            setDefectModelSearch('');
+                            setSelectedDefectModel('');
+                            setIsDefectModelDropdownOpen(false);
+                            setAddDefectFeedbackType('Lỗi xe từ khách hàng');
+                            setShowAddDefectModal(true);
+                          }}
+                          className="bg-[#0213b0] hover:bg-blue-800 text-white font-bold text-xs p-2 rounded-lg transition shadow flex items-center justify-center cursor-pointer"
+                          title="Khai báo Phản ánh Thị trường"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left font-sans text-xs border-collapse border border-slate-300">
+                        <thead className="text-[8px] sm:text-[10px] font-bold text-slate-700 uppercase bg-slate-100 border-b border-slate-300">
+                          <tr>
+                            <th className="p-1.5 sm:p-3 border border-slate-300 w-[10%] min-w-[70px] sm:min-w-[85px]">ID xe & Model</th>
+                            <th className="p-1.5 sm:p-3 border border-slate-300 w-[18%] min-w-[110px] sm:min-w-[130px]">Đại lý & Ngày dính lỗi</th>
+                            <th className="p-1.5 sm:p-3 border border-slate-300 w-[26%] min-w-[180px] sm:min-w-[210px]">Phân loại lỗi & Triệu chứng</th>
+                            <th className="p-1.5 sm:p-3 border border-slate-300 w-[24%] min-w-[180px] sm:min-w-[210px]">Nguyên nhân & Phương án xử lý</th>
+                            <th className="p-1.5 sm:p-3 border border-slate-300 w-[10%] min-w-[80px] sm:min-w-[95px] text-center">Xếp loại & Trạng thái</th>
+                            <th className="p-1.5 sm:p-3 border border-slate-300 w-[12%] min-w-[90px] sm:min-w-[110px] text-center">Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-300 font-semibold text-slate-700">
+                          {customerDefects.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="p-8 text-center text-slate-400 italic font-medium border border-slate-300">
+                                Không tìm thấy sự cố lỗi thị trường nào khớp với tiêu chuẩn tìm kiếm.
+                              </td>
+                            </tr>
+                          ) : (
+                            customerDefects.map((d, index) => {
+                              // Check if this symptom / description is repeated >= 3 times in database
+                              const currentDesc = (d.description || '').trim().toLowerCase();
+                              const totalWithSameDesc = currentDesc
+                                ? defects.filter(x => (x.description || '').trim().toLowerCase() === currentDesc).length
+                                : 0;
+                              const isRepetitiveWarning = totalWithSameDesc >= 3;
+                              const isRedAlert = redAlertDefects.some(rad => rad.id === d.id);
+                              const bgRow = isRedAlert
+                                ? 'bg-red-50/40 hover:bg-red-100/50'
+                                : index % 2 === 0
+                                  ? 'bg-white hover:bg-indigo-50/50'
+                                  : 'bg-slate-50/80 hover:bg-indigo-50/50';
+
+                              return (
+                                <tr
+                                  key={d.id}
+                                  onClick={() => {
+                                    setSelectedDefectForReport(d);
+                                    setShowDefectReportModal(true);
+                                    setIsEditingDefectReport(false);
+                                  }}
+                                  className={`cursor-pointer transition-all duration-150 ${bgRow}`}
+                                >
+                                  <td className="p-1.5 sm:p-3 border border-slate-300 w-[10%]">
+                                    <span className="font-extrabold text-slate-850 text-[10px] sm:text-[11px] block">{d.model}</span>
+                                    <span className="text-[8px] sm:text-[9px] text-slate-400 font-mono">{d.id}</span>
+                                  </td>
+                                  <td className="p-1.5 sm:p-3 border border-slate-300 w-[18%] text-[10px] sm:text-[12px]">
+                                    <p className="text-slate-800 font-extrabold">{d.dealer}</p>
+                                    <p className="text-slate-400 text-[8px] sm:text-[10px] font-semibold mt-0.5">Phát sinh: {d.defectDate}</p>
+                                  </td>
+                                  <td className="p-1.5 sm:p-3 border border-slate-300 w-[26%] max-w-xs">
+                                    <span className="font-extrabold text-slate-800 text-[10px] sm:text-[12px] block">{d.type}</span>
+                                    <span className="text-slate-500 font-normal leading-relaxed text-[9px] sm:text-[11px] block">{d.description}</span>
+                                    {isRepetitiveWarning && (
+                                      <span className="inline-block mt-1 font-extrabold text-red-600 bg-red-100 px-1.5 py-0.5 rounded text-[8px] sm:text-[10px] uppercase animate-pulse">
+                                        ⚠️ "Cảnh báo lỗi lặp lại" (Xuất hiện {totalWithSameDesc} lần)
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="p-1.5 sm:p-3 border border-slate-300 w-[24%] text-[9px] sm:text-[11px] font-normal leading-relaxed">
+                                    <div className="space-y-1.5">
+                                      <div>
+                                        <span className="font-extrabold text-slate-600 text-[8px] sm:text-[10px] uppercase tracking-wider block">
+                                          🔍 Nguyên nhân:
+                                        </span>
+                                        <p className="text-slate-700 font-medium">
+                                          {d.rootCause ? d.rootCause : <span className="text-slate-400 italic">Chưa xác định</span>}
+                                        </p>
+                                      </div>
+                                      <div className="pt-1 border-t border-slate-200">
+                                        <span className="font-extrabold text-indigo-700 text-[8px] sm:text-[10px] uppercase tracking-wider block">
+                                          🛠️ Phương án:
+                                        </span>
+                                        <p className="text-indigo-900 font-medium">
+                                          {d.correction ? d.correction : <span className="text-slate-400 italic">Chưa đề xuất</span>}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="p-1.5 sm:p-3 border border-slate-300 w-[10%] text-center">
+                                    <div className="flex flex-col items-center justify-center gap-1.5">
+                                      <span className="px-1.5 py-0.5 text-[8px] sm:text-[9px] font-bold rounded uppercase bg-slate-100 border border-slate-300 text-slate-600 whitespace-nowrap">
+                                        Cấp {d.severity || 'C'}
+                                      </span>
+                                      <span className={`px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-bold whitespace-nowrap ${d.status === 'Đã xử lý'
+                                        ? 'bg-green-100 text-green-700 border border-green-300'
+                                        : d.status === 'Đề xuất cải tiến'
+                                          ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                          : 'bg-yellow-100 text-amber-700 border border-amber-300'
+                                        }`}>
+                                        {d.status || 'Chưa xử lý'}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="p-1.5 sm:p-3 border border-slate-300 w-[12%] text-center" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex flex-col items-center justify-center gap-1.5">
+                                      {d.capaId ? (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setCapaSearch(d.capaId);
+                                            setActiveTab('tasks');
+                                            setTimeout(() => {
+                                              const el = document.getElementById('capa_tracking_sub');
+                                              if (el) el.scrollIntoView({ behavior: 'smooth' });
+                                            }, 100);
+                                          }}
+                                          className="text-indigo-700 font-extrabold underline decoration-indigo-300 hover:text-indigo-900 cursor-pointer inline-flex items-center gap-1 bg-transparent border-none p-0 text-[8px] sm:text-[10px]"
+                                          title="Xem chi tiết CAPA liên quan"
+                                        >
+                                          {d.capaId} 🔍
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveTab('tasks');
+                                            setShowAddCapaForm(true);
+                                            setOriginatingDefectId(d.id);
+
+                                            const isImprovement = d.feedbackType === 'Đề xuất cải tiến';
+                                            const defaultTitle = isImprovement
+                                              ? `[Cải tiến] Đề xuất cải tiến ${d.type} cho dòng xe ${d.model} (Mã phản ánh: ${d.id})`
+                                              : `[Khắc phục] Lỗi sự cố ${d.type} trên dòng xe ${d.model} (Mã phản ánh: ${d.id})`;
+
+                                            const defaultSource = isImprovement
+                                              ? 'Đề xuất cải tiến chất lượng & linh kiện'
+                                              : 'Khiếu nại thị trường (Đại lý)';
+
+                                            const defaultCorrection = isImprovement
+                                              ? 'Khảo sát tính khả thi thiết kế và lên phương án thử nghiệm mẫu (Prototype).'
+                                              : 'Liên hệ đại lý thu hồi phụ tùng lỗi gửi về hãng, khoanh vùng cô lập sản phẩm tại kho xưởng.';
+
+                                            setNewCapaTitle(defaultTitle);
+                                            setNewCapaSource(defaultSource);
+                                            setNewCapaAssignee(d.assignee || 'Trưởng nhóm QA/QC');
+                                            setNewCapaSupplier(d.dealer || '');
+                                            setNewCapaModel(d.model || '');
+                                            setNewCapaRootCause(d.rootCause || 'Đang phân tích nguyên nhân cốt lõi phát sinh từ đại lý/thị trường...');
+                                            setNewCapaCorrection(d.correction || defaultCorrection);
+                                            setNewCapaCorrectiveAction(d.correctiveAction || 'Rà soát quy trình lắp sườn, kiểm nghiệm mối hàn và bổ sung dưỡng gá chặn phòng vệ.');
+                                            setNewCapaPreventiveAction(d.preventiveAction || 'Đào tạo kỹ năng lắp ráp và cập nhật SOP giám sát IQC/OQC mới.');
+                                            setNewCapaLocationOfOrigin(d.locationOfOrigin || `Thị trường / Đại lý: ${d.dealer || 'DKBike'}`);
+                                            setNewCapaTargetDate(d.targetDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+                                            setNewCapaIsRepeated(true);
+                                            if (d.imageUrl) {
+                                              setNewCapaImage(d.imageUrl);
+                                            } else if (d.images && d.images.length > 0) {
+                                              setNewCapaImage(d.images[0]);
+                                            } else {
+                                              setNewCapaImage('');
+                                            }
+                                            setTimeout(() => {
+                                              const el = document.getElementById('capa_tracking_sub');
+                                              if (el) el.scrollIntoView({ behavior: 'smooth' });
+                                            }, 100);
+                                          }}
+                                          className="text-indigo-850 hover:text-indigo-950 font-bold underline text-[8px] sm:text-[10px] cursor-pointer bg-transparent border-none p-0 uppercase"
+                                        >
+                                          Liên kết CAPA
+                                        </button>
+                                      )}
+                                      <div className="flex items-center justify-center gap-1 sm:gap-1.5 pt-1 border-t border-slate-100 w-full">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedDefectForReport(d);
+                                            setShowDefectReportModal(true);
+                                            setIsEditingDefectReport(false);
+                                          }}
+                                          className="text-emerald-600 hover:text-emerald-800 p-1 cursor-pointer"
+                                          title="Biên bản lỗi thị trường"
+                                        >
+                                          <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenEditModal('defect', d);
+                                          }}
+                                          className="text-indigo-650 hover:text-indigo-850 p-1 cursor-pointer"
+                                          title="Sửa lỗi sườn"
+                                        >
+                                          <Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteItem('defect', d.id);
+                                          }}
+                                          className="text-rose-600 hover:text-rose-800 p-1 cursor-pointer"
+                                          title="Xóa lỗi sườn"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            }))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
 
-                  {/* Filter Summary / Reset */}
-                  {(marketDefectsSearch ||
-                    marketDefectsFilterModel !== 'All' ||
-                    marketDefectsFilterStatus !== 'All' ||
-                    marketDefectsFilterSeverity !== 'All' ||
-                    marketDefectsFilterFeedbackType !== 'All' ||
-                    marketDefectsFilterMonth !== 'All' ||
-                    marketDefectsFilterYear !== 'All' ||
-                    marketDefectsFilterQuickTime !== 'All'
-                  ) && (
-                      <div className="flex items-center justify-between bg-indigo-50/50 border border-indigo-200 rounded-lg px-3 py-2 text-[11px] text-indigo-800">
-                        <div>
-                          Đang áp dụng bộ lọc: Tìm thấy <span className="font-extrabold text-indigo-700">{filteredMarketDefects.length}</span> / <span className="font-extrabold">{defects.length}</span> phản ánh phù hợp.
-                        </div>
-                        <button
-                          onClick={() => {
-                            setMarketDefectsSearch('');
-                            setMarketDefectsFilterModel('All');
-                            setMarketDefectsFilterStatus('All');
-                            setMarketDefectsFilterSeverity('All');
-                            setMarketDefectsFilterFeedbackType('All');
-                            setMarketDefectsFilterMonth('All');
-                            setMarketDefectsFilterYear('All');
-                            setMarketDefectsFilterQuickTime('All');
-                          }}
-                          className="text-indigo-600 hover:text-indigo-800 font-extrabold flex items-center gap-1.5 cursor-pointer bg-transparent border-none p-0"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5 animate-spin-slow" /> Thiết lập lại bộ lọc
-                        </button>
+                  {/* Bảng 2: Đề xuất cải tiến */}
+                  <div className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden" id="market_defects_table_2">
+                    <div className="px-4 py-3 bg-emerald-50/60 border-b border-slate-300 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-extrabold text-emerald-700 uppercase flex items-center gap-1.5">💡 Bảng 2: Đề xuất cải tiến ({improvementSuggestions.length})</span>
+                        <span className="text-[11px] text-slate-500 mt-0.5">Thu thập sáng kiến, đề xuất nâng cấp cải tiến chất lượng xe & linh kiện của DKBike</span>
                       </div>
-                    )}
-                </div>
-              )}
-
-              {/* Bảng 1: Lỗi thị trường */}
-              <div className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden" id="market_defects_table_1">
-                <div className="px-4 py-3 bg-red-50/60 border-b border-slate-300 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-extrabold text-red-700 uppercase flex items-center gap-1.5">🚗 Bảng 1: Lỗi thị trường ({customerDefects.length})</span>
-                    <span className="text-[11px] text-slate-500 mt-0.5">Mục tiêu dập lỗi triệt để và liên kết hồ sơ CAPA phòng vệ</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleExportCustomerFeedbackToExcel}
-                      className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-2.5 py-2 rounded-lg transition shadow flex items-center justify-center gap-1 cursor-pointer"
-                      title="Tải về toàn bộ bản ghi phản ánh khách hàng thành 1 bảng Excel"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Tải về Excel</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDefectDealerSearch('');
-                        setSelectedDefectDealer('');
-                        setIsDefectDealerDropdownOpen(false);
-                        setDefectModelSearch('');
-                        setSelectedDefectModel('');
-                        setIsDefectModelDropdownOpen(false);
-                        setAddDefectFeedbackType('Lỗi xe từ khách hàng');
-                        setShowAddDefectModal(true);
-                      }}
-                      className="bg-[#0213b0] hover:bg-blue-800 text-white font-bold text-xs p-2 rounded-lg transition shadow flex items-center justify-center cursor-pointer"
-                      title="Khai báo Phản ánh Thị trường"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left font-sans text-xs border-collapse border border-slate-300">
-                    <thead className="text-[8px] sm:text-[10px] font-bold text-slate-700 uppercase bg-slate-100 border-b border-slate-300">
-                      <tr>
-                        <th className="p-1.5 sm:p-3 border border-slate-300 w-[10%] min-w-[70px] sm:min-w-[85px]">ID xe & Model</th>
-                        <th className="p-1.5 sm:p-3 border border-slate-300 w-[18%] min-w-[110px] sm:min-w-[130px]">Đại lý & Ngày dính lỗi</th>
-                        <th className="p-1.5 sm:p-3 border border-slate-300 w-[26%] min-w-[180px] sm:min-w-[210px]">Phân loại lỗi & Triệu chứng</th>
-                        <th className="p-1.5 sm:p-3 border border-slate-300 w-[24%] min-w-[180px] sm:min-w-[210px]">Nguyên nhân & Phương án xử lý</th>
-                        <th className="p-1.5 sm:p-3 border border-slate-300 w-[10%] min-w-[80px] sm:min-w-[95px] text-center">Xếp loại & Trạng thái</th>
-                        <th className="p-1.5 sm:p-3 border border-slate-300 w-[12%] min-w-[90px] sm:min-w-[110px] text-center">Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-300 font-semibold text-slate-700">
-                      {customerDefects.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="p-8 text-center text-slate-400 italic font-medium border border-slate-300">
-                            Không tìm thấy sự cố lỗi thị trường nào khớp với tiêu chuẩn tìm kiếm.
-                          </td>
-                        </tr>
-                      ) : (
-                        customerDefects.map((d, index) => {
-                          // Check if this symptom / description is repeated >= 3 times in database
-                          const currentDesc = (d.description || '').trim().toLowerCase();
-                          const totalWithSameDesc = currentDesc
-                            ? defects.filter(x => (x.description || '').trim().toLowerCase() === currentDesc).length
-                            : 0;
-                          const isRepetitiveWarning = totalWithSameDesc >= 3;
-                          const isRedAlert = redAlertDefects.some(rad => rad.id === d.id);
-                          const bgRow = isRedAlert
-                            ? 'bg-red-50/40 hover:bg-red-100/50'
-                            : index % 2 === 0
-                              ? 'bg-white hover:bg-indigo-50/50'
-                              : 'bg-slate-50/80 hover:bg-indigo-50/50';
-
-                          return (
-                            <tr
-                              key={d.id}
-                              onClick={() => {
-                                setSelectedDefectForReport(d);
-                                setShowDefectReportModal(true);
-                                setIsEditingDefectReport(false);
-                              }}
-                              className={`cursor-pointer transition-all duration-150 ${bgRow}`}
-                            >
-                              <td className="p-1.5 sm:p-3 border border-slate-300 w-[10%]">
-                                <span className="font-extrabold text-slate-850 text-[10px] sm:text-[11px] block">{d.model}</span>
-                                <span className="text-[8px] sm:text-[9px] text-slate-400 font-mono">{d.id}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImprovementDealerSearch('');
+                          setSelectedImprovementDealer('');
+                          setIsImprovementDealerDropdownOpen(false);
+                          setImprovementModelSearch('');
+                          setSelectedImprovementModel('');
+                          setIsImprovementModelDropdownOpen(false);
+                          setImprovementImages([]);
+                          setShowAddImprovementModal(true);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs p-2 rounded-lg transition shadow flex items-center justify-center cursor-pointer"
+                        title="Khai báo Đề xuất Cải tiến"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left font-sans text-xs border-collapse border border-slate-300">
+                        <thead className="text-[8px] sm:text-[10px] font-bold text-slate-700 uppercase bg-slate-100 border-b border-slate-300">
+                          <tr>
+                            <th className="p-1.5 sm:p-3 border border-slate-300 w-[10%] min-w-[70px] sm:min-w-[85px]">ID & Model đề xuất</th>
+                            <th className="p-1.5 sm:p-3 border border-slate-300 w-[18%] min-w-[110px] sm:min-w-[130px]">Đại lý & Ngày gửi</th>
+                            <th className="p-1.5 sm:p-3 border border-slate-300 w-[26%] min-w-[180px] sm:min-w-[210px]">Lĩnh vực & Chi tiết đề xuất</th>
+                            <th className="p-1.5 sm:p-3 border border-slate-300 w-[24%] min-w-[180px] sm:min-w-[210px]">Nguyên nhân & Phương án xử lý</th>
+                            <th className="p-1.5 sm:p-3 border border-slate-300 w-[10%] min-w-[80px] sm:min-w-[95px] text-center">Trạng thái</th>
+                            <th className="p-1.5 sm:p-3 border border-slate-300 w-[12%] min-w-[90px] sm:min-w-[110px] text-center">Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
+                          {improvementSuggestions.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="p-8 text-center text-slate-400 italic font-medium border border-slate-300">
+                                Không tìm thấy đề xuất cải tiến nào khớp với tiêu chuẩn tìm kiếm.
                               </td>
-                              <td className="p-1.5 sm:p-3 border border-slate-300 w-[18%] text-[10px] sm:text-[12px]">
-                                <p className="text-slate-800 font-extrabold">{d.dealer}</p>
-                                <p className="text-slate-400 text-[8px] sm:text-[10px] font-semibold mt-0.5">Phát sinh: {d.defectDate}</p>
-                              </td>
-                              <td className="p-1.5 sm:p-3 border border-slate-300 w-[26%] max-w-xs">
-                                <span className="font-extrabold text-slate-800 text-[10px] sm:text-[12px] block">{d.type}</span>
-                                <span className="text-slate-500 font-normal leading-relaxed text-[9px] sm:text-[11px] block">{d.description}</span>
-                                {isRepetitiveWarning && (
-                                  <span className="inline-block mt-1 font-extrabold text-red-600 bg-red-100 px-1.5 py-0.5 rounded text-[8px] sm:text-[10px] uppercase animate-pulse">
-                                    ⚠️ "Cảnh báo lỗi lặp lại" (Xuất hiện {totalWithSameDesc} lần)
-                                  </span>
-                                )}
-                              </td>
-                              <td className="p-1.5 sm:p-3 border border-slate-300 w-[24%] text-[9px] sm:text-[11px] font-normal leading-relaxed">
-                                <div className="space-y-1.5">
-                                  <div>
-                                    <span className="font-extrabold text-slate-600 text-[8px] sm:text-[10px] uppercase tracking-wider block">
-                                      🔍 Nguyên nhân:
-                                    </span>
-                                    <p className="text-slate-700 font-medium">
-                                      {d.rootCause ? d.rootCause : <span className="text-slate-400 italic">Chưa xác định</span>}
-                                    </p>
-                                  </div>
-                                  <div className="pt-1 border-t border-slate-200">
-                                    <span className="font-extrabold text-indigo-700 text-[8px] sm:text-[10px] uppercase tracking-wider block">
-                                      🛠️ Phương án:
-                                    </span>
-                                    <p className="text-indigo-900 font-medium">
-                                      {d.correction ? d.correction : <span className="text-slate-400 italic">Chưa đề xuất</span>}
-                                    </p>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="p-1.5 sm:p-3 border border-slate-300 w-[10%] text-center">
-                                <div className="flex flex-col items-center justify-center gap-1.5">
-                                  <span className="px-1.5 py-0.5 text-[8px] sm:text-[9px] font-bold rounded uppercase bg-slate-100 border border-slate-300 text-slate-600 whitespace-nowrap">
-                                    Cấp {d.severity || 'C'}
-                                  </span>
-                                  <span className={`px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-bold whitespace-nowrap ${d.status === 'Đã xử lý'
-                                    ? 'bg-green-100 text-green-700 border border-green-300'
-                                    : d.status === 'Đề xuất cải tiến'
-                                      ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                                      : 'bg-yellow-100 text-amber-700 border border-amber-300'
-                                    }`}>
-                                    {d.status || 'Chưa xử lý'}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="p-1.5 sm:p-3 border border-slate-300 w-[12%] text-center" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex flex-col items-center justify-center gap-1.5">
-                                  {d.capaId ? (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setCapaSearch(d.capaId);
-                                        setActiveTab('tasks');
-                                        setTimeout(() => {
-                                          const el = document.getElementById('capa_tracking_sub');
-                                          if (el) el.scrollIntoView({ behavior: 'smooth' });
-                                        }, 100);
-                                      }}
-                                      className="text-indigo-700 font-extrabold underline decoration-indigo-300 hover:text-indigo-900 cursor-pointer inline-flex items-center gap-1 bg-transparent border-none p-0 text-[8px] sm:text-[10px]"
-                                      title="Xem chi tiết CAPA liên quan"
-                                    >
-                                      {d.capaId} 🔍
-                                    </button>
-                                  ) : (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setActiveTab('tasks');
-                                        setShowAddCapaForm(true);
-                                        setOriginatingDefectId(d.id);
+                            </tr>
+                          ) : (
+                            improvementSuggestions.map((d, index) => {
+                              const isRedAlert = redAlertDefects.some(rad => rad.id === d.id);
+                              const bgRow = isRedAlert
+                                ? 'bg-red-50/40 hover:bg-red-100/50'
+                                : index % 2 === 0
+                                  ? 'bg-white hover:bg-indigo-50/50'
+                                  : 'bg-slate-50/80 hover:bg-indigo-50/50';
+                              return (
+                                <tr
+                                  key={d.id}
+                                  onClick={() => {
+                                    setSelectedDefectForReport(d);
+                                    setShowDefectReportModal(true);
+                                    setIsEditingDefectReport(false);
+                                  }}
+                                  className={`cursor-pointer transition-all duration-150 ${bgRow}`}
+                                >
+                                  <td className="p-1.5 sm:p-3 border border-slate-300 w-[10%]">
+                                    <span className="font-extrabold text-slate-850 text-[10px] sm:text-[11px] block">{d.model}</span>
+                                    <span className="text-[8px] sm:text-[9px] text-slate-400 font-mono">{d.id}</span>
+                                  </td>
+                                  <td className="p-1.5 sm:p-3 border border-slate-300 w-[18%] text-[10px] sm:text-[12px]">
+                                    <p className="text-slate-800 font-extrabold">{d.dealer}</p>
+                                    <p className="text-slate-400 text-[8px] sm:text-[10px] font-semibold mt-0.5">Gửi: {d.defectDate}</p>
+                                  </td>
+                                  <td className="p-1.5 sm:p-3 border border-slate-300 w-[26%] max-w-xs">
+                                    <span className="font-extrabold text-slate-800 text-[10px] sm:text-[12px] block">{d.type}</span>
+                                    <span className="text-slate-500 font-normal leading-relaxed text-[9px] sm:text-[11px] mb-1 block">{d.description}</span>
+                                    {d.supplierName && (
+                                      <span className="inline-flex items-center gap-1.5 mt-1 font-bold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded text-[8px] sm:text-[10px]">
+                                        🏢 NCC: {d.supplierName}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="p-1.5 sm:p-3 border border-slate-300 w-[24%] text-[9px] sm:text-[11px] font-normal leading-relaxed">
+                                    <div className="space-y-1.5">
+                                      <div>
+                                        <span className="font-extrabold text-slate-600 text-[8px] sm:text-[10px] uppercase tracking-wider block">
+                                          🔍 Nguyên nhân:
+                                        </span>
+                                        <p className="text-slate-700 font-medium">
+                                          {d.rootCause ? d.rootCause : <span className="text-slate-400 italic">Chưa xác định</span>}
+                                        </p>
+                                      </div>
+                                      <div className="pt-1 border-t border-slate-200">
+                                        <span className="font-extrabold text-indigo-700 text-[8px] sm:text-[10px] uppercase tracking-wider block">
+                                          🛠️ Phương án:
+                                        </span>
+                                        <p className="text-indigo-900 font-medium">
+                                          {d.correction ? d.correction : <span className="text-slate-400 italic">Chưa đề xuất</span>}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="p-1.5 sm:p-3 border border-slate-300 w-[10%] text-center">
+                                    <div className="flex flex-col items-center justify-center gap-1.5">
+                                      <span className="px-1.5 py-0.5 text-[8px] sm:text-[9px] font-bold rounded uppercase bg-slate-100 border border-slate-300 text-slate-600 whitespace-nowrap">
+                                        Cấp {d.severity || 'C'}
+                                      </span>
+                                      <span className={`px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-bold whitespace-nowrap ${d.status === 'Đã xử lý'
+                                        ? 'bg-green-100 text-green-700 border border-green-300'
+                                        : d.status === 'Đề xuất cải tiến'
+                                          ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                          : 'bg-yellow-100 text-amber-700 border border-amber-300'
+                                        }`}>
+                                        {d.status || 'Chưa xử lý'}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="p-1.5 sm:p-3 border border-slate-300 w-[12%] text-center" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex flex-col items-center justify-center gap-1.5">
+                                      {(() => {
+                                        const linkedAction = improvementActions.find(act => act.defectId === d.id || act.id === d.capaId);
+                                        const displayCapaId = linkedAction ? linkedAction.id : (d.capaId && !d.capaId.startsWith('ACT-') ? d.capaId : null);
 
-                                        const isImprovement = d.feedbackType === 'Đề xuất cải tiến';
-                                        const defaultTitle = isImprovement
-                                          ? `[Cải tiến] Đề xuất cải tiến ${d.type} cho dòng xe ${d.model} (Mã phản ánh: ${d.id})`
-                                          : `[Khắc phục] Lỗi sự cố ${d.type} trên dòng xe ${d.model} (Mã phản ánh: ${d.id})`;
-
-                                        const defaultSource = isImprovement
-                                          ? 'Đề xuất cải tiến chất lượng & linh kiện'
-                                          : 'Khiếu nại thị trường (Đại lý)';
-
-                                        const defaultCorrection = isImprovement
-                                          ? 'Khảo sát tính khả thi thiết kế và lên phương án thử nghiệm mẫu (Prototype).'
-                                          : 'Liên hệ đại lý thu hồi phụ tùng lỗi gửi về hãng, khoanh vùng cô lập sản phẩm tại kho xưởng.';
-
-                                        setNewCapaTitle(defaultTitle);
-                                        setNewCapaSource(defaultSource);
-                                        setNewCapaAssignee(d.assignee || 'Trưởng nhóm QA/QC');
-                                        setNewCapaSupplier(d.dealer || '');
-                                        setNewCapaModel(d.model || '');
-                                        setNewCapaRootCause(d.rootCause || 'Đang phân tích nguyên nhân cốt lõi phát sinh từ đại lý/thị trường...');
-                                        setNewCapaCorrection(d.correction || defaultCorrection);
-                                        setNewCapaCorrectiveAction(d.correctiveAction || 'Rà soát quy trình lắp sườn, kiểm nghiệm mối hàn và bổ sung dưỡng gá chặn phòng vệ.');
-                                        setNewCapaPreventiveAction(d.preventiveAction || 'Đào tạo kỹ năng lắp ráp và cập nhật SOP giám sát IQC/OQC mới.');
-                                        setNewCapaLocationOfOrigin(d.locationOfOrigin || `Thị trường / Đại lý: ${d.dealer || 'DKBike'}`);
-                                        setNewCapaTargetDate(d.targetDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
-                                        setNewCapaIsRepeated(true);
-                                        if (d.imageUrl) {
-                                          setNewCapaImage(d.imageUrl);
-                                        } else if (d.images && d.images.length > 0) {
-                                          setNewCapaImage(d.images[0]);
+                                        if (displayCapaId) {
+                                          return (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (displayCapaId.startsWith('ACT-')) {
+                                                  setActiveTab('ecos');
+                                                  setTimeout(() => {
+                                                    const el = document.getElementById('improvement_actions_table_card');
+                                                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                                                  }, 100);
+                                                } else {
+                                                  setActiveTab('tasks');
+                                                  setTimeout(() => {
+                                                    const el = document.getElementById('capa_tracking_sub');
+                                                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                                                  }, 100);
+                                                }
+                                              }}
+                                              className="text-indigo-700 font-extrabold underline decoration-indigo-300 hover:text-indigo-900 cursor-pointer inline-flex items-center gap-1 bg-transparent border-none p-0 text-[8px] sm:text-[10px]"
+                                              title={displayCapaId.startsWith('ACT-') ? "Xem hành động cải tiến ECO" : "Xem chi tiết CAPA liên quan"}
+                                            >
+                                              {displayCapaId} {displayCapaId.startsWith('ACT-') ? '🛠' : '🔍'}
+                                            </button>
+                                          );
                                         } else {
-                                          setNewCapaImage('');
+                                          return (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedDefectForImprovementAction(d);
+                                                setShowAddImprovementActionModal(true);
+                                              }}
+                                              className="px-1.5 py-0.5 sm:px-2 sm:py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded text-[8px] sm:text-[9px] cursor-pointer shadow-xs transition whitespace-nowrap uppercase"
+                                              title="Tạo hành động cải tiến ECO mới liên kết với đề xuất này"
+                                            >
+                                              Hành động
+                                            </button>
+                                          );
                                         }
-                                        setTimeout(() => {
-                                          const el = document.getElementById('capa_tracking_sub');
-                                          if (el) el.scrollIntoView({ behavior: 'smooth' });
-                                        }, 100);
-                                      }}
-                                      className="text-indigo-850 hover:text-indigo-950 font-bold underline text-[8px] sm:text-[10px] cursor-pointer bg-transparent border-none p-0 uppercase"
-                                    >
-                                      Liên kết CAPA
-                                    </button>
-                                  )}
-                                  <div className="flex items-center justify-center gap-1 sm:gap-1.5 pt-1 border-t border-slate-100 w-full">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedDefectForReport(d);
-                                        setShowDefectReportModal(true);
-                                        setIsEditingDefectReport(false);
-                                      }}
-                                      className="text-emerald-600 hover:text-emerald-800 p-1 cursor-pointer"
-                                      title="Biên bản lỗi thị trường"
-                                    >
-                                      <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleOpenEditModal('defect', d);
-                                      }}
-                                      className="text-indigo-650 hover:text-indigo-850 p-1 cursor-pointer"
-                                      title="Sửa lỗi sườn"
-                                    >
-                                      <Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDeleteItem('defect', d.id);
-                                      }}
-                                      className="text-rose-600 hover:text-rose-800 p-1 cursor-pointer"
-                                      title="Xóa lỗi sườn"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        }))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Bảng 2: Đề xuất cải tiến */}
-              <div className="bg-white border border-slate-300 rounded-xl shadow-sm overflow-hidden" id="market_defects_table_2">
-                <div className="px-4 py-3 bg-emerald-50/60 border-b border-slate-300 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-extrabold text-emerald-700 uppercase flex items-center gap-1.5">💡 Bảng 2: Đề xuất cải tiến ({improvementSuggestions.length})</span>
-                    <span className="text-[11px] text-slate-500 mt-0.5">Thu thập sáng kiến, đề xuất nâng cấp cải tiến chất lượng xe & linh kiện của DKBike</span>
+                                      })()}
+                                      <div className="flex items-center justify-center gap-1 sm:gap-1.5 pt-1 border-t border-slate-100 w-full">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedDefectForReport(d);
+                                            setShowDefectReportModal(true);
+                                            setIsEditingDefectReport(false);
+                                          }}
+                                          className="text-emerald-600 hover:text-emerald-800 p-1 cursor-pointer"
+                                          title="Biên bản lỗi thị trường"
+                                        >
+                                          <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenEditModal('defect', d);
+                                          }}
+                                          className="text-indigo-650 hover:text-indigo-850 p-1 cursor-pointer"
+                                          title="Sửa đề xuất cải tiến"
+                                        >
+                                          <Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteItem('defect', d.id);
+                                          }}
+                                          className="text-rose-600 hover:text-rose-800 p-1 cursor-pointer"
+                                          title="Xóa đề xuất cải tiến"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            }))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImprovementDealerSearch('');
-                      setSelectedImprovementDealer('');
-                      setIsImprovementDealerDropdownOpen(false);
-                      setImprovementModelSearch('');
-                      setSelectedImprovementModel('');
-                      setIsImprovementModelDropdownOpen(false);
-                      setImprovementImages([]);
-                      setShowAddImprovementModal(true);
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs p-2 rounded-lg transition shadow flex items-center justify-center cursor-pointer"
-                    title="Khai báo Đề xuất Cải tiến"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left font-sans text-xs border-collapse border border-slate-300">
-                    <thead className="text-[8px] sm:text-[10px] font-bold text-slate-700 uppercase bg-slate-100 border-b border-slate-300">
-                      <tr>
-                        <th className="p-1.5 sm:p-3 border border-slate-300 w-[10%] min-w-[70px] sm:min-w-[85px]">ID & Model đề xuất</th>
-                        <th className="p-1.5 sm:p-3 border border-slate-300 w-[18%] min-w-[110px] sm:min-w-[130px]">Đại lý & Ngày gửi</th>
-                        <th className="p-1.5 sm:p-3 border border-slate-300 w-[26%] min-w-[180px] sm:min-w-[210px]">Lĩnh vực & Chi tiết đề xuất</th>
-                        <th className="p-1.5 sm:p-3 border border-slate-300 w-[24%] min-w-[180px] sm:min-w-[210px]">Nguyên nhân & Phương án xử lý</th>
-                        <th className="p-1.5 sm:p-3 border border-slate-300 w-[10%] min-w-[80px] sm:min-w-[95px] text-center">Trạng thái</th>
-                        <th className="p-1.5 sm:p-3 border border-slate-300 w-[12%] min-w-[90px] sm:min-w-[110px] text-center">Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
-                      {improvementSuggestions.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="p-8 text-center text-slate-400 italic font-medium border border-slate-300">
-                            Không tìm thấy đề xuất cải tiến nào khớp với tiêu chuẩn tìm kiếm.
-                          </td>
-                        </tr>
-                      ) : (
-                        improvementSuggestions.map((d, index) => {
-                          const isRedAlert = redAlertDefects.some(rad => rad.id === d.id);
-                          const bgRow = isRedAlert
-                            ? 'bg-red-50/40 hover:bg-red-100/50'
-                            : index % 2 === 0
-                              ? 'bg-white hover:bg-indigo-50/50'
-                              : 'bg-slate-50/80 hover:bg-indigo-50/50';
-                          return (
-                            <tr
-                              key={d.id}
-                              onClick={() => {
-                                setSelectedDefectForReport(d);
-                                setShowDefectReportModal(true);
-                                setIsEditingDefectReport(false);
-                              }}
-                              className={`cursor-pointer transition-all duration-150 ${bgRow}`}
-                            >
-                              <td className="p-1.5 sm:p-3 border border-slate-300 w-[10%]">
-                                <span className="font-extrabold text-slate-850 text-[10px] sm:text-[11px] block">{d.model}</span>
-                                <span className="text-[8px] sm:text-[9px] text-slate-400 font-mono">{d.id}</span>
+
+                  {/* FMEA Record Output list */}
+                  <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden" id="fmea_database_list">
+                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                      <span className="text-xs font-extrabold text-slate-600 uppercase flex items-center gap-1.5">📊 Hồ sơ nghiên cứu rủi ro FMEA hiện có</span>
+                      <span className="text-[10px] text-slate-400">{"Định mức dập đỏ: RPN > 200 => Rủi ro cao ưu tiên CAPA khẩn"}</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left font-sans text-xs">
+                        <thead className="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 border-b border-slate-100">
+                          <tr>
+                            <th className="p-3">Mã & Công đoạn</th>
+                            <th className="p-3">Hành vi lỗi & Tác hại phát sinh</th>
+                            <th className="p-3 text-center">S</th>
+                            <th className="p-3 text-center">O</th>
+                            <th className="p-3 text-center">D</th>
+                            <th className="p-3 text-center font-bold text-indigo-700">RPN Score</th>
+                            <th className="p-3">Mức độ rủi ro</th>
+                            <th className="p-3">Hành động dỡ hỏa lực</th>
+                            <th className="p-3 text-center">Ảnh lỗi</th>
+                            <th className="p-3 text-center">Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-semibold">
+                          {fmea.map((f) => (
+                            <tr key={f.id} className={`hover:bg-slate-50 ${f.riskLevel === 'Cao' ? 'bg-red-50/15' : ''}`}>
+                              <td className="p-3 text-slate-800">
+                                <span className="font-mono font-bold text-indigo-600 block">{f.id}</span>
+                                <span>{f.processStep}</span>
                               </td>
-                              <td className="p-1.5 sm:p-3 border border-slate-300 w-[18%] text-[10px] sm:text-[12px]">
-                                <p className="text-slate-800 font-extrabold">{d.dealer}</p>
-                                <p className="text-slate-400 text-[8px] sm:text-[10px] font-semibold mt-0.5">Gửi: {d.defectDate}</p>
+                              <td className="p-3 max-w-sm">
+                                <span className="font-bold text-slate-800 block text-[12px]">{f.potentialFailureMode}</span>
+                                <span className="text-slate-400 block font-normal text-[11px] leading-relaxed">Hậu quả: {f.potentialEffect} | Nguyên nhân: {f.potentialCause}</span>
                               </td>
-                              <td className="p-1.5 sm:p-3 border border-slate-300 w-[26%] max-w-xs">
-                                <span className="font-extrabold text-slate-800 text-[10px] sm:text-[12px] block">{d.type}</span>
-                                <span className="text-slate-500 font-normal leading-relaxed text-[9px] sm:text-[11px] mb-1 block">{d.description}</span>
-                                {d.supplierName && (
-                                  <span className="inline-flex items-center gap-1.5 mt-1 font-bold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded text-[8px] sm:text-[10px]">
-                                    🏢 NCC: {d.supplierName}
-                                  </span>
+                              <td className="p-3 text-center font-mono">{f.severity}</td>
+                              <td className="p-3 text-center font-mono">{f.occurrence}</td>
+                              <td className="p-3 text-center font-mono">{f.detection}</td>
+                              <td className="p-3 text-center font-mono font-extrabold text-sm text-indigo-700">{f.rpn}</td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 text-[10px] font-black rounded uppercase ${f.riskLevel === 'Cao' ? 'bg-red-600 text-white animate-pulse' :
+                                  f.riskLevel === 'Trung bình' ? 'bg-amber-100 text-amber-700 font-bold' : 'bg-slate-150 text-slate-500 font-normal'
+                                  }`}>
+                                  {f.riskLevel}
+                                </span>
+                              </td>
+                              <td className="p-3 text-[11px] max-w-xs leading-snug font-normal text-slate-600">
+                                <p className="font-semibold text-slate-800">Kiểm soát: {f.currentControl}</p>
+                                <p className="text-indigo-600 italic mt-1 font-semibold">{f.proposedAction}</p>
+                              </td>
+                              <td className="p-3 text-center">
+                                {f.imageUrl ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewDetailModal({ type: 'fmea', data: f })}
+                                    className="inline-block relative group/img cursor-pointer"
+                                  >
+                                    <img
+                                      src={f.imageUrl}
+                                      className="w-10 h-10 object-cover rounded border border-slate-200 shadow-xs hover:scale-110 transition-transform"
+                                      alt="Thumb"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 italic font-normal">Không ảnh</span>
                                 )}
                               </td>
-                              <td className="p-1.5 sm:p-3 border border-slate-300 w-[24%] text-[9px] sm:text-[11px] font-normal leading-relaxed">
-                                <div className="space-y-1.5">
-                                  <div>
-                                    <span className="font-extrabold text-slate-600 text-[8px] sm:text-[10px] uppercase tracking-wider block">
-                                      🔍 Nguyên nhân:
-                                    </span>
-                                    <p className="text-slate-700 font-medium">
-                                      {d.rootCause ? d.rootCause : <span className="text-slate-400 italic">Chưa xác định</span>}
-                                    </p>
-                                  </div>
-                                  <div className="pt-1 border-t border-slate-200">
-                                    <span className="font-extrabold text-indigo-700 text-[8px] sm:text-[10px] uppercase tracking-wider block">
-                                      🛠️ Phương án:
-                                    </span>
-                                    <p className="text-indigo-900 font-medium">
-                                      {d.correction ? d.correction : <span className="text-slate-400 italic">Chưa đề xuất</span>}
-                                    </p>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="p-1.5 sm:p-3 border border-slate-300 w-[10%] text-center">
-                                <div className="flex flex-col items-center justify-center gap-1.5">
-                                  <span className="px-1.5 py-0.5 text-[8px] sm:text-[9px] font-bold rounded uppercase bg-slate-100 border border-slate-300 text-slate-600 whitespace-nowrap">
-                                    Cấp {d.severity || 'C'}
-                                  </span>
-                                  <span className={`px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-bold whitespace-nowrap ${d.status === 'Đã xử lý'
-                                    ? 'bg-green-100 text-green-700 border border-green-300'
-                                    : d.status === 'Đề xuất cải tiến'
-                                      ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                                      : 'bg-yellow-100 text-amber-700 border border-amber-300'
-                                    }`}>
-                                    {d.status || 'Chưa xử lý'}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="p-1.5 sm:p-3 border border-slate-300 w-[12%] text-center" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex flex-col items-center justify-center gap-1.5">
-                                  {(() => {
-                                    const linkedAction = improvementActions.find(act => act.defectId === d.id || act.id === d.capaId);
-                                    const displayCapaId = linkedAction ? linkedAction.id : (d.capaId && !d.capaId.startsWith('ACT-') ? d.capaId : null);
-
-                                    if (displayCapaId) {
-                                      return (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (displayCapaId.startsWith('ACT-')) {
-                                              setActiveTab('ecos');
-                                              setTimeout(() => {
-                                                const el = document.getElementById('improvement_actions_table_card');
-                                                if (el) el.scrollIntoView({ behavior: 'smooth' });
-                                              }, 100);
-                                            } else {
-                                              setActiveTab('tasks');
-                                              setTimeout(() => {
-                                                const el = document.getElementById('capa_tracking_sub');
-                                                if (el) el.scrollIntoView({ behavior: 'smooth' });
-                                              }, 100);
-                                            }
-                                          }}
-                                          className="text-indigo-700 font-extrabold underline decoration-indigo-300 hover:text-indigo-900 cursor-pointer inline-flex items-center gap-1 bg-transparent border-none p-0 text-[8px] sm:text-[10px]"
-                                          title={displayCapaId.startsWith('ACT-') ? "Xem hành động cải tiến ECO" : "Xem chi tiết CAPA liên quan"}
-                                        >
-                                          {displayCapaId} {displayCapaId.startsWith('ACT-') ? '🛠' : '🔍'}
-                                        </button>
-                                      );
-                                    } else {
-                                      return (
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setSelectedDefectForImprovementAction(d);
-                                            setShowAddImprovementActionModal(true);
-                                          }}
-                                          className="px-1.5 py-0.5 sm:px-2 sm:py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded text-[8px] sm:text-[9px] cursor-pointer shadow-xs transition whitespace-nowrap uppercase"
-                                          title="Tạo hành động cải tiến ECO mới liên kết với đề xuất này"
-                                        >
-                                          Hành động
-                                        </button>
-                                      );
-                                    }
-                                  })()}
-                                  <div className="flex items-center justify-center gap-1 sm:gap-1.5 pt-1 border-t border-slate-100 w-full">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedDefectForReport(d);
-                                        setShowDefectReportModal(true);
-                                        setIsEditingDefectReport(false);
-                                      }}
-                                      className="text-emerald-600 hover:text-emerald-800 p-1 cursor-pointer"
-                                      title="Biên bản lỗi thị trường"
-                                    >
-                                      <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleOpenEditModal('defect', d);
-                                      }}
-                                      className="text-indigo-650 hover:text-indigo-850 p-1 cursor-pointer"
-                                      title="Sửa đề xuất cải tiến"
-                                    >
-                                      <Pencil className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDeleteItem('defect', d.id);
-                                      }}
-                                      className="text-rose-600 hover:text-rose-800 p-1 cursor-pointer"
-                                      title="Xóa đề xuất cải tiến"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
+                              <td className="p-3 text-center">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewDetailModal({ type: 'fmea', data: f })}
+                                    className="p-1 hover:bg-slate-100 text-slate-600 hover:text-indigo-600 rounded transition cursor-pointer"
+                                    title="Xem chi tiết"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditModal('fmea', f)}
+                                    className="p-1 hover:bg-slate-100 text-slate-600 hover:text-indigo-600 rounded transition cursor-pointer"
+                                    title="Sửa rủi ro FMEA"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteItem('fmea', f.id)}
+                                    className="p-1 hover:bg-slate-100 text-slate-600 hover:text-red-650 rounded transition cursor-pointer"
+                                    title="Xóa rủi ro FMEA"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
                                 </div>
                               </td>
                             </tr>
-                          );
-                        }))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* FMEA Record Output list */}
-              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden" id="fmea_database_list">
-                <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                  <span className="text-xs font-extrabold text-slate-600 uppercase flex items-center gap-1.5">📊 Hồ sơ nghiên cứu rủi ro FMEA hiện có</span>
-                  <span className="text-[10px] text-slate-400">{"Định mức dập đỏ: RPN > 200 => Rủi ro cao ưu tiên CAPA khẩn"}</span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left font-sans text-xs">
-                    <thead className="text-[10px] font-bold text-slate-400 uppercase bg-slate-50 border-b border-slate-100">
-                      <tr>
-                        <th className="p-3">Mã & Công đoạn</th>
-                        <th className="p-3">Hành vi lỗi & Tác hại phát sinh</th>
-                        <th className="p-3 text-center">S</th>
-                        <th className="p-3 text-center">O</th>
-                        <th className="p-3 text-center">D</th>
-                        <th className="p-3 text-center font-bold text-indigo-700">RPN Score</th>
-                        <th className="p-3">Mức độ rủi ro</th>
-                        <th className="p-3">Hành động dỡ hỏa lực</th>
-                        <th className="p-3 text-center">Ảnh lỗi</th>
-                        <th className="p-3 text-center">Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-semibold">
-                      {fmea.map((f) => (
-                        <tr key={f.id} className={`hover:bg-slate-50 ${f.riskLevel === 'Cao' ? 'bg-red-50/15' : ''}`}>
-                          <td className="p-3 text-slate-800">
-                            <span className="font-mono font-bold text-indigo-600 block">{f.id}</span>
-                            <span>{f.processStep}</span>
-                          </td>
-                          <td className="p-3 max-w-sm">
-                            <span className="font-bold text-slate-800 block text-[12px]">{f.potentialFailureMode}</span>
-                            <span className="text-slate-400 block font-normal text-[11px] leading-relaxed">Hậu quả: {f.potentialEffect} | Nguyên nhân: {f.potentialCause}</span>
-                          </td>
-                          <td className="p-3 text-center font-mono">{f.severity}</td>
-                          <td className="p-3 text-center font-mono">{f.occurrence}</td>
-                          <td className="p-3 text-center font-mono">{f.detection}</td>
-                          <td className="p-3 text-center font-mono font-extrabold text-sm text-indigo-700">{f.rpn}</td>
-                          <td className="p-3">
-                            <span className={`px-2 py-0.5 text-[10px] font-black rounded uppercase ${f.riskLevel === 'Cao' ? 'bg-red-600 text-white animate-pulse' :
-                              f.riskLevel === 'Trung bình' ? 'bg-amber-100 text-amber-700 font-bold' : 'bg-slate-150 text-slate-500 font-normal'
-                              }`}>
-                              {f.riskLevel}
-                            </span>
-                          </td>
-                          <td className="p-3 text-[11px] max-w-xs leading-snug font-normal text-slate-600">
-                            <p className="font-semibold text-slate-800">Kiểm soát: {f.currentControl}</p>
-                            <p className="text-indigo-600 italic mt-1 font-semibold">{f.proposedAction}</p>
-                          </td>
-                          <td className="p-3 text-center">
-                            {f.imageUrl ? (
-                              <button
-                                type="button"
-                                onClick={() => setViewDetailModal({ type: 'fmea', data: f })}
-                                className="inline-block relative group/img cursor-pointer"
-                              >
-                                <img
-                                  src={f.imageUrl}
-                                  className="w-10 h-10 object-cover rounded border border-slate-200 shadow-xs hover:scale-110 transition-transform"
-                                  alt="Thumb"
-                                  referrerPolicy="no-referrer"
-                                />
-                              </button>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 italic font-normal">Không ảnh</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setViewDetailModal({ type: 'fmea', data: f })}
-                                className="p-1 hover:bg-slate-100 text-slate-600 hover:text-indigo-600 rounded transition cursor-pointer"
-                                title="Xem chi tiết"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditModal('fmea', f)}
-                                className="p-1 hover:bg-slate-100 text-slate-600 hover:text-indigo-600 rounded transition cursor-pointer"
-                                title="Sửa rủi ro FMEA"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteItem('fmea', f.id)}
-                                className="p-1 hover:bg-slate-100 text-slate-600 hover:text-red-650 rounded transition cursor-pointer"
-                                title="Xóa rủi ro FMEA"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </>
               )}
 
@@ -23435,7 +23433,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       };
                       const updatedDailyLogs = dailyLogs.map(dl => {
                         const isMatch = (data.id && dl.id && dl.id === data.id) ||
-                                        (data.stt !== undefined && dl.stt !== undefined && Number(dl.stt) === Number(data.stt));
+                          (data.stt !== undefined && dl.stt !== undefined && Number(dl.stt) === Number(data.stt));
                         return isMatch ? sanitizedData : dl;
                       });
                       setDailyLogs(updatedDailyLogs);
@@ -28448,8 +28446,8 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
 
               {/* Preview Section */}
               {bulkImportParsedPreview.length > 0 && (() => {
-                const previewOverwriteCount = bulkImportParsedPreview.filter(item => 
-                  item.id && defects.some(d => 
+                const previewOverwriteCount = bulkImportParsedPreview.filter(item =>
+                  item.id && defects.some(d =>
                     (d.id || '').toLowerCase() === item.id!.toLowerCase() ||
                     (d.dataNotes && d.dataNotes.toLowerCase().includes(`[mã gốc: ${item.id!.toLowerCase()}]`))
                   )
@@ -28457,133 +28455,133 @@ PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,C
                 const previewNewCount = bulkImportParsedPreview.length - previewOverwriteCount;
 
                 return (
-                <div className="space-y-3 pt-2">
-                  <div className="flex justify-between items-center bg-emerald-100/70 p-3 rounded-xl border border-emerald-200">
-                    <div className="flex items-center gap-3">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse"></span>
-                      <span className="font-extrabold text-emerald-950 text-xs">
-                        Đã phân tích: <span className="text-emerald-700 text-sm font-black">{bulkImportParsedPreview.length}</span> bản ghi hợp lệ
-                      </span>
-                      <span className="text-[11px] font-bold text-blue-800 bg-blue-100/80 px-2 py-0.5 rounded-full border border-blue-300">
-                        {previewOverwriteCount} bản ghi ghi đè ✏️
-                      </span>
-                      <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-300">
-                        {previewNewCount} bản ghi mới ➕
-                      </span>
+                  <div className="space-y-3 pt-2">
+                    <div className="flex justify-between items-center bg-emerald-100/70 p-3 rounded-xl border border-emerald-200">
+                      <div className="flex items-center gap-3">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                        <span className="font-extrabold text-emerald-950 text-xs">
+                          Đã phân tích: <span className="text-emerald-700 text-sm font-black">{bulkImportParsedPreview.length}</span> bản ghi hợp lệ
+                        </span>
+                        <span className="text-[11px] font-bold text-blue-800 bg-blue-100/80 px-2 py-0.5 rounded-full border border-blue-300">
+                          {previewOverwriteCount} bản ghi ghi đè ✏️
+                        </span>
+                        <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full border border-emerald-300">
+                          {previewNewCount} bản ghi mới ➕
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBulkImportRawText('');
+                          setBulkImportParsedPreview([]);
+                        }}
+                        className="text-[11px] font-bold text-slate-500 hover:text-rose-600 cursor-pointer"
+                      >
+                        Xóa làm lại
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBulkImportRawText('');
-                        setBulkImportParsedPreview([]);
-                      }}
-                      className="text-[11px] font-bold text-slate-500 hover:text-rose-600 cursor-pointer"
-                    >
-                      Xóa làm lại
-                    </button>
-                  </div>
 
-                  {/* Scrollable Preview Table */}
-                  <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-72 shadow-inner bg-white">
-                    <table className="w-full text-left border-collapse text-[11px]">
-                      <thead>
-                        <tr className="bg-slate-100 text-slate-700 font-extrabold border-b border-slate-200 uppercase text-[10px] tracking-wider sticky top-0 z-10 shadow-xs">
-                          <th className="p-2.5 w-10 text-center">STT</th>
-                          <th className="p-2.5 min-w-[100px]">Mã Phản Ánh</th>
-                          <th className="p-2.5 min-w-[95px]">Ngày tiếp nhận</th>
-                          <th className="p-2.5 min-w-[120px]">Khách hàng / Đại lý</th>
-                          <th className="p-2.5 min-w-[90px]">Model</th>
-                          <th className="p-2.5 min-w-[110px]">Loại & Nhóm lỗi</th>
-                          <th className="p-2.5 min-w-[200px]">Chi tiết phản ánh</th>
-                          <th className="p-2.5 min-w-[150px]">Nguyên nhân & Phương án</th>
-                          <th className="p-2.5 min-w-[110px]">Người xử lý & Hạn</th>
-                          <th className="p-2.5 min-w-[100px]">Trạng thái & Mức độ</th>
-                          <th className="p-2.5 w-10 text-center">Xóa</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {bulkImportParsedPreview.map((item, idx) => {
-                          const isDuplicate = !!(item.id && defects.some(d => 
-                            (d.id || '').toLowerCase() === item.id!.toLowerCase() ||
-                            (d.dataNotes && d.dataNotes.toLowerCase().includes(`[mã gốc: ${item.id!.toLowerCase()}]`))
-                          ));
-
-                          return (
-                          <tr key={idx} className="hover:bg-slate-50 transition">
-                            <td className="p-2.5 text-center font-bold text-slate-400">{idx + 1}</td>
-                            <td className="p-2.5">
-                              <span className="font-mono font-bold text-slate-800 text-[11px] block">
-                                {item.id || 'Tự động sinh'}
-                              </span>
-                              {item.id && isDuplicate ? (
-                                <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-800 border border-blue-200 rounded text-[9px] font-black uppercase">
-                                  Ghi đè ✏️
-                                </span>
-                              ) : (
-                                <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded text-[9px] font-black uppercase">
-                                  Thêm mới ➕
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-2.5">
-                              <span className="font-mono text-slate-700 font-bold block">{item.defectDate || '-'}</span>
-                              {item.sourceDate && item.sourceDate !== item.defectDate && (
-                                <span className="text-[10px] text-slate-400 font-mono block">Nguồn: {item.sourceDate}</span>
-                              )}
-                            </td>
-                            <td className="p-2.5 font-bold text-indigo-900">{item.dealer || item.customerName || '-'}</td>
-                            <td className="p-2.5 font-black text-slate-800">{item.model || '-'}</td>
-                            <td className="p-2.5">
-                              <span className="block font-bold text-slate-800">{item.type || '-'}</span>
-                              <span className="text-[10px] text-slate-400 font-semibold">{item.originalCategory || 'Lỗi xe'}</span>
-                            </td>
-                            <td className="p-2.5 font-medium text-slate-800 max-w-xs leading-snug">
-                              {item.description}
-                              {item.dataNotes && (
-                                <span className="block text-[10px] font-mono text-slate-500 italic mt-0.5">{item.dataNotes}</span>
-                              )}
-                            </td>
-                            <td className="p-2.5 text-slate-700 space-y-0.5">
-                              {item.rootCause && <div className="text-slate-600"><strong>NN:</strong> {item.rootCause}</div>}
-                              {item.correction && <div className="text-emerald-700"><strong>PA:</strong> {item.correction}</div>}
-                            </td>
-                            <td className="p-2.5">
-                              <span className="font-semibold text-slate-700 block">{item.assignee || 'Trưởng nhóm QA'}</span>
-                              {item.targetDate && (
-                                <span className="text-[10px] font-mono font-bold text-indigo-700 block mt-0.5">Hạn: {item.targetDate}</span>
-                              )}
-                            </td>
-                            <td className="p-2.5">
-                              <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase ${item.status === 'Đã xử lý' ? 'bg-emerald-100 text-emerald-800' :
-                                item.status === 'Đang xử lý' ? 'bg-amber-100 text-amber-800' :
-                                  'bg-rose-100 text-rose-800'
-                                }`}>
-                                {item.status || 'Chưa xử lý'}
-                              </span>
-                              <span className="block text-[10px] font-bold text-slate-500 mt-0.5">
-                                Mức độ: {item.severity || 'Cao'}
-                              </span>
-                            </td>
-                            <td className="p-2.5 text-center">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updated = bulkImportParsedPreview.filter((_, i) => i !== idx);
-                                  setBulkImportParsedPreview(updated);
-                                }}
-                                className="text-slate-300 hover:text-rose-600 p-1 cursor-pointer transition"
-                                title="Xóa dòng này"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
+                    {/* Scrollable Preview Table */}
+                    <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-72 shadow-inner bg-white">
+                      <table className="w-full text-left border-collapse text-[11px]">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 font-extrabold border-b border-slate-200 uppercase text-[10px] tracking-wider sticky top-0 z-10 shadow-xs">
+                            <th className="p-2.5 w-10 text-center">STT</th>
+                            <th className="p-2.5 min-w-[100px]">Mã Phản Ánh</th>
+                            <th className="p-2.5 min-w-[95px]">Ngày tiếp nhận</th>
+                            <th className="p-2.5 min-w-[120px]">Khách hàng / Đại lý</th>
+                            <th className="p-2.5 min-w-[90px]">Model</th>
+                            <th className="p-2.5 min-w-[110px]">Loại & Nhóm lỗi</th>
+                            <th className="p-2.5 min-w-[200px]">Chi tiết phản ánh</th>
+                            <th className="p-2.5 min-w-[150px]">Nguyên nhân & Phương án</th>
+                            <th className="p-2.5 min-w-[110px]">Người xử lý & Hạn</th>
+                            <th className="p-2.5 min-w-[100px]">Trạng thái & Mức độ</th>
+                            <th className="p-2.5 w-10 text-center">Xóa</th>
                           </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {bulkImportParsedPreview.map((item, idx) => {
+                            const isDuplicate = !!(item.id && defects.some(d =>
+                              (d.id || '').toLowerCase() === item.id!.toLowerCase() ||
+                              (d.dataNotes && d.dataNotes.toLowerCase().includes(`[mã gốc: ${item.id!.toLowerCase()}]`))
+                            ));
+
+                            return (
+                              <tr key={idx} className="hover:bg-slate-50 transition">
+                                <td className="p-2.5 text-center font-bold text-slate-400">{idx + 1}</td>
+                                <td className="p-2.5">
+                                  <span className="font-mono font-bold text-slate-800 text-[11px] block">
+                                    {item.id || 'Tự động sinh'}
+                                  </span>
+                                  {item.id && isDuplicate ? (
+                                    <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-800 border border-blue-200 rounded text-[9px] font-black uppercase">
+                                      Ghi đè ✏️
+                                    </span>
+                                  ) : (
+                                    <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded text-[9px] font-black uppercase">
+                                      Thêm mới ➕
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-2.5">
+                                  <span className="font-mono text-slate-700 font-bold block">{item.defectDate || '-'}</span>
+                                  {item.sourceDate && item.sourceDate !== item.defectDate && (
+                                    <span className="text-[10px] text-slate-400 font-mono block">Nguồn: {item.sourceDate}</span>
+                                  )}
+                                </td>
+                                <td className="p-2.5 font-bold text-indigo-900">{item.dealer || item.customerName || '-'}</td>
+                                <td className="p-2.5 font-black text-slate-800">{item.model || '-'}</td>
+                                <td className="p-2.5">
+                                  <span className="block font-bold text-slate-800">{item.type || '-'}</span>
+                                  <span className="text-[10px] text-slate-400 font-semibold">{item.originalCategory || 'Lỗi xe'}</span>
+                                </td>
+                                <td className="p-2.5 font-medium text-slate-800 max-w-xs leading-snug">
+                                  {item.description}
+                                  {item.dataNotes && (
+                                    <span className="block text-[10px] font-mono text-slate-500 italic mt-0.5">{item.dataNotes}</span>
+                                  )}
+                                </td>
+                                <td className="p-2.5 text-slate-700 space-y-0.5">
+                                  {item.rootCause && <div className="text-slate-600"><strong>NN:</strong> {item.rootCause}</div>}
+                                  {item.correction && <div className="text-emerald-700"><strong>PA:</strong> {item.correction}</div>}
+                                </td>
+                                <td className="p-2.5">
+                                  <span className="font-semibold text-slate-700 block">{item.assignee || 'Trưởng nhóm QA'}</span>
+                                  {item.targetDate && (
+                                    <span className="text-[10px] font-mono font-bold text-indigo-700 block mt-0.5">Hạn: {item.targetDate}</span>
+                                  )}
+                                </td>
+                                <td className="p-2.5">
+                                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase ${item.status === 'Đã xử lý' ? 'bg-emerald-100 text-emerald-800' :
+                                    item.status === 'Đang xử lý' ? 'bg-amber-100 text-amber-800' :
+                                      'bg-rose-100 text-rose-800'
+                                    }`}>
+                                    {item.status || 'Chưa xử lý'}
+                                  </span>
+                                  <span className="block text-[10px] font-bold text-slate-500 mt-0.5">
+                                    Mức độ: {item.severity || 'Cao'}
+                                  </span>
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = bulkImportParsedPreview.filter((_, i) => i !== idx);
+                                      setBulkImportParsedPreview(updated);
+                                    }}
+                                    className="text-slate-300 hover:text-rose-600 p-1 cursor-pointer transition"
+                                    title="Xóa dòng này"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
                 );
               })()}
             </div>

@@ -762,7 +762,8 @@ export function buildReportSnapshot(
   const prevDailyCompleted = prevDaily.filter(l => l.statusPercent === '100%').length;
   const prevDailyRate = prevDailyTotal > 0 ? Math.round((prevDailyCompleted / prevDailyTotal) * 100) : dailyRate;
 
-  const pendingDailyLogs = curDaily.filter(l => l.statusPercent !== '100%');
+  // Công việc tồn đọng: Chỉ ghi lại các công việc chưa hoàn thành 100% của kỳ cũ (tuần trước / tháng trước)
+  const pendingDailyLogs = prevDaily.filter(l => l.statusPercent !== '100%');
   const pendingAssigneeMap = new Map<string, DailyLogRecord[]>();
   pendingDailyLogs.forEach(l => {
     const a = (l.assignee || 'Chưa phân công').trim();
@@ -1102,9 +1103,9 @@ export function buildReportSnapshot(
       id: 'wn-daily',
       level: 'warning',
       category: 'Công việc',
-      title: `${pendingDailyLogs.length} đầu việc Báo cáo ngày chưa hoàn thành 100%`,
+      title: `${pendingDailyLogs.length} đầu việc tồn đọng từ ${period.type === 'week' ? 'tuần trước' : 'tháng trước'} chưa đạt 100%`,
       detail: pendingByAssignee.slice(0, 3).map(p => `${p.assignee} (${p.count})`).join(', '),
-      action: 'Theo dõi nhân sự hoàn tất các đầu việc tồn đọng trong kỳ.',
+      action: 'Theo dõi nhân sự xử lý dứt điểm công việc tồn của kỳ cũ.',
       targetTab: 'daily_logs'
     });
   }
@@ -1216,3 +1217,4 @@ export function buildReportSnapshot(
 function iqcPassRateCheck(rate: number): boolean {
   return rate >= 95;
 }
+
