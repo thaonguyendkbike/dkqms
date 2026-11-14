@@ -20206,90 +20206,78 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           </div>
                         )}
 
-                        {/* 4 KPI Cards tối giản, đồng nhất */}
+                        {/* 4 KPI Cards tối giản, đường bo rõ ràng, chỉ số lớn */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
                           {/* KPI 1: Lỗi xe từ KH */}
-                          <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-rose-300 transition">
+                          <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-rose-400 transition">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Lỗi xe từ KH</span>
+                              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">Lỗi xe từ KH</span>
                               <span className="p-1.5 rounded-lg bg-rose-100 text-rose-600">
                                 <Car className="w-3.5 h-3.5" />
                               </span>
                             </div>
                             <div className="flex items-baseline justify-between">
-                              <span className="text-2xl font-black text-slate-900">{allCustomerDefects.length}</span>
-                              <span className="text-xs font-extrabold text-rose-600">{custRate}% đã xử lý</span>
+                              <span className="text-3xl font-black text-slate-900">{allCustomerDefects.length}</span>
+                              <span className="text-sm font-extrabold text-rose-600">{custRate}% đã xử lý</span>
                             </div>
-                            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                              <div className="bg-rose-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${custRate}%` }} />
-                            </div>
-                            <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
-                              <span>Chưa: <b className="text-amber-600">{custUnprocessed}</b></span>
-                              <span>Đang: <b className="text-blue-600">{custProcessing}</b></span>
-                              <span>Xong: <b className="text-emerald-600">{custProcessed}</b></span>
+                            <div className="text-xs text-slate-600 font-semibold flex items-center justify-between pt-1 border-t border-slate-200">
+                              <span>Chưa: <b className="text-amber-700">{custUnprocessed}</b></span>
+                              <span>Đang: <b className="text-blue-700">{custProcessing}</b></span>
+                              <span>Xong: <b className="text-emerald-700">{custProcessed}</b></span>
                             </div>
                           </div>
 
                           {/* KPI 2: Đề xuất Cải tiến */}
-                          <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-emerald-300 transition">
+                          <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-emerald-400 transition">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Đề xuất Cải tiến</span>
+                              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">Đề xuất Cải tiến</span>
                               <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-600">
                                 <Sparkles className="w-3.5 h-3.5" />
                               </span>
                             </div>
                             <div className="flex items-baseline justify-between">
-                              <span className="text-2xl font-black text-slate-900">{allSuggestions.length}</span>
-                              <span className="text-xs font-extrabold text-emerald-600">{sugRate}% gắn CAPA/ECO</span>
+                              <span className="text-3xl font-black text-slate-900">{allSuggestions.length}</span>
+                              <span className="text-sm font-extrabold text-emerald-600">{sugRate}% gắn CAPA/ECO</span>
                             </div>
-                            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                              <div className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${sugRate}%` }} />
-                            </div>
-                            <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
-                              <span>Đã chuyển: <b className="text-emerald-600">{sugConverted}</b></span>
-                              <span>Chờ đánh giá: <b className="text-amber-600">{sugPending}</b></span>
+                            <div className="text-xs text-slate-600 font-semibold flex items-center justify-between pt-1 border-t border-slate-200">
+                              <span>Đã chuyển: <b className="text-emerald-700">{sugConverted}</b></span>
+                              <span>Chờ đánh giá: <b className="text-amber-700">{sugPending}</b></span>
                             </div>
                           </div>
 
                           {/* KPI 3: Kế hoạch ECO */}
-                          <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-indigo-300 transition">
+                          <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-indigo-400 transition">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Kế hoạch ECO</span>
+                              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">Kế hoạch ECO</span>
                               <span className="p-1.5 rounded-lg bg-indigo-100 text-indigo-600">
                                 <Wrench className="w-3.5 h-3.5" />
                               </span>
                             </div>
                             <div className="flex items-baseline justify-between">
-                              <span className="text-2xl font-black text-slate-900">{actTotal}</span>
-                              <span className="text-xs font-extrabold text-indigo-600">{actRate}% hoàn tất</span>
+                              <span className="text-3xl font-black text-slate-900">{actTotal}</span>
+                              <span className="text-sm font-extrabold text-indigo-600">{actRate}% hoàn tất</span>
                             </div>
-                            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                              <div className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${actRate}%` }} />
-                            </div>
-                            <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
-                              <span>Đang thực hiện: <b className="text-blue-600">{actInProg}</b></span>
-                              <span>Hoàn thành: <b className="text-emerald-600">{actDone}</b></span>
+                            <div className="text-xs text-slate-600 font-semibold flex items-center justify-between pt-1 border-t border-slate-200">
+                              <span>Đang thực hiện: <b className="text-blue-700">{actInProg}</b></span>
+                              <span>Hoàn thành: <b className="text-emerald-700">{actDone}</b></span>
                             </div>
                           </div>
 
                           {/* KPI 4: Tiến độ Toàn Phân hệ */}
-                          <div className="bg-slate-50/60 border border-slate-200 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-amber-300 transition">
+                          <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col justify-between gap-2.5 hover:border-amber-400 transition">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-extrabold text-slate-600 uppercase tracking-wide">Tiến độ chung</span>
+                              <span className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">Tiến độ chung</span>
                               <span className="p-1.5 rounded-lg bg-amber-100 text-amber-600">
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                               </span>
                             </div>
                             <div className="flex items-baseline justify-between">
-                              <span className="text-2xl font-black text-slate-900">{overallRate}%</span>
-                              <span className="text-xs font-extrabold text-amber-700">{totalResolved}/{totalIssues} hồ sơ</span>
+                              <span className="text-3xl font-black text-slate-900">{overallRate}%</span>
+                              <span className="text-sm font-extrabold text-amber-700">{totalResolved}/{totalIssues} hồ sơ</span>
                             </div>
-                            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                              <div className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${overallRate}%` }} />
-                            </div>
-                            <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between pt-0.5">
-                              <span>Tổng phản ánh: <b className="text-slate-800">{totalIssues}</b></span>
-                              <span>Đã xong: <b className="text-emerald-600">{totalResolved}</b></span>
+                            <div className="text-xs text-slate-600 font-semibold flex items-center justify-between pt-1 border-t border-slate-200">
+                              <span>Tổng phản ánh: <b className="text-slate-900">{totalIssues}</b></span>
+                              <span>Đã xong: <b className="text-emerald-700">{totalResolved}</b></span>
                             </div>
                           </div>
                         </div>
@@ -20363,10 +20351,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             </div>
                           ) : (
                             <div className={`grid gap-3.5 ${defectsChartTab === 'all' ? 'grid-cols-1 lg:grid-cols-3' : 'grid-cols-1'}`}>
-                              {/* BIỂU ĐỒ 1: THEO DÒNG XE */}
+                              {/* DANH SÁCH 1: THEO DÒNG XE */}
                               {(defectsChartTab === 'all' || defectsChartTab === 'model') && (
-                                <div className="bg-slate-50/40 border border-slate-200 rounded-xl p-4 flex flex-col">
-                                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200">
+                                <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col">
+                                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b-2 border-slate-200">
                                     <div className="flex items-center gap-2">
                                       <span className="p-1 bg-indigo-100 text-indigo-600 rounded-md">
                                         <Car className="w-3.5 h-3.5" />
@@ -20377,39 +20365,30 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                     </div>
                                   </div>
 
-                                  <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                                  <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
                                     {modelChartData.map((item, idx) => {
-                                      const barWidth = Math.max(6, Math.round((item.count / maxModelCount) * 100));
                                       const isSelected = marketDefectsFilterModel === item.model;
                                       return (
                                         <div
                                           key={idx}
                                           onClick={() => setMarketDefectsFilterModel(isSelected ? 'All' : item.model)}
-                                          className={`px-2.5 py-2 rounded-lg transition cursor-pointer ${isSelected
-                                            ? 'bg-indigo-50 ring-1 ring-indigo-400'
-                                            : 'hover:bg-white'
+                                          className={`px-2.5 py-2 rounded-lg border transition cursor-pointer flex justify-between items-center gap-2 ${isSelected
+                                            ? 'bg-indigo-50 border-indigo-400'
+                                            : 'border-transparent hover:bg-slate-50 hover:border-slate-200'
                                             }`}
                                           title={`${item.model}: ${item.resolved}/${item.count} đã xử lý (${item.resolveRate}%)${item.sevA > 0 ? ` • ${item.sevA} mức A` : ''} — Bấm để lọc`}
                                         >
-                                          <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
-                                            <span className="font-bold text-slate-800 truncate flex items-center gap-1.5">
-                                              <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
-                                              <span className="truncate">{item.model}</span>
-                                            </span>
-                                            <span className="font-mono text-[11px] shrink-0 flex items-center gap-1.5">
-                                              {item.sevA > 0 && (
-                                                <span className="text-[10px] font-bold text-rose-600">{item.sevA}A</span>
-                                              )}
-                                              <b className="text-slate-900 font-black">{item.count}</b>
-                                              <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
-                                            </span>
-                                          </div>
-                                          <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
-                                            <div
-                                              className="bg-indigo-600 h-1.5 rounded-full transition-all duration-500"
-                                              style={{ width: `${barWidth}%` }}
-                                            />
-                                          </div>
+                                          <span className="text-xs font-bold text-slate-800 truncate flex items-center gap-1.5">
+                                            <span className="text-[11px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
+                                            <span className="truncate">{item.model}</span>
+                                          </span>
+                                          <span className="font-mono shrink-0 flex items-center gap-2">
+                                            {item.sevA > 0 && (
+                                              <span className="text-[11px] font-extrabold text-rose-600">{item.sevA}A</span>
+                                            )}
+                                            <b className="text-sm text-slate-900 font-black">{item.count}</b>
+                                            <span className="text-slate-500 text-xs font-semibold">({item.pct}%)</span>
+                                          </span>
                                         </div>
                                       );
                                     })}
@@ -20417,10 +20396,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 </div>
                               )}
 
-                              {/* BIỂU ĐỒ 2: TOP KHÁCH HÀNG / ĐẠI LÝ */}
+                              {/* DANH SÁCH 2: TOP KHÁCH HÀNG / ĐẠI LÝ */}
                               {(defectsChartTab === 'all' || defectsChartTab === 'customer') && (
-                                <div className="bg-slate-50/40 border border-slate-200 rounded-xl p-4 flex flex-col">
-                                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200">
+                                <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col">
+                                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b-2 border-slate-200">
                                     <div className="flex items-center gap-2">
                                       <span className="p-1 bg-emerald-100 text-emerald-600 rounded-md">
                                         <Building2 className="w-3.5 h-3.5" />
@@ -20431,36 +20410,27 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                     </div>
                                   </div>
 
-                                  <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                                  <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
                                     {customerChartData.map((item, idx) => {
-                                      const barWidth = Math.max(6, Math.round((item.count / maxCustomerCount) * 100));
                                       const isSelected = marketDefectsSearch === item.customer;
                                       return (
                                         <div
                                           key={idx}
                                           onClick={() => setMarketDefectsSearch(isSelected ? '' : item.customer)}
-                                          className={`px-2.5 py-2 rounded-lg transition cursor-pointer ${isSelected
-                                            ? 'bg-emerald-50 ring-1 ring-emerald-400'
-                                            : 'hover:bg-white'
+                                          className={`px-2.5 py-2 rounded-lg border transition cursor-pointer flex justify-between items-center gap-2 ${isSelected
+                                            ? 'bg-emerald-50 border-emerald-400'
+                                            : 'border-transparent hover:bg-slate-50 hover:border-slate-200'
                                             }`}
                                           title={`${item.customer}: ${item.resolved}/${item.count} đã xử lý (${item.resolveRate}%)${item.latestDate ? ` • Gần nhất: ${item.latestDate}` : ''} — Bấm để lọc`}
                                         >
-                                          <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
-                                            <span className="font-bold text-slate-800 truncate flex items-center gap-1.5">
-                                              <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
-                                              <span className="truncate">{item.customer}</span>
-                                            </span>
-                                            <span className="font-mono text-[11px] shrink-0 flex items-center gap-1.5">
-                                              <b className="text-slate-900 font-black">{item.count}</b>
-                                              <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
-                                            </span>
-                                          </div>
-                                          <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
-                                            <div
-                                              className="bg-emerald-600 h-1.5 rounded-full transition-all duration-500"
-                                              style={{ width: `${barWidth}%` }}
-                                            />
-                                          </div>
+                                          <span className="text-xs font-bold text-slate-800 truncate flex items-center gap-1.5">
+                                            <span className="text-[11px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
+                                            <span className="truncate">{item.customer}</span>
+                                          </span>
+                                          <span className="font-mono shrink-0 flex items-center gap-2">
+                                            <b className="text-sm text-slate-900 font-black">{item.count}</b>
+                                            <span className="text-slate-500 text-xs font-semibold">({item.pct}%)</span>
+                                          </span>
                                         </div>
                                       );
                                     })}
@@ -20468,10 +20438,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 </div>
                               )}
 
-                              {/* BIỂU ĐỒ 3: CƠ CẤU NHÓM LỖI */}
+                              {/* DANH SÁCH 3: CƠ CẤU NHÓM LỖI */}
                               {(defectsChartTab === 'all' || defectsChartTab === 'type') && (
-                                <div className="bg-slate-50/40 border border-slate-200 rounded-xl p-4 flex flex-col">
-                                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200">
+                                <div className="bg-white border-2 border-slate-300 rounded-xl p-4 flex flex-col">
+                                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b-2 border-slate-200">
                                     <div className="flex items-center gap-2">
                                       <span className="p-1 bg-amber-100 text-amber-600 rounded-md">
                                         <AlertTriangle className="w-3.5 h-3.5" />
@@ -20482,39 +20452,30 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                     </div>
                                   </div>
 
-                                  <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                                  <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
                                     {typeChartData.map((item, idx) => {
-                                      const barWidth = Math.max(6, Math.round((item.count / maxTypeCount) * 100));
                                       const isSelected = marketDefectsSearch === item.type;
                                       return (
                                         <div
                                           key={idx}
                                           onClick={() => setMarketDefectsSearch(isSelected ? '' : item.type)}
-                                          className={`px-2.5 py-2 rounded-lg transition cursor-pointer ${isSelected
-                                            ? 'bg-amber-50 ring-1 ring-amber-400'
-                                            : 'hover:bg-white'
+                                          className={`px-2.5 py-2 rounded-lg border transition cursor-pointer flex justify-between items-center gap-2 ${isSelected
+                                            ? 'bg-amber-50 border-amber-400'
+                                            : 'border-transparent hover:bg-slate-50 hover:border-slate-200'
                                             }`}
                                           title={`${item.type}: ${item.resolved}/${item.count} đã xử lý (${item.resolveRate}%)${item.sevA > 0 ? ` • ${item.sevA} mức A` : ''} — Bấm để lọc`}
                                         >
-                                          <div className="flex justify-between items-center text-xs mb-1.5 gap-2">
-                                            <span className="font-bold text-slate-800 truncate flex items-center gap-1.5">
-                                              <span className="text-[10px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
-                                              <span className="truncate">{item.type}</span>
-                                            </span>
-                                            <span className="font-mono text-[11px] shrink-0 flex items-center gap-1.5">
-                                              {item.sevA > 0 && (
-                                                <span className="text-[10px] font-bold text-rose-600">{item.sevA}A</span>
-                                              )}
-                                              <b className="text-slate-900 font-black">{item.count}</b>
-                                              <span className="text-slate-400 text-[10px]">({item.pct}%)</span>
-                                            </span>
-                                          </div>
-                                          <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
-                                            <div
-                                              className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
-                                              style={{ width: `${barWidth}%` }}
-                                            />
-                                          </div>
+                                          <span className="text-xs font-bold text-slate-800 truncate flex items-center gap-1.5">
+                                            <span className="text-[11px] text-slate-400 font-mono w-4 shrink-0">{idx + 1}.</span>
+                                            <span className="truncate">{item.type}</span>
+                                          </span>
+                                          <span className="font-mono shrink-0 flex items-center gap-2">
+                                            {item.sevA > 0 && (
+                                              <span className="text-[11px] font-extrabold text-rose-600">{item.sevA}A</span>
+                                            )}
+                                            <b className="text-sm text-slate-900 font-black">{item.count}</b>
+                                            <span className="text-slate-500 text-xs font-semibold">({item.pct}%)</span>
+                                          </span>
                                         </div>
                                       );
                                     })}
