@@ -333,8 +333,19 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
         `${formatDateStrVi(w.date)} (${w.statusPercent || 'Chưa 100%'})`
       ]),
       ...capaEco.overdueCapas.map((c) => ['CAPA quá hạn', c.CAPAID || c.id, c.title || c.issue || '--', c.owner || c.assignee || '--', formatDateStrVi(c.dueDate || c.targetDate)]),
-      ...work.ptspOverdue.map((t) => ['PTSP trễ hạn', t.id, t.name, t.executor || '--', formatDateStrVi(t.endDate)])
+      ...work.ptspOverdue.map((t) => ['PTSP trễ hạn', t.id, t.name, t.executor || '--', formatDateStrVi(t.endDate)]),
+      ...work.planningTasksOverdue.map((t) => ['Kế hoạch quá hạn', t.id, t.title, t.assignee || '--', t.deadline ? formatDateStrVi(t.deadline) : t.week || '--'])
     ];
+    const planTaskRows: (string | number)[][] = work.planningTasksInPeriod.map((t) => [
+      t.section.toUpperCase(),
+      t.title,
+      t.assignee || '--',
+      t.deadline ? formatDateStrVi(t.deadline) : t.week || '--',
+      t.priority,
+      t.status === 'Completed' ? 'Hoàn thành' : t.status === 'In_Progress' ? 'Đang làm' : 'Chờ xử lý',
+      t.modelOrSupplier || '--',
+      t.notes || ''
+    ]);
     XLSXStyle.utils.book_append_sheet(
       wb,
       buildMultiSectionSheet(
@@ -344,7 +355,8 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
         [
           { title: '1. THEO DÕI CAPA & ECO', headers: ['Phân loại', 'Mã', 'Tiêu đề / Nội dung', 'Nguồn / Nhóm', 'Mức độ / Model', 'Trạng thái', 'Phụ trách / Đề xuất', 'Hạn / Áp dụng'], rows: capaEcoRows },
           { title: '2. CÔNG VIỆC BÁO CÁO NGÀY TRONG KỲ', headers: ['Ngày', 'Nhân sự', 'Nhóm', 'Tiến độ', 'Kết quả', 'Nội dung công việc', 'Ghi chú'], rows: workRows },
-          { title: '3. CÔNG VIỆC TỒN ĐỌNG TỪ KỲ TRƯỚC & QUÁ HẠN', headers: ['Loại tồn đọng', 'Mã', 'Nội dung', 'Phụ trách', 'Ngày / Hạn'], rows: backlogRows }
+          { title: '3. CÔNG VIỆC TỒN ĐỌNG TỪ KỲ TRƯỚC & QUÁ HẠN', headers: ['Loại tồn đọng', 'Mã', 'Nội dung', 'Phụ trách', 'Ngày / Hạn'], rows: backlogRows },
+          { title: '4. TÁC VỤ TỪ LẬP KẾ HOẠCH CHẤT LƯỢNG TRONG KỲ', headers: ['Nhóm', 'Nội dung tác vụ', 'Phụ trách', 'Hạn / Tuần', 'Ưu tiên', 'Trạng thái', 'Model / NCC', 'Ghi chú'], rows: planTaskRows }
         ],
         [22, 16, 38, 18, 18, 16, 22, 16]
       ),

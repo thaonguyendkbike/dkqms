@@ -1236,6 +1236,108 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
               </div>
             )}
           </div>
+
+          <div className="lg:col-span-2 bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-extrabold text-slate-900">
+                  Tác vụ từ Lập kế hoạch Chất lượng ({work.planningTasksInPeriod.length} việc trong kỳ • {work.planningTasksCompleted} hoàn thành
+                  {work.planningTasksOverdue.length > 0 ? ` • ${work.planningTasksOverdue.length} tồn quá hạn kỳ trước` : ''})
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Đồng bộ tự động từ phân hệ Lập kế hoạch chất lượng (Tồn đọng, CAPA, PTSP, Phối hợp, ECO).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateTab('quality_planning')}
+                className="text-xs font-bold text-blue-700 hover:underline"
+              >
+                Mở Lập kế hoạch chất lượng →
+              </button>
+            </div>
+
+            {work.planningTasksInPeriod.length === 0 && work.planningTasksOverdue.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                Chưa có tác vụ kế hoạch nào được lập cho kỳ báo cáo này.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
+                      <th className="p-2 text-left font-bold">Nhóm</th>
+                      <th className="p-2 text-left font-bold">Nội dung tác vụ</th>
+                      <th className="p-2 text-left font-bold">Phụ trách</th>
+                      <th className="p-2 text-center font-bold">Hạn</th>
+                      <th className="p-2 text-center font-bold">Ưu tiên</th>
+                      <th className="p-2 text-center font-bold">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      ...work.planningTasksInPeriod.map((t) => ({ task: t, isOverduePrev: false })),
+                      ...work.planningTasksOverdue
+                        .filter((o) => !work.planningTasksInPeriod.some((p) => p.id === o.id))
+                        .map((t) => ({ task: t, isOverduePrev: true }))
+                    ].map(({ task, isOverduePrev }) => {
+                      const sectionLabel: Record<string, string> = {
+                        backlog: 'Tồn đọng',
+                        capa: 'CAPA',
+                        ptsp: 'PTSP',
+                        coordination: 'Phối hợp',
+                        eco: 'ECO'
+                      };
+                      const statusLabel =
+                        task.status === 'Completed'
+                          ? 'Hoàn thành'
+                          : task.status === 'In_Progress'
+                            ? 'Đang làm'
+                            : 'Chờ xử lý';
+                      const statusCls =
+                        task.status === 'Completed'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : isOverduePrev
+                            ? 'bg-rose-100 text-rose-800'
+                            : task.status === 'In_Progress'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-slate-100 text-slate-700';
+                      return (
+                        <tr key={task.id} className="border-b border-slate-200 hover:bg-slate-50">
+                          <td className="p-2 font-bold text-slate-800 whitespace-nowrap">
+                            {sectionLabel[task.section] || task.section}
+                            {isOverduePrev && (
+                              <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold">
+                                Tồn kỳ trước
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2 text-slate-900">
+                            <div className="font-semibold">{task.title}</div>
+                            {(task.modelOrSupplier || task.notes) && (
+                              <div className="text-[11px] text-slate-500">
+                                {[task.modelOrSupplier, task.notes].filter(Boolean).join(' • ')}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-2 text-slate-700 whitespace-nowrap">{task.assignee || '--'}</td>
+                          <td className="p-2 text-center text-slate-700 whitespace-nowrap">
+                            {task.deadline ? formatDateStrVi(task.deadline) : task.week || '--'}
+                          </td>
+                          <td className="p-2 text-center text-slate-700 whitespace-nowrap">{task.priority}</td>
+                          <td className="p-2 text-center whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${statusCls}`}>
+                              {statusLabel}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

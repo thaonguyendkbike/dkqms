@@ -1,4 +1,4 @@
-import { ReportSnapshot } from './reportEngine';
+import { formatDateStrVi, ReportSnapshot } from './reportEngine';
 
 type ToastFn = (msg: string, type?: 'success' | 'error' | 'info') => void;
 
@@ -231,8 +231,46 @@ export function printReportA4(snapshot: ReportSnapshot, onToast?: ToastFn): void
     </ul>
   </div>
 
+  ${
+    snapshot.work.planningTasksInPeriod.length > 0 || snapshot.work.planningTasksOverdue.length > 0
+      ? `<div class="section">
+    <div class="section-title">4. Tác vụ từ Lập kế hoạch Chất lượng (${snapshot.work.planningTasksInPeriod.length} việc trong kỳ • ${snapshot.work.planningTasksCompleted} hoàn thành)</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:70px;">Nhóm</th>
+          <th>Nội dung tác vụ</th>
+          <th style="width:110px;">Phụ trách</th>
+          <th style="width:80px;">Hạn</th>
+          <th style="width:85px;">Trạng thái</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${[
+          ...snapshot.work.planningTasksInPeriod,
+          ...snapshot.work.planningTasksOverdue.filter(
+            (o) => !snapshot.work.planningTasksInPeriod.some((p) => p.id === o.id)
+          )
+        ]
+          .slice(0, 20)
+          .map(
+            (t) => `<tr>
+              <td>${esc(t.section.toUpperCase())}</td>
+              <td>${esc(t.title)}</td>
+              <td>${esc(t.assignee || '--')}</td>
+              <td>${esc(t.deadline ? formatDateStrVi(t.deadline) : t.week || '--')}</td>
+              <td>${esc(t.status === 'Completed' ? 'Hoàn thành' : t.status === 'In_Progress' ? 'Đang làm' : 'Chờ xử lý')}</td>
+            </tr>`
+          )
+          .join('')}
+      </tbody>
+    </table>
+  </div>`
+      : ''
+  }
+
   <div class="section">
-    <div class="section-title">4. Nhận xét & Kết luận của Phòng QLCL</div>
+    <div class="section-title">${snapshot.work.planningTasksInPeriod.length > 0 || snapshot.work.planningTasksOverdue.length > 0 ? '5' : '4'}. Nhận xét & Kết luận của Phòng QLCL</div>
     <div class="note-box">
       ${
         note
@@ -303,3 +341,4 @@ export function buildSummaryCopyText(snapshot: ReportSnapshot): string {
   }
   return lines.join('\n');
 }
+

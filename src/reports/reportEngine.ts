@@ -13,6 +13,7 @@ import {
 } from '../types';
 import { DailyLogRecord } from '../dailyLogsData';
 import { IQCRecord, OQCRecord, PQCRecord } from '../qualityTestData';
+import type { QualityTask } from '../components/QualityPlanning';
 import {
   formatDateShortVi,
   formatDateStrVi,
@@ -69,6 +70,7 @@ export interface ReportDatasetInput {
   copqs: COPQMetric[];
   ptspProjects: PTSPProject[];
   ptspTasks: PTSPTask[];
+  planningTasks?: QualityTask[];
   suppliers: Supplier[];
   supplierProductionAudits: SupplierProductionAudit[];
   reportNotes: ReportNote[];
@@ -198,6 +200,9 @@ export interface ReportSnapshot {
     ptspCompleted: number;
     ptspOverdue: PTSPTask[];
     ptspAvgProgress: number;
+    planningTasksInPeriod: QualityTask[];
+    planningTasksOverdue: QualityTask[];
+    planningTasksCompleted: number;
   };
   qcTools: {
     checkSheet: CheckSheetMatrix;
@@ -726,6 +731,64 @@ export function buildReportSnapshot(
   });
   const ptspAvgProgress = ptspTotal > 0 ? Math.round(input.ptspTasks.reduce((s, t) => s + (t.progress || 0), 0) / ptspTotal) : 0;
 
+  // --- 7B. TÁC VỤ TỪ LẬP KẾ HOẠCH CHẤT LƯỢNG ---
+  const allPlanningTasks = input.planningTasks || [];
+  const getPlanWeekRange = (y: number, m: number, weekLabel?: string): { start: number; end: number } | null => {
+    if (!weekLabel) return null;
+    const match = String(weekLabel).match(/(\d+)/);
+    if (!match) return null;
+    const wNum = Number(match[1]);
+    if (!wNum || wNum < 1 || wNum > 5) return null;
+    const daysInM = new Date(y, m, 0).getDate();
+    const startDay = Math.min((wNum - 1) * 7 + 1, daysInM);
+    const endDay = Math.min(wNum * 7, daysInM);
+    return {
+      start: new Date(y, m - 1, startDay, 0, 0, 0, 0).getTime(),
+      end: new Date(y, m - 1, endDay, 23, 59, 59, 999).getTime()
+    };
+  };
+
+  const pStartMs = period.start.getTime();
+  const pEndMs = period.end.getTime();
+
+  const planningTasksInPeriod = allPlanningTasks.filter(t => {
+    const dDate = parseFlexibleDate(t.deadline);
+    if (dDate) {
+      const dMs = dDate.getTime();
+      if (dMs >= pStartMs && dMs <= pEndMs) return true;
+    }
+    if (period.type === 'month') {
+      return t.year === period.year && t.month === period.value;
+    }
+    if (t.year && t.month) {
+      const wRange = getPlanWeekRange(t.year, t.month, t.week);
+      if (wRange) {
+        return wRange.start <= pEndMs && wRange.end >= pStartMs;
+      }
+      const startM = period.start.getMonth() + 1;
+      const startY = period.start.getFullYear();
+      const endM = period.end.getMonth() + 1;
+      const endY = period.end.getFullYear();
+      return !dDate && ((t.year === startY && t.month === startM) || (t.year === endY && t.month === endM));
+    }
+    return false;
+  });
+
+  const planningTasksOverdue = allPlanningTasks.filter(t => {
+    if (t.status === 'Completed') return false;
+    const dDate = parseFlexibleDate(t.deadline);
+    if (dDate) return dDate.getTime() < pStartMs;
+    if (t.year && t.month) {
+      const wRange = getPlanWeekRange(t.year, t.month, t.week);
+      if (wRange) return wRange.end < pStartMs;
+      const monthEnd = new Date(t.year, t.month, 0, 23, 59, 59, 999).getTime();
+      return monthEnd < pStartMs;
+    }
+    return false;
+  });
+
+  const planningTasksCompleted = planningTasksInPeriod.filter(t => t.status === 'Completed').length;
+
   // --- 8. COPQ ---
   const curCopqs = input.copqs.filter(c => {
     if (c.month && c.year) {
@@ -813,8 +876,8 @@ export function buildReportSnapshot(
   // Tool 1: Check Sheet (defect types x time columns)
   const colLabels =
     period.type === 'week'
-      ? [...WEEKDAY_LABELS_MON_FIRST]
-      : ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5'];
+        ? [...WEEKDAY_LABELS_MON_FIRST]
+        : ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5'];
   const getColIdx = (d: Date): number => {
     if (period.type === 'week') {
       return getWeekdayIndexMonFirst(d);
@@ -1137,7 +1200,10 @@ export function buildReportSnapshot(
       ptspTotal,
       ptspCompleted,
       ptspOverdue,
-      ptspAvgProgress
+      ptspAvgProgress,
+      planningTasksInPeriod,
+      planningTasksOverdue,
+      planningTasksCompleted
     },
     qcTools: {
       checkSheet,

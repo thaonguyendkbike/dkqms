@@ -17203,6 +17203,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   copqs,
                   ptspProjects: [],
                   ptspTasks,
+                  planningTasks,
                   suppliers,
                   supplierProductionAudits,
                   reportNotes
