@@ -2035,14 +2035,11 @@ export default function QualityInspectionRecords({
     );
   }, [weeklyPlans]);
 
-  // Check if any error/defect exists in inspection databases (IQC, PQC, OQC) — only used in supplier_monitoring tab
+  // Check if any IQC error/defect exists — only used in supplier_monitoring (SQC) tab
   const hasQualityErrorInSystem = useMemo(() => {
     if (qcMainSubTab !== 'supplier_monitoring') return false;
-    const hasIqcError = iqcRecords.some(r => r.result === 'Lỗi' || (r.failedQty !== undefined && r.failedQty > 0));
-    const hasPqcError = pqcRecords.some(r => r.status === 'Đang cải tiến' || (r.findings && r.findings.toLowerCase().includes('lỗi')));
-    const hasOqcError = oqcRecords.some(r => r.status === 'Lỗi' || (r.failedCount !== undefined && r.failedCount > 0));
-    return hasIqcError || hasPqcError || hasOqcError;
-  }, [qcMainSubTab, iqcRecords, pqcRecords, oqcRecords]);
+    return iqcRecords.some(r => r.result === 'Lỗi' || (r.failedQty !== undefined && r.failedQty > 0));
+  }, [qcMainSubTab, iqcRecords]);
 
   const filterDailyLogsForSqc = useCallback((log: any) => {
     const content = (log.content || '').toLowerCase();
@@ -2660,6 +2657,7 @@ export default function QualityInspectionRecords({
 
   // Modal to add a request
   const [showAddSupplierAuditModal, setShowAddSupplierAuditModal] = useState(false);
+  const [showSqcDailySuggestions, setShowSqcDailySuggestions] = useState(false);
   const [newAuditSupplierName, setNewAuditSupplierName] = useState(() => suppliers[0]?.name || suppliers[0]?.SupplierName || 'Công ty Việt Nhật Precision');
   const [newAuditComponentName, setNewAuditComponentName] = useState('');
   const [newAuditSpec, setNewAuditSpec] = useState('');
@@ -12393,186 +12391,195 @@ return (
       </div>
     )}
 
-    {/* ==================== SUBTAB: SUPPLIER MONITORING ==================== */}
-    {qcMainSubTab === 'supplier_monitoring' && (
-      <div className="space-y-6">
+    {/* ==================== SUBTAB: SUPPLIER MONITORING (SQC) ==================== */}
+    {qcMainSubTab === 'supplier_monitoring' && (() => {
+      const sqcSuggestedLogs = hasQualityErrorInSystem
+        ? dailyLogs.filter(log => {
+            const matches = filterDailyLogsForSqc(log);
+            if (!matches) return false;
+            if (hideIgnoredLogs && ignoredDailyLogStts.includes(log.stt)) return false;
+            return true;
+          })
+        : [];
+
+      const getAuditStatusMeta = (status: string) => {
+        if (status === 'pending') {
+          return {
+            badgeClass: 'bg-amber-100 text-amber-800 border-amber-200 border',
+            badgeLabel: 'Chờ NCC gửi',
+            ringClass: 'border-amber-200 bg-amber-50/5 hover:border-amber-300'
+          };
+        }
+        if (status === 'updated') {
+          return {
+            badgeClass: 'bg-blue-100 text-blue-800 border-blue-200 border',
+            badgeLabel: 'Chờ duyệt',
+            ringClass: 'border-blue-200 bg-blue-50/5 hover:border-blue-300'
+          };
+        }
+        if (status === 'approved') {
+          return {
+            badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200 border',
+            badgeLabel: 'Đạt chuẩn',
+            ringClass: 'border-emerald-200 bg-emerald-50/5 hover:border-emerald-300'
+          };
+        }
+        if (status === 'rejected') {
+          return {
+            badgeClass: 'bg-red-100 text-red-800 border-red-200 border',
+            badgeLabel: 'Không đạt',
+            ringClass: 'border-red-200 bg-red-50/5 hover:border-red-300'
+          };
+        }
+        return {
+          badgeClass: 'bg-slate-100 text-slate-500',
+          badgeLabel: 'Chờ NCC gửi',
+          ringClass: 'border-slate-200'
+        };
+      };
+
+      return (
+      <div className="space-y-4">
         {renderActivePlanTargetsBanner('SQC')}
-        {/* Summary counters */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-4">
-          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm col-span-1">
+        {/* Summary counters (4 compact cards) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm">
             <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase leading-tight">Tổng đợt giám sát</span>
             <span className="text-xs sm:text-sm font-black text-slate-800 font-mono mt-0.5 sm:mt-1 block">{supplierProductionAudits.length} chỉ thị</span>
           </div>
-          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-amber-500 col-span-1">
-            <span className="text-[9px] sm:text-[10px] font-bold text-amber-550 block uppercase leading-tight">NCC Đang xử lý</span>
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-amber-500">
+            <span className="text-[9px] sm:text-[10px] font-bold text-amber-600 block uppercase leading-tight">Chờ NCC / Chờ duyệt</span>
             <span className="text-xs sm:text-sm font-black text-amber-700 font-mono mt-0.5 sm:mt-1 block">
-              {supplierProductionAudits.filter(a => a.status === 'pending').length} lô hàng
+              {supplierProductionAudits.filter(a => a.status === 'pending' || a.status === 'updated').length} đợt
             </span>
           </div>
-          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-blue-500 col-span-1">
-            <span className="text-[9px] sm:text-[10px] font-bold text-blue-550 block uppercase font-sans leading-tight">NCC phản hồi</span>
-            <span className="text-xs sm:text-sm font-black text-blue-700 font-mono mt-0.5 sm:mt-1 block">
-              {supplierProductionAudits.filter(a => a.status === 'updated').length} đợt
-            </span>
-          </div>
-          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-emerald-500 col-span-1">
-            <span className="text-[9px] sm:text-[10px] font-bold text-emerald-550 block uppercase leading-tight">Ký duyệt Đạt chuẩn</span>
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-emerald-500">
+            <span className="text-[9px] sm:text-[10px] font-bold text-emerald-600 block uppercase leading-tight">Đạt chuẩn</span>
             <span className="text-xs sm:text-sm font-black text-emerald-700 font-mono mt-0.5 sm:mt-1 block">
               {supplierProductionAudits.filter(a => a.status === 'approved').length} đợt
             </span>
           </div>
-          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-red-500 col-span-2 lg:col-span-1">
-            <span className="text-[9px] sm:text-[10px] font-bold text-red-550 block uppercase leading-tight">Sai lệch khuôn dập</span>
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-red-500">
+            <span className="text-[9px] sm:text-[10px] font-bold text-red-600 block uppercase leading-tight">Không đạt / Sai lệch</span>
             <span className="text-xs sm:text-sm font-black text-red-700 font-mono mt-0.5 sm:mt-1 block">
-              {supplierProductionAudits.filter(a => a.status === 'rejected').length} sự cố
+              {supplierProductionAudits.filter(a => a.status === 'rejected').length} đợt
             </span>
           </div>
         </div>
 
-        {/* Business Goal Banner */}
-        <div className="bg-gradient-to-r from-orange-50 to-amber-50 p-4.5 rounded-xl border border-orange-100 flex items-start gap-3.5 shadow-xs">
-          <span className="p-2 bg-white text-orange-600 rounded-lg shadow-xs border border-orange-100 font-bold block shrink-0 text-sm">💡</span>
-          <div className="text-xs">
-            <h4 className="font-extrabold text-slate-800 text-xs">PHƯƠNG PHÁP GIÁM SÁT CHỦ ĐỘNG TẠI NHÀ CUNG CẤP (ACTIVE MONITORING)</h4>
-            <p className="text-slate-500 leading-relaxed mt-1">
-              Thay vì đợi hàng giao tới kho mới kiểm IQC (lúc này lỗi đã dập hàng loạt), QMS DKBike chủ động kích thị giám sát cho Nhà Cung Cấp trong khi sản xuất.
-              Nhà cung cấp sẽ gửi ảnh trực tiếp từ nhà máy hoặc đo chỉ số kỹ thuật thực tế để DKBike kiểm tra sai lệch trước khi cho phép chạy tràn lan.
-            </p>
-          </div>
-        </div>
-
-        {/* Daily Logs Integration Panel */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-3 gap-2">
-            <div>
-              <h4 className="font-extrabold text-slate-800 text-xs uppercase flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-ping"></span>
-                📋 Nhật trình công việc ngày liên quan NCC & Giám sát
-              </h4>
-              <p className="text-[10px] text-slate-400 mt-1 leading-tight">
-                Tự động truy tìm các nhiệm vụ chất lượng hoặc bọc lót theo Nhà Cung Cấp trong ngày để QC đối soát, kích hoạt chỉ thị tức thì.
-              </p>
+        {/* Daily Logs Integration Panel: Chỉ xuất hiện khi phát hiện lỗi IQC */}
+        {hasQualityErrorInSystem && sqcSuggestedLogs.length > 0 && (
+          <div className="bg-white p-4 rounded-xl border border-orange-200 shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0"></span>
+                <h4 className="font-extrabold text-slate-800 text-xs uppercase">
+                  Nhật trình liên quan khi phát hiện lỗi IQC ({sqcSuggestedLogs.length})
+                </h4>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                {showSqcDailySuggestions && (
+                  <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer font-bold select-none border border-slate-200 bg-slate-50 px-2 py-1 rounded hover:bg-slate-100 transition">
+                    <input
+                      type="checkbox"
+                      checked={hideIgnoredLogs}
+                      onChange={(e) => setHideIgnoredLogs(e.target.checked)}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 text-xs accent-indigo-600 cursor-pointer"
+                    />
+                    Ẩn mục bỏ qua
+                  </label>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowSqcDailySuggestions(prev => !prev)}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 transition cursor-pointer"
+                >
+                  {showSqcDailySuggestions ? 'Thu gọn' : 'Mở xem'}
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-3 self-end sm:self-auto">
-              <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer font-bold select-none border border-slate-200 bg-slate-50 px-2 py-1 rounded hover:bg-slate-100 transition">
-                <input
-                  type="checkbox"
-                  checked={hideIgnoredLogs}
-                  onChange={(e) => setHideIgnoredLogs(e.target.checked)}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 text-xs accent-indigo-600 cursor-pointer"
-                />
-                Ẩn mục bỏ qua
-              </label>
-              <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-md text-[10px] font-black font-mono">
-                {dailyLogs.filter(log => {
-                  const matches = filterDailyLogsForSqc(log);
-                  return matches && (!hideIgnoredLogs || !ignoredDailyLogStts.includes(log.stt));
-                }).length} công việc ngày đề xuất
-              </span>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {dailyLogs.filter(log => {
-              const matches = filterDailyLogsForSqc(log);
-              if (!matches) return false;
-              if (hideIgnoredLogs && ignoredDailyLogStts.includes(log.stt)) return false;
-              return true;
-            }).map((log, index) => {
-              // Find if there is a linked Supplier Production Audit
-              const linkedAudit = supplierProductionAudits.find(aud => aud.dailyLogStt === log.stt);
-              const isIgnored = ignoredDailyLogStts.includes(log.stt);
+            {showSqcDailySuggestions && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                {sqcSuggestedLogs.map((log, index) => {
+                  const linkedAudit = supplierProductionAudits.find(aud => aud.dailyLogStt === log.stt);
+                  const isIgnored = ignoredDailyLogStts.includes(log.stt);
+                  const isErrorLog = (log.content || '').toLowerCase().includes('lỗi') ||
+                    (log.note || '').toLowerCase().includes('lỗi') ||
+                    (log.content || '').toLowerCase().includes('sự cố') ||
+                    (log.note || '').toLowerCase().includes('sự cố');
 
-              return (
-                <div key={log.stt || index} className={`p-3.5 rounded-xl border border-slate-150 transition duration-200 flex flex-col justify-between space-y-3 ${isIgnored ? 'opacity-60 bg-slate-100 border-dashed' : 'bg-slate-50/50 hover:bg-white hover:shadow-xs'}`}>
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between items-center text-[10px]">
-                      <span className="font-bold text-slate-400 uppercase tracking-wider">{log.date} · Stt #{log.stt} {isIgnored && <span className="text-rose-600 font-extrabold ml-1">(ĐÃ BỎ QUA)</span>}</span>
-                      <div className="flex items-center gap-1.5">
-                        {/* Intelligent Trigger Badge specifying why it was proposed */}
-                        {((log.content || '').toLowerCase().includes('lỗi') || (log.note || '').toLowerCase().includes('lỗi') || (log.content || '').toLowerCase().includes('sự cố') || (log.note || '').toLowerCase().includes('sự cố') || hasQualityErrorInSystem) ? (
-                          <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-150 text-[8px] font-extrabold uppercase">🔴 Sai lỗi</span>
-                        ) : (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-150 text-[8px] font-extrabold uppercase font-mono">📅 Kế hoạch IQC</span>
-                        )}
-                        <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${log.category === 'IQC' ? 'bg-indigo-100 text-indigo-800' :
-                            log.category === 'SQC/QA' ? 'bg-orange-100 text-orange-850' : 'bg-slate-200 text-slate-800'
-                          }`}>
-                          {log.category}
-                        </span>
+                  return (
+                    <div key={log.stt || index} className={`p-3 rounded-xl border border-slate-150 transition duration-200 flex flex-col justify-between space-y-2.5 ${isIgnored ? 'opacity-60 bg-slate-100 border-dashed' : 'bg-slate-50/50 hover:bg-white hover:shadow-xs'}`}>
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="font-bold text-slate-400 uppercase tracking-wider">{log.date} · Stt #{log.stt} {isIgnored && <span className="text-rose-600 font-extrabold ml-1">(ĐÃ BỎ QUA)</span>}</span>
+                          <div className="flex items-center gap-1.5">
+                            {isErrorLog ? (
+                              <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-150 text-[8px] font-extrabold uppercase">🔴 Lỗi</span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-150 text-[8px] font-extrabold uppercase font-mono">📅 IQC</span>
+                            )}
+                            <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${log.category === 'IQC' ? 'bg-indigo-100 text-indigo-800' :
+                                log.category === 'SQC/QA' ? 'bg-orange-100 text-orange-850' : 'bg-slate-200 text-slate-800'
+                              }`}>
+                              {log.category}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className={`text-xs font-semibold leading-relaxed font-sans ${isIgnored ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{log.content}</p>
+                      </div>
+
+                      <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-[10px]">
+                        <div className="flex items-center gap-1.5 text-slate-500">
+                          <strong className="font-extrabold text-slate-750">{log.assignee ? log.assignee.trim().split(/\s+/).pop() : ''}</strong>
+                          <span>· KPI: <strong>{log.statusPercent}</strong></span>
+                        </div>
+
+                        <div>
+                          {linkedAudit ? (
+                            <span className="font-mono font-bold text-indigo-800 text-[9px] bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100">
+                              🔗 {linkedAudit.id} · {getAuditStatusMeta(linkedAudit.status).badgeLabel}
+                            </span>
+                          ) : isIgnored ? (
+                            <button
+                              type="button"
+                              onClick={() => handleUndoIgnoreDailyLog(log.stt)}
+                              className="text-xs text-indigo-600 hover:text-indigo-800 font-extrabold cursor-pointer hover:underline"
+                            >
+                              Khôi phục
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleSelectLinkedDailyLogForAudit(log.stt);
+                                  setShowAddSupplierAuditModal(true);
+                                }}
+                                className="bg-orange-600 hover:bg-orange-500 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-md transition cursor-pointer"
+                              >
+                                🚀 Khởi tạo giám sát
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleIgnoreDailyLog(log.stt)}
+                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[10px] px-2 py-1 rounded-md border border-rose-200 transition cursor-pointer"
+                              >
+                                Bỏ qua
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-
-                    <p className={`text-xs font-semibold leading-relaxed font-sans ${isIgnored ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{log.content}</p>
-
-                    {log.note && (
-                      <p className={`text-[10px] italic p-2 rounded border font-sans ${isIgnored ? 'bg-slate-50/50 text-slate-400 border-slate-150' : 'bg-white/70 text-slate-500 border-slate-100'}`}>
-                        📝 <strong className="font-bold text-slate-650">Nhật ký QMS:</strong> "{log.note}"
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between border-t border-slate-100 pt-2.5 mt-1 text-[10px]">
-                    <div className="flex items-center gap-1.5 text-slate-500">
-                      <strong className="font-extrabold text-slate-750">{log.assignee ? log.assignee.trim().split(/\s+/).pop() : ''}</strong>
-                      <span>· KPI: <strong>{log.statusPercent}</strong></span>
-                    </div>
-
-                    <div>
-                      {linkedAudit ? (
-                        <div className="flex items-center gap-1.5 bg-indigo-50/50 px-2 py-1 rounded-lg border border-indigo-100">
-                          <span className="font-mono font-bold text-indigo-800 text-[9px]">
-                            🔗 {linkedAudit.id}
-                          </span>
-                          <span className={`text-[9px] font-extrabold ${linkedAudit.status === 'approved' ? 'text-emerald-700' :
-                              linkedAudit.status === 'rejected' ? 'text-red-700' :
-                                linkedAudit.status === 'updated' ? 'text-blue-700 animate-pulse' : 'text-amber-700'
-                            }`}>
-                            {linkedAudit.status === 'approved' ? '✓ Đạt chuẩn' :
-                              linkedAudit.status === 'rejected' ? '⚠ Sai lệch' :
-                                linkedAudit.status === 'updated' ? '⚡ Chờ duyệt' : '⏳ Chờ ảnh'}
-                          </span>
-                        </div>
-                      ) : isIgnored ? (
-                        <div className="flex items-center gap-1.5 bg-slate-205 border-slate-300 py-1 px-2 rounded-lg text-slate-500 text-[10px]">
-                          <span className="font-bold">Bỏ qua giám sát</span>
-                          <button
-                            type="button"
-                            onClick={() => handleUndoIgnoreDailyLog(log.stt)}
-                            className="text-xs text-indigo-600 hover:text-indigo-800 font-extrabold cursor-pointer hover:underline"
-                          >
-                            Khôi phục
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleSelectLinkedDailyLogForAudit(log.stt);
-                              setShowAddSupplierAuditModal(true);
-                            }}
-                            className="bg-orange-600 hover:bg-orange-500 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-md transition shadow shadow-orange-100 flex items-center gap-1 cursor-pointer"
-                          >
-                            🚀 Khởi tạo giám sát
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleIgnoreDailyLog(log.stt)}
-                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[10px] px-2 py-1.5 rounded-md border border-rose-200 transition cursor-pointer"
-                            title="Bỏ qua không cần giám sát"
-                          >
-                            Bỏ qua
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
         {/* Filtering row */}
         <div className="bg-white p-2.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2 sm:gap-3">
@@ -12582,7 +12589,7 @@ return (
             </span>
             <input
               type="text"
-              placeholder="Tìm mã chỉ thị, tên linh kiện dập, thông số..."
+              placeholder="Tìm mã chỉ thị, tên linh kiện, nhà cung cấp..."
               value={supplierAuditSearch}
               onChange={e => setSupplierAuditSearch(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 sm:py-2 text-xs border border-slate-200 rounded-lg bg-slate-50/50 outline-hidden font-medium"
@@ -12590,13 +12597,11 @@ return (
           </div>
 
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 items-center">
-            {/* Grid / List View Mode Toggle */}
             <div className="col-span-2 sm:col-span-auto flex bg-slate-100 p-1 rounded-lg border border-slate-200 justify-center">
               <button
                 type="button"
                 onClick={() => setSupplierAuditViewMode('grid')}
                 className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-extrabold transition-all uppercase tracking-wider cursor-pointer ${supplierAuditViewMode === 'grid' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
-                title="Hiển thị dạng ô thẻ bento"
               >
                 <LayoutGrid className="w-3 h-3 text-current" />
                 Dạng thẻ
@@ -12605,7 +12610,6 @@ return (
                 type="button"
                 onClick={() => setSupplierAuditViewMode('list')}
                 className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-md text-[9px] sm:text-[10px] font-extrabold transition-all uppercase tracking-wider cursor-pointer ${supplierAuditViewMode === 'list' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
-                title="Hiển thị dạng danh sách bảng"
               >
                 <List className="w-3 h-3 text-current" />
                 Danh sách
@@ -12629,10 +12633,10 @@ return (
               className="col-span-1 text-xs border border-slate-200 rounded-lg bg-white px-2 py-1.5 sm:px-3 sm:py-2 focus:ring-1 focus:ring-orange-500 outline-hidden font-bold text-slate-700 h-8 sm:h-[34px] cursor-pointer"
             >
               <option value="All">Mọi Trạng Thái</option>
-              <option value="pending">Chờ NCC gửi ảnh</option>
+              <option value="pending">Chờ NCC gửi</option>
               <option value="updated">Chờ duyệt</option>
               <option value="approved">Đạt chuẩn</option>
-              <option value="rejected">Sai lệch</option>
+              <option value="rejected">Không đạt</option>
             </select>
           </div>
         </div>
@@ -12643,31 +12647,9 @@ return (
             <p className="text-slate-400 text-xs font-bold font-mono">Không tìm thấy đợt giám sát sản xuất NCC phù hợp bộ lọc.</p>
           </div>
         ) : supplierAuditViewMode === 'grid' ? (
-          /* GRID / CARD VIEW: Showing only main info on the outside, rest on details click */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredSupplierAudits.map((aud, i) => {
-              let badgeClass = "bg-slate-100 text-slate-500";
-              let badgeLabel = "Chờ phản hồi";
-              let ringClass = "border-slate-200";
-
-              if (aud.status === 'pending') {
-                badgeClass = "bg-amber-100 text-amber-800 border-amber-200 border";
-                badgeLabel = "Chờ NCC gửi ảnh";
-                ringClass = "border-amber-200 bg-amber-50/5 hover:border-amber-300";
-              } else if (aud.status === 'updated') {
-                badgeClass = "bg-blue-100 text-blue-800 border-blue-200 border";
-                badgeLabel = "Đã báo cáo - Chờ duyệt";
-                ringClass = "border-blue-200 bg-blue-50/5 hover:border-blue-300";
-              } else if (aud.status === 'approved') {
-                badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-200 border";
-                badgeLabel = "✓ Đạt - Đã duyệt";
-                ringClass = "border-emerald-200 bg-emerald-50/5 hover:border-emerald-300";
-              } else if (aud.status === 'rejected') {
-                badgeClass = "bg-red-100 text-red-800 border-red-200 border";
-                badgeLabel = "✗ Từ chối - Lỗi khuôn";
-                ringClass = "border-red-200 bg-red-50/5 hover:border-red-300";
-              }
-
+              const { badgeClass, badgeLabel, ringClass } = getAuditStatusMeta(aud.status);
               return (
                 <div key={i} className={`bg-white rounded-xl border ${ringClass} p-4.5 shadow-xs space-y-3.5 tracking-normal transition-all duration-200 flex flex-col justify-between`}>
                   <div className="space-y-2.5">
@@ -12710,39 +12692,22 @@ return (
             })}
           </div>
         ) : (
-          /* COMPACT LIST / TABLE VIEW: Neat rows, click to view full details */
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200 text-xs">
                 <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
                   <tr>
                     <th scope="col" className="px-4 py-3 text-left">Mã chỉ thị</th>
-                    <th scope="col" className="px-4 py-3 text-left">Linh kiện sản xuất</th>
-                    <th scope="col" className="px-4 py-3 text-left">Nhà cung cấp đối tác</th>
+                    <th scope="col" className="px-4 py-3 text-left">Linh kiện</th>
+                    <th scope="col" className="px-4 py-3 text-left">Nhà cung cấp</th>
                     <th scope="col" className="px-4 py-3 text-left">Ngày tạo</th>
-                    <th scope="col" className="px-4 py-3 text-left">Trạng thái phê duyệt</th>
+                    <th scope="col" className="px-4 py-3 text-left">Trạng thái</th>
                     <th scope="col" className="px-4 py-3 text-center">Hành động</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 bg-white font-medium text-slate-700">
                   {filteredSupplierAudits.map((aud, i) => {
-                    let badgeClass = "bg-slate-100 text-slate-500";
-                    let badgeLabel = "Chờ phản hồi";
-
-                    if (aud.status === 'pending') {
-                      badgeClass = "bg-amber-100 text-amber-800 border-amber-200 border";
-                      badgeLabel = "Chờ NCC phản hồi";
-                    } else if (aud.status === 'updated') {
-                      badgeClass = "bg-blue-100 text-blue-800 border-blue-200 border";
-                      badgeLabel = "Chờ QMS duyệt";
-                    } else if (aud.status === 'approved') {
-                      badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-200 border";
-                      badgeLabel = "✓ Đạt - Đã duyệt";
-                    } else if (aud.status === 'rejected') {
-                      badgeClass = "bg-red-100 text-red-800 border-red-200 border";
-                      badgeLabel = "✗ Lỗi - Sửa khuôn";
-                    }
-
+                    const { badgeClass, badgeLabel } = getAuditStatusMeta(aud.status);
                     return (
                       <tr key={i} className="hover:bg-slate-50/55 transition-colors">
                         <td className="px-4 py-3 font-mono font-bold text-indigo-600">{aud.id}</td>
@@ -12772,7 +12737,8 @@ return (
           </div>
         )}
       </div>
-    )}
+      );
+    })()}
 
     {/* ==================== SUBTAB: REPORTS ==================== */}
     {qcMainSubTab === 'reports' && (
