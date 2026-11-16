@@ -32,6 +32,7 @@ import { renderAsync } from 'docx-preview';
 import Qms5sTab from './Qms5sTab';
 import QmsStandardsTab from './QmsStandardsTab';
 import QmsProductsTab from './QmsProductsTab';
+import QmsAppShowcaseTab from './QmsAppShowcaseTab';
 
 interface QmsFormsCenterProps {
   onBackToApp?: () => void;
@@ -148,7 +149,7 @@ export default function QmsFormsCenter({
   readOnly = false
 }: QmsFormsCenterProps) {
   // Tab chính: Biểu mẫu chuẩn (forms) HOẶC Kho Hồ sơ tài liệu P-QLCL (documents)
-  const [mainTab, setMainTab] = useState<'forms' | 'documents' | '5s' | 'standards' | 'products'>('forms');
+  const [mainTab, setMainTab] = useState<'forms' | 'documents' | '5s' | 'standards' | 'products' | 'app_qms'>('forms');
 
   // Danh sách biểu mẫu (hỗ trợ tùy biến cấu trúc mẫu)
   const [customTemplatesMap, setCustomTemplatesMap] = useState<Record<string, QmsFormTemplate>>(() => {
@@ -1550,12 +1551,26 @@ export default function QmsFormsCenter({
             <Bike className="w-4 h-4" />
             <span>Sản phẩm</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setMainTab('app_qms')}
+            className={`px-3.5 py-2.5 text-xs sm:text-sm font-extrabold flex items-center gap-2 border-b-2 transition cursor-pointer ${mainTab === 'app_qms'
+                ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+          >
+            <LayoutGrid className="w-4 h-4" />
+            <span>APP QMS</span>
+          </button>
         </div>
       </header>
 
       {/* ==================== NỘI DUNG CHÍNH ==================== */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 w-full flex-1 space-y-4">
-        {mainTab === 'products' ? (
+        {mainTab === 'app_qms' ? (
+          <QmsAppShowcaseTab readOnly={readOnly} />
+        ) : mainTab === 'products' ? (
           <QmsProductsTab readOnly={readOnly} />
         ) : mainTab === 'standards' ? (
           <QmsStandardsTab readOnly={readOnly} />
