@@ -12393,13 +12393,8 @@ return (
 
     {/* ==================== SUBTAB: SUPPLIER MONITORING (SQC) ==================== */}
     {qcMainSubTab === 'supplier_monitoring' && (() => {
-      const sqcSuggestedLogs = hasQualityErrorInSystem
-        ? dailyLogs.filter(log => {
-            const matches = filterDailyLogsForSqc(log);
-            if (!matches) return false;
-            if (hideIgnoredLogs && ignoredDailyLogStts.includes(log.stt)) return false;
-            return true;
-          })
+      const iqcErrorRecords = hasQualityErrorInSystem
+        ? iqcRecords.filter(r => r.result === 'Lỗi' || (r.failedQty !== undefined && r.failedQty > 0))
         : [];
 
       const getAuditStatusMeta = (status: string) => {
@@ -12467,109 +12462,75 @@ return (
           </div>
         </div>
 
-        {/* Daily Logs Integration Panel: Chỉ xuất hiện khi phát hiện lỗi IQC */}
-        {hasQualityErrorInSystem && sqcSuggestedLogs.length > 0 && (
+        {/* IQC Error Panel: Chỉ xuất hiện khi phát hiện phiếu IQC bị lỗi */}
+        {iqcErrorRecords.length > 0 && (
           <div className="bg-white p-4 rounded-xl border border-orange-200 shadow-sm space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0"></span>
+                <span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
                 <h4 className="font-extrabold text-slate-800 text-xs uppercase">
-                  Nhật trình liên quan khi phát hiện lỗi IQC ({sqcSuggestedLogs.length})
+                  Phát hiện {iqcErrorRecords.length} phiếu IQC có lỗi cần giám sát NCC
                 </h4>
               </div>
-              <div className="flex items-center gap-2 self-end sm:self-auto">
-                {showSqcDailySuggestions && (
-                  <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer font-bold select-none border border-slate-200 bg-slate-50 px-2 py-1 rounded hover:bg-slate-100 transition">
-                    <input
-                      type="checkbox"
-                      checked={hideIgnoredLogs}
-                      onChange={(e) => setHideIgnoredLogs(e.target.checked)}
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 text-xs accent-indigo-600 cursor-pointer"
-                    />
-                    Ẩn mục bỏ qua
-                  </label>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowSqcDailySuggestions(prev => !prev)}
-                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 transition cursor-pointer"
-                >
-                  {showSqcDailySuggestions ? 'Thu gọn' : 'Mở xem'}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowSqcDailySuggestions(prev => !prev)}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 transition cursor-pointer self-end sm:self-auto"
+              >
+                {showSqcDailySuggestions ? 'Thu gọn' : 'Mở xem'}
+              </button>
             </div>
 
             {showSqcDailySuggestions && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-                {sqcSuggestedLogs.map((log, index) => {
-                  const linkedAudit = supplierProductionAudits.find(aud => aud.dailyLogStt === log.stt);
-                  const isIgnored = ignoredDailyLogStts.includes(log.stt);
-                  const isErrorLog = (log.content || '').toLowerCase().includes('lỗi') ||
-                    (log.note || '').toLowerCase().includes('lỗi') ||
-                    (log.content || '').toLowerCase().includes('sự cố') ||
-                    (log.note || '').toLowerCase().includes('sự cố');
+                {iqcErrorRecords.map((rec) => {
+                  const linkedAudit = supplierProductionAudits.find(
+                    aud => aud.supplierName === rec.supplierName &&
+                      ((aud.dkNote || '').includes(rec.id) || (aud.targetSpecification || '').includes(rec.id))
+                  );
 
                   return (
-                    <div key={log.stt || index} className={`p-3 rounded-xl border border-slate-150 transition duration-200 flex flex-col justify-between space-y-2.5 ${isIgnored ? 'opacity-60 bg-slate-100 border-dashed' : 'bg-slate-50/50 hover:bg-white hover:shadow-xs'}`}>
+                    <div key={rec.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-xs transition duration-200 flex flex-col justify-between space-y-2.5">
                       <div className="space-y-1">
                         <div className="flex justify-between items-center text-[10px]">
-                          <span className="font-bold text-slate-400 uppercase tracking-wider">{log.date} · Stt #{log.stt} {isIgnored && <span className="text-rose-600 font-extrabold ml-1">(ĐÃ BỎ QUA)</span>}</span>
-                          <div className="flex items-center gap-1.5">
-                            {isErrorLog ? (
-                              <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-150 text-[8px] font-extrabold uppercase">🔴 Lỗi</span>
-                            ) : (
-                              <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-150 text-[8px] font-extrabold uppercase font-mono">📅 IQC</span>
-                            )}
-                            <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${log.category === 'IQC' ? 'bg-indigo-100 text-indigo-800' :
-                                log.category === 'SQC/QA' ? 'bg-orange-100 text-orange-850' : 'bg-slate-200 text-slate-800'
-                              }`}>
-                              {log.category}
-                            </span>
-                          </div>
+                          <span className="font-bold text-slate-500 font-mono">{rec.date} · {rec.id}</span>
+                          <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 text-[9px] font-extrabold uppercase">
+                            🔴 Lỗi {rec.failedQty || 0}/{rec.checkedQty || rec.totalQty || 0}
+                          </span>
                         </div>
-
-                        <p className={`text-xs font-semibold leading-relaxed font-sans ${isIgnored ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{log.content}</p>
+                        <p className="text-xs font-extrabold text-slate-800">{rec.supplierName}</p>
+                        <p className="text-[11px] font-semibold text-slate-700">{rec.itemSummary || rec.content}</p>
+                        {rec.defectDetail && (
+                          <p className="text-[10px] italic text-rose-700 bg-rose-50/60 px-2 py-1 rounded border border-rose-100">
+                            Chi tiết lỗi: {rec.defectDetail}
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-[10px]">
-                        <div className="flex items-center gap-1.5 text-slate-500">
-                          <strong className="font-extrabold text-slate-750">{log.assignee ? log.assignee.trim().split(/\s+/).pop() : ''}</strong>
-                          <span>· KPI: <strong>{log.statusPercent}</strong></span>
-                        </div>
-
+                        <span className="text-slate-500">
+                          KCS: <strong className="text-slate-700">{rec.checkedBy || 'QLCL'}</strong>
+                        </span>
                         <div>
                           {linkedAudit ? (
                             <span className="font-mono font-bold text-indigo-800 text-[9px] bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100">
                               🔗 {linkedAudit.id} · {getAuditStatusMeta(linkedAudit.status).badgeLabel}
                             </span>
-                          ) : isIgnored ? (
+                          ) : (
                             <button
                               type="button"
-                              onClick={() => handleUndoIgnoreDailyLog(log.stt)}
-                              className="text-xs text-indigo-600 hover:text-indigo-800 font-extrabold cursor-pointer hover:underline"
+                              onClick={() => {
+                                setNewAuditLinkedDailyLogStt(undefined);
+                                setNewAuditSupplierName(rec.supplierName || '');
+                                setNewAuditComponentName(rec.itemSummary || rec.content || 'Linh kiện IQC');
+                                setNewAuditSpec(rec.defectDetail ? `Khắc phục lỗi IQC: ${rec.defectDetail}` : 'Kiểm soát lỗi phát sinh tại IQC');
+                                setNewAuditNote(`Khởi tạo từ phiếu IQC lỗi #${rec.id} (${rec.date})`);
+                                setShowAddSupplierAuditModal(true);
+                              }}
+                              className="bg-orange-600 hover:bg-orange-500 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-md transition cursor-pointer"
                             >
-                              Khôi phục
+                              🚀 Khởi tạo giám sát
                             </button>
-                          ) : (
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  handleSelectLinkedDailyLogForAudit(log.stt);
-                                  setShowAddSupplierAuditModal(true);
-                                }}
-                                className="bg-orange-600 hover:bg-orange-500 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-md transition cursor-pointer"
-                              >
-                                🚀 Khởi tạo giám sát
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleIgnoreDailyLog(log.stt)}
-                                className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[10px] px-2 py-1 rounded-md border border-rose-200 transition cursor-pointer"
-                              >
-                                Bỏ qua
-                              </button>
-                            </div>
                           )}
                         </div>
                       </div>
