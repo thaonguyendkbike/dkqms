@@ -942,6 +942,27 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
 }: DashboardModelDefectTrackerProps) {
   // Trạng thái mở rộng dòng xe cục bộ: khi đóng/mở dòng xe thì CHỈ component này render lại, KHÔNG kích hoạt App render lại!
   const [expandedModel, setExpandedModel] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'Đã xử lý' | 'Đang xử lý' | 'Chưa xử lý'>('ALL');
+
+  const getRecordFilterBucket = useCallback((r: any, type: 'PQC' | 'OQC' | 'MarketDefect'): 'Đã xử lý' | 'Đang xử lý' | 'Chưa xử lý' => {
+    if (type === 'PQC') {
+      return r.status === 'Đạt hoàn toàn' ? 'Đã xử lý' : 'Đang xử lý';
+    }
+    if (type === 'OQC') {
+      if (r.status === 'Đạt') return 'Đã xử lý';
+      if (r.status === 'Lỗi') return 'Đang xử lý';
+      return 'Chưa xử lý';
+    }
+    if (r.status === 'Đã xử lý') return 'Đã xử lý';
+    if (r.status === 'Đang xử lý') return 'Đang xử lý';
+    return 'Chưa xử lý';
+  }, []);
+
+  const getOqcGroupFilterBucket = useCallback((records: OQCRecord[]): 'Đã xử lý' | 'Đang xử lý' | 'Chưa xử lý' => {
+    if (records.every(item => item.status === 'Đạt')) return 'Đã xử lý';
+    if (records.every(item => item.status === 'Chưa kiểm tra')) return 'Chưa xử lý';
+    return 'Đang xử lý';
+  }, []);
 
   // Tính toán dữ liệu lỗi theo từng dòng xe tối ưu bằng Hash Map 1-pass (O(N) thay vì O(N*M))
   const modelDefectSummaries = useMemo(() => {
@@ -1068,6 +1089,28 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
 
     return results;
   }, [models, oqcRecords, pqcRecords, defects]);
+
+  const filteredModelSummaries = useMemo(() => {
+    if (statusFilter === 'ALL') return modelDefectSummaries;
+    return modelDefectSummaries
+      .map(item => {
+        const pqcFiltered = item.pqcRecords.filter(r => getRecordFilterBucket(r, 'PQC') === statusFilter);
+        const oqcFiltered = item.oqcDefects.filter(r => getRecordFilterBucket(r, 'OQC') === statusFilter);
+        const marketFiltered = item.marketDefects.filter(r => getRecordFilterBucket(r, 'MarketDefect') === statusFilter);
+        const filteredGroups = (item.allOqcGroups || item.top3Oqc).filter(g => getOqcGroupFilterBucket(g.records) === statusFilter);
+        const totalErrors = pqcFiltered.length + oqcFiltered.length + marketFiltered.length;
+        return {
+          ...item,
+          totalErrors,
+          pqcRecords: pqcFiltered,
+          oqcDefects: oqcFiltered,
+          top3Oqc: filteredGroups.slice(0, 3),
+          allOqcGroups: filteredGroups,
+          marketDefects: marketFiltered
+        };
+      })
+      .filter(item => item.totalErrors > 0);
+  }, [modelDefectSummaries, statusFilter, getRecordFilterBucket, getOqcGroupFilterBucket]);
 
   const renderErrorRow = useCallback((r: any, type: 'PQC' | 'OQC' | 'MarketDefect') => {
     const currentTreatment = type === 'PQC'
@@ -1569,11 +1612,33 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mt-6 mb-6" id="dashboard_model_defect_tracker">
-      <div className="px-5 py-4 bg-slate-50 border-b border-slate-200">
-        <h3 className="text-xs font-extrabold text-slate-800 uppercase flex items-center gap-1.5">
-          🏍️ BẢNG THEO DÕI LỖI & PHƯƠNG ÁN XỬ LÝ THEO DÒNG XE (MODEL)
-        </h3>
-        <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Nhấp vào dòng xe để xem chi tiết lịch sử lỗi PQC, OQC và Lỗi thị trường liên quan</p>
+      <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h3 className="text-xs font-extrabold text-slate-800 uppercase flex items-center gap-1.5">
+            🏍️ BẢNG THEO DÕI LỖI & PHƯƠNG ÁN XỬ LÝ THEO DÒNG XE (MODEL)
+          </h3>
+          <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Nhấp vào dòng xe để xem chi tiết lịch sử lỗi PQC, OQC và Lỗi thị trường liên quan</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {([
+            { key: 'Đã xử lý', activeClass: 'bg-emerald-600 text-white border-emerald-600 shadow-xs', idleClass: 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50' },
+            { key: 'Đang xử lý', activeClass: 'bg-amber-500 text-white border-amber-500 shadow-xs', idleClass: 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50' },
+            { key: 'Chưa xử lý', activeClass: 'bg-slate-600 text-white border-slate-600 shadow-xs', idleClass: 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100' }
+          ] as const).map(btn => {
+            const isActive = statusFilter === btn.key;
+            return (
+              <button
+                key={btn.key}
+                type="button"
+                onClick={() => setStatusFilter(isActive ? 'ALL' : btn.key)}
+                title={isActive ? 'Nhấn lại để hiển thị tất cả trạng thái' : `Lọc theo trạng thái: ${btn.key}`}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition cursor-pointer select-none ${isActive ? btn.activeClass : btn.idleClass}`}
+              >
+                {btn.key}
+              </button>
+            );
+          })}
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left font-sans text-xs">
@@ -1588,14 +1653,16 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-            {modelDefectSummaries.length === 0 ? (
+            {filteredModelSummaries.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center text-slate-400 italic py-6">
-                  Không có dòng xe nào phát sinh lỗi trong quá trình lắp ráp OQC cần theo dõi.
+                  {statusFilter === 'ALL'
+                    ? 'Không có dòng xe nào phát sinh lỗi trong quá trình lắp ráp OQC cần theo dõi.'
+                    : `Không có dòng xe nào có lỗi ở trạng thái "${statusFilter}".`}
                 </td>
               </tr>
             ) : (
-              modelDefectSummaries.map(item => {
+              filteredModelSummaries.map(item => {
                 const isExpanded = expandedModel === item.name;
 
                 return (
@@ -1659,7 +1726,7 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
       {/* Footer ở cuối bảng: Thông tin tổng kết và nút nhỏ xuất dữ liệu */}
       <div className="px-5 py-2.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-slate-500 text-[11px] font-semibold">
-          <span>Tổng số: <strong className="text-slate-800">{modelDefectSummaries.length}</strong> dòng xe phát sinh lỗi cần theo dõi</span>
+          <span>Tổng số: <strong className="text-slate-800">{filteredModelSummaries.length}</strong> dòng xe phát sinh lỗi cần theo dõi{statusFilter !== 'ALL' ? ` (Đang lọc: ${statusFilter})` : ''}</span>
         </div>
         <button
           type="button"
