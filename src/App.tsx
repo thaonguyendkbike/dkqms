@@ -22929,7 +22929,14 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       });
                       break;
                     case 'copq':
-                      setCopqs(prev => prev.map(co => co.id === data.id ? data : co));
+                      setCopqs(prev => {
+                        const updated = prev.map(co => co.id === data.id ? data : co);
+                        safeStorage.setItem('dk_copqs', JSON.stringify(updated));
+                        safeStorage.setItem('dk_copqs_is_dirty', 'true');
+                        if (localDirtyKeys.current) localDirtyKeys.current.add('dk_copqs');
+                        syncToServer('dk_copqs', updated);
+                        return updated;
+                      });
                       break;
                     case 'form':
                       setCustomForms(prev => prev.map(cf => cf.id === data.id ? data : cf));
