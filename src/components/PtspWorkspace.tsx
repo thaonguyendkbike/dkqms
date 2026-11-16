@@ -6,19 +6,25 @@ import {
   Check,
   CheckCircle2,
   ClipboardCheck,
-  Factory,
+  ExternalLink,
+  FileText,
+  Gauge,
+  Link2,
   ListChecks,
   Pencil,
   Plus,
   Printer,
   Trash2,
+  Wrench,
   X
 } from 'lucide-react';
 import { compressImageFile } from '../imageCompressor';
 import {
+  PtspDocLinkItem,
   PtspIssueItem,
   PtspModelWorkspaceRecord,
-  PtspPilotRunItem,
+  PtspNewPartItem,
+  PtspRoadTestItem,
   PtspSampleCheckItem,
   PtspSopGateItem
 } from '../types';
@@ -44,6 +50,17 @@ const createDefaultSampleChecks = (): PtspSampleCheckItem[] => [
   { id: 'sc-12', group: 'IV. Thông số chạy', item: 'Tốc độ tối đa', checkPoint: 'Thử tải thực tế', standard: 'Đạt tốc độ thiết kế theo từng dòng xe (Eco/Normal/Sport)', status: 'Chưa KT', note: '' },
   { id: 'sc-13', group: 'IV. Thông số chạy', item: 'Độ ồn khi vận hành', checkPoint: 'Chạy đường bằng & gồ ghề', standard: 'Không có tiếng ồn dàn nhựa, chân chống, dây điện va khung (< 60dB)', status: 'Chưa KT', note: '' },
   { id: 'sc-14', group: 'IV. Thông số chạy', item: 'Gầm xe & leo dốc', checkPoint: 'Khoảng sáng gầm & lực kéo', standard: 'Lên xuống vỉa hè 10cm không chạm gầm, leo dốc ổn định', status: 'Chưa KT', note: '' }
+];
+
+const createDefaultRoadTests = (): PtspRoadTestItem[] => [
+  { id: 'rt-1', category: 'C. Thiết bị đăng kiểm', item: 'Tốc độ tối đa', standard: 'Theo thông số thiết kế từng dòng xe (25 / 35 / 42 / 50+ km/h)', measuredValue: '', result: 'Chưa đo', note: '' },
+  { id: 'rt-2', category: 'C. Thiết bị đăng kiểm', item: 'Hiệu quả phanh trước / sau', standard: 'Đạt lực phanh tiêu chuẩn đăng kiểm, không lệch hướng', measuredValue: '', result: 'Chưa đo', note: '' },
+  { id: 'rt-3', category: 'C. Thiết bị đăng kiểm', item: 'Cường độ sáng đèn pha', standard: 'Đạt chuẩn chiếu sáng, đường cắt rõ không chói lóa', measuredValue: '', result: 'Chưa đo', note: '' },
+  { id: 'rt-4', category: 'C. Thiết bị đăng kiểm', item: 'Âm lượng còi xe', standard: '90 – 115 dB(A)', measuredValue: '', result: 'Chưa đo', note: '' },
+  { id: 'rt-5', category: 'D. Đường chạy thử', item: 'Độ ồn khi chạy thử', standard: '< 60 dB, không có tiếng ồn nhựa, chân chống, dây điện va đập', measuredValue: '', result: 'Chưa đo', note: '' },
+  { id: 'rt-6', category: 'D. Đường chạy thử', item: 'Gầm xe & vượt bậc 10cm', standard: 'Lên xuống dốc & bậc vỉa hè 10cm không chạm gầm', measuredValue: '', result: 'Chưa đo', note: '' },
+  { id: 'rt-7', category: 'D. Đường chạy thử', item: 'Khả năng leo dốc & tăng tốc', standard: 'Lên ga mượt, không giật cục, leo dốc ổn định', measuredValue: '', result: 'Chưa đo', note: '' },
+  { id: 'rt-8', category: 'D. Đường chạy thử', item: 'Hệ thống treo / Giảm xóc', standard: 'Hành trình giảm xóc trước/sau > 5 và < 10 cm, nhún êm', measuredValue: '', result: 'Chưa đo', note: '' }
 ];
 
 const createDefaultSopGates = (): PtspSopGateItem[] => [
@@ -79,7 +96,18 @@ export const DEFAULT_PTSP_MODELS: PtspModelWorkspaceRecord[] = [
         createdAt: '2026-11-16'
       }
     ],
-    pilotRuns: [],
+    newParts: [
+      {
+        id: 'np-1',
+        partName: 'Đèn pha 4 bi cầu',
+        partCode: 'LK-DP-ROMA27',
+        supplierName: 'NCC Đèn Chiếu Sáng',
+        changeNote: 'Nâng cấp cường độ sáng, thay đổi giắc cắm chống nước',
+        iqcSampleStatus: 'Đang đánh giá'
+      }
+    ],
+    roadTests: createDefaultRoadTests(),
+    docLinks: [],
     sopGates: createDefaultSopGates(),
     updatedAt: '2026-11-16'
   }
@@ -87,7 +115,7 @@ export const DEFAULT_PTSP_MODELS: PtspModelWorkspaceRecord[] = [
 
 export default function PtspWorkspace({ modelsList, onSaveModelsList, canEdit }: PtspWorkspaceProps) {
   const [selectedId, setSelectedId] = useState<string>(() => modelsList[0]?.id || '');
-  const [subTab, setSubTab] = useState<'sample_issues' | 'pilot' | 'sop'>('sample_issues');
+  const [subTab, setSubTab] = useState<'sample_issues' | 'specs_docs' | 'sop'>('sample_issues');
 
   // Modals
   const [showModelModal, setShowModelModal] = useState(false);
@@ -115,14 +143,20 @@ export default function PtspWorkspace({ modelsList, onSaveModelsList, canEdit }:
     image: undefined
   });
 
-  const [showPilotModal, setShowPilotModal] = useState(false);
-  const [pilotForm, setPilotForm] = useState<Omit<PtspPilotRunItem, 'id'>>({
-    batchName: 'Đợt chạy thử 01',
-    runDate: new Date().toISOString().slice(0, 10),
-    sampleQty: 10,
-    passQty: 9,
-    lineIssues: '',
-    conclusion: 'Cần hiệu chỉnh'
+  const [showPartModal, setShowPartModal] = useState(false);
+  const [partForm, setPartForm] = useState<Omit<PtspNewPartItem, 'id'>>({
+    partName: '',
+    partCode: '',
+    supplierName: '',
+    changeNote: '',
+    iqcSampleStatus: 'Chưa có mẫu'
+  });
+
+  const [showDocModal, setShowDocModal] = useState(false);
+  const [docForm, setDocForm] = useState<Omit<PtspDocLinkItem, 'id'>>({
+    title: '',
+    docType: 'Thông số KT',
+    url: ''
   });
 
   const [zoomImage, setZoomImage] = useState<string | null>(null);
@@ -230,7 +264,9 @@ export default function PtspWorkspace({ modelsList, onSaveModelsList, canEdit }:
         image: modelForm.image || undefined,
         sampleChecks: createDefaultSampleChecks(),
         issues: [],
-        pilotRuns: [],
+        newParts: [],
+        roadTests: createDefaultRoadTests(),
+        docLinks: [],
         sopGates: createDefaultSopGates(),
         updatedAt: today
       };
@@ -313,17 +349,22 @@ export default function PtspWorkspace({ modelsList, onSaveModelsList, canEdit }:
     setShowIssueModal(false);
   };
 
-  const handleSavePilot = (e: React.FormEvent) => {
+  const handleSavePart = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedModel || !canEdit) return;
-    const newRun: PtspPilotRunItem = {
-      id: `pilot-${Date.now()}`,
-      ...pilotForm,
-      sampleQty: Math.max(1, Number(pilotForm.sampleQty) || 1),
-      passQty: Math.max(0, Math.min(Number(pilotForm.sampleQty) || 1, Number(pilotForm.passQty) || 0))
-    };
-    updateSelectedModel((cur) => ({ ...cur, pilotRuns: [newRun, ...cur.pilotRuns] }));
-    setShowPilotModal(false);
+    if (!selectedModel || !canEdit || !partForm.partName.trim()) return;
+    const newPart: PtspNewPartItem = { id: `np-${Date.now()}`, ...partForm, partName: partForm.partName.trim() };
+    updateSelectedModel((cur) => ({ ...cur, newParts: [newPart, ...(cur.newParts || [])] }));
+    setPartForm({ partName: '', partCode: '', supplierName: '', changeNote: '', iqcSampleStatus: 'Chưa có mẫu' });
+    setShowPartModal(false);
+  };
+
+  const handleSaveDoc = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedModel || !canEdit || !docForm.title.trim() || !docForm.url.trim()) return;
+    const newDoc: PtspDocLinkItem = { id: `doc-${Date.now()}`, ...docForm, title: docForm.title.trim(), url: docForm.url.trim() };
+    updateSelectedModel((cur) => ({ ...cur, docLinks: [newDoc, ...(cur.docLinks || [])] }));
+    setDocForm({ title: '', docType: 'Thông số KT', url: '' });
+    setShowDocModal(false);
   };
 
   const handlePrintSampleSheet = () => {
@@ -552,13 +593,13 @@ export default function PtspWorkspace({ modelsList, onSaveModelsList, canEdit }:
             </button>
             <button
               type="button"
-              onClick={() => setSubTab('pilot')}
+              onClick={() => setSubTab('specs_docs')}
               className={`px-4 py-2 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer ${
-                subTab === 'pilot' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                subTab === 'specs_docs' ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Factory className="w-4 h-4" />
-              <span>2. Lô chạy thử Pilot ({selectedModel.pilotRuns.length})</span>
+              <Wrench className="w-4 h-4" />
+              <span>2. Linh kiện mới, Đo kiểm &amp; Hồ sơ</span>
             </button>
             <button
               type="button"
@@ -797,101 +838,290 @@ export default function PtspWorkspace({ modelsList, onSaveModelsList, canEdit }:
             </div>
           )}
 
-          {/* ==================== TAB 2: LÔ CHẠY THỬ PILOT RUN ==================== */}
-          {subTab === 'pilot' && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h4 className="text-xs sm:text-sm font-black text-slate-800 uppercase">
-                    Theo Dõi Các Đợt Sản Xuất Thử Nghiệm (Pilot / Trial Run)
-                  </h4>
-                  <p className="text-[11px] text-slate-500">
-                    Ghi nhận số lượng xe chạy thử trên chuyền, tỷ lệ đạt KCS và lỗi phát sinh trước sản xuất hàng loạt.
-                  </p>
-                </div>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => setShowPilotModal(true)}
-                    className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Thêm đợt chạy thử</span>
-                  </button>
-                )}
-              </div>
+          {/* ==================== TAB 2: LINH KIỆN MỚI, ĐO KIỂM (C-D) & HỒ SƠ KỸ THUẬT ==================== */}
+          {subTab === 'specs_docs' && (() => {
+            const partsList = selectedModel.newParts || [];
+            const roadList = selectedModel.roadTests && selectedModel.roadTests.length > 0
+              ? selectedModel.roadTests
+              : createDefaultRoadTests();
+            const docsList = selectedModel.docLinks || [];
 
-              <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-900 text-white text-[11px]">
-                    <tr>
-                      <th className="p-2.5 w-10 text-center">STT</th>
-                      <th className="p-2.5">Đợt chạy thử</th>
-                      <th className="p-2.5 w-28 text-center">Ngày chạy</th>
-                      <th className="p-2.5 w-24 text-right">SL Thử</th>
-                      <th className="p-2.5 w-24 text-right">SL Đạt</th>
-                      <th className="p-2.5 w-24 text-right">Tỷ lệ đạt</th>
-                      <th className="p-2.5">Vấn đề phát sinh trên chuyền</th>
-                      <th className="p-2.5 w-32 text-center">Kết luận</th>
-                      {canEdit && <th className="p-2.5 w-14 text-center">Xóa</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedModel.pilotRuns.length === 0 ? (
-                      <tr>
-                        <td colSpan={canEdit ? 9 : 8} className="p-8 text-center text-slate-400 italic">
-                          Chưa có đợt chạy thử Pilot Run nào cho model này.
-                        </td>
-                      </tr>
-                    ) : (
-                      selectedModel.pilotRuns.map((run, idx) => {
-                        const rate = run.sampleQty > 0 ? Math.round((run.passQty / run.sampleQty) * 100) : 0;
-                        return (
-                          <tr key={run.id} className="hover:bg-slate-50">
-                            <td className="p-2.5 text-center font-mono text-slate-500">{idx + 1}</td>
-                            <td className="p-2.5 font-bold text-slate-900">{run.batchName}</td>
-                            <td className="p-2.5 text-center font-mono text-slate-600">{run.runDate}</td>
-                            <td className="p-2.5 text-right font-mono font-bold">{run.sampleQty}</td>
-                            <td className="p-2.5 text-right font-mono font-bold text-emerald-700">{run.passQty}</td>
-                            <td className="p-2.5 text-right font-mono font-black text-indigo-700">{rate}%</td>
-                            <td className="p-2.5 text-slate-700 whitespace-pre-line">{run.lineIssues || 'Không phát sinh'}</td>
-                            <td className="p-2.5 text-center">
-                              <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  run.conclusion === 'Đạt'
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : 'bg-amber-100 text-amber-800'
-                                }`}
-                              >
-                                {run.conclusion}
-                              </span>
+            return (
+              <div className="space-y-5">
+                {/* A. Linh kiện mới / Thay đổi & Nhà cung cấp */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-slate-800 uppercase flex items-center gap-1.5">
+                        <Wrench className="w-4 h-4 text-indigo-600" />
+                        <span>A. Danh Sách Linh Kiện Mới / Thay Đổi &amp; Nhà Cung Cấp</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Theo dõi linh kiện mới/cải tiến để kiểm soát mẫu chuẩn IQC đầu vào trước khi sản xuất.
+                      </p>
+                    </div>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => setShowPartModal(true)}
+                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Thêm linh kiện mới</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-900 text-white text-[11px]">
+                        <tr>
+                          <th className="p-2.5 w-10 text-center">STT</th>
+                          <th className="p-2.5">Tên linh kiện</th>
+                          <th className="p-2.5 w-32">Mã hàng</th>
+                          <th className="p-2.5 w-44">Nhà cung cấp</th>
+                          <th className="p-2.5">Điểm thay đổi / Lưu ý IQC</th>
+                          <th className="p-2.5 w-36 text-center">Mẫu chuẩn IQC</th>
+                          {canEdit && <th className="p-2.5 w-14 text-center">Xóa</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {partsList.length === 0 ? (
+                          <tr>
+                            <td colSpan={canEdit ? 7 : 6} className="p-6 text-center text-slate-400 italic">
+                              Chưa có linh kiện mới/thay đổi nào được thêm cho model này.
                             </td>
-                            {canEdit && (
-                              <td className="p-2.5 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (!window.confirm('Xóa đợt chạy thử này?')) return;
+                          </tr>
+                        ) : (
+                          partsList.map((pt, idx) => (
+                            <tr key={pt.id} className="hover:bg-slate-50">
+                              <td className="p-2.5 text-center font-mono text-slate-500">{idx + 1}</td>
+                              <td className="p-2.5 font-bold text-slate-900">{pt.partName}</td>
+                              <td className="p-2.5 font-mono text-indigo-700">{pt.partCode || '—'}</td>
+                              <td className="p-2.5 font-semibold text-slate-700">{pt.supplierName || '—'}</td>
+                              <td className="p-2.5 text-slate-700">{pt.changeNote || '—'}</td>
+                              <td className="p-2 text-center">
+                                <select
+                                  disabled={!canEdit}
+                                  value={pt.iqcSampleStatus}
+                                  onChange={(e) => {
+                                    const val = e.target.value as PtspNewPartItem['iqcSampleStatus'];
                                     updateSelectedModel((cur) => ({
                                       ...cur,
-                                      pilotRuns: cur.pilotRuns.filter((x) => x.id !== run.id)
+                                      newParts: (cur.newParts || []).map((x) =>
+                                        x.id === pt.id ? { ...x, iqcSampleStatus: val } : x
+                                      )
                                     }));
                                   }}
-                                  className="p-1 rounded hover:bg-rose-50 text-rose-500 cursor-pointer"
+                                  className={`px-2 py-1 rounded-lg border text-[11px] font-bold ${
+                                    pt.iqcSampleStatus === 'Đã chốt mẫu'
+                                      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                                      : pt.iqcSampleStatus === 'Đang đánh giá'
+                                      ? 'bg-amber-50 border-amber-300 text-amber-800'
+                                      : 'bg-white border-slate-300 text-slate-700'
+                                  }`}
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                  <option value="Chưa có mẫu">Chưa có mẫu</option>
+                                  <option value="Đang đánh giá">Đang đánh giá</option>
+                                  <option value="Đã chốt mẫu">Đã chốt mẫu</option>
+                                </select>
                               </td>
-                            )}
+                              {canEdit && (
+                                <td className="p-2.5 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (!window.confirm('Xóa linh kiện này?')) return;
+                                      updateSelectedModel((cur) => ({
+                                        ...cur,
+                                        newParts: (cur.newParts || []).filter((x) => x.id !== pt.id)
+                                      }));
+                                    }}
+                                    className="p-1 rounded hover:bg-rose-50 text-rose-500 cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* B. Đo kiểm Đăng kiểm & Chạy thử đường (C–D) */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-black text-slate-800 uppercase flex items-center gap-1.5">
+                      <Gauge className="w-4 h-4 text-emerald-600" />
+                      <span>B. Kết Quả Đo Kiểm Thiết Bị Đăng Kiểm &amp; Đường Chạy Thử (C–D)</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Ghi nhận giá trị đo thực tế của xe mẫu (tốc độ, lực phanh, đèn, độ ồn, gầm xe, leo dốc).
+                    </p>
+                  </div>
+
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-100 text-slate-700 text-[11px]">
+                        <tr>
+                          <th className="p-2.5 w-10 text-center">STT</th>
+                          <th className="p-2.5 w-40">Hạng mục</th>
+                          <th className="p-2.5 w-44">Thông số kiểm tra</th>
+                          <th className="p-2.5">Tiêu chuẩn</th>
+                          <th className="p-2.5 w-40">Giá trị đo thực tế</th>
+                          <th className="p-2.5 w-32 text-center">Đánh giá</th>
+                          <th className="p-2.5 w-40">Ghi chú</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {roadList.map((rt, idx) => (
+                          <tr key={rt.id} className={idx % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'}>
+                            <td className="p-2.5 text-center font-mono text-slate-500">{idx + 1}</td>
+                            <td className="p-2.5 font-bold text-indigo-900">{rt.category}</td>
+                            <td className="p-2.5 font-bold text-slate-900">{rt.item}</td>
+                            <td className="p-2.5 text-slate-600">{rt.standard}</td>
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                disabled={!canEdit}
+                                value={rt.measuredValue}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  updateSelectedModel((cur) => {
+                                    const base = cur.roadTests && cur.roadTests.length > 0 ? cur.roadTests : createDefaultRoadTests();
+                                    return { ...cur, roadTests: base.map((x) => (x.id === rt.id ? { ...x, measuredValue: val } : x)) };
+                                  });
+                                }}
+                                placeholder="VD: 44 km/h, 54 dB..."
+                                className="w-full px-2 py-1 rounded border border-slate-200 font-mono text-xs"
+                              />
+                            </td>
+                            <td className="p-2 text-center">
+                              <select
+                                disabled={!canEdit}
+                                value={rt.result}
+                                onChange={(e) => {
+                                  const val = e.target.value as PtspRoadTestItem['result'];
+                                  updateSelectedModel((cur) => {
+                                    const base = cur.roadTests && cur.roadTests.length > 0 ? cur.roadTests : createDefaultRoadTests();
+                                    return { ...cur, roadTests: base.map((x) => (x.id === rt.id ? { ...x, result: val } : x)) };
+                                  });
+                                }}
+                                className={`px-2 py-1 rounded-lg border font-bold text-xs ${
+                                  rt.result === 'Đạt'
+                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                                    : rt.result === 'Không đạt'
+                                    ? 'bg-rose-50 border-rose-300 text-rose-800'
+                                    : 'bg-white border-slate-300 text-slate-700'
+                                }`}
+                              >
+                                <option value="Chưa đo">Chưa đo</option>
+                                <option value="Đạt">Đạt</option>
+                                <option value="Không đạt">Không đạt</option>
+                              </select>
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                disabled={!canEdit}
+                                value={rt.note || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  updateSelectedModel((cur) => {
+                                    const base = cur.roadTests && cur.roadTests.length > 0 ? cur.roadTests : createDefaultRoadTests();
+                                    return { ...cur, roadTests: base.map((x) => (x.id === rt.id ? { ...x, note: val } : x)) };
+                                  });
+                                }}
+                                placeholder="Ghi chú..."
+                                className="w-full px-2 py-1 rounded border border-slate-200 text-xs"
+                              />
+                            </td>
                           </tr>
-                        );
-                      })
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* C. Hồ sơ & Link tài liệu kỹ thuật */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-slate-800 uppercase flex items-center gap-1.5">
+                        <FileText className="w-4 h-4 text-sky-600" />
+                        <span>C. Hồ Sơ &amp; Đường Dẫn Tài Liệu Kỹ Thuật</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Lưu tập trung link Google Drive / Sheet thông số kỹ thuật, tiêu chuẩn IQC/OQC, hồ sơ đăng kiểm của model.
+                      </p>
+                    </div>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => setShowDocModal(true)}
+                        className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-extrabold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Link2 className="w-3.5 h-3.5" />
+                        <span>Thêm link tài liệu</span>
+                      </button>
                     )}
-                  </tbody>
-                </table>
+                  </div>
+
+                  {docsList.length === 0 ? (
+                    <div className="p-5 rounded-xl bg-slate-50 border border-dashed border-slate-300 text-center text-xs text-slate-500">
+                      Chưa có đường dẫn tài liệu nào cho model này.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      {docsList.map((docItem) => (
+                        <div
+                          key={docItem.id}
+                          className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between gap-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-sky-100 text-sky-800">
+                              {docItem.docType}
+                            </span>
+                            <div className="text-xs font-bold text-slate-900 mt-1 truncate">{docItem.title}</div>
+                            <div className="text-[11px] font-mono text-slate-500 truncate">{docItem.url}</div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <a
+                              href={docItem.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold flex items-center gap-1"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>Mở</span>
+                            </a>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!window.confirm('Xóa link tài liệu này?')) return;
+                                  updateSelectedModel((cur) => ({
+                                    ...cur,
+                                    docLinks: (cur.docLinks || []).filter((x) => x.id !== docItem.id)
+                                  }));
+                                }}
+                                className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-500 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ==================== TAB 3: CHECKLIST ĐƯA VÀO HÀNG LOẠT (SOP GATE) ==================== */}
           {subTab === 'sop' && (
@@ -1254,100 +1484,129 @@ export default function PtspWorkspace({ modelsList, onSaveModelsList, canEdit }:
         </div>
       )}
 
-      {/* Modal Thêm Lô Chạy Thử Pilot Run */}
-      {showPilotModal && (
+      {/* Modal Thêm Linh Kiện Mới / Thay Đổi */}
+      {showPartModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4">
-          <form
-            onSubmit={handleSavePilot}
-            className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg"
-          >
+          <form onSubmit={handleSavePart} className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200">
-              <h3 className="text-base font-extrabold text-slate-900">Thêm Đợt Chạy Thử Pilot Run</h3>
-              <button
-                type="button"
-                onClick={() => setShowPilotModal(false)}
-                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
-              >
+              <h3 className="text-base font-extrabold text-slate-900">Thêm Linh Kiện Mới / Thay Đổi</h3>
+              <button type="button" onClick={() => setShowPartModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="p-5 space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Tên đợt chạy thử *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Tên linh kiện *</label>
                   <input
                     type="text"
                     required
-                    value={pilotForm.batchName}
-                    onChange={(e) => setPilotForm((p) => ({ ...p, batchName: e.target.value }))}
+                    value={partForm.partName}
+                    onChange={(e) => setPartForm((p) => ({ ...p, partName: e.target.value }))}
+                    placeholder="VD: Đèn pha 4 bi cầu"
                     className="w-full px-3 py-2 rounded-lg border border-slate-300"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Ngày chạy</label>
+                  <label className="block font-bold text-slate-700 mb-1">Mã hàng</label>
                   <input
-                    type="date"
-                    value={pilotForm.runDate}
-                    onChange={(e) => setPilotForm((p) => ({ ...p, runDate: e.target.value }))}
+                    type="text"
+                    value={partForm.partCode}
+                    onChange={(e) => setPartForm((p) => ({ ...p, partCode: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Số lượng xe thử</label>
+                  <label className="block font-bold text-slate-700 mb-1">Nhà cung cấp</label>
                   <input
-                    type="number"
-                    min="1"
-                    value={pilotForm.sampleQty}
-                    onChange={(e) => setPilotForm((p) => ({ ...p, sampleQty: Number(e.target.value) }))}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono"
+                    type="text"
+                    value={partForm.supplierName}
+                    onChange={(e) => setPartForm((p) => ({ ...p, supplierName: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Số xe đạt KCS</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={pilotForm.passQty}
-                    onChange={(e) => setPilotForm((p) => ({ ...p, passQty: Number(e.target.value) }))}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono"
-                  />
+                  <label className="block font-bold text-slate-700 mb-1">Mẫu chuẩn IQC</label>
+                  <select
+                    value={partForm.iqcSampleStatus}
+                    onChange={(e) => setPartForm((p) => ({ ...p, iqcSampleStatus: e.target.value as any }))}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
+                  >
+                    <option value="Chưa có mẫu">Chưa có mẫu</option>
+                    <option value="Đang đánh giá">Đang đánh giá</option>
+                    <option value="Đã chốt mẫu">Đã chốt mẫu</option>
+                  </select>
                 </div>
               </div>
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Kết luận</label>
-                <select
-                  value={pilotForm.conclusion}
-                  onChange={(e) => setPilotForm((p) => ({ ...p, conclusion: e.target.value as any }))}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
-                >
-                  <option value="Đạt">Đạt</option>
-                  <option value="Cần hiệu chỉnh">Cần hiệu chỉnh</option>
-                </select>
-              </div>
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Vấn đề phát sinh trên chuyền</label>
+                <label className="block font-bold text-slate-700 mb-1">Điểm thay đổi / Lưu ý kiểm tra IQC</label>
                 <textarea
                   rows={3}
-                  value={pilotForm.lineIssues}
-                  onChange={(e) => setPilotForm((p) => ({ ...p, lineIssues: e.target.value }))}
+                  value={partForm.changeNote}
+                  onChange={(e) => setPartForm((p) => ({ ...p, changeNote: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300"
                 />
               </div>
             </div>
             <div className="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50">
-              <button
-                type="button"
-                onClick={() => setShowPilotModal(false)}
-                className="px-4 py-2 rounded-lg border border-slate-300 bg-white font-bold text-xs cursor-pointer"
-              >
-                Hủy
+              <button type="button" onClick={() => setShowPartModal(false)} className="px-4 py-2 rounded-lg border border-slate-300 bg-white font-bold text-xs cursor-pointer">Hủy</button>
+              <button type="submit" className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs cursor-pointer">Lưu linh kiện</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal Thêm Link Tài Liệu Kỹ Thuật */}
+      {showDocModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4">
+          <form onSubmit={handleSaveDoc} className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200">
+              <h3 className="text-base font-extrabold text-slate-900">Thêm Đường Dẫn Tài Liệu Kỹ Thuật</h3>
+              <button type="button" onClick={() => setShowDocModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer">
+                <X className="w-4 h-4" />
               </button>
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs cursor-pointer"
-              >
-                Lưu đợt Pilot
-              </button>
+            </div>
+            <div className="p-5 space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Tên tài liệu *</label>
+                <input
+                  type="text"
+                  required
+                  value={docForm.title}
+                  onChange={(e) => setDocForm((p) => ({ ...p, title: e.target.value }))}
+                  placeholder="VD: Bảng thông số kỹ thuật DK Roma SX 2027"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Loại tài liệu</label>
+                <select
+                  value={docForm.docType}
+                  onChange={(e) => setDocForm((p) => ({ ...p, docType: e.target.value as any }))}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white"
+                >
+                  <option value="Thông số KT">Thông số KT</option>
+                  <option value="Tiêu chuẩn IQC/OQC">Tiêu chuẩn IQC/OQC</option>
+                  <option value="Hồ sơ Đăng kiểm">Hồ sơ Đăng kiểm</option>
+                  <option value="Ảnh / Video mẫu">Ảnh / Video mẫu</option>
+                  <option value="Khác">Khác</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Đường dẫn (URL) *</label>
+                <input
+                  type="url"
+                  required
+                  value={docForm.url}
+                  onChange={(e) => setDocForm((p) => ({ ...p, url: e.target.value }))}
+                  placeholder="https://drive.google.com/..."
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50">
+              <button type="button" onClick={() => setShowDocModal(false)} className="px-4 py-2 rounded-lg border border-slate-300 bg-white font-bold text-xs cursor-pointer">Hủy</button>
+              <button type="submit" className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-xs cursor-pointer">Lưu link tài liệu</button>
             </div>
           </form>
         </div>

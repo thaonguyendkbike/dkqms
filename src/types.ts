@@ -313,6 +313,32 @@ export interface PtspPilotRunItem {
   conclusion: 'Đạt' | 'Cần hiệu chỉnh';
 }
 
+export interface PtspNewPartItem {
+  id: string;
+  partName: string;
+  partCode: string;
+  supplierName: string;
+  changeNote: string;
+  iqcSampleStatus: 'Chưa có mẫu' | 'Đang đánh giá' | 'Đã chốt mẫu';
+}
+
+export interface PtspRoadTestItem {
+  id: string;
+  category: 'C. Thiết bị đăng kiểm' | 'D. Đường chạy thử';
+  item: string;
+  standard: string;
+  measuredValue: string;
+  result: 'Chưa đo' | 'Đạt' | 'Không đạt';
+  note?: string;
+}
+
+export interface PtspDocLinkItem {
+  id: string;
+  title: string;
+  docType: 'Thông số KT' | 'Tiêu chuẩn IQC/OQC' | 'Hồ sơ Đăng kiểm' | 'Ảnh / Video mẫu' | 'Khác';
+  url: string;
+}
+
 export interface PtspSopGateItem {
   id: string;
   title: string;
@@ -334,7 +360,10 @@ export interface PtspModelWorkspaceRecord {
   notes?: string;
   sampleChecks: PtspSampleCheckItem[];
   issues: PtspIssueItem[];
-  pilotRuns: PtspPilotRunItem[];
+  pilotRuns?: PtspPilotRunItem[];
+  newParts?: PtspNewPartItem[];
+  roadTests?: PtspRoadTestItem[];
+  docLinks?: PtspDocLinkItem[];
   sopGates: PtspSopGateItem[];
   updatedAt: string;
 }
