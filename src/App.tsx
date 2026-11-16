@@ -4930,6 +4930,9 @@ export function App() {
   const [defects, setDefects] = useState<MarketDefect[]>(() => getSavedState('dk_defects', INITIAL_DEFECTS));
   const [partEvaluations, setPartEvaluations] = useState<PartEvaluation[]>(() => getSavedState('dk_part_evaluations', []));
   const [reportNotes, setReportNotes] = useState<ReportNote[]>(() => getSavedState('dk_report_notes', []));
+  const [bmUnlocked, setBmUnlocked] = useState<boolean>(() => safeStorage.getItem('dk_qms_bm_unlocked_v1') === 'true');
+  const [bmPasswordInput, setBmPasswordInput] = useState<string>('');
+  const [bmPasswordError, setBmPasswordError] = useState<string>('');
   const [qmsBmRecords, setQmsBmRecords] = useState<QmsBmSyncRecord[]>(() => {
     const existing = getSavedState<QmsBmSyncRecord[]>('dk_qms_bm_records', []);
     if (existing.length > 0) return existing;
@@ -12742,6 +12745,107 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
         setIsAiLoading(false);
       });
   };
+
+  const isStandaloneBmUrl = typeof window !== 'undefined' && (
+    window.location.pathname === '/bm' ||
+    window.location.pathname === '/bm/' ||
+    window.location.pathname.startsWith('/bm') ||
+    new URLSearchParams(window.location.search).get('bm') === '1' ||
+    new URLSearchParams(window.location.search).get('bm') === 'true'
+  );
+
+  if (!firebaseUser && isStandaloneBmUrl) {
+    if (bmUnlocked) {
+      return (
+        <div className="w-full h-full min-h-screen overflow-y-auto overflow-x-hidden bg-slate-50">
+          <QmsFormsCenter
+            bmRecords={qmsBmRecords}
+            onSaveBmRecord={handleSaveQmsBmRecord}
+            onDeleteBmRecord={handleDeleteQmsBmRecord}
+            onBackToApp={() => {
+              if (typeof window !== 'undefined' && window.location.pathname.includes('/bm')) {
+                window.history.pushState({}, '', '/');
+              }
+              setActiveTab('dashboard');
+            }}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 min-h-screen w-full flex items-center justify-center p-4 font-sans text-slate-100">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (bmPasswordInput.trim() === '12356789') {
+              safeStorage.setItem('dk_qms_bm_unlocked_v1', 'true');
+              setBmPasswordError('');
+              setBmUnlocked(true);
+            } else {
+              setBmPasswordError('Mật khẩu chưa đúng. Vui lòng thử lại.');
+            }
+          }}
+          className="w-full max-w-md bg-slate-900/95 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-5 backdrop-blur-md"
+        >
+          <div className="text-center space-y-2">
+            <div className="mx-auto w-14 h-14 bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 rounded-2xl flex items-center justify-center">
+              <ShieldCheck className="w-8 h-8" />
+            </div>
+            <h1 className="text-lg md:text-xl font-black text-white uppercase">
+              Trung Tâm Biểu Mẫu & Tiêu Chuẩn (/bm)
+            </h1>
+            <p className="text-xs text-slate-400">
+              Công ty TNHH Xe điện DK Việt Nhật — DKBike<br />
+              Phòng Quản lý chất lượng (QLCL / DK QMS)
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-slate-300">
+              Nhập mật khẩu truy cập (chỉ cần nhập lần đầu):
+            </label>
+            <input
+              type="password"
+              autoFocus
+              value={bmPasswordInput}
+              onChange={(e) => {
+                setBmPasswordInput(e.target.value);
+                if (bmPasswordError) setBmPasswordError('');
+              }}
+              placeholder="Nhập mật khẩu..."
+              className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-hidden focus:border-indigo-500"
+            />
+            {bmPasswordError && (
+              <p className="text-xs text-rose-400 font-semibold">{bmPasswordError}</p>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-extrabold shadow-lg transition cursor-pointer"
+          >
+            Mở khóa truy cập /bm
+          </button>
+
+          <div className="text-center pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.location.pathname.includes('/bm')) {
+                  window.history.pushState({}, '', '/');
+                }
+                setActiveTab('dashboard');
+              }}
+              className="text-xs text-slate-400 hover:text-indigo-300 underline cursor-pointer"
+            >
+              Hoặc đăng nhập bằng tài khoản Google nội bộ
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
 
   if (!firebaseUser) {
     return (
