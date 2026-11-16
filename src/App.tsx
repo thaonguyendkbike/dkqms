@@ -14432,7 +14432,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                               className="hover:bg-amber-50/20 transition-colors"
                             >
                               <td className="p-3 font-extrabold text-amber-600">
-                                📦 Nhà cung cấp dầm phơi
+                                📦 Nhà cung cấp (PPM cao)
                               </td>
                               <td className="p-3">
                                 <span className="font-black text-slate-850 text-slate-800 block text-[11px]">{sup.name}</span>
