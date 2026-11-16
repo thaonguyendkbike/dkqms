@@ -21541,6 +21541,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           <option value="Kiểm tra lại">Kiểm tra lại</option>
                           <option value="Vật tư tiêu hao">Vật tư tiêu hao</option>
                           <option value="Thiết bị & Dụng cụ đo">Thiết bị & Dụng cụ đo</option>
+                          <option value="Thiết bị dây chuyền SX">Thiết bị dây chuyền SX</option>
                           <option value="Thiết bị văn phòng & 5S">Thiết bị văn phòng & 5S</option>
                           <option value="Đào tạo & Tài liệu">Đào tạo & Tài liệu</option>
                           <option value="Chi phí khác">Chi phí khác</option>
@@ -21600,6 +21601,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                           item.category === 'Dừng chuyền' ? 'bg-rose-100 text-rose-800 border-rose-200 animate-pulse' :
                                             item.category === 'Vật tư tiêu hao' ? 'bg-orange-50 text-orange-700 border-orange-200' :
                                               item.category === 'Thiết bị & Dụng cụ đo' ? 'bg-cyan-50 text-cyan-700 border-cyan-200' :
+                                                item.category === 'Thiết bị dây chuyền SX' ? 'bg-teal-50 text-teal-700 border-teal-200' :
                                                 item.category === 'Thiết bị văn phòng & 5S' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                                                   item.category === 'Đào tạo & Tài liệu' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
                                                     'bg-slate-50 text-slate-600 border-slate-200'
@@ -25198,6 +25200,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         <option value="Kiểm tra lại">Kiểm tra lại</option>
                         <option value="Vật tư tiêu hao">Vật tư tiêu hao</option>
                         <option value="Thiết bị & Dụng cụ đo">Thiết bị & Dụng cụ đo</option>
+                        <option value="Thiết bị dây chuyền SX">Thiết bị dây chuyền SX</option>
                         <option value="Thiết bị văn phòng & 5S">Thiết bị văn phòng & 5S</option>
                         <option value="Đào tạo & Tài liệu">Đào tạo & Tài liệu</option>
                         <option value="Chi phí khác">Chi phí khác</option>

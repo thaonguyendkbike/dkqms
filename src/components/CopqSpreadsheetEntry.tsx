@@ -49,6 +49,7 @@ const CATEGORY_OPTIONS = [
   'Kiểm tra lại',
   'Vật tư tiêu hao',
   'Thiết bị & Dụng cụ đo',
+  'Thiết bị dây chuyền SX',
   'Thiết bị văn phòng & 5S',
   'Đào tạo & Tài liệu',
   'Chi phí khác'
@@ -718,6 +719,7 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
                     ['Kiểm tra lại', 'Chi phí nhân công/dụng cụ phát sinh do phải kiểm tra 100% hoặc sàng lọc lại lô lỗi.'],
                     ['Vật tư tiêu hao', 'Sơn, xăng thơm, đá mài, keo nến, que hàn, hóa chất phụ trợ dùng trong quá trình xử lý.'],
                     ['Thiết bị & Dụng cụ đo', 'Máy móc, thiết bị kiểm tra, dưỡng kiểm, đồng hồ đo phục vụ công tác QC/QA.'],
+                    ['Thiết bị dây chuyền SX', 'Chi phí mua mới hoặc bổ sung máy móc, đồ gá, thiết bị phục vụ dây chuyền sản xuất/lắp ráp.'],
                     ['Thiết bị văn phòng & 5S', 'Bàn họp, kệ sách, tủ hồ sơ, đèn LED, bảng biểu, vật dụng sắp xếp 5S phòng QLCL.'],
                     ['Đào tạo & Tài liệu', 'Sách chuyên môn, tài liệu tiêu chuẩn, in ấn, chi phí đào tạo nâng cao chất lượng.'],
                     ['Chi phí khác', 'Các khoản chi phí khác chưa xếp vào 10 nhóm trên.']
