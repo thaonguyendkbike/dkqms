@@ -5377,6 +5377,7 @@ export function App() {
   const [copqSearch, setCopqSearch] = useState<string>('');
   const [copqFilterCategory, setCopqFilterCategory] = useState<string>('All');
   const [copqFilterOrigin, setCopqFilterOrigin] = useState<string>('All');
+  const [showCopqDashboard, setShowCopqDashboard] = useState<boolean>(true);
   const [fmea, setFmea] = useState<FMEARecord[]>(() => getSavedState('dk_fmea', INITIAL_FMEA));
   const [customForms, setCustomForms] = useState<CustomForm[]>(() => getSavedState('dk_custom_forms', INITIAL_FORMS));
   const [staff, setStaff] = useState<QualityStaff[]>(() => {
@@ -21415,7 +21416,19 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       Phòng Quản lý chất lượng (DK QMS) • Slogan: <span className="italic">"Xe cho cả gia đình"</span>
                     </p>
                   </div>
-                  <div className="flex gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowCopqDashboard((v) => !v)}
+                      className={`px-3.5 py-2 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shadow-2xs ${
+                        showCopqDashboard
+                          ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <BarChart className="w-4 h-4" />
+                      <span>{showCopqDashboard ? 'Ẩn Dashboard' : 'Hiện Dashboard'}</span>
+                    </button>
                     <div className="bg-rose-50 border border-rose-100 px-4 py-2 rounded-xl shadow-2xs">
                       <span className="text-[9px] text-rose-600 font-extrabold uppercase block">Lũy kế Toàn hệ thống (COPQ)</span>
                       <span className="text-base font-black text-rose-750 font-mono">
@@ -21430,6 +21443,125 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     </div>
                   </div>
                 </div>
+
+                {/* Dashboard phân tích Chi phí theo tháng & theo Nhóm phân loại COPQ */}
+                {showCopqDashboard && (() => {
+                  const getItemVnd = (it: COPQMetric) => {
+                    if (it.totalAmount !== undefined) return Number(it.totalAmount) || 0;
+                    if (it.quantity !== undefined && it.unitPrice !== undefined) return Number(it.quantity) * Number(it.unitPrice);
+                    return (Number(it.amount) || 0) * 1000000;
+                  };
+
+                  const monthlyTotals = Array.from({ length: 12 }, (_, idx) => {
+                    const m = idx + 1;
+                    const sumVnd = filteredCopqs
+                      .filter((c) => Number(c.month ?? 7) === m)
+                      .reduce((s, c) => s + getItemVnd(c), 0);
+                    return { month: m, vnd: sumVnd };
+                  });
+                  const maxMonthVnd = Math.max(1, ...monthlyTotals.map((x) => x.vnd));
+
+                  const catMap = new Map<string, { vnd: number; count: number }>();
+                  filteredCopqs.forEach((c) => {
+                    const cat = c.category || 'Chi phí khác';
+                    const cur = catMap.get(cat) || { vnd: 0, count: 0 };
+                    cur.vnd += getItemVnd(c);
+                    cur.count += 1;
+                    catMap.set(cat, cur);
+                  });
+                  const catStats = Array.from(catMap.entries())
+                    .map(([category, info]) => ({ category, ...info }))
+                    .sort((a, b) => b.vnd - a.vnd);
+                  const grandVnd = Math.max(1, catStats.reduce((s, x) => s + x.vnd, 0));
+
+                  return (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {/* 1. Chi phí theo tháng */}
+                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                          <div>
+                            <h3 className="text-xs font-black text-slate-800 uppercase">
+                              Chi Phí Theo Tháng (T1 – T12)
+                            </h3>
+                            <p className="text-[11px] text-slate-500">
+                              Tính theo {filteredCopqs.length} khoản đang lọc • Tổng: {totalFilteredVND.toLocaleString('vi-VN')} đ
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          {monthlyTotals.map((m) => {
+                            const pct = m.vnd > 0 ? Math.max(4, Math.round((m.vnd / maxMonthVnd) * 100)) : 0;
+                            return (
+                              <div key={m.month} className="flex items-center gap-2.5 text-xs">
+                                <span className="w-8 font-mono font-bold text-slate-600 shrink-0">T{m.month}</span>
+                                <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden">
+                                  {pct > 0 && (
+                                    <div
+                                      className="h-full bg-indigo-600 rounded-full transition-all"
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  )}
+                                </div>
+                                <span className="w-28 text-right font-mono font-bold text-slate-800 shrink-0">
+                                  {m.vnd > 0 ? `${m.vnd.toLocaleString('vi-VN')} đ` : '—'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* 2. Chi phí theo Nhóm phân loại COPQ */}
+                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                          <div>
+                            <h3 className="text-xs font-black text-slate-800 uppercase">
+                              Chi Phí Theo Nhóm Phân Loại COPQ
+                            </h3>
+                            <p className="text-[11px] text-slate-500">
+                              Phân bổ tỷ trọng theo {catStats.length} nhóm phát sinh
+                            </p>
+                          </div>
+                        </div>
+
+                        {catStats.length === 0 ? (
+                          <div className="py-12 text-center text-xs text-slate-400 italic">
+                            Chưa có dữ liệu chi phí trong bộ lọc hiện tại.
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+                            {catStats.map((c) => {
+                              const sharePct = Math.round((c.vnd / grandVnd) * 100);
+                              return (
+                                <div key={c.category} className="space-y-1 text-xs">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="font-bold text-slate-800 truncate">{c.category}</span>
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-bold">
+                                        {c.count} khoản
+                                      </span>
+                                    </div>
+                                    <div className="font-mono font-black text-slate-900 shrink-0">
+                                      {c.vnd.toLocaleString('vi-VN')} đ{' '}
+                                      <span className="text-[10px] font-bold text-indigo-600">({sharePct}%)</span>
+                                    </div>
+                                  </div>
+                                  <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-emerald-600 rounded-full transition-all"
+                                      style={{ width: `${Math.max(3, sharePct)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Bảng nhập liệu COPQ dạng cột-hàng & Nhập hàng loạt từ Excel */}
                 <CopqSpreadsheetEntry
@@ -21518,10 +21650,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           <option value="Thị trường / Bảo hành">Thị trường / Bảo hành</option>
                           <option value="Phòng QLCL (Đầu tư & 5S)">Phòng QLCL (Đầu tư & 5S)</option>
                           <option value="Khác">Khác</option>
-                          <option value="Nội bộ">Nội bộ (cũ)</option>
-                          <option value="Sửa chữa xe">Sửa chữa xe (cũ)</option>
-                          <option value="Linh kiện lỗi">Linh kiện lỗi (cũ)</option>
-                          <option value="Hao phí xưởng">Hao phí xưởng (cũ)</option>
                         </select>
                       </div>
 
@@ -21544,6 +21672,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           <option value="Thiết bị dây chuyền SX">Thiết bị dây chuyền SX</option>
                           <option value="Thiết bị văn phòng & 5S">Thiết bị văn phòng & 5S</option>
                           <option value="Đào tạo & Tài liệu">Đào tạo & Tài liệu</option>
+                          <option value="Phát triển sản phẩm">Phát triển sản phẩm</option>
                           <option value="Chi phí khác">Chi phí khác</option>
                         </select>
                       </div>
@@ -21604,6 +21733,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                                 item.category === 'Thiết bị dây chuyền SX' ? 'bg-teal-50 text-teal-700 border-teal-200' :
                                                 item.category === 'Thiết bị văn phòng & 5S' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                                                   item.category === 'Đào tạo & Tài liệu' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                                    item.category === 'Phát triển sản phẩm' ? 'bg-violet-50 text-violet-700 border-violet-200' :
                                                     'bg-slate-50 text-slate-600 border-slate-200'
                                     }`}>
                                     {item.category}
@@ -25179,10 +25309,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         <option value="Thị trường / Bảo hành">Thị trường / Bảo hành</option>
                         <option value="Phòng QLCL (Đầu tư & 5S)">Phòng QLCL (Đầu tư & 5S)</option>
                         <option value="Khác">Khác</option>
-                        <option value="Nội bộ">Nội bộ (cũ)</option>
-                        <option value="Sửa chữa xe">Sửa chữa xe (cũ)</option>
-                        <option value="Linh kiện lỗi">Linh kiện lỗi (cũ)</option>
-                        <option value="Hao phí xưởng">Hao phí xưởng (cũ)</option>
                       </select>
                     </div>
                     <div>
@@ -25203,6 +25329,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         <option value="Thiết bị dây chuyền SX">Thiết bị dây chuyền SX</option>
                         <option value="Thiết bị văn phòng & 5S">Thiết bị văn phòng & 5S</option>
                         <option value="Đào tạo & Tài liệu">Đào tạo & Tài liệu</option>
+                        <option value="Phát triển sản phẩm">Phát triển sản phẩm</option>
                         <option value="Chi phí khác">Chi phí khác</option>
                       </select>
                     </div>

@@ -52,6 +52,7 @@ const CATEGORY_OPTIONS = [
   'Thiết bị dây chuyền SX',
   'Thiết bị văn phòng & 5S',
   'Đào tạo & Tài liệu',
+  'Phát triển sản phẩm',
   'Chi phí khác'
 ];
 
@@ -722,7 +723,8 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
                     ['Thiết bị dây chuyền SX', 'Chi phí mua mới hoặc bổ sung máy móc, đồ gá, thiết bị phục vụ dây chuyền sản xuất/lắp ráp.'],
                     ['Thiết bị văn phòng & 5S', 'Bàn họp, kệ sách, tủ hồ sơ, đèn LED, bảng biểu, vật dụng sắp xếp 5S phòng QLCL.'],
                     ['Đào tạo & Tài liệu', 'Sách chuyên môn, tài liệu tiêu chuẩn, in ấn, chi phí đào tạo nâng cao chất lượng.'],
-                    ['Chi phí khác', 'Các khoản chi phí khác chưa xếp vào 10 nhóm trên.']
+                    ['Phát triển sản phẩm', 'Chi phí làm mẫu, thử nghiệm, đánh giá linh kiện/xe mới phục vụ phát triển sản phẩm (PTSP).'],
+                    ['Chi phí khác', 'Các khoản chi phí khác chưa xếp vào các nhóm trên.']
                   ].map(([title, desc]) => (
                     <div key={title} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
                       <div className="font-extrabold text-slate-900">{title}</div>
