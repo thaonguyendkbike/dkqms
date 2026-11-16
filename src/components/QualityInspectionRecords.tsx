@@ -4376,6 +4376,7 @@ export default function QualityInspectionRecords({
     } catch (e) { }
 
     setHandoverScannedList(list);
+    safeStorage.setItem('dk_oqc_handover_list_is_dirty', 'true');
     try {
       localStorage.setItem('dk_oqc_handover_list_is_dirty', 'true');
     } catch (e) { }

@@ -4240,7 +4240,8 @@ export function App() {
       if (serverData.dk_oqc_part_codes !== undefined) {
         safeStorage.setItem('dk_oqc_part_codes', JSON.stringify(serverData.dk_oqc_part_codes));
       }
-      if (serverData.dk_oqc_handover_list !== undefined) {
+      const isHandoverDirty = localStorage.getItem('dk_oqc_handover_list_is_dirty') === 'true';
+      if (serverData.dk_oqc_handover_list !== undefined && !isHandoverDirty) {
         safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(serverData.dk_oqc_handover_list));
         setOqcHandoverList(serverData.dk_oqc_handover_list);
       }
