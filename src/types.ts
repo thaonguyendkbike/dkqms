@@ -279,6 +279,67 @@ export interface PTSPTask {
 }
 
 // ==========================================
+// 7B. PTSP MỚI (Quản lý theo Model xe mới / nâng cấp - 3 tab con)
+// ==========================================
+export interface PtspSampleCheckItem {
+  id: string;
+  group: 'I. Ngoại quan' | 'II. Hệ thống điện' | 'III. Hệ thống lái' | 'IV. Thông số chạy';
+  item: string;
+  checkPoint: string;
+  standard: string;
+  status: 'Chưa KT' | 'Đạt' | 'Không đạt';
+  note?: string;
+}
+
+export interface PtspIssueItem {
+  id: string;
+  partOrArea: string;
+  description: string;
+  severity: 'A' | 'B' | 'C';
+  ownerDept: 'NCC' | 'Kỹ thuật' | 'Xưởng' | 'QLCL';
+  dueDate: string;
+  status: 'Mở' | 'Đang xử lý' | 'Đã chốt';
+  image?: string;
+  createdAt: string;
+}
+
+export interface PtspPilotRunItem {
+  id: string;
+  batchName: string;
+  runDate: string;
+  sampleQty: number;
+  passQty: number;
+  lineIssues: string;
+  conclusion: 'Đạt' | 'Cần hiệu chỉnh';
+}
+
+export interface PtspSopGateItem {
+  id: string;
+  title: string;
+  done: boolean;
+  verifier?: string;
+  verifiedDate?: string;
+  note?: string;
+}
+
+export interface PtspModelWorkspaceRecord {
+  id: string;
+  code: string;
+  modelName: string;
+  projectType: 'Model mới' | 'Nâng cấp / Cải tiến';
+  manager: string;
+  targetSopDate: string;
+  status: 'Đang đánh giá mẫu' | 'Đang chạy thử Pilot' | 'Sẵn sàng SOP' | 'Đã SOP';
+  image?: string;
+  notes?: string;
+  sampleChecks: PtspSampleCheckItem[];
+  issues: PtspIssueItem[];
+  pilotRuns: PtspPilotRunItem[];
+  sopGates: PtspSopGateItem[];
+  updatedAt: string;
+}
+
+// ==========================================
 // 8. ENGINEERING CHANGES TABLE (Thay đổi thiết kế kỹ thuật - ECO/ECR)
 // ==========================================
 export interface EngineeringChange {

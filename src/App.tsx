@@ -93,7 +93,7 @@ import {
   INITIAL_EQUIPMENT_INCIDENTS,
   INITIAL_DEALERS
 } from './initialData';
-import { Task, KPI, Supplier, CAPA, PTSPProject, PTSPTask, MarketDefect, ECOChange, COPQMetric, CustomForm, QualityStaff, DKBikeModel, PlanTarget, WeeklyPlan, MonthlyPlan, EquipmentItem, MaintenanceLog, EquipmentIncident, SupplierProductionAudit, Dealer, ImprovementAction, PartEvaluation, ReportNote, QmsBmSyncRecord } from './types';
+import { Task, KPI, Supplier, CAPA, PTSPProject, PTSPTask, MarketDefect, ECOChange, COPQMetric, CustomForm, QualityStaff, DKBikeModel, PlanTarget, WeeklyPlan, MonthlyPlan, EquipmentItem, MaintenanceLog, EquipmentIncident, SupplierProductionAudit, Dealer, ImprovementAction, PartEvaluation, ReportNote, QmsBmSyncRecord, PtspModelWorkspaceRecord } from './types';
 import { DAILY_LOG_DATA, DailyLogRecord } from './dailyLogsData';
 import { INITIAL_PTSP_TASKS } from './ptspTasksData';
 import {
@@ -125,6 +125,7 @@ import OqcTvDashboard from './components/OqcTvDashboard';
 import QmsFormsCenter from './components/QmsFormsCenter';
 import { PartEvaluationsTab } from './components/PartEvaluationsTab';
 import CopqSpreadsheetEntry, { ACCOUNTING_OPTIONS, exportCopqListToExcel, suggestAccountingCode } from './components/CopqSpreadsheetEntry';
+import PtspWorkspace, { DEFAULT_PTSP_MODELS } from './components/PtspWorkspace';
 import { compressBase64String, compressImageFile } from './imageCompressor';
 
 // Firebase Integrations
@@ -3723,7 +3724,7 @@ export function App() {
         'dk_capas', 'dk_ecos', 'dk_daily_logs', 'dk_iqc_records',
         'dk_pqc_records', 'dk_oqc_records', 'dk_staff', 'dk_dealers',
         'dk_defects', 'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records', 'dk_fmea', 'dk_improvement_actions', 'dk_oqc_handover_list',
-        'dk_oqc_color_changes', 'dk_copqs'
+        'dk_oqc_color_changes', 'dk_copqs', 'dk_ptsp_models'
       ];
       localKeys.forEach(k => {
         // dk_oqc_records và dk_part_evaluations ưu tiên đọc từ safeStorage (memoryStore/IndexedDB)
@@ -3759,6 +3760,7 @@ export function App() {
             else if (k === 'dk_fmea') setFmea(sanitizedParsed);
             else if (k === 'dk_improvement_actions') setImprovementActions(sanitizedParsed);
             else if (k === 'dk_copqs') setCopqs(sanitizedParsed);
+            else if (k === 'dk_ptsp_models') setPtspModels(sanitizedParsed);
           } catch (e) { }
         }
       });
@@ -4199,6 +4201,11 @@ export function App() {
       if (serverData.dk_copqs !== undefined && Array.isArray(serverData.dk_copqs) && !isCopqsDirty) {
         setCopqs(serverData.dk_copqs);
         safeStorage.setItem('dk_copqs', JSON.stringify(serverData.dk_copqs));
+      }
+      const isPtspModelsDirty = localStorage.getItem('dk_ptsp_models_is_dirty') === 'true';
+      if (serverData.dk_ptsp_models !== undefined && Array.isArray(serverData.dk_ptsp_models) && !isPtspModelsDirty) {
+        setPtspModels(serverData.dk_ptsp_models);
+        safeStorage.setItem('dk_ptsp_models', JSON.stringify(serverData.dk_ptsp_models));
       }
       if (serverData.dk_fmea !== undefined) setFmea(serverData.dk_fmea);
       if (serverData.dk_custom_forms !== undefined) setCustomForms(serverData.dk_custom_forms);
@@ -4740,7 +4747,8 @@ export function App() {
         'dk_oqc_part_codes',
         'dk_supplier_production_audits',
         'dk_models',
-        'dk_copqs'
+        'dk_copqs',
+        'dk_ptsp_models'
       ];
 
       STANDARD_DOC_SYNC_KEYS.forEach((key) => {
@@ -4783,6 +4791,8 @@ export function App() {
             }
           } else if (key === 'dk_copqs') {
             setCopqs(list);
+          } else if (key === 'dk_ptsp_models') {
+            setPtspModels(list);
           }
         }, (err) => {
           console.warn(`[Doc onSnapshot Warning] for ${key}:`, err);
@@ -4845,6 +4855,7 @@ export function App() {
 
   const [projects, setProjects] = useState<PTSPProject[]>(() => getSavedState('dk_projects', INITIAL_PROJECTS));
   const [ptspTasks, setPtspTasks] = useState<PTSPTask[]>(() => resequencePtspTasks(getSavedState('dk_ptsp_tasks', INITIAL_PTSP_TASKS)));
+  const [ptspModels, setPtspModels] = useState<PtspModelWorkspaceRecord[]>(() => getSavedState('dk_ptsp_models', DEFAULT_PTSP_MODELS));
   const [selectedPtspProject, setSelectedPtspProject] = useState<string>('PRJ-VOLTv2');
   const [editingPtspTask, setEditingPtspTask] = useState<PTSPTask | null>(null);
   const [viewingPtspTask, setViewingPtspTask] = useState<PTSPTask | null>(null);
@@ -8126,6 +8137,12 @@ export function App() {
       syncToServer('dk_copqs', copqs);
     }
   }, [copqs]);
+
+  useEffect(() => {
+    if (localStorage.getItem('dk_ptsp_models_is_dirty') === 'true') {
+      syncToServer('dk_ptsp_models', ptspModels);
+    }
+  }, [ptspModels]);
 
   useEffect(() => {
     if (localStorage.getItem('dk_fmea_is_dirty') === 'true') {
@@ -19147,853 +19164,19 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             </div>
           )}
 
-          {activeTab === 'ptsp' && (() => {
-            const selectedProj = projects.find(p => p.id === selectedPtspProject) || projects[0] || { id: '', name: '', status: '', manager: '', openTasksCount: 0, progress: 0 };
-            const currentProjectTasks = ptspTasks.filter(t => t.projectId === selectedProj.id);
-            const stagesList = [
-              { num: 1, name: "Thống nhất cấu hình kỹ thuật", period: "Tháng 6 - Tháng 6" },
-              { num: 2, name: "Xây dựng tiêu chuẩn chọn mẫu", period: "Tháng 6 - Tháng 7" },
-              { num: 3, name: "Thử nghiệm, trải nghiệm sử dụng", period: "Tháng 6 - Tháng 7" },
-              { num: 4, name: "Hiệu chỉnh kỹ thuật & chốt mẫu chuẩn", period: "Tháng 7 - Tháng 8" },
-              { num: 5, name: "Đăng kiểm thử nghiệm", period: "Tháng 8 - Tháng 9" },
-              { num: 6, name: "Cập nhật hồ sơ sản phẩm & Đào tạo", period: "Tháng 9 - Tháng 10" },
-              { num: 7, name: "Nhập hàng & Sản xuất lắp ráp", period: "Tháng 10 - Tháng 12" },
-              { num: 8, name: "Sau bán hàng (Theo dõi phản ứng thị trường)", period: "Tháng 12 - Tháng 12" }
-            ];
-            const getStageStats = (stageNum: number) => {
-              const tasks = currentProjectTasks.filter(t => Number(t.stage) === stageNum);
-              const total = tasks.length;
-              const closed = tasks.filter(t => t.progress === 100).length;
-              return { total, completed: closed };
-            };
-            const filteredTasks = (selectedPtspStage === 'All' || selectedPtspStage === 0)
-              ? currentProjectTasks
-              : currentProjectTasks.filter(t => Number(t.stage) === selectedPtspStage);
-
-            return (
-              <div className="space-y-6" id="view_ptsp_content">
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white/55 p-4 rounded-xl border border-slate-200">
-                  <div>
-                    <h2 className="text-xl font-extrabold text-slate-800 font-sans">Sổ tay 8 Giai đoạn Đảm bảo Tiến độ (PTSP Project Stages)</h2>
-                    <p className="text-xs text-slate-500">Kế hoạch dập mẫu thử, kiểm chuẩn sườn khung xe máy điện, quản lý mốc đăng kiểm hỏa tốc.</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => {
-                        setAddPtspId(generateNextPtspProjectId());
-                        setAddPtspName('');
-                        setAddPtspSelectedMaster('');
-                        setShowAddPtspModal(true);
-                      }}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-lg transition shadow flex items-center justify-center gap-1.5 cursor-pointer max-w-fit"
-                    >
-                      <Plus className="w-4 h-4" /> Khởi Tạo Dự Án Mới
-                    </button>
-                  </div>
-                </div>
-
-                {/* Active Project Spotlight Dashboard */}
-                <div className="bg-gradient-to-r from-slate-900 to-indigo-950 rounded-2xl overflow-hidden border border-slate-800 shadow-md text-white grid grid-cols-1 lg:grid-cols-12 font-sans animate-fade-in" id="ptsp_active_project_spotlight">
-                  {/* Photo Section */}
-                  <div className="col-span-1 lg:col-span-4 h-56 lg:h-full relative min-h-[220px] bg-slate-950/70">
-                    <img
-                      src={getProjectImageUrl(selectedProj)}
-                      alt={selectedProj.name}
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
-
-                    {/* Interactive overlay buttons */}
-                    <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center bg-black/40 backdrop-blur-md p-2 rounded-xl border border-white/10">
-                      <div className="text-left">
-                        <span className="block text-[8px] text-indigo-300 uppercase font-black font-mono tracking-widest">Ảnh mẫu thiết kế</span>
-                        <span className="text-[10px] font-bold text-slate-200 line-clamp-1">{selectedProj.name}</span>
-                      </div>
-                      <div className="flex gap-1.5">
-                        <button
-                          onClick={() => handleOpenEditModal('ptsp', selectedProj)}
-                          className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-900 rounded-lg text-[9px] font-black cursor-pointer transition shadow flex items-center gap-1 font-sans"
-                        >
-                          <Pencil className="w-2.5 h-2.5" /> Chỉnh sửa
-                        </button>
-                        <button
-                          onClick={() => handleDeleteItem('ptsp', selectedProj.id)}
-                          className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[9px] font-black cursor-pointer transition shadow flex items-center gap-1 font-sans"
-                        >
-                          <Trash2 className="w-2.5 h-2.5" /> Xóa Dự Án
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Info Section */}
-                  <div className="col-span-1 lg:col-span-8 p-6 space-y-4 flex flex-col justify-between text-left">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-1.5 mb-2 leading-none">
-                        <span className="text-[8px] bg-indigo-500/20 text-indigo-200 border border-indigo-500/45 font-mono font-black px-2 py-0.5 rounded uppercase tracking-wider">
-                          Dự án: {selectedProj.id}
-                        </span>
-                        {selectedProj.type && (
-                          <span className="text-[8px] bg-sky-500/20 text-sky-200 border border-sky-500/35 font-sans font-black px-2 py-0.5 rounded uppercase">
-                            {selectedProj.type}
-                          </span>
-                        )}
-                        <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase ${selectedProj.status === 'Chậm tiến độ' ? 'bg-red-500/25 text-red-200 border border-red-500/45 animate-pulse' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          }`}>
-                          Trạng thái: {selectedProj.status}
-                        </span>
-                      </div>
-
-                      <h3 className="text-sm lg:text-base font-black tracking-tight text-white mb-1.5 leading-tight">
-                        {selectedProj.name || 'Dòng xe máy điện DK Volt v2'}
-                      </h3>
-
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 my-2.5 text-[10px] font-medium text-slate-300 border-t border-b border-white/5 py-3">
-                        <div>
-                          <span className="text-slate-400 block text-[8px] uppercase tracking-wide mb-0.5">PM Chủ nhiệm dự án:</span>
-                          <strong className="text-white font-bold">{selectedProj.manager}</strong>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[8px] uppercase tracking-wide mb-0.5">Đầu việc treo kiểm toán:</span>
-                          <strong className="text-yellow-400 font-bold">{selectedProj.openTasksCount} việc chưa đóng</strong>
-                        </div>
-                        <div className="col-span-2">
-                          <span className="text-slate-400 block text-[8px] uppercase tracking-wide mb-0.5">Thách thức cơ học & gá hàn:</span>
-                          <p className="text-orange-300 italic text-[9px] leading-relaxed mt-0.5 line-clamp-2">
-                            {selectedProj.risksDescription || "Không có rủi ro kỹ thuật bổ sung được báo cáo trong phân hệ QMS."}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Progress Gauge */}
-                    <div className="space-y-1 font-sans">
-                      <div className="flex justify-between text-[10px] font-bold text-slate-300 h-4 items-center">
-                        <span className="flex items-center gap-1 text-slate-400">Tiến trình dập mẫu thử & phê duyệt đăng kiểm:</span>
-                        <span className="font-mono text-indigo-300 text-xs font-black">{selectedProj.progress}%</span>
-                      </div>
-                      <div className="w-full bg-white/15 h-2 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full transition-all duration-500 ${selectedProj.status === 'Chậm tiến độ' ? 'bg-orange-500' : 'bg-gradient-to-r from-[#0213b0] to-indigo-400'
-                            }`}
-                          style={{ width: `${selectedProj.progress}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Danh mục dự án PTSP mẫu hiện có */}
-                <div className="text-left">
-                  <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest font-mono border-l-2 border-[#0213b0] pl-2">
-                    Mô hình R&D / Dự án Xe Máy Điện Hiện Hành
-                  </h3>
-                  <p className="text-[11px] text-slate-400 font-medium mt-0.5">Vui lòng chọn một dự án xe điện mẫu bên dưới để xem biểu đồ 8 giai đoạn Gantt sườn xe, đăng kiểm & cải tiến.</p>
-                </div>
-
-                {/* PTSP Selector Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {projects.map((p) => {
-                    const isSelected = selectedPtspProject === p.id;
-                    const isChậm = p.status === 'Chậm tiến độ';
-
-                    // Find milestones dynamically 
-                    // Find actual tasks in ptspTasks state
-                    const pTasks = ptspTasks.filter(t => t.projectId === p.id);
-                    const task5_1 = pTasks.find(t => t.itemCode === '5.1');
-                    const task7_7 = pTasks.find(t => t.itemCode === '7.7');
-
-                    const calculatedRegCertDate = p.regCertDate || (task5_1 ? task5_1.endDate : '');
-                    const calculatedMassProdDate = p.massProductionDate || (task7_7 ? task7_7.startDate : '');
-
-                    const formatD = (dStr: string) => {
-                      if (!dStr) return '';
-                      const pts = dStr.split('-');
-                      return pts.length === 3 ? `${pts[2]}/${pts[1]}/${pts[0]}` : dStr;
-                    };
-
-                    return (
-                      <div
-                        key={p.id}
-                        onClick={() => setSelectedPtspProject(p.id)}
-                        className={`group rounded-2xl border transition-all cursor-pointer relative flex flex-col justify-between text-left overflow-hidden ${isSelected
-                          ? 'bg-[#0213b0]/5 border-[#0213b0] shadow-md ring-1 ring-[#0213b0]/25'
-                          : 'bg-white border-slate-200 hover:border-slate-350 hover:shadow-md'
-                          }`}
-                      >
-                        {/* Image Header with Badge Overlay */}
-                        <div className="relative h-36 w-full overflow-hidden bg-slate-100 border-b border-slate-100">
-                          <img
-                            src={getProjectImageUrl(p)}
-                            alt={p.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            referrerPolicy="no-referrer"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/65 via-slate-900/10 to-transparent"></div>
-
-                          {/* Badges Overlay */}
-                          <div className="absolute top-3 left-3 flex gap-1.5 items-center">
-                            <span className="text-[9px] bg-slate-900/80 backdrop-blur-xs text-white border border-slate-700 font-mono font-extrabold px-1.5 py-0.5 rounded shadow-sm">
-                              {p.id}
-                            </span>
-                            {p.type && (
-                              <span className="text-[9px] bg-[#0213b0]/80 backdrop-blur-xs text-indigo-100 border border-indigo-500 font-sans font-bold px-1.5 py-0.5 rounded shadow-sm">
-                                {p.type}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                            {isSelected && (
-                              <span className="bg-[#0213b0] text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full shadow-sm animate-pulse">
-                                ● Đang chọn
-                              </span>
-                            )}
-                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase shadow-sm ${isChậm ? 'bg-red-500 text-white animate-pulse' : 'bg-green-500 text-white'
-                              }`}>
-                              {p.status}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Content Area */}
-                        <div className="p-4 flex flex-col justify-between flex-1">
-                          <div className="space-y-3">
-                            <h3 className="font-extrabold text-slate-800 text-sm font-sans line-clamp-2 leading-tight group-hover:text-[#0213b0] transition-colors">{p.name || 'Dự án mới'}</h3>
-                            <p className="text-[11px] text-slate-400 font-mono flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                              Chủ quản: <strong className="text-slate-600 font-bold">{p.manager}</strong>
-                            </p>
-
-                            {/* Progress Gauge */}
-                            <div className="font-sans">
-                              <div className="flex justify-between text-[11px] mb-1 font-semibold text-slate-500">
-                                <span>Mục tiêu dập mẫu thử</span>
-                                <span className="font-mono text-slate-700">{p.progress}% Hoàn tất</span>
-                              </div>
-                              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden font-sans">
-                                <div className={`h-full ${isChậm ? 'bg-orange-500' : 'bg-[#0213b0]'}`} style={{ width: `${p.progress}%` }}></div>
-                              </div>
-                            </div>
-
-                            {/* Key Milestones section */}
-                            <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-2 text-[10px] font-sans">
-                              <div className="bg-slate-50 p-2 rounded border border-slate-150">
-                                <span className="block text-[8px] text-slate-400 uppercase font-black tracking-wider mb-0.5">Ngày Đăng kiểm (5.1)</span>
-                                <strong className="text-indigo-900 block truncate font-mono text-[9px]">
-                                  {calculatedRegCertDate ? formatD(calculatedRegCertDate) : 'Chưa định'}
-                                </strong>
-                              </div>
-                              <div className="bg-slate-50 p-2 rounded border border-slate-150">
-                                <span className="block text-[8px] text-slate-400 uppercase font-black tracking-wider mb-0.5">SX hàng loạt (7.7)</span>
-                                <strong className="text-emerald-800 block truncate font-mono text-[9px]">
-                                  {calculatedMassProdDate ? formatD(calculatedMassProdDate) : 'Chưa định'}
-                                </strong>
-                              </div>
-                            </div>
-
-                            {p.risksDescription && (
-                              <div className="bg-red-50/45 p-2 rounded border border-red-100 text-xs font-sans">
-                                <p className="font-bold text-red-700 mb-0.5 flex items-center gap-1 text-[9px] tracking-wide font-sans">
-                                  <AlertCircle className="w-3 h-3" /> THÁCH THỨC KỸ THUẬT:
-                                </p>
-                                <p className="text-red-800 italic leading-snug text-[10px] line-clamp-2">{p.risksDescription}</p>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center text-xs text-slate-500 font-medium text-left font-sans font-semibold">
-                            <span>Đầu việc treo thiết kế: <b>{p.openTasksCount} việc</b></span>
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenEditModal('ptsp', p);
-                                }}
-                                className="text-slate-500 hover:text-[#0213b0] p-1 h-6 rounded hover:bg-slate-100 border border-slate-200 transition bg-white flex items-center gap-1 font-bold text-[10px] cursor-pointer shadow-xs"
-                                title="Hiệu chỉnh thông tin dự án & mốc thời gian thủ công"
-                              >
-                                <Pencil className="w-3 h-3 text-slate-500" /> Sửa
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteItem('ptsp', p.id);
-                                }}
-                                className="text-red-650 hover:text-red-700 hover:bg-red-50 p-1 h-6 rounded hover:bg-slate-100 border border-red-200 transition bg-white flex items-center gap-1 font-bold text-[10px] cursor-pointer shadow-xs"
-                                title="Hủy hoặc Xóa toàn bộ dự án"
-                              >
-                                <Trash2 className="w-3 h-3 text-red-500" /> Xóa
-                              </button>
-                              {isChậm ? (
-                                <span className="text-red-650 bg-red-50 px-2 h-6 border border-red-200 rounded font-bold flex items-center gap-1 text-[10px]">⚠ Chậm tiến độ</span>
-                              ) : (
-                                <span className="text-green-600 font-semibold flex items-center gap-1 text-[10px]">✔ Đạt dập mẫu</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* ==================== PROJECT STAGES GANTT TIMELINE BOARD ==================== */}
-                {(() => {
-                  let projectStartYear = 2026;
-                  let projectStartMonth = 6;
-                  if (currentProjectTasks.length > 0) {
-                    let earliestProjDate = '';
-                    currentProjectTasks.forEach(t => {
-                      if (t.startDate && (!earliestProjDate || t.startDate < earliestProjDate)) {
-                        earliestProjDate = t.startDate;
-                      }
-                    });
-                    if (earliestProjDate) {
-                      const parts = earliestProjDate.split('-');
-                      if (parts.length === 3) {
-                        projectStartYear = parseInt(parts[0], 10) || 2026;
-                        projectStartMonth = parseInt(parts[1], 10) || 6;
-                      }
-                    }
-                  }
-
-                  const timelineCols: { label: string; year: number; month: number }[] = [];
-                  for (let i = 0; i < 7; i++) {
-                    let m = projectStartMonth + i;
-                    let y = projectStartYear;
-                    if (m > 12) {
-                      m = m - 12;
-                      y = y + 1;
-                    }
-                    const shortYearStr = String(y % 100).padStart(2, '0');
-                    timelineCols.push({
-                      label: `Th${m}/${shortYearStr}`,
-                      year: y,
-                      month: m
-                    });
-                  }
-
-                  return (
-                    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 text-left space-y-4">
-                      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 border-b pb-3 border-slate-100 font-sans">
-                        <div>
-                          <div className="flex items-center gap-2 font-sans">
-                            <span className="w-2.5 h-6 bg-emerald-500 rounded"></span>
-                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider font-sans">
-                              Bảng Timeline & Kế Hoạch 8 Giai Đoạn (NPD Gantt Chart)
-                            </h3>
-                          </div>
-                          <p className="text-xs text-slate-400 font-medium mt-1">
-                            Biểu đồ tiến độ trực quan từ {timelineCols[0]?.label || ''} đến {timelineCols[6]?.label || ''} dựa trên mốc khởi tạo của: <strong className="text-slate-700 font-sans">{selectedProj.name}</strong>
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-4 text-[10px] font-bold font-sans">
-                          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-slate-100 rounded-xs border border-slate-300"></span> <span className="text-slate-500 text-[10px]">Chưa bắt đầu</span></div>
-                          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-amber-400 rounded-xs border border-amber-500"></span> <span className="text-slate-600 text-[10px]">Đang thực hiện</span></div>
-                          <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-emerald-500 rounded-xs border border-emerald-600"></span> <span className="text-slate-700 text-[10px]">Hoàn thành (100%)</span></div>
-                        </div>
-                      </div>
-
-                      <div className="overflow-x-auto">
-                        <div className="min-w-[800px] border border-slate-150 rounded-xl overflow-hidden text-xs font-sans">
-                          {/* Timeline calendar header row */}
-                          <div className="grid grid-cols-12 bg-slate-50 border-b border-slate-200 font-extrabold text-[#0213b0] text-[10px] p-2.5 text-center uppercase tracking-wider font-sans">
-                            <div className="col-span-3 text-left pl-2 font-sans">Giai đoạn & Chỉ Tiêu</div>
-                            <div className="col-span-2 font-sans">Thời gian (Kế hoạch)</div>
-                            <div className="col-span-7 grid grid-cols-7 gap-1 text-center font-black font-sans">
-                              {timelineCols.map((col, idx) => (
-                                <div key={idx} className="border-r border-slate-105 last:border-0 font-sans">
-                                  {col.label}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Rows for stages 1 to 8 */}
-                          <div className="divide-y divide-slate-150 bg-white shadow-xs font-sans">
-                            {(() => {
-                              const timelineStartDate = new Date(projectStartYear, projectStartMonth - 1, 1);
-                              let endMonth = projectStartMonth + 6;
-                              let endYear = projectStartYear;
-                              if (endMonth > 12) {
-                                endMonth = endMonth - 12;
-                                endYear = endYear + 1;
-                              }
-                              const timelineEndDate = new Date(endYear, endMonth, 1);
-                              timelineEndDate.setMilliseconds(timelineEndDate.getMilliseconds() - 1);
-                              const totalMs = timelineEndDate.getTime() - timelineStartDate.getTime();
-
-                              return stagesList.map((stg) => {
-                                const stageTasks = currentProjectTasks.filter(t => Number(t.stage) === stg.num);
-                                const totalTasks = stageTasks.length;
-                                const completedTasks = stageTasks.filter(t => t.progress === 100).length;
-                                const stageProgress = totalTasks === 0 ? 0 : Math.round(stageTasks.reduce((sum, t) => sum + (t.progress || 0), 0) / totalTasks);
-
-                                const formatShortDate = (dStr: string) => {
-                                  if (!dStr) return '';
-                                  const pts = dStr.split('-');
-                                  if (pts.length === 3) return `${pts[2]}/${pts[1]}`;
-                                  return dStr;
-                                };
-
-                                let earliestDate = '';
-                                let latestDate = '';
-                                if (totalTasks > 0) {
-                                  stageTasks.forEach(t => {
-                                    if (t.startDate && (!earliestDate || t.startDate < earliestDate)) earliestDate = t.startDate;
-                                    if (t.endDate && (!latestDate || t.endDate > latestDate)) latestDate = t.endDate;
-                                  });
-                                }
-
-                                const displayRange = (totalTasks > 0 && earliestDate && latestDate)
-                                  ? `${formatShortDate(earliestDate)} - ${formatShortDate(latestDate)}`
-                                  : stg.period;
-
-                                const parseDate = (dStr: string) => {
-                                  if (!dStr) return null;
-                                  const parts = dStr.split('-');
-                                  if (parts.length === 3) {
-                                    const y = parseInt(parts[0], 10);
-                                    const m = parseInt(parts[1], 10);
-                                    const d = parseInt(parts[2], 10);
-                                    return new Date(y, m - 1, d);
-                                  }
-                                  return null;
-                                };
-
-                                const hasTimelineBar = totalTasks > 0 && !!earliestDate && !!latestDate;
-
-                                let sDate = earliestDate ? parseDate(earliestDate) : null;
-                                let eDate = latestDate ? parseDate(latestDate) : null;
-
-                                let leftPercent = 0;
-                                let widthPercent = 0;
-
-                                if (hasTimelineBar && sDate && eDate) {
-                                  const startMs = Math.max(timelineStartDate.getTime(), Math.min(timelineEndDate.getTime(), sDate.getTime()));
-                                  const endMs = Math.max(timelineStartDate.getTime(), Math.min(timelineEndDate.getTime(), eDate.getTime()));
-                                  leftPercent = Math.max(0, Math.min(100, ((startMs - timelineStartDate.getTime()) / totalMs) * 100));
-                                  widthPercent = Math.max(5, Math.min(100 - leftPercent, ((endMs - startMs) / totalMs) * 100));
-                                }
-
-                                const isFinished = totalTasks > 0 && stageProgress === 100;
-                                const isUnstarted = stageProgress === 0;
-
-                                return (
-                                  <div key={stg.num} className="grid grid-cols-12 p-3 border-b border-slate-100 hover:bg-slate-50 items-center font-sans font-semibold">
-                                    <div className="col-span-3 text-left pl-2 pr-2 font-sans">
-                                      <button
-                                        onClick={() => setSelectedPtspStage(stg.num)}
-                                        className="font-bold text-[#0213b0] hover:underline text-[11px] block truncate transition text-left font-sans"
-                                        title={`Xem chi tiết Giai đoạn ${stg.num}`}
-                                      >
-                                        Giai đoạn {stg.num}: {stg.name}
-                                      </button>
-                                      <div className="text-[10px] text-slate-400 mt-0.5 font-semibold flex items-center gap-1.5 font-sans">
-                                        <span className="font-mono bg-slate-100 px-1 py-0.2 rounded text-[9px] font-black">{totalTasks} việc</span>
-                                        <span>•</span>
-                                        <span>Đóng: {completedTasks}/{totalTasks}</span>
-                                      </div>
-                                    </div>
-
-                                    <div className="col-span-2 text-center font-sans">
-                                      <div className="font-mono text-[10px] text-slate-500 bg-slate-50 border rounded px-1.5 py-0.5 inline-block font-semibold">
-                                        {displayRange}
-                                      </div>
-                                      <div className="mt-1 flex items-center gap-1 justify-center">
-                                        <div className="w-12 bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                          <div
-                                            className={`h-full ${isFinished ? 'bg-emerald-500' : isUnstarted ? 'bg-slate-200' : 'bg-amber-400'}`}
-                                            style={{ width: `${stageProgress}%` }}
-                                          ></div>
-                                        </div>
-                                        <span className={`text-[10px] font-mono font-black ${isFinished ? 'text-emerald-600' : isUnstarted ? 'text-slate-400' : 'text-amber-600'}`}>{stageProgress}%</span>
-                                      </div>
-                                    </div>
-
-                                    <div className="col-span-7 relative h-9 flex items-center pr-1">
-                                      <div className="absolute inset-0 grid grid-cols-7 gap-1 pointer-events-none pr-1">
-                                        {[...Array(7)].map((_, i) => (
-                                          <div key={i} className="border-r border-slate-100 h-full border-dashed last:border-0"></div>
-                                        ))}
-                                      </div>
-
-                                      {hasTimelineBar && (
-                                        <div
-                                          onClick={() => setSelectedPtspStage(stg.num)}
-                                          className={`absolute rounded-lg border flex flex-col justify-center h-6 text-center shadow-xs font-semibold select-none cursor-pointer hover:brightness-95 hover:scale-[1.01] transition-all ${isFinished
-                                            ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-emerald-600'
-                                            : isUnstarted
-                                              ? 'bg-slate-100 border-slate-200 text-slate-400 border-dashed'
-                                              : 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-900 border-amber-500'
-                                            }`}
-                                          style={{
-                                            left: `${leftPercent}%`,
-                                            width: `${widthPercent}%`
-                                          }}
-                                          title={`[GĐ ${stg.num}] Tiến độ ${stageProgress}% | ${displayRange}`}
-                                        >
-                                          <div className="flex justify-between items-center px-2 text-[9px] w-full font-bold truncate">
-                                            <span className="truncate max-w-[70%] text-[10px]">GĐ {stg.num} ({displayRange})</span>
-                                            <span className="font-mono">{stageProgress}%</span>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              });
-                            })()}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Interactive 8-Phase Checklist Grid */}
-                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-6">
-                  <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 border-b pb-4 border-slate-100 text-left">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-6 bg-indigo-650 rounded"></span>
-                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">
-                          Sổ tay 8 Giai đoạn Đảm bảo Tiến độ Phát triển mẫu chuẩn (NPD)
-                        </h3>
-                      </div>
-                      <p className="text-xs text-slate-400 font-medium mt-1">
-                        Chi tiết quy trình của dự án: <span className="text-slate-800 font-bold font-mono bg-slate-100 px-1.5 py-0.5 rounded">{selectedProj.name}</span>
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={() => setShowAddPtspTaskModal(true)}
-                        className="bg-[#0213b0] hover:bg-indigo-700 text-white font-extrabold text-xs px-3 py-2 rounded-lg transition shadow flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Bổ Sung Việc Quy Trình
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          const excelReport = `BÁO CÁO NHẬT KÝ 8 GIAI ĐOẠN PTSP - DKBIKE\n` +
-                            `Dự án: ${selectedProj.name} | PM: ${selectedProj.manager}\n` +
-                            `=======================================================\n` +
-                            currentProjectTasks.map(t => `[STT ${t.itemCode}] ${t.name} -> Tiến độ: ${t.progress}% | Thực hiện: ${t.executor} | Kết quả: ${t.result}`).join('\n');
-                          alert('Bản xem trước Đăng ký Chất lượng Quy trình (Dự kiến):\n\n' + excelReport.slice(0, 400) + '\n...');
-                        }}
-                        className="bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs px-3 py-2 rounded-lg border border-slate-300 transition flex items-center gap-1 cursor-pointer"
-                      >
-                        <Download className="w-3.5 h-3.5" /> Xuất Tiến độ Excel
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Search and Filters inside the Checklist Card */}
-                  <div className="flex flex-col md:flex-row justify-between items-center gap-3 bg-slate-50 p-4 rounded-xl border border-slate-150 text-left font-sans">
-                    <div className="flex-1 w-full relative">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                      <input
-                        type="text"
-                        placeholder="Tìm kiếm công việc quy trình theo mã, tên, người thực hiện..."
-                        value={ptspTaskSearch}
-                        onChange={(e) => setPtspTaskSearch(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-lg py-2 pl-9 pr-8 text-xs font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                      {ptspTaskSearch && (
-                        <button onClick={() => setPtspTaskSearch('')} className="absolute right-2.5 top-3 text-slate-400 hover:text-slate-600">
-                          <X className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                      {/* Select stage buttons/badges */}
-                      <select
-                        value={selectedPtspStage}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setSelectedPtspStage(val === 'All' ? 'All' : Number(val));
-                        }}
-                        className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
-                      >
-                        <option value="All">Tất cả 8 Giai đoạn</option>
-                        {[1, 2, 3, 4, 5, 6, 7, 8].map(stgNum => (
-                          <option key={stgNum} value={stgNum}>Giai đoạn {stgNum}: {stagesList.find(s => s.num === stgNum)?.name}</option>
-                        ))}
-                      </select>
-
-                      <button
-                        onClick={() => setShowImportTemplatesModal(true)}
-                        className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition shadow-xs flex items-center gap-1 cursor-pointer"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" /> Việc mẫu chuẩn DKBike
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Tasks Table */}
-                  <div className="overflow-x-auto">
-                    {filteredTasks.length === 0 ? (
-                      <div className="p-8 text-center text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 italic font-medium font-sans">
-                        Chưa có đầu việc nào được khởi tạo cho {selectedPtspStage === 'All' ? 'các giai đoạn này' : `Giai đoạn ${selectedPtspStage}`}.
-                        Hãy click nút "Việc mẫu chuẩn DKBike" phía trên để nạp nhanh bộ khung quy chuẩn 40 công việc của DK Việt Nhật!
-                      </div>
-                    ) : (
-                      <div className="min-w-[900px] border border-slate-150 rounded-xl overflow-hidden shadow-xs bg-white">
-                        <table className="w-full text-left font-sans text-xs">
-                          <thead className="text-[10px] font-bold text-slate-400 bg-slate-50 border-b border-slate-100 uppercase">
-                            <tr>
-                              <th className="p-3 w-14 text-center">Mã STT</th>
-                              <th className="p-3 max-w-sm">Nội dung công việc & Kế hoạch</th>
-                              <th className="p-3">Phụ trách & Đồng thực hiện</th>
-                              <th className="p-3 text-center">Tiến độ</th>
-                              <th className="p-3">Chỉ tiêu / Kế hoạch</th>
-                              <th className="p-3">Kết quả thực tế</th>
-                              <th className="p-3 text-center w-24">Thao tác</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                            {filteredTasks.filter(t => {
-                              if (ptspTaskSearch) {
-                                const q = ptspTaskSearch.toLowerCase();
-                                return (
-                                  t.itemCode.toLowerCase().includes(q) ||
-                                  t.name.toLowerCase().includes(q) ||
-                                  (t.description && t.description.toLowerCase().includes(q)) ||
-                                  t.executor.toLowerCase().includes(q) ||
-                                  (t.result && t.result.toLowerCase().includes(q))
-                                );
-                              }
-                              return true;
-                            }).map((t) => {
-                              return (
-                                <tr
-                                  key={t.id}
-                                  onClick={() => setViewingPtspTask(t)}
-                                  className="hover:bg-indigo-50/30 transition duration-150 cursor-pointer"
-                                  title="Click để xem chi tiết công việc"
-                                >
-                                  <td className="p-3 text-center font-mono font-black text-indigo-750">
-                                    <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{t.itemCode}</span>
-                                  </td>
-                                  <td className="p-3 max-w-xs">
-                                    <span className="font-extrabold text-slate-850 text-[11px] block">{t.name}</span>
-                                    {t.description && <span className="text-[10px] text-slate-400 font-medium block mt-0.5 line-clamp-2">{t.description}</span>}
-                                    <div className="flex items-center gap-1.5 mt-1">
-                                      <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded-md font-mono">
-                                        Kỳ hạn: {t.startDate ? `${t.startDate.split('-')[2]}/${t.startDate.split('-')[1]}` : ''} - {t.endDate ? `${t.endDate.split('-')[2]}/${t.endDate.split('-')[1]}` : ''} ({t.duration} ngày)
-                                      </span>
-                                    </div>
-                                  </td>
-                                  <td className="p-3">
-                                    <div className="space-y-0.5">
-                                      <span className="block text-slate-800 text-[11px] font-bold">🎯 {t.executor}</span>
-                                      {t.cooperator && <span className="block text-[10px] text-slate-400">Phối hợp: {t.cooperator}</span>}
-                                    </div>
-                                  </td>
-                                  <td className="p-3">
-                                    <div className="flex flex-col items-center justify-center gap-1 min-w-[70px]">
-                                      <div className="w-16 bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                        <div className={`h-full ${t.progress === 100 ? 'bg-emerald-500' : 'bg-indigo-650'}`} style={{ width: `${t.progress}%` }}></div>
-                                      </div>
-                                      <span className={`text-[10px] font-mono font-black ${t.progress === 100 ? 'text-emerald-600' : 'text-slate-600'}`}>${t.progress}%</span>
-                                    </div>
-                                  </td>
-                                  <td className="p-3">
-                                    <div className="space-y-0.5">
-                                      <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wide">Chỉ tiêu:</span>
-                                      <span className="block text-slate-700 font-bold">{t.target} {t.unit}</span>
-                                    </div>
-                                  </td>
-                                  <td className="p-3 max-w-xs">
-                                    <div className="space-y-0.5">
-                                      <span className="block text-slate-800 text-[11px] font-bold">{t.result || 'Chưa ghi nhận kết quả'}</span>
-                                      {t.link && (
-                                        <a
-                                          href={t.link}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          onClick={(e) => e.stopPropagation()}
-                                          className="text-indigo-600 hover:underline text-[10px] font-bold inline-flex items-center gap-0.5 mt-0.5"
-                                        >
-                                          Tài liệu minh chứng 🔗
-                                        </a>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex items-center justify-center gap-1">
-                                      <button
-                                        onClick={() => setEditingPtspTask(t)}
-                                        className="text-indigo-650 hover:text-indigo-850 p-1 cursor-pointer"
-                                        title="Cập nhật chi tiết"
-                                      >
-                                        <Pencil className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          if (confirm(`Xác nhận xóa công việc dập mẫu: ${t.name}?`)) {
-                                            const updated = resequencePtspTasks(ptspTasks.filter((x) => x.id !== t.id));
-                                            setPtspTasks(updated);
-                                            localStorage.setItem('dk_ptsp_tasks', JSON.stringify(updated));
-                                          }
-                                        }}
-                                        className="text-rose-600 hover:text-rose-800 p-1 cursor-pointer"
-                                        title="Xóa công việc"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Import standard task templates modal */}
-                  {showImportTemplatesModal && (
-                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="import_ptsp_templates_dialog">
-                      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-200 overflow-hidden font-sans text-xs">
-                        <div className="bg-amber-600 p-4 text-white flex justify-between items-center text-left">
-                          <div>
-                            <span className="text-[10px] font-black tracking-widest uppercase font-mono">Dữ liệu quy chuẩn DKBike</span>
-                            <h3 className="text-sm font-bold text-slate-100 mt-0.5">
-                              Nhập Việc Mẫu Quy Trình (1.1 - 8.4)
-                            </h3>
-                          </div>
-                          <button onClick={() => setShowImportTemplatesModal(false)} className="text-amber-100 hover:text-white bg-amber-800/50 p-1.5 rounded-full cursor-pointer transition">
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        <div className="p-6 space-y-4 text-left">
-                          <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                            Hệ thống đã định cấu hình khung gồm <strong className="text-slate-800">40 đầu việc tiêu chuẩn</strong> trải dài qua 8 Giai đoạn từ nghiên cứu, chọn mẫu, thử nghiệm thực tế đường trường đến đăng kiểm hỏa tốc và sau bán hàng (từ mục 1.1 đến 8.4).
-                          </p>
-
-                          {/* List/Preview of the 40 standard template tasks */}
-                          <div className="space-y-1.5">
-                            <span className="text-[10px] font-black tracking-widest uppercase font-mono text-slate-400 block">
-                              Xem trước Danh sách 40 công việc mẫu của quy trình:
-                            </span>
-                            <div className="max-h-[180px] overflow-y-auto border border-slate-200 rounded-xl bg-slate-50 p-3.5 space-y-3.5 shadow-inner">
-                              {(() => {
-                                const ptspTemplates = INITIAL_PTSP_TASKS.filter(t => t.projectId === 'volt-v2-demo');
-                                return [1, 2, 3, 4, 5, 6, 7, 8].map(stgNum => {
-                                  const stageName = stagesList.find(s => s.num === stgNum)?.name || `Giai đoạn ${stgNum}`;
-                                  const stageTasks = ptspTemplates.filter(t => Number(t.stage) === stgNum);
-                                  if (stageTasks.length === 0) return null;
-                                  return (
-                                    <div key={stgNum} className="space-y-1.5">
-                                      <div className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50/75 px-2.5 py-1 rounded-md flex justify-between items-center border border-indigo-100/50">
-                                        <span>Giai đoạn {stgNum}: {stageName}</span>
-                                        <span className="text-indigo-500 font-mono font-bold text-[9px] bg-white px-1.5 py-0.2 rounded border border-indigo-100">{stageTasks.length} việc mẫu</span>
-                                      </div>
-                                      <div className="divide-y divide-slate-100 bg-white border border-slate-150 rounded-lg overflow-hidden shadow-xs">
-                                        {stageTasks.map(t => (
-                                          <div key={t.id} className="p-2 flex items-start gap-2.5 hover:bg-indigo-50/10 transition-colors">
-                                            <span className="text-[10px] font-mono font-black text-indigo-650 mt-0.5 min-w-[22px] bg-indigo-50 px-1 rounded text-center">{t.itemCode}</span>
-                                            <div className="flex-1 min-w-0">
-                                              <div className="font-extrabold text-slate-800 text-[11px]">{t.name}</div>
-                                              {t.description && (
-                                                <div className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 leading-snug">
-                                                  {t.description}
-                                                </div>
-                                              )}
-                                            </div>
-                                            <div className="text-[9px] font-extrabold text-slate-600 bg-slate-100/80 border border-slate-200 px-2 py-0.5 rounded-md whitespace-nowrap self-center">
-                                              Phụ trách: {t.executor}
-                                            </div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  );
-                                });
-                              })()}
-                            </div>
-                          </div>
-
-                          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-start gap-2.5">
-                            <FileSpreadsheet className="w-5 h-5 text-amber-650 shrink-0 mt-0.5" />
-                            <div className="text-[11px] text-amber-800 leading-relaxed font-medium">
-                              <span className="font-extrabold uppercase block text-[10px] tracking-wider mb-0.5">Dự án đích nhận việc:</span>
-                              Dòng xe máy điện hiện tại: <strong className="font-extrabold underline text-amber-900">{selectedProj.name}</strong>
-                            </div>
-                          </div>
-
-                          <div className="space-y-2.5">
-                            {/* Option 1: Synchronize all */}
-                            <button
-                              type="button"
-                              onClick={() => handleImportTemplateTasks('all')}
-                              className="w-full bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 hover:border-slate-300 p-4 rounded-xl transition text-left flex items-start gap-3 cursor-pointer group"
-                            >
-                              <div className="bg-blue-100 group-hover:bg-blue-200 text-blue-700 p-2 rounded-lg transition mt-0.5">
-                                <Sparkles className="w-4 h-4" />
-                              </div>
-                              <div className="text-left">
-                                <strong className="text-xs text-slate-800 font-bold block mb-0.5 group-hover:text-blue-700 transition">Đồng bộ việc mẫu còn thiếu (1.1 - 8.4)</strong>
-                                <span className="text-[10px] text-slate-400 font-medium">Chỉ bổ sung các đầu việc tiêu chuẩn chưa tồn tại trong danh sách để tránh trùng lặp. Giữ nguyên tiến trình hiện tại.</span>
-                              </div>
-                            </button>
-
-                            {/* Option 2: Synchronize current stage */}
-                            {typeof selectedPtspStage === 'number' && (
-                              <button
-                                type="button"
-                                onClick={() => handleImportTemplateTasks('stage', selectedPtspStage)}
-                                className="w-full bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-200 hover:border-slate-300 p-4 rounded-xl transition text-left flex items-start gap-3 cursor-pointer group"
-                              >
-                                <div className="bg-emerald-100 group-hover:bg-emerald-200 text-emerald-700 p-2 rounded-lg transition mt-0.5">
-                                  <Plus className="w-4 h-4" />
-                                </div>
-                                <div className="text-left">
-                                  <strong className="text-xs text-slate-800 font-bold block mb-0.5 group-hover:text-emerald-700 transition">Chỉ nhập Giai đoạn {selectedPtspStage} hiện tại</strong>
-                                  <span className="text-[10px] text-slate-400 font-medium">Nạp riêng lẻ các đầu việc thuộc Giai đoạn {selectedPtspStage}: "{stagesList.find(s => s.num === selectedPtspStage)?.name}" vào dự án này.</span>
-                                </div>
-                              </button>
-                            )}
-
-                            {/* Option 3: Overwrite / reset */}
-                            <button
-                              type="button"
-                              onClick={() => handleImportTemplateTasks('overwrite')}
-                              className="w-full bg-red-50/50 hover:bg-red-50 text-red-900 border border-red-100 hover:border-red-200 p-4 rounded-xl transition text-left flex items-start gap-3 cursor-pointer group"
-                            >
-                              <div className="bg-red-100 group-hover:bg-red-200 text-red-700 p-2 rounded-lg transition mt-0.5">
-                                <RefreshCw className="w-4 h-4" />
-                              </div>
-                              <div className="text-left">
-                                <strong className="text-xs text-red-950 font-bold block mb-0.5 group-hover:text-red-700 transition">Làm sạch & Nạp lại Toàn bộ (Cực kỳ sạch)</strong>
-                                <span className="text-[10px] text-red-500/80 font-medium">XÓA HẾT mọi đầu việc cũ của dự án này và ghi đè bằng 40 mốc công việc nguyên bản từ đầu (tất cả tiến độ về 0%).</span>
-                              </div>
-                            </button>
-                          </div>
-
-                          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 mt-2">
-                            <button
-                              type="button"
-                              onClick={() => setShowImportTemplatesModal(false)}
-                              className="px-4 py-2 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 font-bold cursor-pointer transition text-xs"
-                            >
-                              Đóng cửa sổ
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })()}
+          {activeTab === 'ptsp' && (
+            <PtspWorkspace
+              modelsList={ptspModels}
+              canEdit={isUserAuthorized()}
+              onSaveModelsList={(nextList) => {
+                setPtspModels(nextList);
+                safeStorage.setItem('dk_ptsp_models', JSON.stringify(nextList));
+                try { localStorage.setItem('dk_ptsp_models_is_dirty', 'true'); } catch (e) { }
+                if (localDirtyKeys.current) localDirtyKeys.current.add('dk_ptsp_models');
+                syncToServer('dk_ptsp_models', nextList);
+              }}
+            />
+          )}
 
           {/* ==================================== TAB 5: MARKET DEFECTS ==================================== */}
           {activeTab === 'defects' && (
