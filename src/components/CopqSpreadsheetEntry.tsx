@@ -20,6 +20,7 @@ interface CopqDraftRow {
   month: number;
   costOrigin: string;
   category: string;
+  accountingCode: string;
   details: string;
   description: string;
   unit: string;
@@ -28,6 +29,40 @@ interface CopqDraftRow {
   excelTotal?: number | null;
   notes: string;
 }
+
+export const ACCOUNTING_OPTIONS = [
+  { code: 'TK 621', label: 'TK 621 - NVL trực tiếp' },
+  { code: 'TK 622', label: 'TK 622 - Nhân công trực tiếp' },
+  { code: 'TK 627', label: 'TK 627 - Sản xuất chung' },
+  { code: 'TK 641', label: 'TK 641 - Bán hàng / Bảo hành' },
+  { code: 'TK 642', label: 'TK 642 - Quản lý doanh nghiệp' }
+];
+
+export const suggestAccountingCode = (
+  category?: string,
+  details?: string,
+  description?: string,
+  costOrigin?: string
+): string => {
+  const cat = (category || '').toLowerCase();
+  const text = `${details || ''} ${description || ''} ${costOrigin || ''}`.toLowerCase();
+
+  // 1. Ưu tiên nhận diện theo từ khóa nội dung cụ thể
+  if (/kệ sách|bàn họp|tủ hồ sơ|sách|tài liệu|văn phòng|5s|đào tạo|bảng biểu/.test(text)) return 'TK 642';
+  if (/nhân công|tiền công|tăng ca|lương/.test(text)) return 'TK 622';
+  if (/bảo hành|đổi trả|thị trường|đại lý/.test(text)) return 'TK 641';
+  if (/sơn|xăng|keo|que hàn|đá mài|vật tư|linh kiện|ốc|vít|phụ tùng/.test(text)) return 'TK 621';
+  if (/led|dây chuyền|máy móc|thiết bị|dụng cụ|đồng hồ|dưỡng|khấu hao|điện|nước/.test(text)) return 'TK 627';
+
+  // 2. Fallback theo Nhóm COPQ
+  if (cat.includes('văn phòng') || cat.includes('đào tạo')) return 'TK 642';
+  if (cat.includes('bảo hành') || cat.includes('đổi trả')) return 'TK 641';
+  if (cat.includes('vật tư tiêu hao') || cat.includes('sửa chữa')) return 'TK 621';
+  if (cat.includes('kiểm tra lại')) return 'TK 622';
+  if (cat.includes('thiết bị') || cat.includes('tái chế') || cat.includes('dừng chuyền') || cat.includes('phát triển sản phẩm')) return 'TK 627';
+
+  return 'TK 627';
+};
 
 interface CopqSpreadsheetEntryProps {
   onSaveBatch: (newItems: COPQMetric[]) => void;
@@ -103,6 +138,7 @@ const createEmptyRow = (defaults: { year: number; month: number; costOrigin: str
   month: defaults.month,
   costOrigin: defaults.costOrigin,
   category: defaults.category,
+  accountingCode: suggestAccountingCode(defaults.category, '', '', defaults.costOrigin),
   details: '',
   description: '',
   unit: 'Cái',
@@ -167,6 +203,7 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
         month: defaultMonth,
         costOrigin: defaultOrigin,
         category: defaultCategory,
+        accountingCode: suggestAccountingCode(defaultCategory, details, description, defaultOrigin),
         details,
         description,
         unit,
@@ -209,14 +246,14 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
     const exportData =
       activeRows.length > 0
         ? activeRows.map((r) => {
-            const qty = parseNumberVN(r.quantity);
-            const price = parseNumberVN(r.unitPrice);
-            return [r.details, r.description, r.unit || 'Cái', qty, price, qty * price];
-          })
+          const qty = parseNumberVN(r.quantity);
+          const price = parseNumberVN(r.unitPrice);
+          return [r.details, r.description, r.unit || 'Cái', qty, price, qty * price];
+        })
         : [
-            ['Sơn TOA đen', 'Sửa xe, linh kiện', 'Hộp', 4, 130000, 520000],
-            ['Kệ sách', '', 'Cái', 1, 950000, 950000]
-          ];
+          ['Sơn TOA đen', 'Sửa xe, linh kiện', 'Hộp', 4, 130000, 520000],
+          ['Kệ sách', '', 'Cái', 1, 950000, 950000]
+        ];
 
     const aoa = [
       ['NỘI DUNG/HẠNG MỤC', 'MÔ TẢ (nếu có)', 'ĐVT', 'SL', 'ĐG', 'Thành tiền'],
@@ -296,7 +333,8 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
         quantity: qty,
         unitPrice: price,
         totalAmount: totalAmt,
-        notes: r.notes.trim()
+        notes: r.notes.trim(),
+        accountingCode: r.accountingCode || suggestAccountingCode(r.category, r.details, r.description, r.costOrigin)
       };
     });
 
@@ -484,6 +522,7 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
               <th className="border border-slate-700 px-2 py-2 w-20 text-center">Tháng</th>
               <th className="border border-slate-700 px-2 py-2 w-28 text-left">Nguồn gốc</th>
               <th className="border border-slate-700 px-2 py-2 w-28 text-left">Nhóm COPQ</th>
+              <th className="border border-slate-700 px-2 py-2 w-28 text-left">TK Kế toán</th>
               <th className="border border-slate-700 px-2 py-2 min-w-[130px] text-left">Ghi chú</th>
               <th className="border border-slate-700 px-2 py-2 w-32 text-center">Kiểm tra</th>
               <th className="border border-slate-700 px-2 py-2 w-10 text-center">Xóa</th>
@@ -496,8 +535,8 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
                 st.hasAnyInput && st.warnings.length > 0
                   ? 'bg-amber-50/70'
                   : idx % 2 === 1
-                  ? 'bg-slate-50/60'
-                  : 'bg-white';
+                    ? 'bg-slate-50/60'
+                    : 'bg-white';
               return (
                 <tr key={r.rowKey} className={rowBg}>
                   <td className="border border-slate-200 px-2 py-1.5 text-center font-bold text-slate-500">
@@ -590,11 +629,28 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
                   <td className="border border-slate-200 p-1">
                     <select
                       value={r.category}
-                      onChange={(e) => updateRow(r.rowKey, { category: e.target.value })}
+                      onChange={(e) => {
+                        const nextCat = e.target.value;
+                        updateRow(r.rowKey, {
+                          category: nextCat,
+                          accountingCode: suggestAccountingCode(nextCat, r.details, r.description, r.costOrigin)
+                        });
+                      }}
                       className="w-full px-1 py-1 rounded border border-slate-200 bg-white font-semibold"
                     >
                       {CATEGORY_OPTIONS.map((c) => (
                         <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="border border-slate-200 p-1">
+                    <select
+                      value={r.accountingCode}
+                      onChange={(e) => updateRow(r.rowKey, { accountingCode: e.target.value })}
+                      className="w-full px-1 py-1 rounded border border-slate-200 bg-white font-mono font-bold text-indigo-800"
+                    >
+                      {ACCOUNTING_OPTIONS.map((a) => (
+                        <option key={a.code} value={a.code}>{a.label}</option>
                       ))}
                     </select>
                   </td>
@@ -725,6 +781,26 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
                     ['Đào tạo & Tài liệu', 'Sách chuyên môn, tài liệu tiêu chuẩn, in ấn, chi phí đào tạo nâng cao chất lượng.'],
                     ['Phát triển sản phẩm', 'Chi phí làm mẫu, thử nghiệm, đánh giá linh kiện/xe mới phục vụ phát triển sản phẩm (PTSP).'],
                     ['Chi phí khác', 'Các khoản chi phí khác chưa xếp vào các nhóm trên.']
+                  ].map(([title, desc]) => (
+                    <div key={title} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                      <div className="font-extrabold text-slate-900">{title}</div>
+                      <div className="text-slate-600 mt-0.5">{desc}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-black text-slate-900 uppercase text-[11px] bg-sky-50 border border-sky-200 px-3 py-1.5 rounded-lg">
+                  3. Tài khoản Kế toán (TT 200 / TT 133)
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {[
+                    ['TK 621 — NVL trực tiếp', 'Nguyên vật liệu chính, vật liệu phụ, nhiên liệu trực tiếp (sơn, xăng thơm, keo, que hàn, linh kiện thay thế...).'],
+                    ['TK 622 — Nhân công trực tiếp', 'Tiền lương, phụ cấp, công thợ trực tiếp sửa chữa, kiểm tra lại sản phẩm.'],
+                    ['TK 627 — Sản xuất chung', 'Công cụ dụng cụ phân xưởng, thiết bị đo, thiết bị dây chuyền SX, điện/nước, sửa chữa máy móc, tái chế, dừng chuyền.'],
+                    ['TK 641 — Bán hàng / Bảo hành', 'Chi phí bảo hành, đổi trả sản phẩm ngoài thị trường / đại lý.'],
+                    ['TK 642 — Quản lý doanh nghiệp', 'Thiết bị văn phòng, bàn họp, kệ sách, 5S phòng QLCL, sách tài liệu & đào tạo.']
                   ].map(([title, desc]) => (
                     <div key={title} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
                       <div className="font-extrabold text-slate-900">{title}</div>

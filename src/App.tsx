@@ -124,7 +124,7 @@ import QualityPlanning, { getInitialQmsPlanningTasks } from './components/Qualit
 import OqcTvDashboard from './components/OqcTvDashboard';
 import QmsFormsCenter from './components/QmsFormsCenter';
 import { PartEvaluationsTab } from './components/PartEvaluationsTab';
-import CopqSpreadsheetEntry from './components/CopqSpreadsheetEntry';
+import CopqSpreadsheetEntry, { ACCOUNTING_OPTIONS, suggestAccountingCode } from './components/CopqSpreadsheetEntry';
 import { compressBase64String, compressImageFile } from './imageCompressor';
 
 // Firebase Integrations
@@ -5377,6 +5377,7 @@ export function App() {
   const [copqSearch, setCopqSearch] = useState<string>('');
   const [copqFilterCategory, setCopqFilterCategory] = useState<string>('All');
   const [copqFilterOrigin, setCopqFilterOrigin] = useState<string>('All');
+  const [copqFilterAccounting, setCopqFilterAccounting] = useState<string>('All');
   const [showCopqDashboard, setShowCopqDashboard] = useState<boolean>(true);
   const [showCopqEntry, setShowCopqEntry] = useState<boolean>(false);
   const [copqPage, setCopqPage] = useState<number>(1);
@@ -21390,10 +21391,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
 
               const matchesCategory = copqFilterCategory === 'All' || item.category === copqFilterCategory;
               const matchesOrigin = copqFilterOrigin === 'All' || item.costOrigin === copqFilterOrigin;
+              const resolvedAcc = item.accountingCode || suggestAccountingCode(item.category, item.details, item.description, item.costOrigin);
+              const matchesAccounting = copqFilterAccounting === 'All' || resolvedAcc === copqFilterAccounting;
               const matchesMonth = copqFilterMonth === 'all' || item.month === Number(copqFilterMonth);
               const matchesYear = copqFilterYear === 'all' || item.year === Number(copqFilterYear);
 
-              return matchesSearch && matchesCategory && matchesOrigin && matchesMonth && matchesYear;
+              return matchesSearch && matchesCategory && matchesOrigin && matchesAccounting && matchesMonth && matchesYear;
             });
 
             // Calculate totals
@@ -21423,6 +21426,37 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
+                    {copqs.some((c) => !c.accountingCode) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!isUserAuthorized()) {
+                            safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
+                            return;
+                          }
+                          let filledCount = 0;
+                          const updated = copqs.map((c) => {
+                            if (c.accountingCode) return c;
+                            filledCount++;
+                            return {
+                              ...c,
+                              accountingCode: suggestAccountingCode(c.category, c.details, c.description, c.costOrigin)
+                            };
+                          });
+                          setCopqs(updated);
+                          safeStorage.setItem('dk_copqs', JSON.stringify(updated));
+                          try { localStorage.setItem('dk_copqs_is_dirty', 'true'); } catch (e) { }
+                          if (localDirtyKeys.current) localDirtyKeys.current.add('dk_copqs');
+                          syncToServer('dk_copqs', updated);
+                          triggerToast(`Đã tự động điền TK Kế toán cho ${filledCount} bản ghi chi phí`, 'success');
+                        }}
+                        className="px-3.5 py-2 rounded-xl border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                        title="Tự động phân loại và gán TK Kế toán (621, 622, 627, 641, 642) cho các bản ghi chưa có"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        <span>Tự động điền TK Kế toán ({copqs.filter((c) => !c.accountingCode).length})</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setShowCopqEntry((v) => !v)}
@@ -21508,8 +21542,45 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   const circumference = 2 * Math.PI * radius;
                   let cumulativeRatio = 0;
 
+                  const accountingStats = ACCOUNTING_OPTIONS.map((acc) => {
+                    const matched = filteredCopqs.filter(
+                      (c) => (c.accountingCode || suggestAccountingCode(c.category, c.details, c.description, c.costOrigin)) === acc.code
+                    );
+                    const sumVnd = matched.reduce((s, c) => s + getItemVnd(c), 0);
+                    return { ...acc, count: matched.length, vnd: sumVnd };
+                  });
+
                   return (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="space-y-4">
+                      {/* Thống kê theo Tài khoản Kế toán (TT 200 / TT 133) */}
+                      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                          <h3 className="text-xs font-black text-slate-800 uppercase">
+                            Phân Bổ Theo Tài Khoản Kế Toán (TT 200 / TT 133)
+                          </h3>
+                          <span className="text-[11px] text-slate-500">
+                            Tự động phân bổ đối chiếu kế toán theo {filteredCopqs.length} khoản đang lọc
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                          {accountingStats.map((acc) => (
+                            <div key={acc.code} className="bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="text-[11px] font-black text-sky-800 font-mono">{acc.code}</span>
+                                <span className="text-[10px] font-bold text-slate-500">{acc.count} khoản</span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 truncate mt-0.5" title={acc.label}>
+                                {acc.label.replace(`${acc.code} - `, '')}
+                              </div>
+                              <div className="text-xs font-black text-slate-900 font-mono mt-1">
+                                {acc.vnd.toLocaleString('vi-VN')} đ
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       {/* 1. Biểu đồ cột: Chi phí theo tháng */}
                       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between space-y-4">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
@@ -21640,6 +21711,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         )}
                       </div>
                     </div>
+                    </div>
                   );
                 })()}
 
@@ -21676,7 +21748,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     </div>
 
                     {/* Filter controls */}
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-left">
+                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-left">
                       {/* Search box */}
                       <div className="relative col-span-2 sm:col-span-1">
                         <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none">
@@ -21758,6 +21830,23 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           <option value="Chi phí khác">Chi phí khác</option>
                         </select>
                       </div>
+
+                      {/* Filter Accounting Code */}
+                      <div>
+                        <select
+                          value={copqFilterAccounting}
+                          onChange={(e) => {
+                            setCopqFilterAccounting(e.target.value);
+                            setCopqPage(1);
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-[11px] font-bold text-slate-700 focus:outline-none"
+                        >
+                          <option value="All">Tất cả TK Kế toán</option>
+                          {ACCOUNTING_OPTIONS.map((a) => (
+                            <option key={a.code} value={a.code}>{a.label}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   </div>
 
@@ -21771,6 +21860,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           <th className="p-3 text-center">Tháng</th>
                           <th className="p-3">Nguồn gốc</th>
                           <th className="p-3">Nhóm phân loại</th>
+                          <th className="p-3">TK Kế toán</th>
                           <th className="p-3">NỘI DUNG / HẠNG MỤC</th>
                           <th className="p-3">MÔ TẢ CHI TIẾT</th>
                           <th className="p-3 text-center">ĐVT</th>
@@ -21784,7 +21874,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       <tbody className="divide-y divide-slate-100 font-semibold">
                         {pagedCopqs.length === 0 ? (
                           <tr>
-                            <td colSpan={13} className="p-8 text-center text-slate-400 font-medium italic">
+                            <td colSpan={14} className="p-8 text-center text-slate-400 font-medium italic">
                               Không tìm thấy bản ghi chi phí COPQ nào phù hợp với bộ lọc hiện tại.
                             </td>
                           </tr>
@@ -21819,6 +21909,11 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                                     'bg-slate-50 text-slate-600 border-slate-200'
                                     }`}>
                                     {item.category}
+                                  </span>
+                                </td>
+                                <td className="p-3">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-50 text-sky-800 border border-sky-200">
+                                    {item.accountingCode || suggestAccountingCode(item.category, item.details, item.description, item.costOrigin)}
                                   </span>
                                 </td>
                                 <td className="p-3 text-slate-900 font-bold max-w-[180px] truncate" title={item.details}>
@@ -25405,7 +25500,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Nguồn gốc chi phí</label>
                       <select
@@ -25440,6 +25535,26 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         <option value="Đào tạo & Tài liệu">Đào tạo & Tài liệu</option>
                         <option value="Phát triển sản phẩm">Phát triển sản phẩm</option>
                         <option value="Chi phí khác">Chi phí khác</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">TK Kế toán (TT 200/133)</label>
+                      <select
+                        value={
+                          globalEditModal.data.accountingCode ||
+                          suggestAccountingCode(
+                            globalEditModal.data.category,
+                            globalEditModal.data.details,
+                            globalEditModal.data.description,
+                            globalEditModal.data.costOrigin
+                          )
+                        }
+                        onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, accountingCode: e.target.value } })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-sky-800 font-mono font-bold"
+                      >
+                        {ACCOUNTING_OPTIONS.map((a) => (
+                          <option key={a.code} value={a.code}>{a.label}</option>
+                        ))}
                       </select>
                     </div>
                   </div>

@@ -494,6 +494,7 @@ export interface COPQMetric {
   unitPrice?: number;
   totalAmount?: number;
   notes?: string;
+  accountingCode?: string;
 }
 
 export interface CustomForm {
