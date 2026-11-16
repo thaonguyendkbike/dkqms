@@ -4,7 +4,7 @@
  * Strictly enforces <30KB size per image to prevent LocalStorage/Firestore quota overflow.
  */
 
-export function compressImageFile(file: File, maxWidth: number = 500, maxHeight: number = 500, quality: number = 0.4): Promise<string> {
+export function compressImageFile(file: File, maxWidth: number = 500, maxHeight: number = 500, quality: number = 0.4, maxLength: number = 35000): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -48,14 +48,14 @@ export function compressImageFile(file: File, maxWidth: number = 500, maxHeight:
 
         let compressedBase64 = canvas.toDataURL('image/jpeg', quality);
 
-        // If still > 35KB, compress with lower quality / smaller bounds
-        if (compressedBase64.length > 35000) {
+        // If still > maxLength, compress with lower quality / smaller bounds
+        if (compressedBase64.length > maxLength) {
           canvas.width = Math.max(1, Math.round(canvas.width * 0.7));
           canvas.height = Math.max(1, Math.round(canvas.height * 0.7));
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          compressedBase64 = canvas.toDataURL('image/jpeg', 0.3);
+          compressedBase64 = canvas.toDataURL('image/jpeg', maxLength > 100000 ? 0.75 : 0.3);
         }
 
         console.log(`[Image Compressor] Compressed file from ${(rawResult.length / 1024).toFixed(1)}KB to ${(compressedBase64.length / 1024).toFixed(1)}KB`);

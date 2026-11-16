@@ -177,6 +177,7 @@ export default function QmsAppShowcaseTab({ readOnly = false }: { readOnly?: boo
 
   const [editingItem, setEditingItem] = useState<AppModuleShowcaseItem | null>(null);
   const [highlightsText, setHighlightsText] = useState('');
+  const [imageUrlInput, setImageUrlInput] = useState('');
   const [compressing, setCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -220,7 +221,7 @@ export default function QmsAppShowcaseTab({ readOnly = false }: { readOnly?: boo
       const nextImages = [...editingItem.images];
       for (let i = 0; i < files.length; i++) {
         if (nextImages.length >= 4) break;
-        const compressed = await compressImageFile(files[i], 1400, 1400, 0.82);
+        const compressed = await compressImageFile(files[i], 1600, 1600, 0.88, 350000);
         if (compressed) nextImages.push(compressed);
       }
       setEditingItem({ ...editingItem, images: nextImages });
@@ -503,7 +504,7 @@ export default function QmsAppShowcaseTab({ readOnly = false }: { readOnly?: boo
                   <div>
                     <div className="font-bold text-slate-800">Ảnh chụp màn hình giới thiệu (tối đa 4 ảnh)</div>
                     <p className="text-[11px] text-slate-500">
-                      Nén chất lượng cao (1400px, 82%) giúp chữ &amp; số liệu trên ảnh chụp màn hình sắc nét, lưu an toàn qua <code>safeStorage</code>.
+                      Nén chất lượng cao (1600px, 88%, tối đa ~350KB/ảnh) giữ chữ &amp; số liệu sắc nét. Hoặc dán trực tiếp URL ảnh gốc bên dưới.
                     </p>
                   </div>
                   <input
@@ -521,7 +522,30 @@ export default function QmsAppShowcaseTab({ readOnly = false }: { readOnly?: boo
                     className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     <Camera className="w-3.5 h-3.5" />
-                    <span>{compressing ? 'Đang nén ảnh...' : 'Thêm ảnh chụp'}</span>
+                    <span>{compressing ? 'Đang xử lý ảnh...' : 'Chọn ảnh từ máy'}</span>
+                  </button>
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={imageUrlInput}
+                    onChange={(e) => setImageUrlInput(e.target.value)}
+                    placeholder="Hoặc dán link ảnh gốc (https://... hoặc /docs/...)"
+                    className="flex-1 px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-xs"
+                  />
+                  <button
+                    type="button"
+                    disabled={!imageUrlInput.trim() || editingItem.images.length >= 4}
+                    onClick={() => {
+                      const u = imageUrlInput.trim();
+                      if (!u) return;
+                      setEditingItem({ ...editingItem, images: [...editingItem.images, u] });
+                      setImageUrlInput('');
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold disabled:opacity-40 cursor-pointer"
+                  >
+                    Thêm link
                   </button>
                 </div>
 
