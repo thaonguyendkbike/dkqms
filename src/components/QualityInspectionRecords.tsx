@@ -2721,6 +2721,12 @@ export default function QualityInspectionRecords({
     setEditAuditImageUrl(aud.imageUrl || '');
   };
 
+  const persistSupplierAudits = useCallback((updated: SupplierProductionAudit[]) => {
+    safeStorage.setItem('dk_supplier_production_audits', JSON.stringify(updated));
+    safeStorage.setItem('dk_supplier_production_audits_is_dirty', 'true');
+    setSupplierProductionAudits(updated);
+  }, [setSupplierProductionAudits]);
+
   const handleUpdateSupplierAudit = (e: FormEvent) => {
     e.preventDefault();
     if (!editingSupplierAudit) return;
@@ -2744,7 +2750,7 @@ export default function QualityInspectionRecords({
       return aud;
     });
 
-    setSupplierProductionAudits(updated);
+    persistSupplierAudits(updated);
     setEditingSupplierAudit(null);
     alert('Đã cập nhật chỉ thị giám sát thành công!');
 
@@ -2757,7 +2763,7 @@ export default function QualityInspectionRecords({
   const handleDeleteSupplierAudit = (id: string) => {
     if (window.confirm(`Xác nhận xóa bỏ vĩnh viễn chỉ thị giám sát [${id}] này?`)) {
       const updated = supplierProductionAudits.filter(a => a.id !== id);
-      setSupplierProductionAudits(updated);
+      persistSupplierAudits(updated);
       if (selectedSupplierAuditForDetail?.id === id) {
         setSelectedSupplierAuditForDetail(null);
       }
@@ -2778,7 +2784,7 @@ export default function QualityInspectionRecords({
         }
         return aud;
       });
-      setSupplierProductionAudits(updated);
+      persistSupplierAudits(updated);
 
       const found = updated.find(a => a.id === id);
       if (found && selectedSupplierAuditForDetail?.id === id) {
@@ -2800,7 +2806,7 @@ export default function QualityInspectionRecords({
         }
         return aud;
       });
-      setSupplierProductionAudits(updated);
+      persistSupplierAudits(updated);
 
       const found = updated.find(a => a.id === id);
       if (found && selectedSupplierAuditForDetail?.id === id) {
@@ -5063,7 +5069,7 @@ export default function QualityInspectionRecords({
       dailyLogStt: newAuditLinkedDailyLogStt,
       dailyLogTitle: linkedLog ? linkedLog.content : undefined
     };
-    setSupplierProductionAudits([newAudit, ...supplierProductionAudits]);
+    persistSupplierAudits([newAudit, ...supplierProductionAudits]);
     setShowAddSupplierAuditModal(false);
     setNewAuditComponentName('');
     setNewAuditSpec('');
@@ -5087,7 +5093,7 @@ export default function QualityInspectionRecords({
       }
       return aud;
     });
-    setSupplierProductionAudits(updated);
+    persistSupplierAudits(updated);
     setSupplierResponseAudit(null);
     setResponseValueStr('');
     setResponseImageUrl('');
@@ -5113,7 +5119,7 @@ export default function QualityInspectionRecords({
       }
       return aud;
     });
-    setSupplierProductionAudits(updated);
+    persistSupplierAudits(updated);
     setEvaluateAudit(null);
     setEvalDkNote('');
 
