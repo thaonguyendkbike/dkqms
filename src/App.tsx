@@ -5381,6 +5381,7 @@ export function App() {
   const [showCopqDashboard, setShowCopqDashboard] = useState<boolean>(true);
   const [showCopqEntry, setShowCopqEntry] = useState<boolean>(false);
   const [copqPage, setCopqPage] = useState<number>(1);
+  const [copqDrilldown, setCopqDrilldown] = useState<{ title: string; subtitle: string; items: COPQMetric[] } | null>(null);
   const [fmea, setFmea] = useState<FMEARecord[]>(() => getSavedState('dk_fmea', INITIAL_FMEA));
   const [customForms, setCustomForms] = useState<CustomForm[]>(() => getSavedState('dk_custom_forms', INITIAL_FORMS));
   const [staff, setStaff] = useState<QualityStaff[]>(() => {
@@ -21542,71 +21543,52 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   const circumference = 2 * Math.PI * radius;
                   let cumulativeRatio = 0;
 
+                  const accPieColors = ['#0284c7', '#7c3aed', '#059669', '#d97706', '#e11d48'];
                   const accountingStats = ACCOUNTING_OPTIONS.map((acc) => {
                     const matched = filteredCopqs.filter(
                       (c) => (c.accountingCode || suggestAccountingCode(c.category, c.details, c.description, c.costOrigin)) === acc.code
                     );
                     const sumVnd = matched.reduce((s, c) => s + getItemVnd(c), 0);
-                    return { ...acc, count: matched.length, vnd: sumVnd };
-                  });
+                    return { ...acc, count: matched.length, vnd: sumVnd, items: matched };
+                  }).filter((x) => x.vnd > 0 || x.count > 0);
+                  const grandAccVnd = Math.max(1, accountingStats.reduce((s, x) => s + x.vnd, 0));
+                  let cumulativeAccRatio = 0;
 
                   return (
-                    <div className="space-y-4">
-                      {/* Thống kê theo Tài khoản Kế toán (TT 200 / TT 133) */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                          <h3 className="text-xs font-black text-slate-800 uppercase">
-                            Phân Bổ Theo Tài Khoản Kế Toán (TT 200 / TT 133)
-                          </h3>
-                          <span className="text-[11px] text-slate-500">
-                            Tự động phân bổ đối chiếu kế toán theo {filteredCopqs.length} khoản đang lọc
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-                          {accountingStats.map((acc) => (
-                            <div key={acc.code} className="bg-slate-50 border border-slate-200 rounded-xl p-2.5">
-                              <div className="flex items-center justify-between gap-1">
-                                <span className="text-[11px] font-black text-sky-800 font-mono">{acc.code}</span>
-                                <span className="text-[10px] font-bold text-slate-500">{acc.count} khoản</span>
-                              </div>
-                              <div className="text-[10px] text-slate-500 truncate mt-0.5" title={acc.label}>
-                                {acc.label.replace(`${acc.code} - `, '')}
-                              </div>
-                              <div className="text-xs font-black text-slate-900 font-mono mt-1">
-                                {acc.vnd.toLocaleString('vi-VN')} đ
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                       {/* 1. Biểu đồ cột: Chi phí theo tháng */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between space-y-4">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                          <div>
-                            <h3 className="text-xs font-black text-slate-800 uppercase">
-                              Biểu Đồ Cột — Chi Phí Theo Tháng (T1 – T12)
-                            </h3>
-                            <p className="text-[11px] text-slate-500">
-                              Tính theo {filteredCopqs.length} khoản đang lọc • Tổng: {totalFilteredVND.toLocaleString('vi-VN')} đ
-                            </p>
-                          </div>
+                      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between space-y-3">
+                        <div className="border-b border-slate-100 pb-2">
+                          <h3 className="text-xs font-black text-slate-800 uppercase">
+                            1. Biểu Đồ Cột — Theo Tháng (T1–T12)
+                          </h3>
+                          <p className="text-[11px] text-slate-500">
+                            Bấm vào cột tháng để xem chi tiết ({filteredCopqs.length} khoản)
+                          </p>
                         </div>
 
-                        <div className="h-56 flex items-end justify-between gap-1.5 sm:gap-2 pt-6 pb-1 px-1 border-b border-slate-200">
+                        <div className="h-52 flex items-end justify-between gap-1 pt-5 pb-1 px-0.5 border-b border-slate-200">
                           {monthlyTotals.map((m) => {
-                            const heightPct = m.vnd > 0 ? Math.max(6, Math.round((m.vnd / maxMonthVnd) * 100)) : 0;
+                            const heightPct = m.vnd > 0 ? Math.max(8, Math.round((m.vnd / maxMonthVnd) * 100)) : 0;
+                            const monthItems = filteredCopqs.filter((c) => Number(c.month ?? 7) === m.month);
                             return (
-                              <div
+                              <button
                                 key={m.month}
-                                className="flex-1 h-full flex flex-col items-center justify-end gap-1 group"
-                                title={`Tháng ${m.month}: ${m.vnd.toLocaleString('vi-VN')} VNĐ`}
+                                type="button"
+                                onClick={() =>
+                                  setCopqDrilldown({
+                                    title: `Chi phí phát sinh Tháng ${m.month}`,
+                                    subtitle: `${monthItems.length} khoản • Tổng: ${m.vnd.toLocaleString('vi-VN')} đ`,
+                                    items: monthItems
+                                  })
+                                }
+                                className="flex-1 h-full flex flex-col items-center justify-end gap-1 group cursor-pointer"
+                                title={`Bấm xem Tháng ${m.month}: ${m.vnd.toLocaleString('vi-VN')} VNĐ (${monthItems.length} khoản)`}
                               >
-                                <span className="text-[9px] font-mono font-bold text-indigo-700 leading-none">
+                                <span className="text-[8.5px] font-mono font-bold text-indigo-700 leading-none">
                                   {m.vnd > 0 ? formatCompactVnd(m.vnd) : ''}
                                 </span>
-                                <div className="w-full max-w-[28px] flex-1 flex items-end justify-center">
+                                <div className="w-full max-w-[22px] flex-1 flex items-end justify-center">
                                   <div
                                     className={`w-full rounded-t-md transition-all ${
                                       m.vnd > 0 ? 'bg-indigo-600 group-hover:bg-indigo-500 shadow-2xs' : 'bg-slate-100 h-1'
@@ -21614,50 +21596,41 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                     style={m.vnd > 0 ? { height: `${heightPct}%` } : undefined}
                                   />
                                 </div>
-                                <span className="text-[10px] font-mono font-bold text-slate-600 pt-1">
+                                <span className="text-[9.5px] font-mono font-bold text-slate-600 group-hover:text-indigo-700 pt-0.5">
                                   T{m.month}
                                 </span>
-                              </div>
+                              </button>
                             );
                           })}
                         </div>
                       </div>
 
                       {/* 2. Biểu đồ tròn: Chi phí theo Nhóm phân loại COPQ */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                          <div>
-                            <h3 className="text-xs font-black text-slate-800 uppercase">
-                              Biểu Đồ Tròn — Chi Phí Theo Nhóm Phân Loại COPQ
-                            </h3>
-                            <p className="text-[11px] text-slate-500">
-                              Phân bổ tỷ trọng theo {catStats.length} nhóm phát sinh
-                            </p>
-                          </div>
+                      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+                        <div className="border-b border-slate-100 pb-2">
+                          <h3 className="text-xs font-black text-slate-800 uppercase">
+                            2. Biểu Đồ Tròn — Nhóm COPQ
+                          </h3>
+                          <p className="text-[11px] text-slate-500">
+                            Bấm lát cắt hoặc tên nhóm để xem ({catStats.length} nhóm)
+                          </p>
                         </div>
 
                         {catStats.length === 0 ? (
                           <div className="py-16 text-center text-xs text-slate-400 italic">
-                            Chưa có dữ liệu chi phí trong bộ lọc hiện tại.
+                            Chưa có dữ liệu chi phí.
                           </div>
                         ) : (
-                          <div className="flex flex-col sm:flex-row items-center gap-5">
-                            {/* SVG Donut Chart */}
-                            <div className="relative w-44 h-44 shrink-0 flex items-center justify-center">
+                          <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-center gap-3">
+                            <div className="relative w-36 h-36 shrink-0 flex items-center justify-center">
                               <svg viewBox="0 0 160 160" className="w-full h-full -rotate-90">
-                                <circle
-                                  cx="80"
-                                  cy="80"
-                                  r={radius}
-                                  fill="transparent"
-                                  stroke="#f1f5f9"
-                                  strokeWidth="26"
-                                />
+                                <circle cx="80" cy="80" r={radius} fill="transparent" stroke="#f1f5f9" strokeWidth="26" />
                                 {catStats.map((c, idx) => {
                                   const ratio = c.vnd / grandVnd;
                                   const dashLength = ratio * circumference;
                                   const dashOffset = -cumulativeRatio * circumference;
                                   cumulativeRatio += ratio;
+                                  const matched = filteredCopqs.filter((it) => (it.category || 'Chi phí khác') === c.category);
                                   return (
                                     <circle
                                       key={c.category}
@@ -21669,48 +21642,150 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                       strokeWidth="26"
                                       strokeDasharray={`${dashLength} ${circumference}`}
                                       strokeDashoffset={dashOffset}
+                                      className="cursor-pointer hover:opacity-80 transition-opacity"
+                                      onClick={() =>
+                                        setCopqDrilldown({
+                                          title: `Nhóm COPQ: ${c.category}`,
+                                          subtitle: `${matched.length} khoản • Tổng: ${c.vnd.toLocaleString('vi-VN')} đ (${Math.round(ratio * 100)}%)`,
+                                          items: matched
+                                        })
+                                      }
                                     >
                                       <title>{`${c.category}: ${c.vnd.toLocaleString('vi-VN')} đ (${Math.round(ratio * 100)}%)`}</title>
                                     </circle>
                                   );
                                 })}
                               </svg>
-                              <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-4">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase">Tổng lọc</span>
-                                <span className="text-xs font-black text-slate-900 font-mono">
-                                  {formatCompactVnd(grandVnd)}
-                                </span>
-                                <span className="text-[10px] text-slate-500">{catStats.length} nhóm</span>
+                              <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-3">
+                                <span className="text-[9px] font-bold text-slate-400 uppercase">Tổng</span>
+                                <span className="text-[11px] font-black text-slate-900 font-mono">{formatCompactVnd(grandVnd)}</span>
+                                <span className="text-[9px] text-slate-500">{catStats.length} nhóm</span>
                               </div>
                             </div>
 
-                            {/* Legend */}
-                            <div className="flex-1 w-full space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                            <div className="flex-1 w-full space-y-1.5 max-h-[190px] overflow-y-auto pr-1">
                               {catStats.map((c, idx) => {
                                 const sharePct = Math.round((c.vnd / grandVnd) * 100);
                                 const color = pieColors[idx % pieColors.length];
+                                const matched = filteredCopqs.filter((it) => (it.category || 'Chi phí khác') === c.category);
                                 return (
-                                  <div key={c.category} className="flex items-center justify-between gap-2 text-xs">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <span
-                                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                                        style={{ backgroundColor: color }}
-                                      />
+                                  <button
+                                    key={c.category}
+                                    type="button"
+                                    onClick={() =>
+                                      setCopqDrilldown({
+                                        title: `Nhóm COPQ: ${c.category}`,
+                                        subtitle: `${matched.length} khoản • Tổng: ${c.vnd.toLocaleString('vi-VN')} đ (${sharePct}%)`,
+                                        items: matched
+                                      })
+                                    }
+                                    className="w-full flex items-center justify-between gap-1.5 text-[11px] px-1.5 py-1 rounded hover:bg-slate-50 text-left cursor-pointer"
+                                  >
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
                                       <span className="font-bold text-slate-800 truncate">{c.category}</span>
                                       <span className="text-[10px] text-slate-400 shrink-0">({c.count})</span>
                                     </div>
-                                    <div className="font-mono font-bold text-slate-900 shrink-0">
-                                      {c.vnd.toLocaleString('vi-VN')} đ{' '}
-                                      <span className="text-[10px] text-indigo-600">{sharePct}%</span>
-                                    </div>
-                                  </div>
+                                    <span className="font-mono font-bold text-slate-900 shrink-0">
+                                      {formatCompactVnd(c.vnd)} <span className="text-[10px] text-indigo-600">{sharePct}%</span>
+                                    </span>
+                                  </button>
                                 );
                               })}
                             </div>
                           </div>
                         )}
                       </div>
-                    </div>
+
+                      {/* 3. Biểu đồ tròn: Chi phí theo Tài khoản Kế toán */}
+                      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+                        <div className="border-b border-slate-100 pb-2">
+                          <h3 className="text-xs font-black text-slate-800 uppercase">
+                            3. Biểu Đồ Tròn — TK Kế Toán
+                          </h3>
+                          <p className="text-[11px] text-slate-500">
+                            Bấm lát cắt hoặc mã TK để xem (TT 200 / TT 133)
+                          </p>
+                        </div>
+
+                        {accountingStats.length === 0 ? (
+                          <div className="py-16 text-center text-xs text-slate-400 italic">
+                            Chưa có dữ liệu chi phí.
+                          </div>
+                        ) : (
+                          <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-center gap-3">
+                            <div className="relative w-36 h-36 shrink-0 flex items-center justify-center">
+                              <svg viewBox="0 0 160 160" className="w-full h-full -rotate-90">
+                                <circle cx="80" cy="80" r={radius} fill="transparent" stroke="#f1f5f9" strokeWidth="26" />
+                                {accountingStats.map((acc, idx) => {
+                                  const ratio = acc.vnd / grandAccVnd;
+                                  const dashLength = ratio * circumference;
+                                  const dashOffset = -cumulativeAccRatio * circumference;
+                                  cumulativeAccRatio += ratio;
+                                  return (
+                                    <circle
+                                      key={acc.code}
+                                      cx="80"
+                                      cy="80"
+                                      r={radius}
+                                      fill="transparent"
+                                      stroke={accPieColors[idx % accPieColors.length]}
+                                      strokeWidth="26"
+                                      strokeDasharray={`${dashLength} ${circumference}`}
+                                      strokeDashoffset={dashOffset}
+                                      className="cursor-pointer hover:opacity-80 transition-opacity"
+                                      onClick={() =>
+                                        setCopqDrilldown({
+                                          title: `Tài khoản Kế toán: ${acc.label}`,
+                                          subtitle: `${acc.items.length} khoản • Tổng: ${acc.vnd.toLocaleString('vi-VN')} đ (${Math.round(ratio * 100)}%)`,
+                                          items: acc.items
+                                        })
+                                      }
+                                    >
+                                      <title>{`${acc.label}: ${acc.vnd.toLocaleString('vi-VN')} đ (${Math.round(ratio * 100)}%)`}</title>
+                                    </circle>
+                                  );
+                                })}
+                              </svg>
+                              <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-3">
+                                <span className="text-[9px] font-bold text-slate-400 uppercase">TK KT</span>
+                                <span className="text-[11px] font-black text-slate-900 font-mono">{formatCompactVnd(grandAccVnd)}</span>
+                                <span className="text-[9px] text-slate-500">{accountingStats.length} TK</span>
+                              </div>
+                            </div>
+
+                            <div className="flex-1 w-full space-y-1.5 max-h-[190px] overflow-y-auto pr-1">
+                              {accountingStats.map((acc, idx) => {
+                                const sharePct = Math.round((acc.vnd / grandAccVnd) * 100);
+                                const color = accPieColors[idx % accPieColors.length];
+                                return (
+                                  <button
+                                    key={acc.code}
+                                    type="button"
+                                    onClick={() =>
+                                      setCopqDrilldown({
+                                        title: `Tài khoản Kế toán: ${acc.label}`,
+                                        subtitle: `${acc.items.length} khoản • Tổng: ${acc.vnd.toLocaleString('vi-VN')} đ (${sharePct}%)`,
+                                        items: acc.items
+                                      })
+                                    }
+                                    className="w-full flex items-center justify-between gap-1.5 text-[11px] px-1.5 py-1 rounded hover:bg-slate-50 text-left cursor-pointer"
+                                  >
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                                      <span className="font-bold text-slate-800 truncate">{acc.label}</span>
+                                      <span className="text-[10px] text-slate-400 shrink-0">({acc.count})</span>
+                                    </div>
+                                    <span className="font-mono font-bold text-slate-900 shrink-0">
+                                      {formatCompactVnd(acc.vnd)} <span className="text-[10px] text-sky-700">{sharePct}%</span>
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })()}
@@ -22004,6 +22079,110 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     </span>
                   </div>
                 </div>
+
+                {/* Popup chi tiết các bản ghi khi bấm vào cột/nhóm biểu đồ */}
+                {copqDrilldown && (
+                  <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-5xl max-h-[88vh] flex flex-col overflow-hidden">
+                      <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 bg-slate-50">
+                        <div>
+                          <h3 className="text-sm sm:text-base font-black text-slate-900">{copqDrilldown.title}</h3>
+                          <p className="text-xs text-slate-600 font-semibold mt-0.5">{copqDrilldown.subtitle}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setCopqDrilldown(null)}
+                          className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-600 cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="overflow-auto flex-1">
+                        <table className="w-full text-left font-sans text-xs">
+                          <thead className="text-[10px] font-bold text-slate-500 uppercase bg-slate-100 sticky top-0">
+                            <tr>
+                              <th className="p-2.5 text-center w-10">STT</th>
+                              <th className="p-2.5 text-center">Kỳ</th>
+                              <th className="p-2.5">Nguồn gốc</th>
+                              <th className="p-2.5">Nhóm COPQ</th>
+                              <th className="p-2.5">TK KT</th>
+                              <th className="p-2.5">NỘI DUNG / HẠNG MỤC</th>
+                              <th className="p-2.5">MÔ TẢ</th>
+                              <th className="p-2.5 text-center">ĐVT</th>
+                              <th className="p-2.5 text-right">SL</th>
+                              <th className="p-2.5 text-right">Đơn giá</th>
+                              <th className="p-2.5 text-right">Thành tiền</th>
+                              <th className="p-2.5 text-center w-16">Sửa</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {copqDrilldown.items.length === 0 ? (
+                              <tr>
+                                <td colSpan={12} className="p-8 text-center text-slate-400 italic">
+                                  Không có bản ghi nào trong nhóm/tháng này.
+                                </td>
+                              </tr>
+                            ) : (
+                              copqDrilldown.items.map((item, idx) => {
+                                const calcTotal =
+                                  item.quantity !== undefined && item.unitPrice !== undefined
+                                    ? item.quantity * item.unitPrice
+                                    : item.totalAmount ?? item.amount * 1000000;
+                                return (
+                                  <tr key={item.id} className="hover:bg-slate-50">
+                                    <td className="p-2.5 text-center text-slate-400 font-mono">{idx + 1}</td>
+                                    <td className="p-2.5 text-center font-mono text-slate-600">
+                                      T{item.month ?? 7}/{item.year ?? 2026}
+                                    </td>
+                                    <td className="p-2.5 text-slate-700">{item.costOrigin || '—'}</td>
+                                    <td className="p-2.5 font-bold text-slate-800">{item.category}</td>
+                                    <td className="p-2.5 font-mono font-bold text-sky-800">
+                                      {item.accountingCode || suggestAccountingCode(item.category, item.details, item.description, item.costOrigin)}
+                                    </td>
+                                    <td className="p-2.5 font-bold text-slate-900">{item.details}</td>
+                                    <td className="p-2.5 text-slate-600">{item.description || '—'}</td>
+                                    <td className="p-2.5 text-center">{item.unit || 'Cái'}</td>
+                                    <td className="p-2.5 text-right font-mono">{(item.quantity ?? 1).toLocaleString('vi-VN')}</td>
+                                    <td className="p-2.5 text-right font-mono">
+                                      {(item.unitPrice ?? calcTotal / (item.quantity || 1)).toLocaleString('vi-VN')}
+                                    </td>
+                                    <td className="p-2.5 text-right font-mono font-black text-[#0213b0]">
+                                      {calcTotal.toLocaleString('vi-VN')}
+                                    </td>
+                                    <td className="p-2.5 text-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setCopqDrilldown(null);
+                                          handleOpenEditModal('copq', item);
+                                        }}
+                                        className="p-1 rounded hover:bg-indigo-50 text-indigo-600 cursor-pointer"
+                                        title="Chỉnh sửa bản ghi"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="flex justify-end px-5 py-3 border-t border-slate-200 bg-slate-50">
+                        <button
+                          type="button"
+                          onClick={() => setCopqDrilldown(null)}
+                          className="px-4 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold cursor-pointer"
+                        >
+                          Đóng
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
