@@ -2651,6 +2651,22 @@ export default function QualityInspectionRecords({
     localStorage.setItem('dk_ignored_daily_log_stts', JSON.stringify(updated));
   };
 
+  const [ignoredSqcIqcIds, setIgnoredSqcIqcIds] = useState<string[]>(() => {
+    try {
+      const saved = safeStorage.getItem('dk_ignored_sqc_iqc_ids');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleIgnoreSqcIqc = (iqcId: string) => {
+    if (ignoredSqcIqcIds.includes(iqcId)) return;
+    const updated = [...ignoredSqcIqcIds, iqcId];
+    setIgnoredSqcIqcIds(updated);
+    safeStorage.setItem('dk_ignored_sqc_iqc_ids', JSON.stringify(updated));
+  };
+
   const renderActivePlanTargetsBanner = (_category: string) => {
     return null;
   };
@@ -12394,7 +12410,16 @@ return (
     {/* ==================== SUBTAB: SUPPLIER MONITORING (SQC) ==================== */}
     {qcMainSubTab === 'supplier_monitoring' && (() => {
       const iqcErrorRecords = hasQualityErrorInSystem
-        ? iqcRecords.filter(r => r.result === 'Lỗi' || (r.failedQty !== undefined && r.failedQty > 0))
+        ? iqcRecords.filter(r => {
+            const hasError = r.result === 'Lỗi' || (r.failedQty !== undefined && r.failedQty > 0);
+            if (!hasError) return false;
+            if (ignoredSqcIqcIds.includes(r.id)) return false;
+            const alreadyAudited = supplierProductionAudits.some(
+              aud => aud.supplierName === r.supplierName &&
+                ((aud.supplierNote || '').includes(r.id) || (aud.dkNote || '').includes(r.id) || (aud.targetSpecification || '').includes(r.id))
+            );
+            return !alreadyAudited;
+          })
         : [];
 
       const getAuditStatusMeta = (status: string) => {
@@ -12483,13 +12508,7 @@ return (
 
             {showSqcDailySuggestions && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-                {iqcErrorRecords.map((rec) => {
-                  const linkedAudit = supplierProductionAudits.find(
-                    aud => aud.supplierName === rec.supplierName &&
-                      ((aud.dkNote || '').includes(rec.id) || (aud.targetSpecification || '').includes(rec.id))
-                  );
-
-                  return (
+                {iqcErrorRecords.map((rec) => (
                     <div key={rec.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-xs transition duration-200 flex flex-col justify-between space-y-2.5">
                       <div className="space-y-1">
                         <div className="flex justify-between items-center text-[10px]">
@@ -12511,32 +12530,33 @@ return (
                         <span className="text-slate-500">
                           KCS: <strong className="text-slate-700">{rec.checkedBy || 'QLCL'}</strong>
                         </span>
-                        <div>
-                          {linkedAudit ? (
-                            <span className="font-mono font-bold text-indigo-800 text-[9px] bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100">
-                              🔗 {linkedAudit.id} · {getAuditStatusMeta(linkedAudit.status).badgeLabel}
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setNewAuditLinkedDailyLogStt(undefined);
-                                setNewAuditSupplierName(rec.supplierName || '');
-                                setNewAuditComponentName(rec.itemSummary || rec.content || 'Linh kiện IQC');
-                                setNewAuditSpec(rec.defectDetail ? `Khắc phục lỗi IQC: ${rec.defectDetail}` : 'Kiểm soát lỗi phát sinh tại IQC');
-                                setNewAuditNote(`Khởi tạo từ phiếu IQC lỗi #${rec.id} (${rec.date})`);
-                                setShowAddSupplierAuditModal(true);
-                              }}
-                              className="bg-orange-600 hover:bg-orange-500 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-md transition cursor-pointer"
-                            >
-                              🚀 Khởi tạo giám sát
-                            </button>
-                          )}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewAuditLinkedDailyLogStt(undefined);
+                              setNewAuditSupplierName(rec.supplierName || '');
+                              setNewAuditComponentName(rec.itemSummary || rec.content || 'Linh kiện IQC');
+                              setNewAuditSpec(rec.defectDetail ? `Khắc phục lỗi IQC: ${rec.defectDetail}` : 'Kiểm soát lỗi phát sinh tại IQC');
+                              setNewAuditNote(`Khởi tạo từ phiếu IQC lỗi #${rec.id} (${rec.date})`);
+                              setShowAddSupplierAuditModal(true);
+                            }}
+                            className="bg-orange-600 hover:bg-orange-500 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-md transition cursor-pointer"
+                          >
+                            🚀 Khởi tạo giám sát
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleIgnoreSqcIqc(rec.id)}
+                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-[10px] px-2 py-1 rounded-md border border-rose-200 transition cursor-pointer"
+                            title="Bỏ qua phiếu IQC lỗi này khỏi danh sách đề xuất SQC"
+                          >
+                            Bỏ qua
+                          </button>
                         </div>
                       </div>
                     </div>
-                  );
-                })}
+                ))}
               </div>
             )}
           </div>
