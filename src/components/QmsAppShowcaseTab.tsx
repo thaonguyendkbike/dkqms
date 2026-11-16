@@ -220,7 +220,7 @@ export default function QmsAppShowcaseTab({ readOnly = false }: { readOnly?: boo
       const nextImages = [...editingItem.images];
       for (let i = 0; i < files.length; i++) {
         if (nextImages.length >= 4) break;
-        const compressed = await compressImageFile(files[i], 500, 500, 0.4);
+        const compressed = await compressImageFile(files[i], 1400, 1400, 0.82);
         if (compressed) nextImages.push(compressed);
       }
       setEditingItem({ ...editingItem, images: nextImages });
@@ -384,7 +384,7 @@ export default function QmsAppShowcaseTab({ readOnly = false }: { readOnly?: boo
       {/* Modal Xem chi tiết */}
       {detailItem && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-[1px] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 sticky top-0 bg-white z-10">
               <div>
                 <h3 className="text-base font-extrabold text-slate-900">{detailItem.title}</h3>
@@ -402,7 +402,7 @@ export default function QmsAppShowcaseTab({ readOnly = false }: { readOnly?: boo
             <div className="p-5 space-y-4">
               {detailItem.images.length > 0 ? (
                 <div className="space-y-2">
-                  <div className="h-72 sm:h-80 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden">
+                  <div className="h-[55vh] max-h-[540px] rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden">
                     <img
                       src={detailItem.images[Math.min(activeImageIdx, detailItem.images.length - 1)]}
                       alt={detailItem.title}
@@ -503,7 +503,7 @@ export default function QmsAppShowcaseTab({ readOnly = false }: { readOnly?: boo
                   <div>
                     <div className="font-bold text-slate-800">Ảnh chụp màn hình giới thiệu (tối đa 4 ảnh)</div>
                     <p className="text-[11px] text-slate-500">
-                      Tự động nén &lt;30KB bằng <code>compressImageFile</code> để lưu an toàn.
+                      Nén chất lượng cao (1400px, 82%) giúp chữ &amp; số liệu trên ảnh chụp màn hình sắc nét, lưu an toàn qua <code>safeStorage</code>.
                     </p>
                   </div>
                   <input
