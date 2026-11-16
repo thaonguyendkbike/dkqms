@@ -124,6 +124,7 @@ import QualityPlanning, { getInitialQmsPlanningTasks } from './components/Qualit
 import OqcTvDashboard from './components/OqcTvDashboard';
 import QmsFormsCenter from './components/QmsFormsCenter';
 import { PartEvaluationsTab } from './components/PartEvaluationsTab';
+import CopqSpreadsheetEntry from './components/CopqSpreadsheetEntry';
 import { compressBase64String, compressImageFile } from './imageCompressor';
 
 // Firebase Integrations
@@ -21430,191 +21431,22 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   </div>
                 </div>
 
-                {/* Form to add a new COPQ */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                  <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
-                    <h3 className="text-xs font-black text-slate-700 flex items-center gap-1.5 uppercase">
-                      ⚡ BIỂU MẪU NHẬP LIỆU CHI PHÍ KÉM CHẤT LƯỢNG (COPQ) MỚI
-                    </h3>
-                    <span className="text-[10px] text-slate-400 italic">Tính toán tự động & đồng bộ đám mây</span>
-                  </div>
-
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const fd = new FormData(e.currentTarget);
-                      const quantity = copqFormQty;
-                      const unitPrice = copqFormPrice;
-                      const totalAmt = quantity * unitPrice;
-                      const millionVND = Number((totalAmt / 1000000).toFixed(6));
-
-                      const newCopq: COPQMetric = {
-                        id: 'COPQ-' + Date.now().toString().slice(-4),
-                        category: fd.get('category') as string,
-                        amount: millionVND,
-                        trend: fd.get('trend') as string || 'Ổn định',
-                        details: fd.get('details') as string,
-                        month: Number(fd.get('month') || 7),
-                        year: Number(fd.get('year') || 2026),
-                        costOrigin: fd.get('costOrigin') as string,
-                        description: fd.get('description') as string,
-                        unit: fd.get('unit') as string || 'Cái',
-                        quantity: quantity,
-                        unitPrice: unitPrice,
-                        totalAmount: totalAmt,
-                        notes: fd.get('notes') as string,
-                      };
-
-                      setCopqs([newCopq, ...copqs]);
-                      setCopqFormQty(0);
-                      setCopqFormPrice(0);
-                      e.currentTarget.reset();
-                    }}
-                    className="grid grid-cols-1 md:grid-cols-4 gap-4 font-sans text-xs text-left"
-                  >
-                    {/* Hàng 1: Thời gian và Phân loại */}
-                    <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Năm phát sinh</label>
-                      <select name="year" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 font-bold focus:ring-1 focus:ring-indigo-500">
-                        <option value={2026}>2026</option>
-                        <option value={2025}>2025</option>
-                        <option value={2027}>2027</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Tháng phát sinh</label>
-                      <select name="month" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 font-bold focus:ring-1 focus:ring-indigo-500">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
-                          <option key={m} value={m} defaultValue={7}>Tháng {m}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Nguồn gốc chi phí</label>
-                      <select name="costOrigin" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 font-bold focus:ring-1 focus:ring-indigo-500">
-                        <option value="Nội bộ">Nội bộ</option>
-                        <option value="Nhà cung cấp">Nhà cung cấp</option>
-                        <option value="Sửa chữa xe">Sửa chữa xe</option>
-                        <option value="Linh kiện lỗi">Linh kiện lỗi</option>
-                        <option value="Hao phí xưởng">Hao phí xưởng</option>
-                        <option value="Khác">Khác</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Nhóm phân loại (COPQ Category)</label>
-                      <select name="category" required className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 font-bold focus:ring-1 focus:ring-indigo-500">
-                        <option value="Sửa chữa">Sửa chữa</option>
-                        <option value="Tái chế">Tái chế</option>
-                        <option value="Bảo hành">Bảo hành</option>
-                        <option value="Đổi trả">Đổi trả</option>
-                        <option value="Dừng chuyền">Dừng chuyền</option>
-                        <option value="Kiểm tra lại">Kiểm tra lại</option>
-                      </select>
-                    </div>
-
-                    {/* Hàng 2: Nội dung & Mô tả */}
-                    <div className="md:col-span-2">
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">NỘI DUNG / HẠNG MỤC</label>
-                      <input
-                        name="details"
-                        type="text"
-                        placeholder="Ví dụ: Sơn TOA đen, Xăng thơm Putin..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 font-bold focus:ring-1 focus:ring-indigo-500"
-                        required
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">MÔ TẢ CHI TIẾT (nếu có)</label>
-                      <input
-                        name="description"
-                        type="text"
-                        placeholder="Ví dụ: Sửa chữa linh kiện nhựa, lỗi nước sơn..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-
-                    {/* Hàng 3: ĐVT, SL, Đơn giá và Thành tiền */}
-                    <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Đơn vị tính (ĐVT)</label>
-                      <input
-                        name="unit"
-                        type="text"
-                        placeholder="Hộp, Lít, Cái, m, kg..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 font-bold focus:ring-1 focus:ring-indigo-500"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Số lượng (SL)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={copqFormQty || ''}
-                        onChange={(e) => setCopqFormQty(Number(e.target.value))}
-                        placeholder="Nhập số lượng..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 font-mono font-bold focus:ring-1 focus:ring-indigo-500"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Đơn giá (ĐG - VND)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={copqFormPrice || ''}
-                        onChange={(e) => setCopqFormPrice(Number(e.target.value))}
-                        placeholder="Nhập đơn giá (VND)..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 font-mono font-bold focus:ring-1 focus:ring-indigo-500"
-                        required
-                      />
-                    </div>
-
-                    {/* Hiển thị thành tiền tự động */}
-                    <div className="bg-emerald-50/75 border border-emerald-100 p-2.5 rounded-lg flex flex-col justify-center">
-                      <span className="block text-[9px] text-emerald-600 uppercase font-bold">Thành tiền tự động</span>
-                      <span className="text-xs font-black text-emerald-800 font-mono">
-                        {(copqFormQty * copqFormPrice).toLocaleString('vi-VN')} VND
-                      </span>
-                    </div>
-
-                    {/* Ghi chú & Trend */}
-                    <div className="md:col-span-2">
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Ghi chú thêm</label>
-                      <input
-                        name="notes"
-                        type="text"
-                        placeholder="Nhập ghi chú hoặc nguyên nhân gốc rễ..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Xu hướng biến thiên (Trend)</label>
-                      <select name="trend" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-slate-800 font-bold focus:ring-1 focus:ring-indigo-500">
-                        <option value="Ổn định">➡️ Ổn định</option>
-                        <option value="Tăng">📈 Tăng</option>
-                        <option value="Giảm">📉 Giảm</option>
-                      </select>
-                    </div>
-
-                    <div className="flex items-end">
-                      <button
-                        type="submit"
-                        className="w-full bg-[#0213b0] hover:bg-blue-800 text-white font-bold py-2 px-4 rounded-lg transition-all shadow-md hover:shadow-lg cursor-pointer text-xs uppercase tracking-wider flex items-center justify-center gap-1"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Xác nhận lưu COPQ
-                      </button>
-                    </div>
-                  </form>
-                </div>
+                {/* Bảng nhập liệu COPQ dạng cột-hàng & Nhập hàng loạt từ Excel */}
+                <CopqSpreadsheetEntry
+                  onSaveBatch={(newItems) => {
+                    if (!isUserAuthorized()) {
+                      safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
+                      return;
+                    }
+                    const updated = [...newItems, ...copqs];
+                    setCopqs(updated);
+                    safeStorage.setItem('dk_copqs', JSON.stringify(updated));
+                    try { localStorage.setItem('dk_copqs_is_dirty', 'true'); } catch (e) { }
+                    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_copqs');
+                    syncToServer('dk_copqs', updated);
+                    triggerToast(`Đã lưu ${newItems.length} dòng chi phí COPQ mới vào hệ thống`, 'success');
+                  }}
+                />
 
                 {/* Filters and Table list */}
                 <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden" id="copq_database_list">
