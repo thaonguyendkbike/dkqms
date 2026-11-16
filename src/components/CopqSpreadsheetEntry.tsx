@@ -1,14 +1,16 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
   AlertTriangle,
   CheckCircle2,
   ClipboardPaste,
+  Download,
   FileSpreadsheet,
+  HelpCircle,
   Plus,
   Save,
   Trash2,
-  Upload
+  X
 } from 'lucide-react';
 import { COPQMetric } from '../types';
 
@@ -124,9 +126,9 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
   ]);
 
   const [showPasteBox, setShowPasteBox] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [importNotice, setImportNotice] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const applyDefaultsToAllRows = () => {
     setRows((prev) =>
@@ -198,43 +200,31 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
     }
   };
 
-  const handleExcelFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array' });
-      const firstSheet = wb.Sheets[wb.SheetNames[0]];
-      const rawRows = XLSX.utils.sheet_to_json<any[]>(firstSheet, { header: 1, defval: '' });
+  const handleDownloadExcel = () => {
+    const activeRows = rows.filter(
+      (r) => r.details.trim() || r.description.trim() || r.quantity || r.unitPrice
+    );
+    const exportData =
+      activeRows.length > 0
+        ? activeRows.map((r) => {
+            const qty = parseNumberVN(r.quantity);
+            const price = parseNumberVN(r.unitPrice);
+            return [r.details, r.description, r.unit || 'Cái', qty, price, qty * price];
+          })
+        : [
+            ['Sơn TOA đen', 'Sửa xe, linh kiện', 'Hộp', 4, 130000, 520000],
+            ['Kệ sách', '', 'Cái', 1, 950000, 950000]
+          ];
 
-      // Tự động nhận diện xem file có cột STT/cột A trống trước cột B (NỘI DUNG/HẠNG MỤC) hay không
-      let offset = 0;
-      for (const r of rawRows.slice(0, 10)) {
-        const idx = r.findIndex((c: any) =>
-          String(c ?? '').toLowerCase().includes('nội dung')
-        );
-        if (idx >= 0) {
-          offset = idx;
-          break;
-        }
-      }
-      // Nếu cột 0 trống toàn bộ ở các dòng đầu (như trong ảnh cột B mới là Nội dung), dịch offset = 1
-      if (offset === 0 && rawRows.length > 0) {
-        const nonEmptyCol0 = rawRows.slice(0, 8).filter((r) => String(r[0] ?? '').trim() !== '').length;
-        const nonEmptyCol1 = rawRows.slice(0, 8).filter((r) => String(r[1] ?? '').trim() !== '').length;
-        if (nonEmptyCol0 === 0 && nonEmptyCol1 > 0) offset = 1;
-      }
-
-      const matrix = rawRows.map((r) =>
-        [0, 1, 2, 3, 4, 5].map((i) => String(r[i + offset] ?? ''))
-      );
-      const imported = buildRowsFromMatrix(matrix);
-      mergeImportedRows(imported, `file "${file.name}"`);
-    } catch {
-      setImportNotice('Không thể đọc file Excel. Vui lòng kiểm tra định dạng .xlsx / .xls / .csv.');
-    } finally {
-      e.target.value = '';
-    }
+    const aoa = [
+      ['NỘI DUNG/HẠNG MỤC', 'MÔ TẢ (nếu có)', 'ĐVT', 'SL', 'ĐG', 'Thành tiền'],
+      ...exportData
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 28 }, { wch: 26 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'COPQ');
+    XLSX.writeFile(wb, `Mau_Nhap_COPQ_DKBike.xlsx`);
   };
 
   const updateRow = (rowKey: string, patch: Partial<CopqDraftRow>) => {
@@ -332,13 +322,6 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            onChange={handleExcelFile}
-            className="hidden"
-          />
           <button
             type="button"
             onClick={() => setShowPasteBox((v) => !v)}
@@ -349,11 +332,19 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
           </button>
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={handleDownloadExcel}
             className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
           >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Tải file Excel</span>
+            <Download className="w-3.5 h-3.5" />
+            <span>Tải xuống Excel</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowHelpModal(true)}
+            className="px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>Giải thích</span>
           </button>
           <button
             type="button"
@@ -671,6 +662,87 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
           <span>Lưu tất cả vào hệ thống ({rows.filter((_, i) => rowStatuses[i].hasAnyInput).length} dòng)</span>
         </button>
       </div>
+
+      {/* Modal Giải thích Nguồn gốc & Nhóm phân loại COPQ */}
+      {showHelpModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 sticky top-0 bg-white z-10">
+              <div className="flex items-center gap-2">
+                <HelpCircle className="w-5 h-5 text-amber-600" />
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+                  Giải thích thuật ngữ: Nguồn gốc & Nhóm phân loại COPQ
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowHelpModal(false)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-5 text-xs text-slate-700">
+              <div className="space-y-2">
+                <h4 className="font-black text-slate-900 uppercase text-[11px] bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-lg">
+                  1. Nguồn gốc chi phí (Trả lời câu hỏi: Chi phí phát sinh DO ĐÂU / CHO AI?)
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {[
+                    ['Nội bộ xưởng / Lắp ráp', 'Phát sinh do lỗi thao tác, lắp ráp, vận hành hoặc vật tư sửa chữa trong nội bộ nhà máy.'],
+                    ['Nhà cung cấp', 'Phát sinh do linh kiện của NCC giao bị lỗi (tốn sơn, xăng thơm, đá mài để sửa lại hoặc kiểm tra lại lô hàng NCC).'],
+                    ['Thị trường / Bảo hành', 'Phát sinh từ phản ánh đại lý, khách hàng sau bán (đổi trả, bảo hành, sửa chữa lưu động).'],
+                    ['Phòng QLCL (Đầu tư & 5S)', 'Chi mua sắm trang thiết bị kiểm tra, đồ dùng văn phòng, sách tài liệu, đèn LED, vật tư 5S của phòng QLCL.'],
+                    ['Khác', 'Các nguồn phát sinh đặc thù khác không thuộc 4 nhóm trên.']
+                  ].map(([title, desc]) => (
+                    <div key={title} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                      <div className="font-extrabold text-slate-900">{title}</div>
+                      <div className="text-slate-600 mt-0.5">{desc}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-black text-slate-900 uppercase text-[11px] bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg">
+                  2. Nhóm phân loại COPQ (Trả lời câu hỏi: Tiền đó dùng để LÀM VIỆC GÌ?)
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {[
+                    ['Sửa chữa', 'Chi phí khắc phục, sửa lại xe hoặc linh kiện lỗi để đạt tiêu chuẩn xuất xưởng.'],
+                    ['Tái chế', 'Chi phí gia công lại, sơn lại, phục hồi linh kiện/bán thành phẩm bị lỗi.'],
+                    ['Bảo hành', 'Chi phí linh kiện thay thế, nhân công bảo hành xe ngoài thị trường.'],
+                    ['Đổi trả', 'Chi phí đổi mới linh kiện/xe hoặc thu hồi từ khách hàng, đại lý.'],
+                    ['Dừng chuyền', 'Thiệt hại phát sinh do phải tạm dừng dây chuyền sản xuất vì lỗi chất lượng.'],
+                    ['Kiểm tra lại', 'Chi phí nhân công/dụng cụ phát sinh do phải kiểm tra 100% hoặc sàng lọc lại lô lỗi.'],
+                    ['Vật tư tiêu hao', 'Sơn, xăng thơm, đá mài, keo nến, que hàn, hóa chất phụ trợ dùng trong quá trình xử lý.'],
+                    ['Thiết bị & Dụng cụ đo', 'Máy móc, thiết bị kiểm tra, dưỡng kiểm, đồng hồ đo phục vụ công tác QC/QA.'],
+                    ['Thiết bị văn phòng & 5S', 'Bàn họp, kệ sách, tủ hồ sơ, đèn LED, bảng biểu, vật dụng sắp xếp 5S phòng QLCL.'],
+                    ['Đào tạo & Tài liệu', 'Sách chuyên môn, tài liệu tiêu chuẩn, in ấn, chi phí đào tạo nâng cao chất lượng.'],
+                    ['Chi phí khác', 'Các khoản chi phí khác chưa xếp vào 10 nhóm trên.']
+                  ].map(([title, desc]) => (
+                    <div key={title} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                      <div className="font-extrabold text-slate-900">{title}</div>
+                      <div className="text-slate-600 mt-0.5">{desc}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end px-5 py-3 border-t border-slate-200 bg-slate-50">
+              <button
+                type="button"
+                onClick={() => setShowHelpModal(false)}
+                className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold cursor-pointer"
+              >
+                Đã hiểu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
