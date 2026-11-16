@@ -8975,14 +8975,21 @@ export function App() {
   // Overall COPQ budget
   const totalCOPQ = copqs.reduce((acc, c) => acc + c.amount, 0);
 
-  // Rank D Suppliers & Rising PPM warning check (continuous monthly increase)
+  // Rank D Suppliers & Rising PPM warning check (deduplicated by name, sorted by PPM desc)
   const highRiskSuppliers = useMemo(() => {
-    return computedSuppliers.filter(s => {
-      const isRankD = s.status === 'D' || s.defectRate >= 5000;
-      // PPM increasing for 3 consecutive steps?
-      const isRisingTrend = s.trends.length >= 3 && s.trends[2] > s.trends[1] && s.trends[1] > s.trends[0];
-      return isRankD || isRisingTrend;
-    });
+    const seenNames = new Set<string>();
+    return computedSuppliers
+      .filter(s => {
+        const isRankD = s.status === 'D' || s.defectRate >= 5000;
+        // PPM increasing for 3 consecutive steps?
+        const isRisingTrend = s.trends.length >= 3 && s.trends[2] > s.trends[1] && s.trends[1] > s.trends[0];
+        if (!isRankD && !isRisingTrend) return false;
+        const normName = (s.name || '').trim().toLowerCase();
+        if (!normName || seenNames.has(normName)) return false;
+        seenNames.add(normName);
+        return true;
+      })
+      .sort((a, b) => (b.defectRate || 0) - (a.defectRate || 0));
   }, [computedSuppliers]);
 
   // Red Warning Market Defects (cháy, chập điện, mất phanh, gãy khung, mất điều khiển)
@@ -9958,45 +9965,66 @@ Tập hợp số liệu gốc:
   };
 
   // 2. Tự động kích hoạt CAPA từ bảng Cảnh báo rủi ro (Automation)
-  const handleAutoTriggerCapa = (type: string, description: string, origin: string, model: string) => {
+  const handleAutoTriggerCapa = (
+    type: string,
+    description: string,
+    origin: string,
+    model: string,
+    sourceType: 'market' | 'supplier' = 'market'
+  ) => {
     if (!isUserAuthorized()) {
       alert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).\n\nHãy liên hệ anh Thao để nâng cấp quyền biên tập.");
       return;
     }
 
+    const logDateStr = standardizeDate(new Date().toLocaleDateString('vi-VN'));
+    const dateInfo = getWeekAndMonthFromDate(logDateStr);
+    const isSupplier = sourceType === 'supplier';
+
+    const taskCategory = isSupplier
+      ? 'IQC - Kiểm Soát Chất Lượng Đầu Vào (NCC)'
+      : 'PQC / Thị Trường - Xử Lý Sự Cố Khẩn';
+    const taskContent = isSupplier
+      ? `[Kích hoạt tự động] Khắc phục chất lượng NCC: ${type}`
+      : `[Kích hoạt tự động] Khắc phục khẩn sự cố lỗi: ${type} trên Model ${model} (${origin})`;
+    const immediateAction = isSupplier
+      ? `Khoanh vùng và kiểm tra 100% lô vật tư tồn kho từ ${origin}; gửi yêu cầu phản hồi 8D cho nhà cung cấp.`
+      : `Cô lập và kiểm tra các xe liên quan lỗi "${type}" trên Model ${model}; rà soát lô xuất xưởng tại ${origin}.`;
+    const correctivePlan = isSupplier
+      ? `Phối hợp ${origin} phân tích nguyên nhân gốc rễ, siết tiêu chuẩn kiểm nhận IQC và theo dõi 3 lô nhập kế tiếp.`
+      : `Kiểm tra công đoạn lắp ráp/OQC liên quan đến lỗi "${type}" trên Model ${model} và cập nhật điểm kiểm soát phòng ngừa.`;
+
     const idSuffix = Date.now().toString().slice(-4);
     const newTask: Task = {
       id: `TSK-${idSuffix}`,
       date: getLocalYmd(),
-      week: 20,
-      month: 5,
+      week: Number(String(dateInfo.week).replace(/\D/g, '')) || 1,
+      month: Number(String(dateInfo.month).replace(/\D/g, '')) || (new Date().getMonth() + 1),
       assignee: 'Nguyễn Xuân Thao',
-      category: 'PQC - Kiểm Soát Chất Lượng Công Đoạn Lắp Ráp',
-      content: `[Kích hoạt tự động] Khắc phục khẩn sự cố lỗi: ${type} trên Model ${model} (Đại lý ${origin})`,
+      category: taskCategory,
+      content: taskContent,
       target: 100,
       result: 0,
       status: 'Pending',
       priority: 'HIGH',
-      nextPlan: 'Cô lập và cách ly lô xe lắp ráp liên quan, đo đạc kích thước dung sai và gửi yêu cầu hành động cải khắc 8D cho nhà cung cấp.',
+      nextPlan: immediateAction,
       weeksUnresolved: 0,
       issueCondition: `Rủi ro chất lượng phát hiện: ${description}`,
       locationOfOrigin: origin,
       rootCausePending: 'Đang điều tra nguyên nhân bằng biểu đồ Xương cá & 5-Whys',
-      proposedSolution: 'Rà soát lại quy trình ép khuôn, kiểm định lực siết búa gầm và điều chỉnh thông số Jig lắp ráp.',
+      proposedSolution: correctivePlan,
       images: []
     };
 
-    const logDateStr = standardizeDate(new Date().toLocaleDateString('vi-VN'));
-    const dateInfo = getWeekAndMonthFromDate(logDateStr);
     const autoDailyLog: DailyLogRecord = {
       id: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
       stt: dailyLogs.length + 1,
       date: logDateStr,
       week: dateInfo.week,
-      category: 'PQC',
-      content: `[Kích hoạt tự động CAPA - ${newTask.id}] Xử lý lỗi ${type} model ${model}`,
+      category: isSupplier ? 'IQC' : 'PQC',
+      content: `[Kích hoạt tự động CAPA - ${newTask.id}] ${isSupplier ? type : `Xử lý lỗi ${type} model ${model}`}`,
       target: '100',
-      unit: 'Chiếc',
+      unit: isSupplier ? 'Lô/Chi tiết' : 'Chiếc',
       assignee: 'Nguyễn Xuân Thao',
       timeWork: ['', '', '', '', '', '', '', ''],
       result: '0',
@@ -10007,24 +10035,27 @@ Tập hợp số liệu gốc:
     };
 
     const nextCapaId = getNextCapaId(capas);
+    const capaTitle = isSupplier
+      ? `[Tự động từ Cảnh báo Rủi ro] Khắc phục chất lượng NCC: ${origin}`
+      : `[Tự động từ Cảnh báo Rủi ro] Xử lý lỗi ${type} trên Model ${model}`;
     const newCapaItem: CAPA = {
       id: nextCapaId,
       CAPAID: nextCapaId,
-      title: `[Tự động từ Cảnh báo Rủi ro] Xử lý lỗi ${type} trên Model ${model}`,
-      Issue: `[Tự động từ Cảnh báo Rủi ro] Xử lý lỗi ${type} trên Model ${model}`,
-      source: 'Cảnh báo rủi ro Dashboard',
+      title: capaTitle,
+      Issue: capaTitle,
+      source: isSupplier ? 'Cảnh báo rủi ro Dashboard (IQC/NCC)' : 'Cảnh báo rủi ro Dashboard (Thị trường)',
       assignee: 'Nguyễn Xuân Thao',
       Owner: 'Nguyễn Xuân Thao',
       targetDate: getLocalYmd(),
       DueDate: getLocalYmd(),
       status: 'Mở',
       Status: 'Mở',
-      priority: 'Khẩn cấp',
+      priority: isSupplier ? 'Cao' : 'Khẩn cấp',
       rootCause: `Rủi ro chất lượng phát hiện: ${description}. Đang điều tra nguyên nhân bằng biểu đồ Xương cá & 5-Whys`,
       RootCause: `Rủi ro chất lượng phát hiện: ${description}. Đang điều tra nguyên nhân bằng biểu đồ Xương cá & 5-Whys`,
-      Correction: 'Cô lập và cách ly lô xe lắp ráp liên quan, đo đạc kích thước dung sai',
-      actions: 'Rà soát lại quy trình ép khuôn, kiểm định lực siết búa gầm và điều chỉnh thông số Jig lắp ráp.',
-      CorrectiveAction: 'Rà soát lại quy trình ép khuôn, kiểm định lực siết búa gầm và điều chỉnh thông số Jig lắp ráp.',
+      Correction: immediateAction,
+      actions: correctivePlan,
+      CorrectiveAction: correctivePlan,
       PreventiveAction: 'Đưa vào danh mục kiểm soát trọng yếu tuần và đánh giá hiệu lực định kỳ.',
       locationOfOrigin: origin || 'Phòng QLCL',
       locationDetail: origin || '',
@@ -14385,86 +14416,135 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         <tbody className="divide-y divide-slate-100">
 
                           {/* Lọc các lỗi thị trường nghiêm trọng đỏ */}
-                          {redAlertDefects.map((defect) => (
-                            <tr
-                              key={defect.id}
-                              className="hover:bg-rose-50/30 bg-rose-50/10 transition-colors group"
-                            >
-                              <td className="p-3 font-extrabold text-rose-600 shrink-0 font-sans">
-                                🚨 Thị trường / Model {defect.model}
-                              </td>
-                              <td className="p-3">
-                                <span className="font-black text-slate-850 text-slate-800 block text-[11px]">{defect.type}</span>
-                                <span className="text-[10px] text-slate-500 leading-relaxed block mt-0.5">
-                                  {defect.description} (Đại lý {defect.dealer})
-                                </span>
-                              </td>
-                              <td className="p-3 text-center shrink-0">
-                                <span className="px-2 py-0.5 bg-red-650 text-red-600 bg-red-600 text-white text-[8px] font-black rounded-md uppercase border border-red-700 shadow-sm animate-pulse tracking-wide select-none">
-                                  CẤP A - ĐỎ KHẨN
-                                </span>
-                              </td>
-                              <td className="p-3 text-[10px] italic text-rose-900 font-bold bg-rose-50/20 max-w-xs leading-relaxed">
-                                Đề xuất cô lập ngay mã lỗi phanh do Việt Nhật Precision sản xuất. Thu hồi kiểm định các lô hàng liên đới gầm máy.
-                              </td>
-                              <td className="p-3 text-center">
-                                <button
-                                  onClick={() => handleAutoTriggerCapa(
-                                    defect.type,
-                                    defect.description,
-                                    `Đại lý ${defect.dealer}`,
-                                    defect.model || "Chưa rõ"
+                          {redAlertDefects.map((defect) => {
+                            const hasOpenCapa = capas.some(c =>
+                              c.status !== 'Đã đóng' && c.status !== 'Hoàn thành' && c.Status !== 'Closed' &&
+                              (c.title || '').includes(defect.type) &&
+                              (!defect.model || (c.modelName || '') === defect.model)
+                            );
+                            return (
+                              <tr
+                                key={defect.id}
+                                className="hover:bg-rose-50/30 bg-rose-50/10 transition-colors group"
+                              >
+                                <td className="p-3 font-extrabold text-rose-600 shrink-0 font-sans">
+                                  🚨 Thị trường / Model {defect.model || 'Chưa rõ'}
+                                </td>
+                                <td className="p-3">
+                                  <span className="font-black text-slate-850 text-slate-800 block text-[11px]">{defect.type}</span>
+                                  <span className="text-[10px] text-slate-500 leading-relaxed block mt-0.5">
+                                    {defect.description} (Đại lý {defect.dealer || 'Chưa rõ'})
+                                  </span>
+                                </td>
+                                <td className="p-3 text-center shrink-0">
+                                  <span className="px-2 py-0.5 bg-red-600 text-white text-[8px] font-black rounded-md uppercase border border-red-700 shadow-sm animate-pulse tracking-wide select-none">
+                                    CẤP A - ĐỎ KHẨN
+                                  </span>
+                                </td>
+                                <td className="p-3 text-[10px] italic text-rose-900 font-bold bg-rose-50/20 max-w-xs leading-relaxed">
+                                  Cô lập & kiểm tra ngay lỗi &ldquo;{defect.type}&rdquo; trên Model {defect.model || 'liên quan'}; rà soát lô xuất xưởng gửi đại lý {defect.dealer || 'liên quan'}.
+                                </td>
+                                <td className="p-3 text-center">
+                                  {hasOpenCapa ? (
+                                    <button
+                                      onClick={() => setActiveTab('capa')}
+                                      className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg font-black font-sans text-[9px] uppercase tracking-wider transition duration-150 cursor-pointer flex items-center gap-1 mx-auto select-none shrink-0"
+                                      title="Đã có hồ sơ CAPA đang mở — Nhấn để xem"
+                                    >
+                                      <span>Đã có CAPA</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleAutoTriggerCapa(
+                                        defect.type,
+                                        defect.description,
+                                        `Đại lý ${defect.dealer || 'Chưa rõ'}`,
+                                        defect.model || "Chưa rõ",
+                                        'market'
+                                      )}
+                                      className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-550 text-white rounded-lg font-black font-sans text-[9px] uppercase tracking-wider transition-all duration-150 shadow-md hover:shadow-rose-500/25 active:scale-95 cursor-pointer flex items-center gap-1 mx-auto select-none shrink-0"
+                                      title="Nhấp để tự động khởi tạo Hồ sơ CAPA khẩn và đồng bộ báo cáo chất lượng"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                      <span>Sửa khẩn cấp</span>
+                                    </button>
                                   )}
-                                  className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-550 text-white rounded-lg font-black font-sans text-[9px] uppercase tracking-wider transition-all duration-150 shadow-md hover:shadow-rose-500/25 active:scale-95 cursor-pointer flex items-center gap-1 mx-auto select-none shrink-0"
-                                  title="Nhấp để tự động khởi tạo Hồ sơ CAPA khẩn và đồng bộ báo cáo chất lượng"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                  <span>Sửa khẩn cấp</span>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                                </td>
+                              </tr>
+                            );
+                          })}
 
                           {/* Nhà cung cấp rủi ro PPM cao */}
-                          {highRiskSuppliers.map((sup) => (
-                            <tr
-                              key={sup.id}
-                              className="hover:bg-amber-50/20 transition-colors"
-                            >
-                              <td className="p-3 font-extrabold text-amber-600">
-                                📦 Nhà cung cấp (PPM cao)
-                              </td>
-                              <td className="p-3">
-                                <span className="font-black text-slate-850 text-slate-800 block text-[11px]">{sup.name}</span>
-                                <span className="text-[10px] text-slate-500 leading-normal block mt-0.5">
-                                  Tỷ lệ lỗi {sup.defectRate} PPM (Xu hướng gia tăng mạnh). Nhóm khuyết tật chính: {sup.defectTypes.join(', ')}
-                                </span>
-                              </td>
-                              <td className="p-3 text-center">
-                                <span className="px-2 py-0.5 bg-amber-500 text-white text-[8px] font-black rounded-md uppercase border border-amber-600 shadow-sm tracking-wide select-none">
-                                  CẤP D - RỦI RO
-                                </span>
-                              </td>
-                              <td className="p-3 text-[10px] italic text-slate-600 font-medium max-w-xs leading-normal">
-                                Tạm đình chỉ kiểm nhận cụm linh kiện gầm máy. Tiến hành audit nhà máy tại xưởng đột xuất.
-                              </td>
-                              <td className="p-3 text-center">
-                                <button
-                                  onClick={() => handleAutoTriggerCapa(
-                                    `Lỗi linh kiện PPM vượt ngưỡng của ${sup.name}`,
-                                    `Chất lượng linh kiện giảm sút nghiêm trọng, PPM đạt ${sup.defectRate}`,
-                                    `Nhà xưởng ${sup.name}`,
-                                    "Toàn bộ Model liên quan"
+                          {highRiskSuppliers.map((sup) => {
+                            const isRankD = sup.status === 'D' || sup.defectRate >= 5000;
+                            const isRisingTrend = sup.trends.length >= 3 && sup.trends[2] > sup.trends[1] && sup.trends[1] > sup.trends[0];
+                            const mainDefects = (sup.defectTypes || []).filter(Boolean).slice(0, 3).join(', ') || 'Chưa ghi nhận chi tiết';
+                            const hasOpenCapa = capas.some(c =>
+                              c.status !== 'Đã đóng' && c.status !== 'Hoàn thành' && c.Status !== 'Closed' &&
+                              ((c.title || '').includes(sup.name) || (c.locationOfOrigin || '').includes(sup.name))
+                            );
+                            return (
+                              <tr
+                                key={sup.id}
+                                className="hover:bg-amber-50/20 transition-colors"
+                              >
+                                <td className="p-3 font-extrabold text-amber-600">
+                                  📦 Nhà cung cấp (PPM cao)
+                                </td>
+                                <td className="p-3">
+                                  <span className="font-black text-slate-850 text-slate-800 block text-[11px]">{sup.name}</span>
+                                  <span className="text-[10px] text-slate-500 leading-normal block mt-0.5">
+                                    Tỷ lệ lỗi {sup.defectRate} PPM
+                                    {sup.totalParts > 0 ? ` (${sup.faultyParts || 0}/${sup.totalParts} lỗi)` : ''}
+                                    {isRisingTrend ? ' • Xu hướng tăng liên tiếp' : ''}.
+                                    {' '}Nhóm khuyết tật chính: {mainDefects}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-center">
+                                  {isRankD ? (
+                                    <span className="px-2 py-0.5 bg-amber-500 text-white text-[8px] font-black rounded-md uppercase border border-amber-600 shadow-sm tracking-wide select-none">
+                                      CẤP D - RỦI RO
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 bg-orange-400 text-white text-[8px] font-black rounded-md uppercase border border-orange-500 shadow-sm tracking-wide select-none">
+                                      TĂNG PPM
+                                    </span>
                                   )}
-                                  className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-450 text-white rounded-lg font-black font-sans text-[9px] uppercase tracking-wider transition duration-150 shadow-md active:scale-95 cursor-pointer flex items-center gap-1 mx-auto select-none shrink-0"
-                                  title="Nhấp để tự động kích hoạt CAPA đối tác nhà cung cấp"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                  <span>CAPA Đối tác</span>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                                </td>
+                                <td className="p-3 text-[10px] italic text-slate-600 font-medium max-w-xs leading-normal">
+                                  {isRankD
+                                    ? `Siết kiểm 100% đầu vào (IQC) lô kế tiếp của ${sup.name}; yêu cầu NCC phản hồi 8D cho nhóm lỗi: ${mainDefects}.`
+                                    : `Theo dõi sát xu hướng tăng PPM của ${sup.name}; cảnh báo sớm và siết mức lấy mẫu AQL đầu vào.`}
+                                </td>
+                                <td className="p-3 text-center">
+                                  {hasOpenCapa ? (
+                                    <button
+                                      onClick={() => setActiveTab('capa')}
+                                      className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg font-black font-sans text-[9px] uppercase tracking-wider transition duration-150 cursor-pointer flex items-center gap-1 mx-auto select-none shrink-0"
+                                      title="Đã có hồ sơ CAPA đang mở — Nhấn để xem"
+                                    >
+                                      <span>Đã có CAPA</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleAutoTriggerCapa(
+                                        `Lỗi linh kiện ${sup.defectRate} PPM - ${sup.name}`,
+                                        `Tỷ lệ lỗi ${sup.defectRate} PPM (${sup.faultyParts || 0}/${sup.totalParts || 0}). Khuyết tật chính: ${mainDefects}`,
+                                        sup.name,
+                                        "Linh kiện IQC",
+                                        'supplier'
+                                      )}
+                                      className="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-450 text-white rounded-lg font-black font-sans text-[9px] uppercase tracking-wider transition duration-150 shadow-md active:scale-95 cursor-pointer flex items-center gap-1 mx-auto select-none shrink-0"
+                                      title="Nhấp để tự động kích hoạt CAPA đối tác nhà cung cấp"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                      <span>CAPA Đối tác</span>
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
 
                           {/* Hồ sơ CAPA trì trệ lâu ngày */}
                           {dynamicUnresolvedTasksCount > 0 && (
@@ -14473,9 +14553,9 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 ⚙️ Quy trình QMS nội bộ
                               </td>
                               <td className="p-3">
-                                <span className="font-black text-slate-850 text-slate-800 block text-[11px]">Hồ sơ CAPA treo quá hạn kéo dài</span>
+                                <span className="font-black text-slate-850 text-slate-800 block text-[11px]">Hồ sơ CAPA / Công việc tồn đọng quá hạn</span>
                                 <span className="text-[10px] text-slate-500 leading-normal block mt-0.5">
-                                  Ghi nhận {dynamicUnresolvedTasksCount} hành động khắc phục lỗi treo kéo dài quá 2 tuần chưa dứt điểm.
+                                  Ghi nhận {dynamicUnresolvedTasksCount} đầu việc khắc phục kéo dài quá 2 tuần chưa dứt điểm.
                                 </span>
                               </td>
                               <td className="p-3 text-center">
@@ -14484,7 +14564,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 </span>
                               </td>
                               <td className="p-3 text-[10px] italic text-slate-600 font-medium max-w-xs leading-normal">
-                                Đôn đốc PIC thực hiện báo cáo 8D tiến độ lắp ráp bavia sườn hoặc đề xuất phương án phụ mẫu tăng cường.
+                                Rà soát {dynamicUnresolvedTasksCount} đầu việc tồn đọng quá 2 tuần, đôn đốc PIC cập nhật tiến độ hoặc điều chuyển người phụ trách.
                               </td>
                               <td className="p-3 text-center">
                                 <button
@@ -14499,6 +14579,14 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                   <Activity className="w-3 h-3" />
                                   <span>Đôn Đốc CAPA</span>
                                 </button>
+                              </td>
+                            </tr>
+                          )}
+
+                          {redAlertDefects.length === 0 && highRiskSuppliers.length === 0 && dynamicUnresolvedTasksCount === 0 && (
+                            <tr>
+                              <td colSpan={5} className="p-6 text-center text-xs text-slate-400 italic">
+                                Hiện chưa ghi nhận cảnh báo rủi ro khẩn cấp nào (Thị trường / NCC PPM cao / Việc trễ hạn).
                               </td>
                             </tr>
                           )}
