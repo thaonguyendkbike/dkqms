@@ -5106,48 +5106,6 @@ export default function QualityPlanning({
               <p className="text-xs text-slate-500">Cơ chế QSM tự động liên kết: Trích xuất lỗi KCS thực tế tại phân hệ <strong className="text-rose-600 font-semibold">OQC</strong> để tự động lập chốt chặn phòng ngừa <strong className="text-rose-600 font-semibold">PQC trong chuyền</strong>, đồng thời lên lực <strong className="text-indigo-600 font-semibold">IQC / SQC</strong> theo mốc nhập linh kiện.</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => {
-                try {
-                  const saved = localStorage.getItem('dk_oqc_records');
-                  if (saved) {
-                    const parsed = JSON.parse(saved);
-                    if (Array.isArray(parsed)) {
-                      setOqcRecords(parsed);
-                    }
-                  }
-                } catch (e) {
-                  console.error('Error refreshing OQC records manually', e);
-                }
-                setForceRefresh(prev => prev + 1);
-                alert("🔄 Đã phản hồi & tải mới nhất dữ liệu lỗi OQC thực tế từ hệ thống! Toàn bộ kế hoạch PQC đã được tự động tính toán lại theo lỗi hiện hữu.");
-              }}
-              className="px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-all flex items-center gap-1 shadow-sm cursor-pointer"
-              title="Lực cập nhật tính toán lại bảng số liệu nếu có độ trễ"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Cập nhật số liệu biểu mẫu
-            </button>
-            <button
-              onClick={handleSyncAutoPlansToWorkboard}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-lg shadow-md transition-all cursor-pointer border border-indigo-500/20 flex items-center gap-1.5 focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600"
-              title="Nút đồng bộ: Click để cập nhật và đẩy toàn bộ kế hoạch PQC/OQC/IQC/SQC tự động sinh này thành công việc chi tiết xuống Bảng Quản Lý Tác Vụ bên dưới"
-              id="btn_sync_auto_qms_workboard"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              ĐỒNG BỘ XUỐNG BẢNG TÁC VỤ
-            </button>
-            <button
-              onClick={() => handleSyncPlansToReportsSystem(false)}
-              className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-black uppercase rounded-lg shadow-md transition-all cursor-pointer border border-sky-500/20 flex items-center gap-1.5 focus:ring-2 focus:ring-offset-2 focus:ring-sky-600"
-              title="Đồng bộ kế hoạch này sang Báo cáo tuần/tháng và các phân hệ IQC, PQC, SQC"
-              id="btn_sync_to_reports_system"
-            >
-              <ArrowRightLeft className="w-3.5 h-3.5" />
-              ĐỒNG BỘ SANG BÁO CÁO & PHÂN HỆ KHÁC
-            </button>
-          </div>
         </div>
 
         {/* 2.1 PQC PLAN TABLE CARD */}
