@@ -152,6 +152,34 @@ const DEFAULT_APP_MODULES: AppModuleShowcaseItem[] = [
       'Xuất báo cáo Excel gồm sheet Tổng hợp & Chi tiết BM-KTTD-01'
     ],
     images: []
+  },
+  {
+    id: 'mod-10-daily-log',
+    order: 10,
+    title: '10. Báo cáo ngày',
+    subtitle: 'Nhật ký công việc hàng ngày & theo dõi tiến độ từng nhân sự QLCL',
+    description:
+      'Ghi nhận đầu việc phát sinh hàng ngày theo từng quy trình QMS, giao người phụ trách, cập nhật tỷ lệ hoàn thành (%) và tự động tổng hợp dữ liệu tuân thủ báo cáo ngày sang Báo cáo tuần/tháng.',
+    highlights: [
+      'Gom nhóm công việc theo ngày từ mới nhất đến cũ nhất',
+      'Theo dõi tiến độ (%) & tỷ lệ hoàn thành trung bình của phòng QLCL',
+      'Đồng bộ tự động lên chỉ số Tuân thủ Báo ngày ở Dashboard & Báo cáo tuần/tháng'
+    ],
+    images: []
+  },
+  {
+    id: 'mod-11-eco',
+    order: 11,
+    title: '11. Quản lý Thay đổi Kỹ thuật',
+    subtitle: 'Kiểm soát đề xuất & triển khai thay đổi kỹ thuật (ECO)',
+    description:
+      'Quản lý toàn bộ hồ sơ thay đổi kỹ thuật (ECO): nội dung cải tiến linh kiện/kết cấu, dòng xe áp dụng, bộ phận liên quan, trạng thái phê duyệt và lịch sử áp dụng thực tế trên dây chuyền.',
+    highlights: [
+      'Theo dõi vòng đời hồ sơ ECO từ đề xuất đến phê duyệt & áp dụng',
+      'Gắn chặt dòng xe, mã linh kiện và người chịu trách nhiệm',
+      'Tổng hợp tự động vào sheet CAPA, ECO & Công việc trong Báo cáo tuần/tháng'
+    ],
+    images: []
   }
 ];
 
@@ -160,7 +188,12 @@ function loadModules(): { list: AppModuleShowcaseItem[]; customized: boolean } {
     const raw = safeStorage.getItem(SHOWCASE_STORAGE_KEY);
     if (!raw) return { list: DEFAULT_APP_MODULES, customized: false };
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) return { list: parsed, customized: true };
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      // Bổ sung tự động các mục mặc định mới (như 10, 11) nếu chưa có trong bản đã lưu
+      const existingIds = new Set(parsed.map((x: AppModuleShowcaseItem) => x.id));
+      const missingDefaults = DEFAULT_APP_MODULES.filter((d) => !existingIds.has(d.id));
+      return { list: [...parsed, ...missingDefaults], customized: true };
+    }
     return { list: DEFAULT_APP_MODULES, customized: false };
   } catch {
     return { list: DEFAULT_APP_MODULES, customized: false };
@@ -261,7 +294,7 @@ export default function QmsAppShowcaseTab({ readOnly = false }: { readOnly?: boo
             <span>Giới Thiệu Các Chức Năng Hệ Thống DK QMS</span>
           </h2>
           <p className="text-xs text-slate-600 mt-0.5">
-            Công ty TNHH Xe điện DK Việt Nhật (DKBike) • Phòng Quản lý chất lượng (QLCL) — 9 phân hệ vận hành chính.
+            Công ty TNHH Xe điện DK Việt Nhật (DKBike) • Phòng Quản lý chất lượng (QLCL) — {modules.length} phân hệ vận hành chính.
           </p>
         </div>
 
