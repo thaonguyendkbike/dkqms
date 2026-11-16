@@ -21513,12 +21513,15 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-[11px] font-bold text-slate-700 focus:outline-none"
                         >
                           <option value="All">Tất cả nguồn gốc</option>
-                          <option value="Nội bộ">Nội bộ</option>
+                          <option value="Nội bộ xưởng / Lắp ráp">Nội bộ xưởng / Lắp ráp</option>
                           <option value="Nhà cung cấp">Nhà cung cấp</option>
-                          <option value="Sửa chữa xe">Sửa chữa xe</option>
-                          <option value="Linh kiện lỗi">Linh kiện lỗi</option>
-                          <option value="Hao phí xưởng">Hao phí xưởng</option>
+                          <option value="Thị trường / Bảo hành">Thị trường / Bảo hành</option>
+                          <option value="Phòng QLCL (Đầu tư & 5S)">Phòng QLCL (Đầu tư & 5S)</option>
                           <option value="Khác">Khác</option>
+                          <option value="Nội bộ">Nội bộ (cũ)</option>
+                          <option value="Sửa chữa xe">Sửa chữa xe (cũ)</option>
+                          <option value="Linh kiện lỗi">Linh kiện lỗi (cũ)</option>
+                          <option value="Hao phí xưởng">Hao phí xưởng (cũ)</option>
                         </select>
                       </div>
 
@@ -21536,6 +21539,11 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           <option value="Đổi trả">Đổi trả</option>
                           <option value="Dừng chuyền">Dừng chuyền</option>
                           <option value="Kiểm tra lại">Kiểm tra lại</option>
+                          <option value="Vật tư tiêu hao">Vật tư tiêu hao</option>
+                          <option value="Thiết bị & Dụng cụ đo">Thiết bị & Dụng cụ đo</option>
+                          <option value="Thiết bị văn phòng & 5S">Thiết bị văn phòng & 5S</option>
+                          <option value="Đào tạo & Tài liệu">Đào tạo & Tài liệu</option>
+                          <option value="Chi phí khác">Chi phí khác</option>
                         </select>
                       </div>
                     </div>
@@ -21590,7 +21598,11 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                       item.category === 'Bảo hành' ? 'bg-red-50 text-red-700 border-red-200' :
                                         item.category === 'Đổi trả' ? 'bg-purple-50 text-purple-700 border-purple-200' :
                                           item.category === 'Dừng chuyền' ? 'bg-rose-100 text-rose-800 border-rose-200 animate-pulse' :
-                                            'bg-slate-50 text-slate-600 border-slate-200'
+                                            item.category === 'Vật tư tiêu hao' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                              item.category === 'Thiết bị & Dụng cụ đo' ? 'bg-cyan-50 text-cyan-700 border-cyan-200' :
+                                                item.category === 'Thiết bị văn phòng & 5S' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                  item.category === 'Đào tạo & Tài liệu' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                                    'bg-slate-50 text-slate-600 border-slate-200'
                                     }`}>
                                     {item.category}
                                   </span>
@@ -25156,16 +25168,19 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     <div>
                       <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Nguồn gốc chi phí</label>
                       <select
-                        value={globalEditModal.data.costOrigin || 'Nội bộ'}
+                        value={globalEditModal.data.costOrigin || 'Nội bộ xưởng / Lắp ráp'}
                         onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, costOrigin: e.target.value } })}
                         className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-bold"
                       >
-                        <option value="Nội bộ">Nội bộ</option>
+                        <option value="Nội bộ xưởng / Lắp ráp">Nội bộ xưởng / Lắp ráp</option>
                         <option value="Nhà cung cấp">Nhà cung cấp</option>
-                        <option value="Sửa chữa xe">Sửa chữa xe</option>
-                        <option value="Linh kiện lỗi">Linh kiện lỗi</option>
-                        <option value="Hao phí xưởng">Hao phí xưởng</option>
+                        <option value="Thị trường / Bảo hành">Thị trường / Bảo hành</option>
+                        <option value="Phòng QLCL (Đầu tư & 5S)">Phòng QLCL (Đầu tư & 5S)</option>
                         <option value="Khác">Khác</option>
+                        <option value="Nội bộ">Nội bộ (cũ)</option>
+                        <option value="Sửa chữa xe">Sửa chữa xe (cũ)</option>
+                        <option value="Linh kiện lỗi">Linh kiện lỗi (cũ)</option>
+                        <option value="Hao phí xưởng">Hao phí xưởng (cũ)</option>
                       </select>
                     </div>
                     <div>
@@ -25175,12 +25190,17 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, category: e.target.value } })}
                         className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-bold"
                       >
-                        <option value="Tái chế">Tái chế</option>
                         <option value="Sửa chữa">Sửa chữa</option>
+                        <option value="Tái chế">Tái chế</option>
                         <option value="Bảo hành">Bảo hành</option>
                         <option value="Đổi trả">Đổi trả</option>
                         <option value="Dừng chuyền">Dừng chuyền</option>
                         <option value="Kiểm tra lại">Kiểm tra lại</option>
+                        <option value="Vật tư tiêu hao">Vật tư tiêu hao</option>
+                        <option value="Thiết bị & Dụng cụ đo">Thiết bị & Dụng cụ đo</option>
+                        <option value="Thiết bị văn phòng & 5S">Thiết bị văn phòng & 5S</option>
+                        <option value="Đào tạo & Tài liệu">Đào tạo & Tài liệu</option>
+                        <option value="Chi phí khác">Chi phí khác</option>
                       </select>
                     </div>
                   </div>

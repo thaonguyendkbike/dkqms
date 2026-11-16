@@ -31,8 +31,26 @@ interface CopqSpreadsheetEntryProps {
   onSaveBatch: (newItems: COPQMetric[]) => void;
 }
 
-const ORIGIN_OPTIONS = ['Nội bộ', 'Nhà cung cấp', 'Sửa chữa xe', 'Linh kiện lỗi', 'Hao phí xưởng', 'Khác'];
-const CATEGORY_OPTIONS = ['Sửa chữa', 'Tái chế', 'Bảo hành', 'Đổi trả', 'Dừng chuyền', 'Kiểm tra lại'];
+const ORIGIN_OPTIONS = [
+  'Nội bộ xưởng / Lắp ráp',
+  'Nhà cung cấp',
+  'Thị trường / Bảo hành',
+  'Phòng QLCL (Đầu tư & 5S)',
+  'Khác'
+];
+const CATEGORY_OPTIONS = [
+  'Sửa chữa',
+  'Tái chế',
+  'Bảo hành',
+  'Đổi trả',
+  'Dừng chuyền',
+  'Kiểm tra lại',
+  'Vật tư tiêu hao',
+  'Thiết bị & Dụng cụ đo',
+  'Thiết bị văn phòng & 5S',
+  'Đào tạo & Tài liệu',
+  'Chi phí khác'
+];
 
 const parseNumberVN = (raw: unknown): number => {
   if (typeof raw === 'number' && !Number.isNaN(raw)) return raw;
@@ -96,13 +114,13 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
 
   const [defaultYear, setDefaultYear] = useState<number>(currentYear);
   const [defaultMonth, setDefaultMonth] = useState<number>(currentMonth);
-  const [defaultOrigin, setDefaultOrigin] = useState<string>('Nội bộ');
+  const [defaultOrigin, setDefaultOrigin] = useState<string>('Nội bộ xưởng / Lắp ráp');
   const [defaultCategory, setDefaultCategory] = useState<string>('Sửa chữa');
 
   const [rows, setRows] = useState<CopqDraftRow[]>(() => [
-    createEmptyRow({ year: currentYear, month: currentMonth, costOrigin: 'Nội bộ', category: 'Sửa chữa' }),
-    createEmptyRow({ year: currentYear, month: currentMonth, costOrigin: 'Nội bộ', category: 'Sửa chữa' }),
-    createEmptyRow({ year: currentYear, month: currentMonth, costOrigin: 'Nội bộ', category: 'Sửa chữa' })
+    createEmptyRow({ year: currentYear, month: currentMonth, costOrigin: 'Nội bộ xưởng / Lắp ráp', category: 'Sửa chữa' }),
+    createEmptyRow({ year: currentYear, month: currentMonth, costOrigin: 'Nội bộ xưởng / Lắp ráp', category: 'Sửa chữa' }),
+    createEmptyRow({ year: currentYear, month: currentMonth, costOrigin: 'Nội bộ xưởng / Lắp ráp', category: 'Sửa chữa' })
   ]);
 
   const [showPasteBox, setShowPasteBox] = useState(false);
