@@ -42,30 +42,104 @@ export const suggestAccountingCode = (
   category?: string,
   details?: string,
   description?: string,
-  costOrigin?: string
+  _costOrigin?: string
 ): string => {
   const cat = (category || '').toLowerCase();
-  const text = `${details || ''} ${description || ''} ${costOrigin || ''}`.toLowerCase();
+  const contentText = `${details || ''} ${description || ''}`.toLowerCase();
 
-  // 1. Ưu tiên nhận diện theo từ khóa nội dung cụ thể
-  if (/kệ sách|bàn họp|tủ hồ sơ|sách|tài liệu|văn phòng|5s|đào tạo|bảng biểu/.test(text)) return 'TK 642';
-  if (/nhân công|tiền công|tăng ca|lương/.test(text)) return 'TK 622';
-  if (/bảo hành|đổi trả|thị trường|đại lý/.test(text)) return 'TK 641';
-  if (/sơn|xăng|keo|que hàn|đá mài|vật tư|linh kiện|ốc|vít|phụ tùng/.test(text)) return 'TK 621';
-  if (/led|dây chuyền|máy móc|thiết bị|dụng cụ|đồng hồ|dưỡng|khấu hao|điện|nước/.test(text)) return 'TK 627';
-
-  // 2. Fallback theo Nhóm COPQ
+  // 1. Ưu tiên nhận diện theo Nhóm COPQ rõ ràng trước
   if (cat.includes('văn phòng') || cat.includes('đào tạo')) return 'TK 642';
   if (cat.includes('bảo hành') || cat.includes('đổi trả')) return 'TK 641';
-  if (cat.includes('vật tư tiêu hao') || cat.includes('sửa chữa')) return 'TK 621';
+  if (cat.includes('vật tư tiêu hao')) return 'TK 621';
   if (cat.includes('kiểm tra lại')) return 'TK 622';
-  if (cat.includes('thiết bị') || cat.includes('tái chế') || cat.includes('dừng chuyền') || cat.includes('phát triển sản phẩm')) return 'TK 627';
+  if (cat.includes('thiết bị') || cat.includes('tái chế') || cat.includes('dừng chuyền') || cat.includes('phát triển sản phẩm')) {
+    return 'TK 627';
+  }
 
+  // 2. Nhận diện theo từ khóa nội dung & mô tả (không dùng costOrigin để tránh dính chữ "5S" -> 642)
+  if (/kệ sách|bàn họp|tủ hồ sơ|sách combo|văn phòng phẩm|đào tạo|tài liệu/.test(contentText)) return 'TK 642';
+  if (/nhân công|tiền công|tăng ca|lương/.test(contentText)) return 'TK 622';
+  if (/bảo hành|đổi trả|thị trường|đại lý/.test(contentText)) return 'TK 641';
+  if (/sơn|xăng|keo|que hàn|đá mài|vật tư|linh kiện|ốc|vít|phụ tùng/.test(contentText)) return 'TK 621';
+  if (/led|dây chuyền|máy móc|thiết bị|dụng cụ|đồng hồ|dưỡng|khấu hao|tái chế|cải tiến/.test(contentText)) return 'TK 627';
+
+  // 3. Nhóm "Sửa chữa": nếu không có từ khóa vật tư ở trên thì đưa về Sản xuất chung (627), có vật tư thì 621 ở bước 2
   return 'TK 627';
+};
+
+export const exportCopqListToExcel = (list: COPQMetric[], fileName = `Chi_Phi_COPQ_DKBike_${new Date().toISOString().slice(0, 10)}.xlsx`) => {
+  const header = [
+    'STT',
+    'Năm',
+    'Tháng',
+    'Nguồn gốc',
+    'Nhóm phân loại COPQ',
+    'TK Kế toán',
+    'NỘI DUNG / HẠNG MỤC',
+    'MÔ TẢ (nếu có)',
+    'ĐVT',
+    'SL',
+    'Đơn giá (VND)',
+    'Thành tiền (VND)',
+    'Ghi chú'
+  ];
+
+  let grandTotal = 0;
+  const rows = list.map((item, idx) => {
+    const qty = Number(item.quantity ?? 1);
+    const totalAmt =
+      item.quantity !== undefined && item.unitPrice !== undefined
+        ? qty * Number(item.unitPrice)
+        : Number(item.totalAmount ?? Number(item.amount || 0) * 1000000);
+    const unitPrice = Number(item.unitPrice ?? (qty > 0 ? totalAmt / qty : totalAmt));
+    grandTotal += totalAmt;
+    const accCode = item.accountingCode || suggestAccountingCode(item.category, item.details, item.description, item.costOrigin);
+    return [
+      idx + 1,
+      item.year ?? 2026,
+      `T${item.month ?? 7}`,
+      item.costOrigin || 'Nội bộ xưởng / Lắp ráp',
+      item.category || 'Chi phí khác',
+      accCode,
+      item.details || '',
+      item.description || '',
+      item.unit || 'Cái',
+      qty,
+      unitPrice,
+      totalAmt,
+      item.notes || ''
+    ];
+  });
+
+  const aoa = [
+    header,
+    ...rows,
+    ['', '', '', '', '', '', 'TỔNG CỘNG', '', '', '', '', grandTotal, '']
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [
+    { wch: 6 },
+    { wch: 7 },
+    { wch: 7 },
+    { wch: 24 },
+    { wch: 22 },
+    { wch: 11 },
+    { wch: 28 },
+    { wch: 26 },
+    { wch: 9 },
+    { wch: 8 },
+    { wch: 15 },
+    { wch: 17 },
+    { wch: 22 }
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Danh_Sach_COPQ');
+  XLSX.writeFile(wb, fileName);
 };
 
 interface CopqSpreadsheetEntryProps {
   onSaveBatch: (newItems: COPQMetric[]) => void;
+  exportList?: COPQMetric[];
 }
 
 const ORIGIN_OPTIONS = [
@@ -148,7 +222,7 @@ const createEmptyRow = (defaults: { year: number; month: number; costOrigin: str
   notes: ''
 });
 
-export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEntryProps) {
+export default function CopqSpreadsheetEntry({ onSaveBatch, exportList = [] }: CopqSpreadsheetEntryProps) {
   const currentYear = new Date().getFullYear() >= 2025 ? new Date().getFullYear() : 2026;
   const currentMonth = new Date().getMonth() + 1;
 
@@ -243,6 +317,10 @@ export default function CopqSpreadsheetEntry({ onSaveBatch }: CopqSpreadsheetEnt
     const activeRows = rows.filter(
       (r) => r.details.trim() || r.description.trim() || r.quantity || r.unitPrice
     );
+    if (activeRows.length === 0 && exportList.length > 0) {
+      exportCopqListToExcel(exportList);
+      return;
+    }
     const exportData =
       activeRows.length > 0
         ? activeRows.map((r) => {

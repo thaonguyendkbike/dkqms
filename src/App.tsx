@@ -124,7 +124,7 @@ import QualityPlanning, { getInitialQmsPlanningTasks } from './components/Qualit
 import OqcTvDashboard from './components/OqcTvDashboard';
 import QmsFormsCenter from './components/QmsFormsCenter';
 import { PartEvaluationsTab } from './components/PartEvaluationsTab';
-import CopqSpreadsheetEntry, { ACCOUNTING_OPTIONS, suggestAccountingCode } from './components/CopqSpreadsheetEntry';
+import CopqSpreadsheetEntry, { ACCOUNTING_OPTIONS, exportCopqListToExcel, suggestAccountingCode } from './components/CopqSpreadsheetEntry';
 import { compressBase64String, compressImageFile } from './imageCompressor';
 
 // Firebase Integrations
@@ -3723,7 +3723,7 @@ export function App() {
         'dk_capas', 'dk_ecos', 'dk_daily_logs', 'dk_iqc_records',
         'dk_pqc_records', 'dk_oqc_records', 'dk_staff', 'dk_dealers',
         'dk_defects', 'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records', 'dk_fmea', 'dk_improvement_actions', 'dk_oqc_handover_list',
-        'dk_oqc_color_changes'
+        'dk_oqc_color_changes', 'dk_copqs'
       ];
       localKeys.forEach(k => {
         // dk_oqc_records và dk_part_evaluations ưu tiên đọc từ safeStorage (memoryStore/IndexedDB)
@@ -3758,6 +3758,7 @@ export function App() {
             else if (k === 'dk_qms_bm_records') setQmsBmRecords(sanitizedParsed);
             else if (k === 'dk_fmea') setFmea(sanitizedParsed);
             else if (k === 'dk_improvement_actions') setImprovementActions(sanitizedParsed);
+            else if (k === 'dk_copqs') setCopqs(sanitizedParsed);
           } catch (e) { }
         }
       });
@@ -4194,7 +4195,11 @@ export function App() {
         setQmsBmRecords(serverData.dk_qms_bm_records);
         safeStorage.setItem('dk_qms_bm_records', JSON.stringify(serverData.dk_qms_bm_records));
       }
-      if (serverData.dk_copqs !== undefined) setCopqs(serverData.dk_copqs);
+      const isCopqsDirty = localStorage.getItem('dk_copqs_is_dirty') === 'true';
+      if (serverData.dk_copqs !== undefined && Array.isArray(serverData.dk_copqs) && !isCopqsDirty) {
+        setCopqs(serverData.dk_copqs);
+        safeStorage.setItem('dk_copqs', JSON.stringify(serverData.dk_copqs));
+      }
       if (serverData.dk_fmea !== undefined) setFmea(serverData.dk_fmea);
       if (serverData.dk_custom_forms !== undefined) setCustomForms(serverData.dk_custom_forms);
       const isModelsDirty = localStorage.getItem('dk_models_is_dirty') === 'true';
@@ -4733,7 +4738,8 @@ export function App() {
         'dk_staff',
         'dk_oqc_part_codes',
         'dk_supplier_production_audits',
-        'dk_models'
+        'dk_models',
+        'dk_copqs'
       ];
 
       STANDARD_DOC_SYNC_KEYS.forEach((key) => {
@@ -4774,6 +4780,8 @@ export function App() {
             if (list.length > 0) {
               setModels(mergeMasterModels(list, INITIAL_MODELS));
             }
+          } else if (key === 'dk_copqs') {
+            setCopqs(list);
           }
         }, (err) => {
           console.warn(`[Doc onSnapshot Warning] for ${key}:`, err);
@@ -7668,6 +7676,9 @@ export function App() {
           case 'copq': {
             const updated = copqs.filter(co => co.id !== id);
             setCopqs(updated);
+            safeStorage.setItem('dk_copqs', JSON.stringify(updated));
+            try { localStorage.setItem('dk_copqs_is_dirty', 'true'); } catch (e) { }
+            if (localDirtyKeys.current) localDirtyKeys.current.add('dk_copqs');
             syncToServer('dk_copqs', updated);
             break;
           }
@@ -21427,7 +21438,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
-                    {copqs.some((c) => !c.accountingCode) && (
+                    {copqs.length > 0 && (
                       <button
                         type="button"
                         onClick={() => {
@@ -21435,27 +21446,29 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
                             return;
                           }
-                          let filledCount = 0;
+                          let updatedCount = 0;
                           const updated = copqs.map((c) => {
-                            if (c.accountingCode) return c;
-                            filledCount++;
-                            return {
-                              ...c,
-                              accountingCode: suggestAccountingCode(c.category, c.details, c.description, c.costOrigin)
-                            };
+                            const nextAcc = suggestAccountingCode(c.category, c.details, c.description, c.costOrigin);
+                            if (c.accountingCode !== nextAcc) updatedCount++;
+                            return { ...c, accountingCode: nextAcc };
                           });
                           setCopqs(updated);
                           safeStorage.setItem('dk_copqs', JSON.stringify(updated));
                           try { localStorage.setItem('dk_copqs_is_dirty', 'true'); } catch (e) { }
                           if (localDirtyKeys.current) localDirtyKeys.current.add('dk_copqs');
                           syncToServer('dk_copqs', updated);
-                          triggerToast(`Đã tự động điền TK Kế toán cho ${filledCount} bản ghi chi phí`, 'success');
+                          triggerToast(
+                            updatedCount > 0
+                              ? `Đã chuẩn hóa lại TK Kế toán cho ${updatedCount} bản ghi chi phí`
+                              : 'Tất cả bản ghi đã có TK Kế toán chuẩn xác',
+                            'success'
+                          );
                         }}
                         className="px-3.5 py-2 rounded-xl border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-                        title="Tự động phân loại và gán TK Kế toán (621, 622, 627, 641, 642) cho các bản ghi chưa có"
+                        title="Kiểm tra và chuẩn hóa lại TK Kế toán (621, 622, 627, 641, 642) cho toàn bộ bản ghi"
                       >
                         <Sparkles className="w-4 h-4" />
-                        <span>Tự động điền TK Kế toán ({copqs.filter((c) => !c.accountingCode).length})</span>
+                        <span>Chuẩn hóa TK Kế toán</span>
                       </button>
                     )}
                     <button
@@ -21793,6 +21806,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 {/* Bảng nhập liệu COPQ dạng cột-hàng & Nhập hàng loạt từ Excel (ẩn/hiện theo nút) */}
                 {showCopqEntry && (
                   <CopqSpreadsheetEntry
+                    exportList={filteredCopqs}
                     onSaveBatch={(newItems) => {
                       if (!isUserAuthorized()) {
                         safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
@@ -21813,13 +21827,24 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden" id="copq_database_list">
                   {/* Filter header */}
                   <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex flex-col lg:flex-row justify-between lg:items-center gap-4">
-                    <div>
-                      <h4 className="text-xs font-black text-slate-700 uppercase flex items-center gap-1.5">
-                        📂 DANH SÁCH LƯU TRỮ VÀ QUẢN LÝ CHI PHÍ CHẤT LƯỢNG COPQ
-                      </h4>
-                      <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
-                        Hiển thị {filteredCopqs.length} hồ sơ trong cơ sở dữ liệu
-                      </p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div>
+                        <h4 className="text-xs font-black text-slate-700 uppercase flex items-center gap-1.5">
+                          📂 DANH SÁCH LƯU TRỮ VÀ QUẢN LÝ CHI PHÍ CHẤT LƯỢNG COPQ
+                        </h4>
+                        <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                          Hiển thị {filteredCopqs.length} hồ sơ trong cơ sở dữ liệu
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => exportCopqListToExcel(filteredCopqs)}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
+                        title="Tải toàn bộ danh sách đang lọc ra file Excel (.xlsx)"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Xuất Excel ({filteredCopqs.length})</span>
+                      </button>
                     </div>
 
                     {/* Filter controls */}
