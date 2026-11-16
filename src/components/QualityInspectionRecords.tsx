@@ -10076,7 +10076,8 @@ return (
               if (b > 0) {
                 addRow([], 'empty');
               }
-              for (let r = 0; r < 50; r++) {
+              const rowsInBlock = Math.min(50, Math.max(1, totalCars - b * 100));
+              for (let r = 0; r < rowsInBlock; r++) {
                 const leftIdx = b * 100 + r;
                 const rightIdx = b * 100 + 50 + r;
                 const leftItem = leftIdx < totalCars ? filteredHandoverList[leftIdx] : null;
@@ -10088,7 +10089,7 @@ return (
                   ? getStandardColorWithPrefix(leftItem.color, leftItem.model, leftItem.partCode, lookupPartCode)
                   : "";
 
-                const rightStt = rightIdx + 1;
+                const rightStt = rightItem ? rightIdx + 1 : "";
                 const rightSerial = rightItem ? rightItem.serialNo : "";
                 const rightColor = rightItem
                   ? getStandardColorWithPrefix(rightItem.color, rightItem.model, rightItem.partCode, lookupPartCode)
@@ -10102,10 +10103,8 @@ return (
               }
             }
 
-            // 9 dòng trống phân cách giữa Phần I và Phần II theo đúng mẫu
-            for (let i = 0; i < 9; i++) {
-              addRow([], 'empty');
-            }
+            // 1 dòng trống phân cách gọn giữa Phần I và Phần II
+            addRow([], 'empty');
 
             // 3. PHẦN II: XÁC NHẬN BÀN GIAO & TIẾP NHẬN
             const rSec2 = addRow(["II. XÁC NHẬN BÀN GIAO & TIẾP NHẬN"], 'section-header');
