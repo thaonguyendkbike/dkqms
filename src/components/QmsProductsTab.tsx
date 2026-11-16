@@ -731,7 +731,7 @@ function loadProducts(): { list: ProductSpecItem[]; customized: boolean } {
   }
 }
 
-export default function QmsProductsTab() {
+export default function QmsProductsTab({ readOnly = false }: { readOnly?: boolean }) {
   const initial = useMemo(() => loadProducts(), []);
   const [products, setProducts] = useState<ProductSpecItem[]>(initial.list);
   const [hasCustomEdits, setHasCustomEdits] = useState<boolean>(initial.customized);
@@ -936,7 +936,7 @@ export default function QmsProductsTab() {
               />
             </div>
 
-            {hasCustomEdits && (
+            {!readOnly && hasCustomEdits && (
               <button
                 type="button"
                 onClick={handleResetDefault}
@@ -948,14 +948,16 @@ export default function QmsProductsTab() {
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Thêm SP</span>
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-2xs transition cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Thêm SP</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1041,23 +1043,27 @@ export default function QmsProductsTab() {
                           <Eye className="w-3.5 h-3.5" />
                           <span>Chi tiết</span>
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(item)}
-                          className="py-1.5 px-2.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
-                          title="Chỉnh sửa thông số & ảnh"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                          <span>Sửa</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(item)}
-                          className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 cursor-pointer"
-                          title="Xóa"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {!readOnly && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(item)}
+                              className="py-1.5 px-2.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                              title="Chỉnh sửa thông số & ảnh"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              <span>Sửa</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(item)}
+                              className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 cursor-pointer"
+                              title="Xóa"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1120,14 +1126,16 @@ export default function QmsProductsTab() {
                               >
                                 {item.name}
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => openEditModal(item)}
-                                className="p-1 rounded hover:bg-indigo-50 text-indigo-600 cursor-pointer"
-                                title={`Sửa ${item.name}`}
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </button>
+                              {!readOnly && (
+                                <button
+                                  type="button"
+                                  onClick={() => openEditModal(item)}
+                                  className="p-1 rounded hover:bg-indigo-50 text-indigo-600 cursor-pointer"
+                                  title={`Sửa ${item.name}`}
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         </th>
@@ -1201,14 +1209,16 @@ export default function QmsProductsTab() {
                               >
                                 {item.name}
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => openEditModal(item)}
-                                className="p-1 rounded hover:bg-indigo-50 text-indigo-600 cursor-pointer"
-                                title={`Sửa ${item.name}`}
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </button>
+                              {!readOnly && (
+                                <button
+                                  type="button"
+                                  onClick={() => openEditModal(item)}
+                                  className="p-1 rounded hover:bg-indigo-50 text-indigo-600 cursor-pointer"
+                                  title={`Sửa ${item.name}`}
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         </th>
@@ -1321,14 +1331,16 @@ export default function QmsProductsTab() {
             </div>
 
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-200 bg-slate-50 sticky bottom-0">
-              <button
-                type="button"
-                onClick={() => openEditModal(detailItem)}
-                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                <span>Chỉnh sửa / Đổi ảnh</span>
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => openEditModal(detailItem)}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  <span>Chỉnh sửa / Đổi ảnh</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setDetailItem(null)}

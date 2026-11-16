@@ -779,7 +779,7 @@ type EditingTarget =
   | { kind: 'ab'; index: number | null; draft: VehicleGuideABRow }
   | { kind: 'cd'; index: number | null; draft: VehicleGuideCDRow };
 
-export default function QmsStandardsTab() {
+export default function QmsStandardsTab({ readOnly = false }: { readOnly?: boolean }) {
   const [section, setSection] = useState<StandardMainSection>('sample_eval');
   const [vehicleSub, setVehicleSub] = useState<VehicleSubFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -1177,15 +1177,17 @@ export default function QmsStandardsTab() {
 
             {section !== 'parts_link' && (
               <>
-                <button
-                  type="button"
-                  onClick={openAddModal}
-                  className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Thêm dòng</span>
-                </button>
-                {hasCustomEdits && (
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={openAddModal}
+                    className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Thêm dòng</span>
+                  </button>
+                )}
+                {!readOnly && hasCustomEdits && (
                   <button
                     type="button"
                     onClick={handleResetDefault}
@@ -1272,20 +1274,22 @@ export default function QmsStandardsTab() {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setDraftLink(partsLink);
-                setEditingLink((v) => !v);
-              }}
-              className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-              <span>{partsLink ? 'Đổi link' : 'Gắn link'}</span>
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDraftLink(partsLink);
+                  setEditingLink((v) => !v);
+                }}
+                className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>{partsLink ? 'Đổi link' : 'Gắn link'}</span>
+              </button>
+            )}
           </div>
 
-          {editingLink && (
+          {!readOnly && editingLink && (
             <form onSubmit={handleSavePartsLink} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
               <label className="block text-xs font-bold text-slate-700">
                 Nhập đường dẫn (URL) tài liệu Tiêu chuẩn linh kiện:
@@ -1371,7 +1375,7 @@ export default function QmsStandardsTab() {
                   <th className="border border-slate-400 px-2.5 py-2 w-32 text-center">Phương pháp</th>
                   <th className="border border-slate-400 px-2 py-2 w-20 text-center">Kết quả</th>
                   <th className="border border-slate-400 px-2.5 py-2 w-36 text-left">Đánh giá / Vấn đề</th>
-                  <th className="border border-slate-400 px-2 py-2 w-14 text-center">Sửa</th>
+                  {!readOnly && <th className="border border-slate-400 px-2 py-2 w-14 text-center">Sửa</th>}
                 </tr>
               </thead>
               <tbody>
@@ -1381,7 +1385,7 @@ export default function QmsStandardsTab() {
                   return (
                     <React.Fragment key={grp}>
                       <tr className="bg-indigo-50 text-indigo-950 font-extrabold">
-                        <td colSpan={9} className="border border-slate-400 px-3 py-2 text-xs uppercase">
+                        <td colSpan={readOnly ? 8 : 9} className="border border-slate-400 px-3 py-2 text-xs uppercase">
                           {rows[0].row.groupTitle}
                         </td>
                       </tr>
@@ -1407,16 +1411,18 @@ export default function QmsStandardsTab() {
                           </td>
                           <td className="border border-slate-400 px-2 py-2" />
                           <td className="border border-slate-400 px-2.5 py-2" />
-                          <td className="border border-slate-400 px-1.5 py-1.5 text-center align-top">
-                            <button
-                              type="button"
-                              onClick={() => setEditingTarget({ kind: 'sample', index: origIdx, draft: { ...r } })}
-                              className="p-1.5 rounded-md hover:bg-indigo-50 text-slate-500 hover:text-indigo-700 transition cursor-pointer"
-                              title="Chỉnh sửa dòng tiêu chuẩn này"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
+                          {!readOnly && (
+                            <td className="border border-slate-400 px-1.5 py-1.5 text-center align-top">
+                              <button
+                                type="button"
+                                onClick={() => setEditingTarget({ kind: 'sample', index: origIdx, draft: { ...r } })}
+                                className="p-1.5 rounded-md hover:bg-indigo-50 text-slate-500 hover:text-indigo-700 transition cursor-pointer"
+                                title="Chỉnh sửa dòng tiêu chuẩn này"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </React.Fragment>
@@ -1424,7 +1430,7 @@ export default function QmsStandardsTab() {
                 })}
                 {filteredSampleRows.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="border border-slate-400 p-6 text-center text-slate-500">
+                    <td colSpan={readOnly ? 8 : 9} className="border border-slate-400 p-6 text-center text-slate-500">
                       Không tìm thấy hạng mục nào khớp với từ khóa "{searchQuery}".
                     </td>
                   </tr>
@@ -1538,7 +1544,7 @@ export default function QmsStandardsTab() {
                           <th className="border border-slate-400 px-2.5 py-2 w-36 text-center">Tần suất KT</th>
                           <th className="border border-slate-400 px-2 py-2 w-20 text-center">Kết quả KT</th>
                           <th className="border border-slate-400 px-2 py-2 w-28 text-left">Ghi chú</th>
-                          <th className="border border-slate-400 px-2 py-2 w-14 text-center">Sửa</th>
+                          {!readOnly && <th className="border border-slate-400 px-2 py-2 w-14 text-center">Sửa</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -1564,16 +1570,18 @@ export default function QmsStandardsTab() {
                             </td>
                             <td className="border border-slate-400 px-2 py-2" />
                             <td className="border border-slate-400 px-2 py-2" />
-                            <td className="border border-slate-400 px-1.5 py-1.5 text-center align-top">
-                              <button
-                                type="button"
-                                onClick={() => setEditingTarget({ kind: 'ab', index: origIdx, draft: { ...r } })}
-                                className="p-1.5 rounded-md hover:bg-indigo-50 text-slate-500 hover:text-indigo-700 transition cursor-pointer"
-                                title="Chỉnh sửa dòng tiêu chuẩn này"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
+                            {!readOnly && (
+                              <td className="border border-slate-400 px-1.5 py-1.5 text-center align-top">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingTarget({ kind: 'ab', index: origIdx, draft: { ...r } })}
+                                  className="p-1.5 rounded-md hover:bg-indigo-50 text-slate-500 hover:text-indigo-700 transition cursor-pointer"
+                                  title="Chỉnh sửa dòng tiêu chuẩn này"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -1605,7 +1613,7 @@ export default function QmsStandardsTab() {
                           <th className="border border-slate-400 px-3 py-2 text-left">Tiêu chuẩn</th>
                           <th className="border border-slate-400 px-2.5 py-2 w-32 text-center">Kết quả KT</th>
                           <th className="border border-slate-400 px-2.5 py-2 w-40 text-left">Ghi chú</th>
-                          <th className="border border-slate-400 px-2 py-2 w-14 text-center">Sửa</th>
+                          {!readOnly && <th className="border border-slate-400 px-2 py-2 w-14 text-center">Sửa</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -1622,16 +1630,18 @@ export default function QmsStandardsTab() {
                             </td>
                             <td className="border border-slate-400 px-2.5 py-2" />
                             <td className="border border-slate-400 px-2.5 py-2" />
-                            <td className="border border-slate-400 px-1.5 py-1.5 text-center align-top">
-                              <button
-                                type="button"
-                                onClick={() => setEditingTarget({ kind: 'cd', index: origIdx, draft: { ...r } })}
-                                className="p-1.5 rounded-md hover:bg-indigo-50 text-slate-500 hover:text-indigo-700 transition cursor-pointer"
-                                title="Chỉnh sửa dòng tiêu chuẩn này"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                            </td>
+                            {!readOnly && (
+                              <td className="border border-slate-400 px-1.5 py-1.5 text-center align-top">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingTarget({ kind: 'cd', index: origIdx, draft: { ...r } })}
+                                  className="p-1.5 rounded-md hover:bg-indigo-50 text-slate-500 hover:text-indigo-700 transition cursor-pointer"
+                                  title="Chỉnh sửa dòng tiêu chuẩn này"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>

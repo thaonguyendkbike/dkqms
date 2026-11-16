@@ -12759,6 +12759,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
       return (
         <div className="w-full h-full min-h-screen overflow-y-auto overflow-x-hidden bg-slate-50">
           <QmsFormsCenter
+            readOnly={true}
             bmRecords={qmsBmRecords}
             onSaveBmRecord={handleSaveQmsBmRecord}
             onDeleteBmRecord={handleDeleteQmsBmRecord}
