@@ -5378,6 +5378,8 @@ export function App() {
   const [copqFilterCategory, setCopqFilterCategory] = useState<string>('All');
   const [copqFilterOrigin, setCopqFilterOrigin] = useState<string>('All');
   const [showCopqDashboard, setShowCopqDashboard] = useState<boolean>(true);
+  const [showCopqEntry, setShowCopqEntry] = useState<boolean>(false);
+  const [copqPage, setCopqPage] = useState<number>(1);
   const [fmea, setFmea] = useState<FMEARecord[]>(() => getSavedState('dk_fmea', INITIAL_FMEA));
   const [customForms, setCustomForms] = useState<CustomForm[]>(() => getSavedState('dk_custom_forms', INITIAL_FORMS));
   const [staff, setStaff] = useState<QualityStaff[]>(() => {
@@ -21402,6 +21404,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             }, 0);
 
             const totalFilteredMillion = Number((totalFilteredVND / 1000000).toFixed(6));
+            const copqPageSize = 20;
+            const copqTotalPages = Math.max(1, Math.ceil(filteredCopqs.length / copqPageSize));
+            const safeCopqPage = Math.min(copqPage, copqTotalPages);
+            const pagedCopqs = filteredCopqs.slice((safeCopqPage - 1) * copqPageSize, safeCopqPage * copqPageSize);
 
             return (
               <div className="space-y-6" id="view_copq_content">
@@ -21417,6 +21423,18 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowCopqEntry((v) => !v)}
+                      className={`px-3.5 py-2 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shadow-2xs ${
+                        showCopqEntry
+                          ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                          : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                      }`}
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{showCopqEntry ? 'Ẩn bảng nhập' : 'Nhập chi phí'}</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => setShowCopqDashboard((v) => !v)}
@@ -21474,14 +21492,30 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     .sort((a, b) => b.vnd - a.vnd);
                   const grandVnd = Math.max(1, catStats.reduce((s, x) => s + x.vnd, 0));
 
+                  const pieColors = [
+                    '#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4',
+                    '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#64748b'
+                  ];
+
+                  const formatCompactVnd = (vnd: number) => {
+                    if (vnd >= 1000000) return `${(vnd / 1000000).toFixed(1)}Tr`;
+                    if (vnd >= 1000) return `${Math.round(vnd / 1000)}K`;
+                    return `${vnd}`;
+                  };
+
+                  // SVG Donut slices (radius 56, circumference = 2 * pi * 56)
+                  const radius = 56;
+                  const circumference = 2 * Math.PI * radius;
+                  let cumulativeRatio = 0;
+
                   return (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      {/* 1. Chi phí theo tháng */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                      {/* 1. Biểu đồ cột: Chi phí theo tháng */}
+                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col justify-between space-y-4">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                           <div>
                             <h3 className="text-xs font-black text-slate-800 uppercase">
-                              Chi Phí Theo Tháng (T1 – T12)
+                              Biểu Đồ Cột — Chi Phí Theo Tháng (T1 – T12)
                             </h3>
                             <p className="text-[11px] text-slate-500">
                               Tính theo {filteredCopqs.length} khoản đang lọc • Tổng: {totalFilteredVND.toLocaleString('vi-VN')} đ
@@ -21489,22 +21523,28 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           </div>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="h-56 flex items-end justify-between gap-1.5 sm:gap-2 pt-6 pb-1 px-1 border-b border-slate-200">
                           {monthlyTotals.map((m) => {
-                            const pct = m.vnd > 0 ? Math.max(4, Math.round((m.vnd / maxMonthVnd) * 100)) : 0;
+                            const heightPct = m.vnd > 0 ? Math.max(6, Math.round((m.vnd / maxMonthVnd) * 100)) : 0;
                             return (
-                              <div key={m.month} className="flex items-center gap-2.5 text-xs">
-                                <span className="w-8 font-mono font-bold text-slate-600 shrink-0">T{m.month}</span>
-                                <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden">
-                                  {pct > 0 && (
-                                    <div
-                                      className="h-full bg-indigo-600 rounded-full transition-all"
-                                      style={{ width: `${pct}%` }}
-                                    />
-                                  )}
+                              <div
+                                key={m.month}
+                                className="flex-1 h-full flex flex-col items-center justify-end gap-1 group"
+                                title={`Tháng ${m.month}: ${m.vnd.toLocaleString('vi-VN')} VNĐ`}
+                              >
+                                <span className="text-[9px] font-mono font-bold text-indigo-700 leading-none">
+                                  {m.vnd > 0 ? formatCompactVnd(m.vnd) : ''}
+                                </span>
+                                <div className="w-full max-w-[28px] flex-1 flex items-end justify-center">
+                                  <div
+                                    className={`w-full rounded-t-md transition-all ${
+                                      m.vnd > 0 ? 'bg-indigo-600 group-hover:bg-indigo-500 shadow-2xs' : 'bg-slate-100 h-1'
+                                    }`}
+                                    style={m.vnd > 0 ? { height: `${heightPct}%` } : undefined}
+                                  />
                                 </div>
-                                <span className="w-28 text-right font-mono font-bold text-slate-800 shrink-0">
-                                  {m.vnd > 0 ? `${m.vnd.toLocaleString('vi-VN')} đ` : '—'}
+                                <span className="text-[10px] font-mono font-bold text-slate-600 pt-1">
+                                  T{m.month}
                                 </span>
                               </div>
                             );
@@ -21512,12 +21552,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         </div>
                       </div>
 
-                      {/* 2. Chi phí theo Nhóm phân loại COPQ */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                      {/* 2. Biểu đồ tròn: Chi phí theo Nhóm phân loại COPQ */}
+                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
                           <div>
                             <h3 className="text-xs font-black text-slate-800 uppercase">
-                              Chi Phí Theo Nhóm Phân Loại COPQ
+                              Biểu Đồ Tròn — Chi Phí Theo Nhóm Phân Loại COPQ
                             </h3>
                             <p className="text-[11px] text-slate-500">
                               Phân bổ tỷ trọng theo {catStats.length} nhóm phát sinh
@@ -21526,36 +21566,76 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         </div>
 
                         {catStats.length === 0 ? (
-                          <div className="py-12 text-center text-xs text-slate-400 italic">
+                          <div className="py-16 text-center text-xs text-slate-400 italic">
                             Chưa có dữ liệu chi phí trong bộ lọc hiện tại.
                           </div>
                         ) : (
-                          <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
-                            {catStats.map((c) => {
-                              const sharePct = Math.round((c.vnd / grandVnd) * 100);
-                              return (
-                                <div key={c.category} className="space-y-1 text-xs">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-1.5 min-w-0">
+                          <div className="flex flex-col sm:flex-row items-center gap-5">
+                            {/* SVG Donut Chart */}
+                            <div className="relative w-44 h-44 shrink-0 flex items-center justify-center">
+                              <svg viewBox="0 0 160 160" className="w-full h-full -rotate-90">
+                                <circle
+                                  cx="80"
+                                  cy="80"
+                                  r={radius}
+                                  fill="transparent"
+                                  stroke="#f1f5f9"
+                                  strokeWidth="26"
+                                />
+                                {catStats.map((c, idx) => {
+                                  const ratio = c.vnd / grandVnd;
+                                  const dashLength = ratio * circumference;
+                                  const dashOffset = -cumulativeRatio * circumference;
+                                  cumulativeRatio += ratio;
+                                  return (
+                                    <circle
+                                      key={c.category}
+                                      cx="80"
+                                      cy="80"
+                                      r={radius}
+                                      fill="transparent"
+                                      stroke={pieColors[idx % pieColors.length]}
+                                      strokeWidth="26"
+                                      strokeDasharray={`${dashLength} ${circumference}`}
+                                      strokeDashoffset={dashOffset}
+                                    >
+                                      <title>{`${c.category}: ${c.vnd.toLocaleString('vi-VN')} đ (${Math.round(ratio * 100)}%)`}</title>
+                                    </circle>
+                                  );
+                                })}
+                              </svg>
+                              <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-4">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase">Tổng lọc</span>
+                                <span className="text-xs font-black text-slate-900 font-mono">
+                                  {formatCompactVnd(grandVnd)}
+                                </span>
+                                <span className="text-[10px] text-slate-500">{catStats.length} nhóm</span>
+                              </div>
+                            </div>
+
+                            {/* Legend */}
+                            <div className="flex-1 w-full space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                              {catStats.map((c, idx) => {
+                                const sharePct = Math.round((c.vnd / grandVnd) * 100);
+                                const color = pieColors[idx % pieColors.length];
+                                return (
+                                  <div key={c.category} className="flex items-center justify-between gap-2 text-xs">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span
+                                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                                        style={{ backgroundColor: color }}
+                                      />
                                       <span className="font-bold text-slate-800 truncate">{c.category}</span>
-                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-bold">
-                                        {c.count} khoản
-                                      </span>
+                                      <span className="text-[10px] text-slate-400 shrink-0">({c.count})</span>
                                     </div>
-                                    <div className="font-mono font-black text-slate-900 shrink-0">
+                                    <div className="font-mono font-bold text-slate-900 shrink-0">
                                       {c.vnd.toLocaleString('vi-VN')} đ{' '}
-                                      <span className="text-[10px] font-bold text-indigo-600">({sharePct}%)</span>
+                                      <span className="text-[10px] text-indigo-600">{sharePct}%</span>
                                     </div>
                                   </div>
-                                  <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                                    <div
-                                      className="h-full bg-emerald-600 rounded-full transition-all"
-                                      style={{ width: `${Math.max(3, sharePct)}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -21563,22 +21643,24 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   );
                 })()}
 
-                {/* Bảng nhập liệu COPQ dạng cột-hàng & Nhập hàng loạt từ Excel */}
-                <CopqSpreadsheetEntry
-                  onSaveBatch={(newItems) => {
-                    if (!isUserAuthorized()) {
-                      safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
-                      return;
-                    }
-                    const updated = [...newItems, ...copqs];
-                    setCopqs(updated);
-                    safeStorage.setItem('dk_copqs', JSON.stringify(updated));
-                    try { localStorage.setItem('dk_copqs_is_dirty', 'true'); } catch (e) { }
-                    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_copqs');
-                    syncToServer('dk_copqs', updated);
-                    triggerToast(`Đã lưu ${newItems.length} dòng chi phí COPQ mới vào hệ thống`, 'success');
-                  }}
-                />
+                {/* Bảng nhập liệu COPQ dạng cột-hàng & Nhập hàng loạt từ Excel (ẩn/hiện theo nút) */}
+                {showCopqEntry && (
+                  <CopqSpreadsheetEntry
+                    onSaveBatch={(newItems) => {
+                      if (!isUserAuthorized()) {
+                        safeAlert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
+                        return;
+                      }
+                      const updated = [...newItems, ...copqs];
+                      setCopqs(updated);
+                      safeStorage.setItem('dk_copqs', JSON.stringify(updated));
+                      try { localStorage.setItem('dk_copqs_is_dirty', 'true'); } catch (e) { }
+                      if (localDirtyKeys.current) localDirtyKeys.current.add('dk_copqs');
+                      syncToServer('dk_copqs', updated);
+                      triggerToast(`Đã lưu ${newItems.length} dòng chi phí COPQ mới vào hệ thống`, 'success');
+                    }}
+                  />
+                )}
 
                 {/* Filters and Table list */}
                 <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden" id="copq_database_list">
@@ -21700,21 +21782,21 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-semibold">
-                        {filteredCopqs.length === 0 ? (
+                        {pagedCopqs.length === 0 ? (
                           <tr>
                             <td colSpan={13} className="p-8 text-center text-slate-400 font-medium italic">
                               Không tìm thấy bản ghi chi phí COPQ nào phù hợp với bộ lọc hiện tại.
                             </td>
                           </tr>
                         ) : (
-                          filteredCopqs.map((item, index) => {
+                          pagedCopqs.map((item, index) => {
                             const calculatedTotal = (item.quantity !== undefined && item.unitPrice !== undefined)
                               ? item.quantity * item.unitPrice
                               : (item.totalAmount ?? (item.amount * 1000000));
 
                             return (
                               <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="p-3 text-center text-slate-400 font-mono text-[11px]">{index + 1}</td>
+                                <td className="p-3 text-center text-slate-400 font-mono text-[11px]">{(safeCopqPage - 1) * copqPageSize + index + 1}</td>
                                 <td className="p-3 text-center text-slate-600 font-mono">{item.year ?? 2026}</td>
                                 <td className="p-3 text-center text-slate-600 font-mono">T{item.month ?? 7}</td>
                                 <td className="p-3">
@@ -21790,11 +21872,38 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     </table>
                   </div>
 
-                  {/* Table summary footer */}
-                  <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-2">
+                  {/* Table summary footer & pagination (tối đa 20 dòng/trang) */}
+                  <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-3">
                     <span className="text-[11px] text-slate-500 font-bold">
-                      Hiển thị {filteredCopqs.length} dòng dữ liệu chất lượng
+                      {filteredCopqs.length === 0
+                        ? 'Hiển thị 0 dòng dữ liệu'
+                        : `Hiển thị ${(safeCopqPage - 1) * copqPageSize + 1}–${Math.min(safeCopqPage * copqPageSize, filteredCopqs.length)} / ${filteredCopqs.length} dòng (20 dòng/trang)`}
                     </span>
+
+                    {copqTotalPages > 1 && (
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <button
+                          type="button"
+                          disabled={safeCopqPage <= 1}
+                          onClick={() => setCopqPage((p) => Math.max(1, p - 1))}
+                          className="px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold disabled:opacity-40 cursor-pointer"
+                        >
+                          Trước
+                        </button>
+                        <span className="px-2.5 py-1 font-mono font-bold text-slate-700">
+                          Trang {safeCopqPage} / {copqTotalPages}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={safeCopqPage >= copqTotalPages}
+                          onClick={() => setCopqPage((p) => Math.min(copqTotalPages, p + 1))}
+                          className="px-2.5 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold disabled:opacity-40 cursor-pointer"
+                        >
+                          Sau
+                        </button>
+                      </div>
+                    )}
+
                     <span className="text-xs font-extrabold text-[#0213b0]">
                       Tổng tiền lọc: {totalFilteredVND.toLocaleString('vi-VN')} VND (= {totalFilteredMillion.toFixed(4)} Tr VNĐ)
                     </span>
