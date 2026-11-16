@@ -4424,6 +4424,7 @@ export default function QualityInspectionRecords({
     return Array.from(new Set(handoverScannedList.map(x => x.model).filter(Boolean))).sort();
   }, [handoverScannedList]);
 
+  const handoverExportHandlerRef = useRef<(() => void) | null>(null);
   const filteredHandoverList = useMemo(() => {
     return handoverScannedList.filter(item => {
       if (handoverFilterDate !== 'All') {
@@ -8000,7 +8001,11 @@ return (
             } else if (qcMainSubTab === 'pqc') {
               handleExportPqcCSV();
             } else if (qcMainSubTab === 'oqc') {
-              handleExportOqcCSV();
+              if (oqcSubView === 'handover' && handoverExportHandlerRef.current) {
+                handoverExportHandlerRef.current();
+              } else {
+                handleExportOqcCSV();
+              }
             } else if (qcMainSubTab === 'color_change') {
               handleExportColorChangeCSV();
             } else {
@@ -10315,6 +10320,7 @@ return (
             XLSXStyle.utils.book_append_sheet(wb, ws, "Ban_Giao_Kho");
             XLSXStyle.writeFile(wb, `DKBike_Ban_Giao_Kho_${safeDateStr}.xlsx`);
           };
+          handoverExportHandlerRef.current = handleExportHandoverExcelLocal;
 
           const handleCopyHandoverTextLocal = () => {
             if (filteredHandoverList.length === 0) return;
