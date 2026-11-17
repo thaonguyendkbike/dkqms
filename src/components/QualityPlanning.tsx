@@ -838,217 +838,152 @@ export default function QualityPlanning({
   const weekSuffix = `${selectedYear}_M${selectedMonth}_${selectedWeek}`;
   const monthSuffix = `${selectedYear}_M${selectedMonth}`;
 
-  // 1. Weekly Assembly Support State
-  const [weeklyAssembly, setWeeklyAssemblyState] = useState<{ [model: string]: { [day: string]: number } }>(() => {
+  // Ưu tiên đọc từ khóa tổng hợp đồng bộ Cloud (*_all[suffix]) trước, sau đó mới fallback sang khóa lẻ cục bộ
+  const loadPlanningPeriodData = <T,>(
+    allKey: string,
+    suffixKey: string,
+    legacyKey: string,
+    suffix: string,
+    fallback: () => T
+  ): T => {
     try {
-      const saved = localStorage.getItem(`dk_weekly_assembly_${weekSuffix}`);
-      if (saved) return JSON.parse(saved);
-      const savedAll = localStorage.getItem('dk_weekly_assemblies_all');
+      const savedAll = localStorage.getItem(allKey);
       if (savedAll) {
-        const parsed = JSON.parse(savedAll);
-        if (parsed[weekSuffix]) return parsed[weekSuffix];
+        const parsedAll = JSON.parse(savedAll);
+        if (parsedAll && typeof parsedAll === 'object' && parsedAll[suffix] !== undefined) {
+          return parsedAll[suffix];
+        }
       }
-      const oldLegacy = localStorage.getItem('dk_weekly_assembly');
+      const saved = localStorage.getItem(suffixKey);
+      if (saved) return JSON.parse(saved);
+      const oldLegacy = localStorage.getItem(legacyKey);
       if (oldLegacy) return JSON.parse(oldLegacy);
     } catch (e) {}
-    return getDefaultWeeklyAssembly(defaultYear, defaultMonth, defaultWeek, DEFAULT_MODELS.map(m => m.name));
-  });
+    return fallback();
+  };
+
+  // 1. Weekly Assembly Support State
+  const [weeklyAssembly, setWeeklyAssemblyState] = useState<{ [model: string]: { [day: string]: number } }>(() =>
+    loadPlanningPeriodData(
+      'dk_weekly_assemblies_all',
+      `dk_weekly_assembly_${weekSuffix}`,
+      'dk_weekly_assembly',
+      weekSuffix,
+      () => getDefaultWeeklyAssembly(defaultYear, defaultMonth, defaultWeek, DEFAULT_MODELS.map(m => m.name))
+    )
+  );
 
   // 2. Monthly Assembly Support State
-  const [monthlyAssembly, setMonthlyAssemblyState] = useState<{ [model: string]: { [week: string]: number } }>(() => {
-    try {
-      const saved = localStorage.getItem(`dk_monthly_assembly_${monthSuffix}`);
-      if (saved) return JSON.parse(saved);
-      const savedAll = localStorage.getItem('dk_monthly_assemblies_all');
-      if (savedAll) {
-        const parsed = JSON.parse(savedAll);
-        if (parsed[monthSuffix]) return parsed[monthSuffix];
-      }
-      const oldLegacy = localStorage.getItem('dk_monthly_assembly');
-      if (oldLegacy) return JSON.parse(oldLegacy);
-    } catch (e) {}
-    return getDefaultMonthlyAssembly(defaultYear, defaultMonth, DEFAULT_MODELS.map(m => m.name));
-  });
+  const [monthlyAssembly, setMonthlyAssemblyState] = useState<{ [model: string]: { [week: string]: number } }>(() =>
+    loadPlanningPeriodData(
+      'dk_monthly_assemblies_all',
+      `dk_monthly_assembly_${monthSuffix}`,
+      'dk_monthly_assembly',
+      monthSuffix,
+      () => getDefaultMonthlyAssembly(defaultYear, defaultMonth, DEFAULT_MODELS.map(m => m.name))
+    )
+  );
 
   // 3. Weekly Supply Support State
-  const [weeklySupply, setWeeklySupplyState] = useState<{ [supplier: string]: { [day: string]: string } }>(() => {
-    try {
-      const saved = localStorage.getItem(`dk_weekly_supply_${weekSuffix}`);
-      if (saved) return JSON.parse(saved);
-      const savedAll = localStorage.getItem('dk_weekly_supplies_all');
-      if (savedAll) {
-        const parsed = JSON.parse(savedAll);
-        if (parsed[weekSuffix]) return parsed[weekSuffix];
-      }
-      const oldLegacy = localStorage.getItem('dk_weekly_supply');
-      if (oldLegacy) return JSON.parse(oldLegacy);
-    } catch (e) {}
-    return getDefaultWeeklySupply(defaultYear, defaultMonth, defaultWeek, DEFAULT_SUPPLIERS.map(s => s.name));
-  });
+  const [weeklySupply, setWeeklySupplyState] = useState<{ [supplier: string]: { [day: string]: string } }>(() =>
+    loadPlanningPeriodData(
+      'dk_weekly_supplies_all',
+      `dk_weekly_supply_${weekSuffix}`,
+      'dk_weekly_supply',
+      weekSuffix,
+      () => getDefaultWeeklySupply(defaultYear, defaultMonth, defaultWeek, DEFAULT_SUPPLIERS.map(s => s.name))
+    )
+  );
 
   // 4. Monthly Supply Support State
-  const [monthlySupply, setMonthlySupplyState] = useState<{ [supplier: string]: { [week: string]: string } }>(() => {
-    try {
-      const saved = localStorage.getItem(`dk_monthly_supply_${monthSuffix}`);
-      if (saved) return JSON.parse(saved);
-      const savedAll = localStorage.getItem('dk_monthly_supplies_all');
-      if (savedAll) {
-        const parsed = JSON.parse(savedAll);
-        if (parsed[monthSuffix]) return parsed[monthSuffix];
-      }
-      const oldLegacy = localStorage.getItem('dk_monthly_supply');
-      if (oldLegacy) return JSON.parse(oldLegacy);
-    } catch (e) {}
-    return getDefaultMonthlySupply(defaultYear, defaultMonth, DEFAULT_SUPPLIERS.map(s => s.name));
-  });
+  const [monthlySupply, setMonthlySupplyState] = useState<{ [supplier: string]: { [week: string]: string } }>(() =>
+    loadPlanningPeriodData(
+      'dk_monthly_supplies_all',
+      `dk_monthly_supply_${monthSuffix}`,
+      'dk_monthly_supply',
+      monthSuffix,
+      () => getDefaultMonthlySupply(defaultYear, defaultMonth, DEFAULT_SUPPLIERS.map(s => s.name))
+    )
+  );
 
   // 5. Weekly Timeline Support State
-  const [weeklyTimeline, setWeeklyTimelineState] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem(`dk_weekly_timeline_${weekSuffix}`);
-      if (saved) return JSON.parse(saved);
-      const savedAll = localStorage.getItem('dk_weekly_timelines_all');
-      if (savedAll) {
-        const parsed = JSON.parse(savedAll);
-        if (parsed[weekSuffix]) return parsed[weekSuffix];
-      }
-      const oldLegacy = localStorage.getItem('dk_weekly_timeline');
-      if (oldLegacy) return JSON.parse(oldLegacy);
-    } catch (e) {}
-    return ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
-  });
+  const [weeklyTimeline, setWeeklyTimelineState] = useState<string[]>(() =>
+    loadPlanningPeriodData(
+      'dk_weekly_timelines_all',
+      `dk_weekly_timeline_${weekSuffix}`,
+      'dk_weekly_timeline',
+      weekSuffix,
+      () => ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật']
+    )
+  );
 
   // 6. Monthly Timeline Support State
-  const [monthlyTimeline, setMonthlyTimelineState] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem(`dk_monthly_timeline_${monthSuffix}`);
-      if (saved) return JSON.parse(saved);
-      const savedAll = localStorage.getItem('dk_monthly_timelines_all');
-      if (savedAll) {
-        const parsed = JSON.parse(savedAll);
-        if (parsed[monthSuffix]) return parsed[monthSuffix];
-      }
-      const oldLegacy = localStorage.getItem('dk_monthly_timeline');
-      if (oldLegacy) return JSON.parse(oldLegacy);
-    } catch (e) {}
-    return ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5'];
-  });
+  const [monthlyTimeline, setMonthlyTimelineState] = useState<string[]>(() =>
+    loadPlanningPeriodData(
+      'dk_monthly_timelines_all',
+      `dk_monthly_timeline_${monthSuffix}`,
+      'dk_monthly_timeline',
+      monthSuffix,
+      () => ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5']
+    )
+  );
 
   // --- DYNAMICALLY SYNC / LOAD CORRESPONDING PERIOD DATA WHEN TIME/MODE MODIFIED ---
   useEffect(() => {
-    // Sync Weekly Assembly
-    try {
-      const saved = localStorage.getItem(`dk_weekly_assembly_${weekSuffix}`);
-      if (saved) {
-        setWeeklyAssemblyState(JSON.parse(saved));
-      } else {
-        const savedAll = localStorage.getItem('dk_weekly_assemblies_all');
-        let parsedAll: any = {};
-        if (savedAll) parsedAll = JSON.parse(savedAll);
-        if (parsedAll[weekSuffix]) {
-          setWeeklyAssemblyState(parsedAll[weekSuffix]);
-        } else {
-          setWeeklyAssemblyState(getDefaultWeeklyAssembly(selectedYear, selectedMonth, selectedWeek, masterModelNames));
-        }
-      }
-    } catch (e) {
-      setWeeklyAssemblyState(getDefaultWeeklyAssembly(selectedYear, selectedMonth, selectedWeek, masterModelNames));
-    }
-
-    // Sync Monthly Assembly
-    try {
-      const saved = localStorage.getItem(`dk_monthly_assembly_${monthSuffix}`);
-      if (saved) {
-        setMonthlyAssemblyState(JSON.parse(saved));
-      } else {
-        const savedAll = localStorage.getItem('dk_monthly_assemblies_all');
-        let parsedAll: any = {};
-        if (savedAll) parsedAll = JSON.parse(savedAll);
-        if (parsedAll[monthSuffix]) {
-          setMonthlyAssemblyState(parsedAll[monthSuffix]);
-        } else {
-          setMonthlyAssemblyState(getDefaultMonthlyAssembly(selectedYear, selectedMonth, masterModelNames));
-        }
-      }
-    } catch (e) {
-      setMonthlyAssemblyState(getDefaultMonthlyAssembly(selectedYear, selectedMonth, masterModelNames));
-    }
-
-    // Sync Weekly Supply
-    try {
-      const saved = localStorage.getItem(`dk_weekly_supply_${weekSuffix}`);
-      if (saved) {
-        setWeeklySupplyState(JSON.parse(saved));
-      } else {
-        const savedAll = localStorage.getItem('dk_weekly_supplies_all');
-        let parsedAll: any = {};
-        if (savedAll) parsedAll = JSON.parse(savedAll);
-        if (parsedAll[weekSuffix]) {
-          setWeeklySupplyState(parsedAll[weekSuffix]);
-        } else {
-          setWeeklySupplyState(getDefaultWeeklySupply(selectedYear, selectedMonth, selectedWeek, masterSupplierNames));
-        }
-      }
-    } catch (e) {
-      setWeeklySupplyState(getDefaultWeeklySupply(selectedYear, selectedMonth, selectedWeek, masterSupplierNames));
-    }
-
-    // Sync Monthly Supply
-    try {
-      const saved = localStorage.getItem(`dk_monthly_supply_${monthSuffix}`);
-      if (saved) {
-        setMonthlySupplyState(JSON.parse(saved));
-      } else {
-        const savedAll = localStorage.getItem('dk_monthly_supplies_all');
-        let parsedAll: any = {};
-        if (savedAll) parsedAll = JSON.parse(savedAll);
-        if (parsedAll[monthSuffix]) {
-          setMonthlySupplyState(parsedAll[monthSuffix]);
-        } else {
-          setMonthlySupplyState(getDefaultMonthlySupply(selectedYear, selectedMonth, masterSupplierNames));
-        }
-      }
-    } catch (e) {
-      setMonthlySupplyState(getDefaultMonthlySupply(selectedYear, selectedMonth, masterSupplierNames));
-    }
-
-    // Sync Weekly Timeline
-    try {
-      const saved = localStorage.getItem(`dk_weekly_timeline_${weekSuffix}`);
-      if (saved) {
-        setWeeklyTimelineState(JSON.parse(saved));
-      } else {
-        const savedAll = localStorage.getItem('dk_weekly_timelines_all');
-        let parsedAll: any = {};
-        if (savedAll) parsedAll = JSON.parse(savedAll);
-        if (parsedAll[weekSuffix]) {
-          setWeeklyTimelineState(parsedAll[weekSuffix]);
-        } else {
-          setWeeklyTimelineState(['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật']);
-        }
-      }
-    } catch (e) {
-      setWeeklyTimelineState(['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật']);
-    }
-
-    // Sync Monthly Timeline
-    try {
-      const saved = localStorage.getItem(`dk_monthly_timeline_${monthSuffix}`);
-      if (saved) {
-        setMonthlyTimelineState(JSON.parse(saved));
-      } else {
-        const savedAll = localStorage.getItem('dk_monthly_timelines_all');
-        let parsedAll: any = {};
-        if (savedAll) parsedAll = JSON.parse(savedAll);
-        if (parsedAll[monthSuffix]) {
-          setMonthlyTimelineState(parsedAll[monthSuffix]);
-        } else {
-          setMonthlyTimelineState(['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5']);
-        }
-      }
-    } catch (e) {
-      setMonthlyTimelineState(['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5']);
-    }
+    setWeeklyAssemblyState(
+      loadPlanningPeriodData(
+        'dk_weekly_assemblies_all',
+        `dk_weekly_assembly_${weekSuffix}`,
+        'dk_weekly_assembly',
+        weekSuffix,
+        () => getDefaultWeeklyAssembly(selectedYear, selectedMonth, selectedWeek, masterModelNames)
+      )
+    );
+    setMonthlyAssemblyState(
+      loadPlanningPeriodData(
+        'dk_monthly_assemblies_all',
+        `dk_monthly_assembly_${monthSuffix}`,
+        'dk_monthly_assembly',
+        monthSuffix,
+        () => getDefaultMonthlyAssembly(selectedYear, selectedMonth, masterModelNames)
+      )
+    );
+    setWeeklySupplyState(
+      loadPlanningPeriodData(
+        'dk_weekly_supplies_all',
+        `dk_weekly_supply_${weekSuffix}`,
+        'dk_weekly_supply',
+        weekSuffix,
+        () => getDefaultWeeklySupply(selectedYear, selectedMonth, selectedWeek, masterSupplierNames)
+      )
+    );
+    setMonthlySupplyState(
+      loadPlanningPeriodData(
+        'dk_monthly_supplies_all',
+        `dk_monthly_supply_${monthSuffix}`,
+        'dk_monthly_supply',
+        monthSuffix,
+        () => getDefaultMonthlySupply(selectedYear, selectedMonth, masterSupplierNames)
+      )
+    );
+    setWeeklyTimelineState(
+      loadPlanningPeriodData(
+        'dk_weekly_timelines_all',
+        `dk_weekly_timeline_${weekSuffix}`,
+        'dk_weekly_timeline',
+        weekSuffix,
+        () => ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật']
+      )
+    );
+    setMonthlyTimelineState(
+      loadPlanningPeriodData(
+        'dk_monthly_timelines_all',
+        `dk_monthly_timeline_${monthSuffix}`,
+        'dk_monthly_timeline',
+        monthSuffix,
+        () => ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5']
+      )
+    );
   }, [selectedYear, selectedMonth, selectedWeek, masterModelNames, masterSupplierNames, weekSuffix, monthSuffix]);
 
   // --- UNIFIED WRAPPED SETTERS THAT SAVE SYNCHRONOUSLY TO PREVENT RACE CONDITIONS ---

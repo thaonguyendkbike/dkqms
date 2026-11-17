@@ -4337,10 +4337,13 @@ export function App() {
       ];
       (window as any).__skip_cloud_sync = true;
       planningKeys.forEach(k => {
+        if (localStorage.getItem(`${k}_is_dirty`) === 'true') return;
         if (serverData[k] !== undefined) {
           try {
-            localStorage.setItem(k, JSON.stringify(serverData[k]));
-            window.dispatchEvent(new CustomEvent('dk_planning_reload_state', { detail: { key: k, value: JSON.stringify(serverData[k]) } }));
+            const serialized = JSON.stringify(serverData[k]);
+            safeStorage.setItem(k, serialized);
+            try { localStorage.setItem(k, serialized); } catch (e) { }
+            window.dispatchEvent(new CustomEvent('dk_planning_reload_state', { detail: { key: k, value: serialized } }));
           } catch (err) {
             console.error("Lỗi đồng bộ nạp khóa:", k, err);
           }
@@ -4815,7 +4818,13 @@ export function App() {
         'dk_supplier_production_audits',
         'dk_models',
         'dk_copqs',
-        'dk_ptsp_models'
+        'dk_ptsp_models',
+        'dk_weekly_assemblies_all',
+        'dk_monthly_assemblies_all',
+        'dk_weekly_supplies_all',
+        'dk_monthly_supplies_all',
+        'dk_weekly_timelines_all',
+        'dk_monthly_timelines_all'
       ];
 
       STANDARD_DOC_SYNC_KEYS.forEach((key) => {
@@ -4827,6 +4836,19 @@ export function App() {
             return;
           }
           const metaData = docSnap.data();
+          const isPlanningDict = key.startsWith('dk_weekly_') || key.startsWith('dk_monthly_');
+          if (isPlanningDict) {
+            const dict = metaData?.data && typeof metaData.data === 'object' && !Array.isArray(metaData.data) ? metaData.data : null;
+            if (!dict) return;
+            const serialized = JSON.stringify(dict);
+            safeStorage.setItem(key, serialized);
+            try { localStorage.setItem(key, serialized); } catch (e) { }
+            isRemoteUpdateRef.current[key] = true;
+            lastSyncedValues.current[key] = serialized;
+            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
+            window.dispatchEvent(new CustomEvent('dk_planning_reload_state', { detail: { key, value: serialized } }));
+            return;
+          }
           const list = Array.isArray(metaData?.data) ? metaData.data : [];
           if (key === 'dk_oqc_color_changes' && list.length === 0) {
             try {
