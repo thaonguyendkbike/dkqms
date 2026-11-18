@@ -73,7 +73,6 @@ import {
   Copy,
   LogIn
 } from 'lucide-react';
-import GmailManager from './components/GmailManager';
 import {
   INITIAL_TASKS,
   INITIAL_KPIS,
@@ -13618,12 +13617,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 setActiveTab('monthly_reports');
                 setSelectedReportWeekInsideMonth('all'); // default to whole month when clicked
               }}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg text-base md:text-[15px] font-medium transition-all text-left cursor-pointer ${activeTab === 'monthly_reports' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
+              className={`w-full flex items-center gap-3 p-3 rounded-lg text-base md:text-[15px] font-medium transition-all text-left cursor-pointer ${activeTab === 'monthly_reports' || activeTab === 'weekly_reports' || activeTab === 'gmail' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
                 }`}
               id="nav_monthly_reports"
             >
-              <FileSpreadsheet className={`w-5 h-5 shrink-0 ${activeTab === 'monthly_reports' ? 'text-white' : 'text-cyan-500'}`} />
-              Báo cáo (tuần, tháng)
+              <FileSpreadsheet className={`w-5 h-5 shrink-0 ${activeTab === 'monthly_reports' || activeTab === 'weekly_reports' || activeTab === 'gmail' ? 'text-white' : 'text-cyan-500'}`} />
+              Báo cáo
             </button>
 
             <button
@@ -13721,16 +13720,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             >
               <Wrench className={`w-5 h-5 shrink-0 ${activeTab === 'master_lists' ? 'text-white' : 'text-indigo-500'}`} />
               Quản lý danh sách (Master)
-            </button>
-
-            <button
-              onClick={() => setActiveTab('gmail')}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg text-base md:text-[15px] font-medium transition-all text-left cursor-pointer ${activeTab === 'gmail' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
-                }`}
-              id="nav_gmail_hub"
-            >
-              <Mail className={`w-5 h-5 shrink-0 ${activeTab === 'gmail' ? 'text-white' : 'text-indigo-550'}`} />
-              Gửi Báo Cáo & Gmail
             </button>
           </div>
 
@@ -17292,11 +17281,11 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             </div>
           )}
 
-          {/* ==================================== TAB: REPORTS (BÁO CÁO TUẦN & THÁNG TỔNG HỢP) ==================================== */}
-          {(activeTab === 'weekly_reports' || activeTab === 'monthly_reports') && (
+          {/* ==================================== TAB: BÁO CÁO (NGÀY / TUẦN / THÁNG + GMAIL) ==================================== */}
+          {(activeTab === 'weekly_reports' || activeTab === 'monthly_reports' || activeTab === 'gmail') && (
             <>
               <ReportsHub
-                initialPeriodType={activeTab === 'monthly_reports' ? 'month' : 'week'}
+                initialPeriodType={activeTab === 'gmail' ? 'day' : activeTab === 'weekly_reports' ? 'week' : 'month'}
                 dataset={{
                   dailyLogs,
                   iqcRecords,
@@ -17315,6 +17304,11 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   supplierProductionAudits,
                   reportNotes
                 }}
+                staff={staff}
+                oqcRecords={oqcRecords}
+                oqcColorChanges={oqcColorChanges}
+                senderName={currentUser?.name || 'Nguyễn Xuân Thao'}
+                senderEmail={currentUser?.email || 'thaonguyendkbike@gmail.com'}
                 authorName={currentUser?.name || currentUser?.email || 'QLCL'}
                 onSaveNote={handleSaveReportNote}
                 onDeleteNote={handleDeleteReportNote}
@@ -21986,21 +21980,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   </button>
                 </form>
               </div>
-            </div>
-          )}
-
-          {/* ==================================== TAB GMAIL: GMAIL CLOUD SYNC & REPORTING WORKSPACE ==================================== */}
-          {activeTab === 'gmail' && (
-            <div className="space-y-6" id="view_gmail_workspace_content">
-              <GmailManager
-                dailyLogs={dailyLogs}
-                staff={staff}
-                capas={capas}
-                oqcRecords={oqcRecords}
-                oqcColorChanges={oqcColorChanges}
-                initialSenderName={currentUser.name}
-                initialSenderEmail={currentUser.email}
-              />
             </div>
           )}
 

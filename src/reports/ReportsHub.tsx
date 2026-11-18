@@ -12,6 +12,7 @@ import {
   Download,
   FileText,
   Filter,
+  Mail,
   MessageSquarePlus,
   Minus,
   Plus,
@@ -19,7 +20,8 @@ import {
   Trash2,
   X
 } from 'lucide-react';
-import { ReportNote } from '../types';
+import { QualityStaff, ReportNote } from '../types';
+import GmailManager from '../components/GmailManager';
 import {
   buildReportSnapshot,
   formatDateShortVi,
@@ -38,11 +40,17 @@ import { exportReportToExcel } from './reportExportExcel';
 import { buildSummaryCopyText, printReportA4 } from './reportExportPrint';
 
 type ReportSubTab = 'overview' | 'production' | 'market' | 'capa_eco' | 'work' | 'qc_tools';
+export type ReportHubMode = 'day' | 'week' | 'month';
 
 export interface ReportsHubProps {
-  initialPeriodType: ReportPeriodType;
+  initialPeriodType: ReportHubMode;
   dataset: ReportDatasetInput;
   authorName: string;
+  staff?: QualityStaff[];
+  oqcRecords?: any[];
+  oqcColorChanges?: any[];
+  senderName?: string;
+  senderEmail?: string;
   onSaveNote: (note: ReportNote) => boolean;
   onDeleteNote: (id: string) => void;
   onOpenAddWeekTask: () => void;
@@ -80,6 +88,11 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
   initialPeriodType,
   dataset,
   authorName,
+  staff = [],
+  oqcRecords = [],
+  oqcColorChanges = [],
+  senderName = 'Nguyễn Xuân Thao',
+  senderEmail = 'thaonguyendkbike@gmail.com',
   onSaveNote,
   onDeleteNote,
   onOpenAddWeekTask,
@@ -89,7 +102,13 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
   const now = useMemo(() => new Date(), []);
   const currentIso = useMemo(() => getIsoWeekInfo(now), [now]);
 
-  const [periodType, setPeriodType] = useState<ReportPeriodType>(initialPeriodType);
+  const [periodType, setPeriodType] = useState<ReportHubMode>(initialPeriodType);
+  const enginePeriodType: ReportPeriodType = periodType === 'week' ? 'week' : 'month';
+  const [gmailModalPreset, setGmailModalPreset] = useState<{
+    subject: string;
+    bodyHtml: string;
+    triggerKey: number;
+  } | null>(null);
   const [year, setYear] = useState<number>(
     initialPeriodType === 'week' ? currentIso.isoYear : now.getFullYear()
   );
@@ -101,13 +120,13 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [showMissingDateModal, setShowMissingDateModal] = useState(false);
 
-  // Sync mode when user clicks top sidebar Weekly vs Monthly Reports
+  // Sync mode when user clicks sidebar
   useEffect(() => {
     setPeriodType(initialPeriodType);
     if (initialPeriodType === 'week') {
       setYear(currentIso.isoYear);
       setPeriodValue(currentIso.isoWeek);
-    } else {
+    } else if (initialPeriodType === 'month') {
       setYear(now.getFullYear());
       setPeriodValue(now.getMonth() + 1);
     }
@@ -143,8 +162,8 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
   }, [year]);
 
   const period = useMemo(
-    () => getPeriodDescriptor(periodType, year, periodValue),
-    [periodType, year, periodValue]
+    () => getPeriodDescriptor(enginePeriodType, year, periodValue),
+    [enginePeriodType, year, periodValue]
   );
 
   const snapshot = useMemo(() => buildReportSnapshot(dataset, period), [dataset, period]);
@@ -196,21 +215,43 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
     onToast(`Đã xóa nhận xét cho ${period.label}`, 'info');
   };
 
-  const handleModeChange = (nextType: ReportPeriodType) => {
+  const handleModeChange = (nextType: ReportHubMode) => {
     setPeriodType(nextType);
     if (nextType === 'week') {
       setYear(currentIso.isoYear);
       setPeriodValue(currentIso.isoWeek);
-    } else {
+    } else if (nextType === 'month') {
       setYear(now.getFullYear());
       setPeriodValue(now.getMonth() + 1);
     }
   };
 
   const handleStep = (delta: -1 | 1) => {
-    const next = stepPeriod(periodType, year, periodValue, delta);
+    const next = stepPeriod(enginePeriodType, year, periodValue, delta);
     setYear(next.year);
     setPeriodValue(next.value);
+  };
+
+  const handleOpenPeriodGmail = () => {
+    const text = buildSummaryCopyText(snapshot);
+    const escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    const bodyHtml = `<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 720px;">
+      <div style="background: #1e3a8a; color: #ffffff; padding: 12px 16px; border-radius: 8px 8px 0 0;">
+        <div style="font-size: 14px; font-weight: 800;">CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT — PHÒNG QLCL (DK QMS)</div>
+        <div style="font-size: 12px; opacity: 0.9;">Báo cáo Chất lượng ${period.label} (${period.rangeLabel})</div>
+      </div>
+      <div style="border: 1px solid #cbd5e1; border-top: 0; padding: 14px 16px; border-radius: 0 0 8px 8px; background: #ffffff;">
+        <pre style="font-family: Arial, sans-serif; white-space: pre-wrap; margin: 0; font-size: 13px; color: #0f172a;">${escaped}</pre>
+      </div>
+    </div>`;
+    setGmailModalPreset({
+      subject: `[DKBike QMS] Báo cáo chất lượng ${period.label} (${period.rangeLabel})`,
+      bodyHtml,
+      triggerKey: Date.now()
+    });
   };
 
   const handleResetCurrent = () => {
@@ -302,19 +343,30 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
 
   return (
     <div
-      id={periodType === 'week' ? 'view_weekly_reports_content' : 'view_monthly_reports_content'}
+      id={periodType === 'day' ? 'view_daily_gmail_reports_content' : periodType === 'week' ? 'view_weekly_reports_content' : 'view_monthly_reports_content'}
       className="space-y-4 pb-10"
     >
       {/* Top Control & Action Bar */}
       <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Left: Mode & Period Selector */}
+          {/* Left: Mode (Theo ngày / Theo Tuần / Theo Tháng) & Period Selector */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="inline-flex rounded-xl border-2 border-slate-300 bg-slate-100 p-0.5">
               <button
                 type="button"
+                onClick={() => handleModeChange('day')}
+                className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition cursor-pointer ${
+                  periodType === 'day'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-white'
+                }`}
+              >
+                Theo ngày
+              </button>
+              <button
+                type="button"
                 onClick={() => handleModeChange('week')}
-                className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition ${
+                className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition cursor-pointer ${
                   periodType === 'week'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-slate-700 hover:bg-white'
@@ -325,7 +377,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
               <button
                 type="button"
                 onClick={() => handleModeChange('month')}
-                className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition ${
+                className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition cursor-pointer ${
                   periodType === 'month'
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-slate-700 hover:bg-white'
@@ -335,158 +387,188 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
               </button>
             </div>
 
-            <select
-              value={year}
-              onChange={(e) => {
-                const nextY = Number(e.target.value);
-                setYear(nextY);
-                if (periodType === 'week') {
-                  const maxW = getIsoWeeksInYear(nextY);
-                  if (periodValue > maxW) setPeriodValue(maxW);
-                }
-              }}
-              aria-label="Chọn năm báo cáo"
-              className="px-3 py-2 rounded-xl border-2 border-slate-300 bg-white text-sm font-bold text-slate-800 focus:border-blue-600 focus:outline-none"
-            >
-              {yearOptions.map((y) => (
-                <option key={y} value={y}>
-                  Năm {y}
-                </option>
-              ))}
-            </select>
-
-            <div className="inline-flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => handleStep(-1)}
-                title="Kỳ trước"
-                className="p-2 rounded-xl border-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-
-              {periodType === 'week' ? (
+            {periodType !== 'day' && (
+              <>
                 <select
-                  value={period.value}
-                  onChange={(e) => setPeriodValue(Number(e.target.value))}
-                  aria-label="Chọn tuần ISO"
-                  className="px-3 py-2 rounded-xl border-2 border-slate-300 bg-white text-sm font-bold text-slate-800 focus:border-blue-600 focus:outline-none max-w-[250px]"
-                >
-                  {weeksInYear.map((w) => (
-                    <option key={w.week} value={w.week}>
-                      {w.label}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <select
-                  value={period.value}
-                  onChange={(e) => setPeriodValue(Number(e.target.value))}
-                  aria-label="Chọn tháng"
+                  value={year}
+                  onChange={(e) => {
+                    const nextY = Number(e.target.value);
+                    setYear(nextY);
+                    if (periodType === 'week') {
+                      const maxW = getIsoWeeksInYear(nextY);
+                      if (periodValue > maxW) setPeriodValue(maxW);
+                    }
+                  }}
+                  aria-label="Chọn năm báo cáo"
                   className="px-3 py-2 rounded-xl border-2 border-slate-300 bg-white text-sm font-bold text-slate-800 focus:border-blue-600 focus:outline-none"
                 >
-                  {Array.from({ length: 12 }, (_, idx) => idx + 1).map((m) => (
-                    <option key={m} value={m}>
-                      Tháng {String(m).padStart(2, '0')}/{year}
+                  {yearOptions.map((y) => (
+                    <option key={y} value={y}>
+                      Năm {y}
                     </option>
                   ))}
                 </select>
-              )}
 
-              <button
-                type="button"
-                onClick={() => handleStep(1)}
-                title="Kỳ sau"
-                className="p-2 rounded-xl border-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+                <div className="inline-flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleStep(-1)}
+                    title="Kỳ trước"
+                    className="p-2 rounded-xl border-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
 
-            <button
-              type="button"
-              onClick={handleResetCurrent}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 border-slate-300 bg-slate-50 text-xs font-bold text-slate-700 hover:bg-slate-100"
-            >
-              <Calendar className="w-3.5 h-3.5" /> Kỳ hiện tại
-            </button>
-          </div>
+                  {periodType === 'week' ? (
+                    <select
+                      value={period.value}
+                      onChange={(e) => setPeriodValue(Number(e.target.value))}
+                      aria-label="Chọn tuần ISO"
+                      className="px-3 py-2 rounded-xl border-2 border-slate-300 bg-white text-sm font-bold text-slate-800 focus:border-blue-600 focus:outline-none max-w-[250px]"
+                    >
+                      {weeksInYear.map((w) => (
+                        <option key={w.week} value={w.week}>
+                          {w.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select
+                      value={period.value}
+                      onChange={(e) => setPeriodValue(Number(e.target.value))}
+                      aria-label="Chọn tháng"
+                      className="px-3 py-2 rounded-xl border-2 border-slate-300 bg-white text-sm font-bold text-slate-800 focus:border-blue-600 focus:outline-none"
+                    >
+                      {Array.from({ length: 12 }, (_, idx) => idx + 1).map((m) => (
+                        <option key={m} value={m}>
+                          Tháng {String(m).padStart(2, '0')}/{year}
+                        </option>
+                      ))}
+                    </select>
+                  )}
 
-          {/* Right: 1-Click Actions (màu đồng nhất, đơn giản) */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => exportReportToExcel(snapshot, onToast)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
-            >
-              <Download className="w-4 h-4" /> Xuất Excel
-            </button>
-            <button
-              type="button"
-              onClick={() => printReportA4(snapshot, onToast)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
-            >
-              <Printer className="w-4 h-4" /> In / PDF
-            </button>
-            <button
-              type="button"
-              onClick={handleCopySummary}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
-            >
-              <Copy className="w-4 h-4" /> Copy
-            </button>
-            <button
-              type="button"
-              onClick={openNoteModal}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
-            >
-              <MessageSquarePlus className="w-4 h-4" /> Nhận xét QLCL
-            </button>
-            <button
-              type="button"
-              onClick={onOpenAddWeekTask}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold"
-            >
-              <Plus className="w-4 h-4" /> Bổ sung việc
-            </button>
-          </div>
-        </div>
+                  <button
+                    type="button"
+                    onClick={() => handleStep(1)}
+                    title="Kỳ sau"
+                    className="p-2 rounded-xl border-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
 
-        {/* Period Banner & Sub-Tabs */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-            <span className="font-extrabold text-slate-900 text-sm">{period.label}</span>
-            <span>({period.rangeLabel} — Chuẩn ISO 8601)</span>
-            {snapshot.missingDateCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowMissingDateModal(true)}
-                title="Bấm để xem chi tiết các bản ghi thiếu ngày hoặc sai định dạng ngày"
-                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold border border-amber-300 transition cursor-pointer"
-              >
-                <AlertTriangle className="w-3 h-3" /> {snapshot.missingDateCount} bản ghi thiếu ngày (Xem chi tiết)
-              </button>
+                <button
+                  type="button"
+                  onClick={handleResetCurrent}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 border-slate-300 bg-slate-50 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                >
+                  <Calendar className="w-3.5 h-3.5" /> Kỳ hiện tại
+                </button>
+              </>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            {tabs.map((t) => (
+          {/* Right: 1-Click Actions for Week/Month */}
+          {periodType !== 'day' && (
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                key={t.id}
                 type="button"
-                onClick={() => setSubTab(t.id)}
-                className={`px-3.5 py-1.5 rounded-xl text-sm font-bold border-2 transition ${
-                  subTab === t.id
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                }`}
+                onClick={() => exportReportToExcel(snapshot, onToast)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
               >
-                {t.label}
+                <Download className="w-4 h-4" /> Xuất Excel
               </button>
-            ))}
-          </div>
+              <button
+                type="button"
+                onClick={() => printReportA4(snapshot, onToast)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
+              >
+                <Printer className="w-4 h-4" /> In / PDF
+              </button>
+              <button
+                type="button"
+                onClick={handleCopySummary}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
+              >
+                <Copy className="w-4 h-4" /> Copy
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenPeriodGmail}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-bold cursor-pointer"
+                title="Gửi tóm tắt báo cáo kỳ này qua Gmail"
+              >
+                <Mail className="w-4 h-4" /> Gửi Gmail
+              </button>
+              <button
+                type="button"
+                onClick={openNoteModal}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
+              >
+                <MessageSquarePlus className="w-4 h-4" /> Nhận xét QLCL
+              </button>
+              <button
+                type="button"
+                onClick={onOpenAddWeekTask}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold"
+              >
+                <Plus className="w-4 h-4" /> Bổ sung việc
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Period Banner & Sub-Tabs (chỉ hiện ở Theo Tuần / Theo Tháng) */}
+        {periodType !== 'day' && (
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+              <span className="font-extrabold text-slate-900 text-sm">{period.label}</span>
+              <span>({period.rangeLabel} — Chuẩn ISO 8601)</span>
+              {snapshot.missingDateCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowMissingDateModal(true)}
+                  title="Bấm để xem chi tiết các bản ghi thiếu ngày hoặc sai định dạng ngày"
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold border border-amber-300 transition cursor-pointer"
+                >
+                  <AlertTriangle className="w-3 h-3" /> {snapshot.missingDateCount} bản ghi thiếu ngày (Xem chi tiết)
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {tabs.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setSubTab(t.id)}
+                  className={`px-3.5 py-1.5 rounded-xl text-sm font-bold border-2 transition ${
+                    subTab === t.id
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      {periodType === 'day' ? (
+        <GmailManager
+          embeddedMode
+          dailyLogs={dataset.dailyLogs}
+          staff={staff}
+          capas={dataset.capas}
+          oqcRecords={oqcRecords}
+          oqcColorChanges={oqcColorChanges}
+          initialSenderName={senderName}
+          initialSenderEmail={senderEmail}
+        />
+      ) : (
+        <>
 
       {/* ==================== TAB 1: TỔNG QUAN ==================== */}
       {subTab === 'overview' && (
@@ -1485,6 +1567,41 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
 
       {/* Thẻ Nhận xét & Kết luận QLCL hiển thị trên mọi tab còn lại */}
       {subTab !== 'overview' && renderQlclNoteCard()}
+        </>
+      )}
+
+      {/* ==================== MODAL: GỬI BÁO CÁO TUẦN / THÁNG QUA GMAIL ==================== */}
+      {gmailModalPreset && (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="w-full max-w-6xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden my-auto">
+            <div className="flex items-center justify-between px-5 py-3 bg-slate-900 text-white">
+              <span className="text-xs font-extrabold uppercase tracking-wider flex items-center gap-2">
+                <Mail className="w-4 h-4 text-indigo-300" /> Gửi {period.label} qua Gmail
+              </span>
+              <button
+                type="button"
+                onClick={() => setGmailModalPreset(null)}
+                className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 max-h-[85vh] overflow-y-auto">
+              <GmailManager
+                embeddedMode
+                externalPreset={gmailModalPreset}
+                dailyLogs={dataset.dailyLogs}
+                staff={staff}
+                capas={dataset.capas}
+                oqcRecords={oqcRecords}
+                oqcColorChanges={oqcColorChanges}
+                initialSenderName={senderName}
+                initialSenderEmail={senderEmail}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ==================== MODAL: NHẬN XÉT QLCL ==================== */}
       {showNoteModal && (

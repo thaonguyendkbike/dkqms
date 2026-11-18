@@ -40,6 +40,8 @@ interface GmailManagerProps {
   initialSenderEmail?: string;
   oqcRecords?: any[];
   oqcColorChanges?: any[];
+  embeddedMode?: boolean;
+  externalPreset?: { subject: string; bodyHtml: string; triggerKey: number } | null;
 }
 
 export default function GmailManager({ 
@@ -49,7 +51,9 @@ export default function GmailManager({
   initialSenderName = "Nguyễn Xuân Thao",
   initialSenderEmail = "thaonguyendkbike@gmail.com",
   oqcRecords = [],
-  oqcColorChanges = []
+  oqcColorChanges = [],
+  embeddedMode = false,
+  externalPreset = null
 }: GmailManagerProps) {
   const [googleUser, setGoogleUser] = useState<any>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -318,6 +322,15 @@ export default function GmailManager({
       setSelectedCapaId(capas[0].id);
     }
   }, [presetMode, capas, selectedCapaId]);
+
+  // Apply external report preset (e.g., from Weekly/Monthly Reports)
+  useEffect(() => {
+    if (externalPreset && externalPreset.triggerKey) {
+      setPresetMode('custom');
+      setEmailSubject(externalPreset.subject);
+      setEmailBody(externalPreset.bodyHtml);
+    }
+  }, [externalPreset?.triggerKey]);
 
   // Generate Email Content depending on Presets
   const getPreviewEmailContent = () => {
@@ -655,62 +668,52 @@ export default function GmailManager({
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-xs border border-slate-200 overflow-hidden" id="gmail-manager-root">
+    <div className={`bg-white rounded-2xl border border-slate-200 overflow-hidden ${embeddedMode ? 'shadow-xs' : 'shadow-sm'}`} id="gmail-manager-root">
       
-      {/* Upper header */}
-      <div className="bg-indigo-900 px-6 py-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-indigo-800 rounded-lg text-indigo-300">
-              <Mail className="w-5 h-5" />
-            </div>
-            <h2 className="text-base font-extrabold text-white tracking-tight uppercase">TÍCH HỢP QUẢN TRỊ GMAIL CLOUD</h2>
+      {/* Sleek Top Header & Google Auth Pill */}
+      <div className="bg-slate-50 border-b border-slate-200 px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 bg-indigo-100 text-indigo-700 rounded-xl">
+            <Mail className="w-4 h-4" />
           </div>
-          <p className="text-xs text-indigo-200 mt-1">
-            Gửi báo cáo chất lượng dây chuyền, cảnh báo CAPA & lịch sử sửa chữa tự động qua tài khoản Gmail cá nhân
-          </p>
+          <div>
+            <h2 className="text-sm font-extrabold text-slate-800 tracking-tight uppercase">
+              {externalPreset ? 'Gửi Báo Cáo Tổng Hợp Qua Gmail' : 'Báo Cáo Ngày & Gửi Gmail'}
+            </h2>
+            <p className="text-[11px] text-slate-500">
+              Tổng hợp báo cáo ngày, kế hoạch ngày mai, CAPA và gửi trực tiếp theo luồng Gmail
+            </p>
+          </div>
         </div>
 
-        {/* Authentication Widget */}
+        {/* Authentication Pill */}
         <div>
           {isLoadingAuth ? (
-            <div className="flex items-center gap-2 text-indigo-200 text-xs bg-indigo-950/40 px-3 py-2 rounded-lg border border-indigo-800">
-              <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
-              <span>Đang kiểm tra kết nối...</span>
+            <div className="flex items-center gap-2 text-slate-500 text-xs bg-white px-3 py-1.5 rounded-xl border border-slate-200">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500" />
+              <span>Đang kiểm tra Gmail...</span>
             </div>
           ) : googleUser ? (
-            <div className="bg-slate-900 border border-slate-700/50 p-2.5 rounded-lg flex items-center justify-between gap-3 shadow-md max-w-[280px] md:max-w-[400px]">
-              <div className="flex items-center gap-2.5 min-w-0">
-                {googleUser.photoURL ? (
-                  <img 
-                    src={googleUser.photoURL} 
-                    alt="avatar" 
-                    className="w-10 h-10 rounded-full border border-indigo-500 shadow-inner" 
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-indigo-700 text-white flex items-center justify-center font-bold text-sm">
-                    {googleUser.displayName?.charAt(0) || <User className="w-4 h-4" />}
-                  </div>
-                )}
+            <div className="bg-white border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center justify-between gap-2.5 shadow-2xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-xs font-black text-slate-100 truncate">{googleUser.displayName}</p>
-                  <p className="text-[10px] text-indigo-300 truncate lowercase font-mono font-medium">{googleUser.email}</p>
+                  <p className="text-[11px] font-extrabold text-slate-800 truncate">{googleUser.displayName}</p>
+                  <p className="text-[10px] text-emerald-700 truncate font-mono">{googleUser.email}</p>
                 </div>
               </div>
               <button 
                 onClick={handleLogout}
                 title="Đăng xuất tài khoản Google"
-                className="p-1.5 rounded text-slate-400 hover:text-rose-450 hover:bg-slate-800 transition shrink-0"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0 cursor-pointer"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-3.5 h-3.5" />
               </button>
             </div>
           ) : (
-            /* Official Google styled sign in button */
             <button 
               onClick={handleLogin}
-              className="px-4 py-2 bg-white text-slate-700 hover:text-slate-950 rounded-lg hover:shadow-md border border-slate-300 font-extrabold text-xs transition duration-200 flex items-center gap-2 cursor-pointer shadow-xs active:scale-95"
+              className="px-3.5 py-2 bg-white text-slate-700 hover:text-slate-950 rounded-xl hover:shadow-sm border border-slate-300 font-extrabold text-xs transition duration-150 flex items-center gap-2 cursor-pointer"
             >
               <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-4 h-4 shrink-0" style={{ display: 'block' }}>
                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
