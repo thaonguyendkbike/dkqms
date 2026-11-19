@@ -40,12 +40,13 @@ import { exportReportToExcel } from './reportExportExcel';
 import { buildSummaryCopyText, printReportA4 } from './reportExportPrint';
 
 type ReportSubTab = 'overview' | 'production' | 'market' | 'capa_eco' | 'work' | 'qc_tools';
-export type ReportHubMode = 'day' | 'week' | 'month';
+export type ReportHubMode = 'overview' | 'day' | 'week' | 'month';
 
 export interface ReportsHubProps {
   initialPeriodType: ReportHubMode;
   dataset: ReportDatasetInput;
   authorName: string;
+  overviewContent?: React.ReactNode;
   staff?: QualityStaff[];
   oqcRecords?: any[];
   oqcColorChanges?: any[];
@@ -88,6 +89,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
   initialPeriodType,
   dataset,
   authorName,
+  overviewContent,
   staff = [],
   oqcRecords = [],
   oqcColorChanges = [],
@@ -341,17 +343,38 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
     </div>
   );
 
+  const isPeriodReport = periodType === 'week' || periodType === 'month';
+
   return (
     <div
-      id={periodType === 'day' ? 'view_daily_gmail_reports_content' : periodType === 'week' ? 'view_weekly_reports_content' : 'view_monthly_reports_content'}
+      id={
+        periodType === 'overview'
+          ? 'view_dashboard_content'
+          : periodType === 'day'
+            ? 'view_daily_gmail_reports_content'
+            : periodType === 'week'
+              ? 'view_weekly_reports_content'
+              : 'view_monthly_reports_content'
+      }
       className="space-y-4 pb-10"
     >
       {/* Top Control & Action Bar */}
       <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Left: Mode (Theo ngày / Theo Tuần / Theo Tháng) & Period Selector */}
+          {/* Left: Mode (Tổng quan / Theo ngày / Theo Tuần / Theo Tháng) & Period Selector */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-xl border-2 border-slate-300 bg-slate-100 p-0.5">
+            <div className="inline-flex flex-wrap rounded-xl border-2 border-slate-300 bg-slate-100 p-0.5">
+              <button
+                type="button"
+                onClick={() => handleModeChange('overview')}
+                className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition cursor-pointer ${
+                  periodType === 'overview'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-white'
+                }`}
+              >
+                Tổng quan
+              </button>
               <button
                 type="button"
                 onClick={() => handleModeChange('day')}
@@ -387,7 +410,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
               </button>
             </div>
 
-            {periodType !== 'day' && (
+            {isPeriodReport && (
               <>
                 <select
                   value={year}
@@ -469,7 +492,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
           </div>
 
           {/* Right: 1-Click Actions for Week/Month */}
-          {periodType !== 'day' && (
+          {isPeriodReport && (
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -519,7 +542,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
         </div>
 
         {/* Period Banner & Sub-Tabs (chỉ hiện ở Theo Tuần / Theo Tháng) */}
-        {periodType !== 'day' && (
+        {isPeriodReport && (
           <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200">
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
               <span className="font-extrabold text-slate-900 text-sm">{period.label}</span>
@@ -556,7 +579,9 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
         )}
       </div>
 
-      {periodType === 'day' ? (
+      {periodType === 'overview' ? (
+        <div className="space-y-4">{overviewContent}</div>
+      ) : periodType === 'day' ? (
         <GmailManager
           embeddedMode
           dailyLogs={dataset.dailyLogs}

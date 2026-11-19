@@ -13545,12 +13545,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
 
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg text-base md:text-[15px] font-medium transition-all text-left cursor-pointer ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
+              className={`w-full flex items-center gap-3 p-3 rounded-lg text-base md:text-[15px] font-medium transition-all text-left cursor-pointer ${activeTab === 'dashboard' || activeTab === 'monthly_reports' || activeTab === 'weekly_reports' || activeTab === 'gmail' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
                 }`}
               id="nav_dashboard"
             >
-              <BarChart className="w-5 h-5 shrink-0 animate-pulse" />
-              Tổng quan Dashboard
+              <BarChart className={`w-5 h-5 shrink-0 ${activeTab === 'dashboard' || activeTab === 'monthly_reports' || activeTab === 'weekly_reports' || activeTab === 'gmail' ? 'text-white' : 'text-indigo-500'}`} />
+              Báo cáo
             </button>
 
             <button
@@ -13610,19 +13610,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             >
               <Clock className={`w-5 h-5 shrink-0 ${activeTab === 'daily_logs' ? 'text-white' : 'text-amber-500'}`} />
               Báo cáo ngày QLCL ({dailyLogs.length})
-            </button>
-
-            <button
-              onClick={() => {
-                setActiveTab('monthly_reports');
-                setSelectedReportWeekInsideMonth('all'); // default to whole month when clicked
-              }}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg text-base md:text-[15px] font-medium transition-all text-left cursor-pointer ${activeTab === 'monthly_reports' || activeTab === 'weekly_reports' || activeTab === 'gmail' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
-                }`}
-              id="nav_monthly_reports"
-            >
-              <FileSpreadsheet className={`w-5 h-5 shrink-0 ${activeTab === 'monthly_reports' || activeTab === 'weekly_reports' || activeTab === 'gmail' ? 'text-white' : 'text-cyan-500'}`} />
-              Báo cáo
             </button>
 
             <button
@@ -13797,716 +13784,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
           )}
 
           {/* ==================================== TAB 1: DASHBOARD OVERVIEW ==================================== */}
-          {activeTab === 'dashboard' && (() => {
-            // Lọc dữ liệu theo bộ lọc động của Dashboard để tạo trải nghiệm tương tác trực quan cao
-            const filteredDefects = defects.filter(d => {
-              if (dashboardMonthFilter === 'all') return true;
-              const monthStr = dashboardMonthFilter.padStart(2, '0');
-              return (d.date && d.date.includes(`/${monthStr}/`)) || (d.date && d.date.startsWith(`2026-${monthStr}-`));
-            }).filter(d => {
-              if (dashboardModelFilter === 'all') return true;
-              return d.model === dashboardModelFilter;
-            });
-
-            const filteredTasks = tasks.filter(t => {
-              if (dashboardMonthFilter === 'all') return true;
-              return String(t.month) === dashboardMonthFilter;
-            });
-
-            // Calculate dynamic OQC/IQC rates for weekly/monthly
-            const targetW = selectedReportWeek || 'T1';
-            const targetM = dashboardMonthFilter === 'all' ? (selectedMonthlyReportMonth === 0 ? 6 : selectedMonthlyReportMonth) : Number(dashboardMonthFilter);
-            const targetY = selectedMonthlyReportYear || 2026;
-
-            const filterByMonthOnly = (dateStr: string, tM: number, tY: number) => {
-              if (!dateStr) return false;
-              let month = 4;
-              let year = 2026;
-              if (dateStr.includes('-')) {
-                const parts = dateStr.split('-');
-                year = Number(parts[0]) || 2026;
-                month = Number(parts[1]) || 4;
-              } else if (dateStr.includes('/')) {
-                const parts = dateStr.split('/');
-                month = Number(parts[1]) || 4;
-                const yrPart = parts[2] ? parts[2].trim() : '';
-                year = yrPart ? (yrPart.length === 2 ? 2000 + Number(yrPart) : Number(yrPart)) : 2026;
-              } else {
-                return false;
-              }
-              return month === tM && year === tY;
-            };
-
-            // 1. IQC Weekly
-            const iqcWeeklyRecords = iqcRecords.filter(r => r.date ? filterByWeekAndMonth(r.date, targetW, targetM, targetY) : false);
-            const iqcWeeklyTotal = iqcWeeklyRecords.length;
-            const iqcWeeklyPassed = iqcWeeklyRecords.filter(r => r.result === 'Đạt' || r.status === 'Thông quan' || r.status === 'Pass' || r.result === 'Pass').length;
-            const iqcWeeklyRate = iqcWeeklyTotal > 0 ? Number((iqcWeeklyPassed / iqcWeeklyTotal * 100).toFixed(1)) : 0;
-
-            // 2. IQC Monthly
-            const iqcMonthlyRecords = iqcRecords.filter(r => r.date ? filterByMonthOnly(r.date, targetM, targetY) : false);
-            const iqcMonthlyTotal = iqcMonthlyRecords.length;
-            const iqcMonthlyPassed = iqcMonthlyRecords.filter(r => r.result === 'Đạt' || r.status === 'Thông quan' || r.status === 'Pass' || r.result === 'Pass').length;
-            const iqcMonthlyRate = iqcMonthlyTotal > 0 ? Number((iqcMonthlyPassed / iqcMonthlyTotal * 100).toFixed(1)) : 0;
-
-            // 3. OQC Weekly
-            const oqcWeeklyRecords = oqcRecords.filter(r => r.date ? filterByWeekAndMonth(r.date, targetW, targetM, targetY) : false);
-            const oqcWeeklyTotal = oqcWeeklyRecords.length;
-            const oqcWeeklyPassed = oqcWeeklyRecords.filter(r => r.status === 'Đạt').length;
-            const oqcWeeklyRate = oqcWeeklyTotal > 0 ? Number((oqcWeeklyPassed / oqcWeeklyTotal * 100).toFixed(1)) : 0;
-
-            // 4. OQC Monthly
-            const oqcMonthlyRecords = oqcRecords.filter(r => r.date ? filterByMonthOnly(r.date, targetM, targetY) : false);
-            const oqcMonthlyTotal = oqcMonthlyRecords.length;
-            const oqcMonthlyPassed = oqcMonthlyRecords.filter(r => r.status === 'Đạt').length;
-            const oqcMonthlyRate = oqcMonthlyTotal > 0 ? Number((oqcMonthlyPassed / oqcMonthlyTotal * 100).toFixed(1)) : 0;
-
-            // Tính toán lại các Metric động dựa trên bộ lọc để giao diện nhảy số tương tác sống động
-            const activeFilteredTasks = filteredTasks.length > 0 ? filteredTasks : INITIAL_TASKS;
-            const dynamicTotalTasks = activeFilteredTasks.length;
-            const dynamicCompletedTasks = activeFilteredTasks.filter(t => t.result >= t.target).length;
-            const dynamicTaskCompletionRate = dynamicTotalTasks > 0 ? Math.round((dynamicCompletedTasks / dynamicTotalTasks) * 100) : taskCompletionRate;
-            const dynamicOverdueTasksCount = activeFilteredTasks.filter(t => t.status === 'Overdue').length;
-            const dynamicUnresolvedTasksCount = activeFilteredTasks.filter(t => t.weeksUnresolved && t.weeksUnresolved >= 2).length;
-
-            const dynamicOverallScore = activeFilteredTasks.length > 0
-              ? Math.min(100, Math.round(overallScore * (0.85 + (dynamicCompletedTasks / activeFilteredTasks.length) * 0.25)))
-              : overallScore;
-
-            const cumulativeCopq = copqs.reduce((sum, c) => sum + (c.amount || 0), 0);
-            const currentMonthCopq = copqs
-              .filter(c => c.month === targetM && (c.year === targetY || !c.year))
-              .reduce((sum, c) => sum + (c.amount || 0), 0);
-
-            const dynamicTotalCOPQ = dashboardCopqView === 'month'
-              ? Number(currentMonthCopq.toFixed(3))
-              : Number(cumulativeCopq.toFixed(3));
-
-            // Tính toán Pareto 80/20 về nguyên nhân lỗi hàng đầu
-            const counts: Record<string, number> = {};
-            const dataToUse = filteredDefects.length > 0 ? filteredDefects : defects;
-
-            dataToUse.forEach(d => {
-              const type = d.type || "Lỗi lắp ráp bavia sườn";
-              counts[type] = (counts[type] || 0) + 1;
-            });
-
-            if (Object.keys(counts).length === 0) {
-              counts["Nứt má phanh gầm Việt Nhật"] = 28;
-              counts["Bavia bọc mép khung sườn xe"] = 18;
-              counts["Lệch khớp vỏ nhựa ốp đầu đèn"] = 12;
-              counts["Lỏng đầu nối giắc điện sườn"] = 7;
-              counts["Trầy xước nước sơn bửng sườn"] = 5;
-            }
-
-            const sortedPareto = Object.entries(counts)
-              .map(([name, count]) => ({ name, count }))
-              .sort((a, b) => b.count - a.count)
-              .slice(0, 5); // Top 5 lỗi hàng đầu
-
-            const totalParetoCount = sortedPareto.reduce((sum, item) => sum + item.count, 0);
-            let accum = 0;
-            const paretoData = sortedPareto.map(item => {
-              accum += item.count;
-              const percentage = totalParetoCount > 0 ? Math.round((item.count / totalParetoCount) * 100) : 0;
-              const cumulativePercentage = totalParetoCount > 0 ? Math.round((accum / totalParetoCount) * 100) : 0;
-              return {
-                ...item,
-                percentage,
-                cumulativePercentage
-              };
-            });
-
-            const maxParetoCount = Math.max(...paretoData.map(d => d.count), 1);
-
-            const currentCopqItems = copqs.filter(c => {
-              if (dashboardCopqView === 'month') {
-                return c.month === targetM && (c.year === targetY || !c.year);
-              }
-              return true;
-            });
-
-            const categoryTotals: Record<string, number> = {};
-            currentCopqItems.forEach(c => {
-              const cat = c.category || 'Khác';
-              categoryTotals[cat] = (categoryTotals[cat] || 0) + (c.amount || 0);
-            });
-
-            const sortedCategories = Object.entries(categoryTotals)
-              .map(([name, amount]) => ({ name, amount }))
-              .sort((a, b) => b.amount - a.amount);
-
-            return (
-              <div className="space-y-6" id="view_dashboard_content">
-
-                {/* 3.1. CHỈ TIÊU CHẤT LƯỢNG CHUYÊN MÔN (IQC & OQC YIELD) */}
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-2">
-                      <Activity className="w-3.5 h-3.5 text-indigo-500" />
-                      Chỉ tiêu chất lượng kiểm soát (IQC & OQC)
-                    </h3>
-                    <span className="text-[10px] font-bold text-slate-400">
-                      Chu kỳ: Tuần {targetW} - Tháng {targetM === 6 ? '6 (Hiện tại)' : targetM}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {/* Card 5: Tỷ lệ đạt OQC Tuần */}
-                    <div
-                      onClick={() => {
-                        setActiveTab('weekly_reports');
-                        setSelectedReportWeek(targetW);
-                      }}
-                      className="bg-white border border-slate-200 hover:border-emerald-500 rounded-2xl p-4.5 shadow-sm flex flex-col justify-between h-34 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer group relative overflow-hidden"
-                      title="Nhấp để xem Báo cáo chất lượng Tuần chi tiết"
-                    >
-                      <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-full blur-lg"></div>
-                      <div className="flex justify-between items-start">
-                        <span className="text-[11px] font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-wider font-sans">
-                          Tỷ lệ đạt OQC Tuần ({targetW})
-                        </span>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500 group-hover:scale-110 transition-transform" />
-                      </div>
-                      <div className="flex items-baseline justify-between mt-2">
-                        <span className="text-3xl font-black text-emerald-600 tracking-tight">{oqcWeeklyRate}%</span>
-                        <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black tracking-wide uppercase ${oqcWeeklyRate >= 98.5 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'}`}>
-                          {oqcWeeklyRate >= 98.5 ? 'ĐẠT' : 'CẦN CẢI TIẾN'}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 border-t border-slate-100 pt-2 flex justify-between items-center group-hover:text-slate-600 transition-colors">
-                        <span>Số mẫu kiểm: {oqcWeeklyTotal} mẫu</span>
-                        <span className="text-emerald-600 font-bold font-mono">CHI TIẾT ➔</span>
-                      </div>
-                    </div>
-
-                    {/* Card 6: Tỷ lệ đạt OQC Tháng */}
-                    <div
-                      onClick={() => {
-                        setActiveTab('monthly_reports');
-                      }}
-                      className="bg-white border border-slate-200 hover:border-indigo-500 rounded-2xl p-4.5 shadow-sm flex flex-col justify-between h-34 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer group relative overflow-hidden"
-                      title="Nhấp để chuyển tới Báo cáo chất lượng Tháng"
-                    >
-                      <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/5 rounded-full blur-lg"></div>
-                      <div className="flex justify-between items-start">
-                        <span className="text-[11px] font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-wider font-sans">
-                          Tỷ lệ đạt OQC Tháng {targetM}
-                        </span>
-                        <Activity className="w-4 h-4 text-indigo-500 group-hover:scale-110 transition-transform" />
-                      </div>
-                      <div className="flex items-baseline justify-between mt-2">
-                        <span className="text-3xl font-black text-indigo-600 tracking-tight">{oqcMonthlyRate}%</span>
-                        <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black tracking-wide uppercase ${oqcMonthlyRate >= 98.5 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'}`}>
-                          {oqcMonthlyRate >= 98.5 ? 'ĐẠT' : 'CẦN CẢI TIẾN'}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 border-t border-slate-100 pt-2 flex justify-between items-center group-hover:text-slate-600 transition-colors">
-                        <span>Số mẫu kiểm: {oqcMonthlyTotal} mẫu</span>
-                        <span className="text-indigo-600 font-bold font-mono">XEM THÁNG ➔</span>
-                      </div>
-                    </div>
-
-                    {/* Card 7: Tỷ lệ đạt IQC Tuần */}
-                    <div
-                      onClick={() => {
-                        setActiveTab('weekly_reports');
-                        setSelectedReportWeek(targetW);
-                      }}
-                      className="bg-white border border-slate-200 hover:border-teal-500 rounded-2xl p-4.5 shadow-sm flex flex-col justify-between h-34 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer group relative overflow-hidden"
-                      title="Nhấp để xem Báo cáo chất lượng Tuần chi tiết"
-                    >
-                      <div className="absolute top-0 right-0 w-16 h-16 bg-teal-500/5 rounded-full blur-lg"></div>
-                      <div className="flex justify-between items-start">
-                        <span className="text-[11px] font-bold text-slate-400 group-hover:text-teal-600 transition-colors uppercase tracking-wider font-sans">
-                          Tỷ lệ đạt IQC Tuần ({targetW})
-                        </span>
-                        <ShieldCheck className="w-4 h-4 text-teal-500 group-hover:scale-110 transition-transform" />
-                      </div>
-                      <div className="flex items-baseline justify-between mt-2">
-                        <span className="text-3xl font-black text-teal-600 tracking-tight">{iqcWeeklyRate}%</span>
-                        <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black tracking-wide uppercase ${iqcWeeklyRate >= 98.0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'}`}>
-                          {iqcWeeklyRate >= 98.0 ? 'ĐẠT' : 'CẦN CẢI TIẾN'}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 border-t border-slate-100 pt-2 flex justify-between items-center group-hover:text-slate-600 transition-colors">
-                        <span>Số lô kiểm: {iqcWeeklyTotal} lô</span>
-                        <span className="text-teal-600 font-bold font-mono">CHI TIẾT ➔</span>
-                      </div>
-                    </div>
-
-                    {/* Card 8: Tỷ lệ đạt IQC Tháng */}
-                    <div
-                      onClick={() => {
-                        setActiveTab('monthly_reports');
-                      }}
-                      className="bg-white border border-slate-200 hover:border-violet-500 rounded-2xl p-4.5 shadow-sm flex flex-col justify-between h-34 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer group relative overflow-hidden"
-                      title="Nhấp để chuyển tới Báo cáo chất lượng Tháng"
-                    >
-                      <div className="absolute top-0 right-0 w-16 h-16 bg-violet-500/5 rounded-full blur-lg"></div>
-                      <div className="flex justify-between items-start">
-                        <span className="text-[11px] font-bold text-slate-400 group-hover:text-violet-600 transition-colors uppercase tracking-wider font-sans">
-                          Tỷ lệ đạt IQC Tháng {targetM}
-                        </span>
-                        <Target className="w-4 h-4 text-violet-500 group-hover:scale-110 transition-transform" />
-                      </div>
-                      <div className="flex items-baseline justify-between mt-2">
-                        <span className="text-3xl font-black text-violet-600 tracking-tight">{iqcMonthlyRate}%</span>
-                        <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black tracking-wide uppercase ${iqcMonthlyRate >= 98.0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-200'}`}>
-                          {iqcMonthlyRate >= 98.0 ? 'ĐẠT' : 'CẦN CẢI TIẾN'}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 border-t border-slate-100 pt-2 flex justify-between items-center group-hover:text-slate-600 transition-colors">
-                        <span>Số lô kiểm: {iqcMonthlyTotal} lô</span>
-                        <span className="text-violet-600 font-bold font-mono">XEM THÁNG ➔</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. METRIC CARDS - BIỂU ĐỒ CHI PHÍ CHẤT LƯỢNG (COPQ) TOÀN DIỆN */}
-                <div className="w-full" id="copq_dashboard_panel">
-                  <div
-                    onClick={() => setActiveTab('copq')}
-                    className="bg-white border border-slate-200 hover:border-rose-500 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row justify-between gap-6 transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer group relative overflow-hidden"
-                    title="Nhấp để xem chi tiết danh mục Chi phí Chất lượng (COPQ)"
-                  >
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-rose-500/5 rounded-full blur-xl"></div>
-
-                    {/* Cột trái: Tổng quan Metric */}
-                    <div className="flex-1 flex flex-col justify-between space-y-4">
-                      <div>
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-1">
-                            <span className="text-[11px] font-bold text-slate-400 group-hover:text-rose-600 transition-colors uppercase tracking-wider font-sans">
-                              Chi phí kém chất lượng (COPQ) - Công ty TNHH Xe điện DK Việt Nhật
-                            </span>
-                            <h4 className="text-[10px] text-slate-500 font-bold">
-                              {dashboardCopqView === 'month' ? `Số liệu phát sinh trong Tháng ${targetM}/2026` : 'Tổng chi phí tích lũy lũy kế hệ thống DKBike'}
-                            </h4>
-                          </div>
-
-                          {/* Toggle & Icon */}
-                          <div className="flex items-center gap-3 shrink-0 z-10" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center bg-slate-100/90 p-0.5 rounded-lg border border-slate-200">
-                              <button
-                                type="button"
-                                onClick={() => setDashboardCopqView('month')}
-                                className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase transition-all cursor-pointer ${dashboardCopqView === 'month' ? 'bg-rose-500 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
-                                title={`Xem chi phí Tháng ${targetM}`}
-                              >
-                                Tháng {targetM}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDashboardCopqView('cumulative')}
-                                className={`px-2.5 py-1 rounded-md text-[9px] font-black uppercase transition-all cursor-pointer ${dashboardCopqView === 'cumulative' ? 'bg-rose-500 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
-                                title="Xem chi phí lũy kế"
-                              >
-                                Lũy kế
-                              </button>
-                            </div>
-                            <PiggyBank className="w-5 h-5 text-rose-500 group-hover:scale-110 transition-transform" />
-                          </div>
-                        </div>
-
-                        <div className="flex items-baseline justify-between mt-4">
-                          <span className="text-4xl font-black text-rose-600 tracking-tight">
-                            {dynamicTotalCOPQ.toLocaleString('vi-VN')} Tr <span className="text-sm font-bold text-slate-500">VNĐ</span>
-                          </span>
-                          <span className="text-xs font-bold text-slate-450 font-mono">
-                            {dashboardCopqView === 'month' ? `Tổng lũy kế: ${cumulativeCopq.toFixed(2)} Tr` : `Bình quân tháng: ${(cumulativeCopq / 12).toFixed(2)} Tr`}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="border-t border-slate-100 pt-3 flex flex-col sm:flex-row justify-between items-start sm:items-center text-[11px] text-slate-400 gap-2">
-                        <div>
-                          <span className="font-bold text-slate-500">DK QMS • Slogan: "Xe cho cả gia đình"</span>
-                          <span className="mx-1.5">•</span>
-                          <span>Đơn vị: Triệu đồng (Tr)</span>
-                        </div>
-                        <span className="text-rose-600 font-bold font-mono group-hover:translate-x-1 transition-transform">XEM BÁO CÁO COPQ CHI TIẾT ➔</span>
-                      </div>
-                    </div>
-
-                    {/* Cột phải: Phân rã chi phí theo Danh mục (Category Breakdown) */}
-                    <div className="w-full md:w-80 bg-slate-50/70 border border-slate-100 rounded-xl p-4 flex flex-col justify-between space-y-3 z-10">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Cơ cấu chi phí thất thoát</span>
-                        <span className="text-[9px] font-bold text-slate-400">Tỷ trọng (%)</span>
-                      </div>
-
-                      <div className="space-y-2.5">
-                        {sortedCategories.length > 0 ? (
-                          sortedCategories.slice(0, 4).map(({ name, amount }) => {
-                            const pct = dynamicTotalCOPQ > 0 ? Math.round((amount / dynamicTotalCOPQ) * 100) : 0;
-                            return (
-                              <div key={name} className="space-y-1">
-                                <div className="flex justify-between text-[11px] font-bold">
-                                  <span className="text-slate-700 truncate max-w-[150px]" title={name}>{name}</span>
-                                  <span className="text-slate-600 font-mono">{amount.toFixed(2)} Tr ({pct}%)</span>
-                                </div>
-                                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                                  <div
-                                    className="bg-rose-500 h-full rounded-full transition-all duration-500"
-                                    style={{ width: `${pct}%` }}
-                                  ></div>
-                                </div>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <div className="text-center py-4 text-xs text-slate-400">
-                            Không có dữ liệu chi phí cho kỳ này
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                  </div>
-                </div>
-
-
-                {/* 5. INTERACTIVE PARETO CHART 80/20 */}
-                <div className="w-full" id="chart_pareto_root_causes">
-                  <div
-                    onClick={() => setActiveTab('defects')}
-                    className="bg-white border border-slate-200 hover:border-indigo-500 rounded-2xl p-6 shadow-md flex flex-col justify-between hover:shadow-xl transition-all duration-300 cursor-pointer group"
-                    title="Nhấp để chuyển tới phân hệ Quản lý Lỗi thị trường chi tiết"
-                  >
-                    <div>
-                      {/* Header */}
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-4 mb-6 gap-3">
-                        <div className="space-y-1">
-                          <h3 className="text-base font-black uppercase tracking-tight text-slate-800 flex items-center gap-2 group-hover:text-indigo-600 transition-colors">
-                            <span className="w-3 h-3 rounded-full bg-indigo-600 inline-block animate-pulse"></span>
-                            Biểu đồ Pareto (80/20) - Nhóm nguyên nhân lỗi trọng điểm
-                          </h3>
-                          <p className="text-xs text-slate-500">
-                            Giúp anh Thao định vị 80% rủi ro chất lượng từ 20% nhóm linh kiện chính để tối ưu hóa nguồn lực kiểm định. Nhấp vào biểu đồ để chuyển tới phân hệ Quản lý Lỗi thị trường.
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <span className="text-[10px] bg-indigo-50 border border-indigo-100 text-indigo-700 px-3 py-1 rounded-full font-black uppercase tracking-wider">
-                            ISO 9001 • IATF 16949
-                          </span>
-                          <span className="text-[10px] text-indigo-600 font-black group-hover:translate-x-1 transition-transform inline-flex items-center gap-1 font-sans">
-                            XEM CHI TIẾT ➔
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Chart & Analysis Row */}
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-
-                        {/* Left side: Visual Chart */}
-                        <div className="lg:col-span-7 xl:col-span-8 flex flex-col justify-between">
-                          <div>
-                            {/* Y-Axis scale label */}
-                            <div className="flex justify-between items-center text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                              <span>Tần suất lỗi (Số vụ)</span>
-                              <span className="text-rose-500">Tỷ lệ lũy kế (%)</span>
-                            </div>
-
-                            {/* Chart Core Canvas */}
-                            <div className="relative h-64 border-b border-l border-slate-200 bg-slate-50/50 rounded-lg p-4">
-
-                              {/* Gridlines */}
-                              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none p-4 pb-0 pr-12">
-                                {[100, 80, 60, 40, 20, 0].map((val) => (
-                                  <div key={val} className="relative w-full flex items-center h-full">
-                                    {/* Line */}
-                                    <div className={`w-full border-t ${val === 80 ? 'border-rose-300 border-dashed border-t-2' : 'border-slate-100'}`}></div>
-                                    {/* Right % label */}
-                                    <span className={`absolute right-[-40px] text-[8px] font-mono font-bold ${val === 80 ? 'text-rose-600 bg-rose-50 px-1 rounded border border-rose-200' : 'text-slate-400'}`}>
-                                      {val}%
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-
-                              {/* Hybrid columns & lines overlay */}
-                              <div className="absolute inset-x-4 inset-y-0 flex items-end justify-around pr-12">
-
-                                {/* SVG Layer for cumulative percentage line */}
-                                <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-                                  {(() => {
-                                    const totalBars = paretoData.length;
-                                    const colWidth = 100 / totalBars;
-                                    let pathD = "";
-
-                                    paretoData.forEach((item, index) => {
-                                      // center x in percentages
-                                      const x = (index * colWidth) + (colWidth / 2);
-                                      // scale y so it maps neatly in the chart viewport (leaves 15% padding top & bottom)
-                                      const y = 100 - (item.cumulativePercentage * 0.7 + 15);
-                                      if (index === 0) {
-                                        pathD += `M ${x} ${y}`;
-                                      } else {
-                                        pathD += ` L ${x} ${y}`;
-                                      }
-                                    });
-
-                                    return (
-                                      <path
-                                        d={pathD}
-                                        fill="none"
-                                        stroke="#f43f5e"
-                                        strokeWidth="0.5"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        vectorEffect="non-scaling-stroke"
-                                      />
-                                    );
-                                  })()}
-                                </svg>
-
-                                {/* Absolutely positioned non-distorted HTML Elements for Dots and Texts */}
-                                <div className="absolute inset-0 pointer-events-none overflow-visible">
-                                  {paretoData.map((item, index) => {
-                                    const totalBars = paretoData.length;
-                                    const colWidthPercent = 100 / totalBars;
-                                    const xPercent = (index * colWidthPercent) + (colWidthPercent / 2);
-                                    const yPercent = 100 - (item.cumulativePercentage * 0.7 + 15);
-                                    const isHovered = activeParetoIndex === index;
-                                    return (
-                                      <div
-                                        key={index}
-                                        className="absolute transition-all duration-200 flex flex-col items-center justify-center"
-                                        style={{
-                                          left: `${xPercent}%`,
-                                          top: `${yPercent}%`,
-                                          transform: 'translate(-50%, -50%)',
-                                        }}
-                                      >
-                                        {/* Perfect circle dot */}
-                                        <div
-                                          className={`rounded-full bg-rose-500 border border-white shadow-sm transition-all duration-200 ${isHovered ? 'w-2 h-2' : 'w-1.5 h-1.5'
-                                            }`}
-                                        />
-                                        {/* Sharp, non-distorted percentage text */}
-                                        <span
-                                          className={`absolute bottom-full mb-1 text-rose-600 font-mono select-none whitespace-nowrap transition-all duration-200 ${isHovered ? 'text-[10px] font-black scale-105' : 'text-[8.5px] font-bold'
-                                            }`}
-                                          style={{ transformOrigin: 'bottom' }}
-                                        >
-                                          {item.cumulativePercentage}%
-                                        </span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-
-                                {/* Interactive columns container */}
-                                {paretoData.map((item, index) => {
-                                  const barHeightPercent = Math.round((item.count / maxParetoCount) * 75); // max height capped to 75% of canvas to leave top margin
-                                  const isCritical = item.cumulativePercentage <= 85;
-                                  const isHovered = activeParetoIndex === index;
-                                  const anyHovered = activeParetoIndex !== null;
-
-                                  return (
-                                    <div
-                                      key={index}
-                                      className="flex flex-col items-center w-1/5 h-full justify-end relative z-10 group/bar cursor-pointer"
-                                      onMouseEnter={() => setActiveParetoIndex(index)}
-                                      onMouseLeave={() => setActiveParetoIndex(null)}
-                                    >
-                                      <div
-                                        className={`w-10 sm:w-14 rounded-t-lg transition-all duration-300 ${isHovered
-                                          ? 'scale-x-105 filter brightness-110 shadow-lg'
-                                          : anyHovered
-                                            ? 'opacity-40 scale-95'
-                                            : 'opacity-100'
-                                          } ${isCritical
-                                            ? 'bg-gradient-to-t from-rose-600 to-rose-400 shadow-md shadow-rose-500/20'
-                                            : 'bg-gradient-to-t from-indigo-600 to-indigo-400 shadow-md shadow-indigo-500/15'
-                                          }`}
-                                        style={{ height: `${barHeightPercent}%` }}
-                                      ></div>
-
-                                      {/* Column Hover Tooltip */}
-                                      <div className={`absolute bottom-full mb-3 bg-slate-900 text-white text-[10px] p-2.5 rounded-lg transition-all duration-200 z-30 pointer-events-none shadow-xl w-36 text-center leading-normal ${isHovered ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-2 scale-90'
-                                        }`}>
-                                        <div className="font-extrabold text-indigo-300 truncate">{item.name}</div>
-                                        <div className="border-t border-slate-750 my-1"></div>
-                                        <div>Số vụ lỗi: <span className="font-black text-rose-300">{item.count} vụ</span></div>
-                                        <div>Tỷ trọng: <span className="font-bold">{item.percentage}%</span></div>
-                                        <div>Lũy kế: <span className="font-bold text-emerald-400">{item.cumulativePercentage}%</span></div>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-
-                              </div>
-                            </div>
-
-                            {/* X-Axis labels centered */}
-                            <div className="flex justify-around items-start mt-3 pr-12 text-center select-none">
-                              {paretoData.map((item, index) => {
-                                const isHovered = activeParetoIndex === index;
-                                const isCritical = item.cumulativePercentage <= 85;
-                                return (
-                                  <div
-                                    key={index}
-                                    className={`w-1/5 transition-all duration-200 cursor-pointer ${isHovered ? 'scale-105' : 'opacity-80'}`}
-                                    onMouseEnter={() => setActiveParetoIndex(index)}
-                                    onMouseLeave={() => setActiveParetoIndex(null)}
-                                  >
-                                    <div className={`text-[10px] font-black line-clamp-2 px-1 tracking-tight ${isHovered
-                                      ? 'text-indigo-600'
-                                      : isCritical
-                                        ? 'text-slate-800'
-                                        : 'text-slate-600'
-                                      }`} title={item.name}>
-                                      {item.name}
-                                    </div>
-                                    <div className="mt-1">
-                                      <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full ${isCritical
-                                        ? 'bg-rose-50 text-rose-600 border border-rose-200'
-                                        : 'bg-indigo-50 text-indigo-600 border border-indigo-150'
-                                        }`}>
-                                        {item.count} vụ
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          {/* Legends footer */}
-                          <div className="mt-6 pt-3 border-t border-slate-100 flex flex-wrap justify-between items-center text-[10px] text-slate-400 gap-3 font-sans">
-                            <div className="flex items-center gap-3">
-                              <span className="flex items-center gap-1">
-                                <span className="w-2.5 h-2.5 bg-rose-500 rounded-xs"></span>
-                                <span className="font-extrabold text-rose-600">Vùng trọng điểm Pareto (Vital Few - Sửa khẩn)</span>
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <span className="w-2.5 h-2.5 bg-indigo-500 rounded-xs"></span>
-                                <span className="font-bold text-slate-600">Vùng lỗi thứ yếu (Trivial Many)</span>
-                              </span>
-                            </div>
-                            <span className="text-indigo-600 font-extrabold font-mono uppercase tracking-wider">DKBIKE ISO 9001 - BIỂU ĐỒ PARETO 80/20</span>
-                          </div>
-                        </div>
-
-                        {/* Right side: Modern Audit Panel */}
-                        <div className="lg:col-span-5 xl:col-span-4 bg-slate-50 border border-slate-150 rounded-xl p-5 flex flex-col justify-between">
-                          <div className="space-y-4">
-                            <h4 className="text-[11px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5 border-b pb-2">
-                              📊 Bảng thống kê tỷ trọng & Lũy kế lỗi
-                            </h4>
-
-                            {/* Mini Table */}
-                            <div className="space-y-2">
-                              {paretoData.map((item, index) => {
-                                const isCritical = item.cumulativePercentage <= 85;
-                                const isHovered = activeParetoIndex === index;
-                                return (
-                                  <div
-                                    key={index}
-                                    className={`flex items-center justify-between p-2.5 rounded-lg border transition-all duration-200 cursor-pointer ${isHovered
-                                      ? 'bg-indigo-50 border-indigo-300 shadow-xs translate-x-1'
-                                      : isCritical
-                                        ? 'bg-rose-50/50 border-rose-100 hover:bg-rose-50'
-                                        : 'bg-white border-slate-150 hover:bg-slate-100'
-                                      }`}
-                                    onMouseEnter={() => setActiveParetoIndex(index)}
-                                    onMouseLeave={() => setActiveParetoIndex(null)}
-                                  >
-                                    <div className="flex items-center gap-2 max-w-[60%]">
-                                      <span className={`w-4 h-4 shrink-0 rounded-full flex items-center justify-center text-[9px] font-bold ${isCritical ? 'bg-rose-600 text-white' : 'bg-slate-200 text-slate-700'
-                                        }`}>
-                                        {index + 1}
-                                      </span>
-                                      <span className="text-[11px] font-bold text-slate-700 truncate" title={item.name}>
-                                        {item.name}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-right shrink-0">
-                                      <span className="text-[11px] font-mono font-bold text-slate-600">
-                                        {item.count} vụ
-                                      </span>
-                                      <span className={`text-[10px] font-mono font-black w-8 ${isCritical ? 'text-rose-600' : 'text-slate-500'}`}>
-                                        {item.percentage}%
-                                      </span>
-                                      <span className={`text-[10px] font-mono font-black px-1.5 py-0.5 rounded ${isCritical ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-600'
-                                        }`}>
-                                        {item.cumulativePercentage}%
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          {/* AI Recommendation Alert */}
-                          {paretoData.length > 0 && (
-                            <div className="mt-4 bg-indigo-50/70 border border-indigo-150 rounded-lg p-3.5 space-y-2 text-left">
-                              <h5 className="text-[10px] font-black text-indigo-700 uppercase tracking-wider flex items-center gap-1">
-                                💡 KHUYẾN NGHỊ HỆ THỐNG QMS
-                              </h5>
-                              <p className="text-[11px] text-slate-600 leading-relaxed">
-                                Hạng mục <strong className="text-slate-800">"{paretoData[0].name}"</strong> đóng góp tới <strong className="text-rose-600 font-mono">{paretoData[0].percentage}%</strong> tổng số lỗi. Anh Thao nên ưu tiên chỉ đạo lập biên bản CAPA khắc phục khẩn cấp và rà soát quy trình để đạt hiệu quả cải tiến cao nhất.
-                              </p>
-                            </div>
-                          )}
-                        </div>
-
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* BẢNG THEO DÕI LỖI & PHƯƠNG ÁN XỬ LÝ THEO DÒNG XE (MODEL) */}
-                <DashboardModelDefectTracker
-                  models={models}
-                  oqcRecords={oqcRecords}
-                  pqcRecords={pqcRecords}
-                  defects={defects}
-                  setActiveTab={setActiveTab}
-                  setQcMainSubTab={setQcMainSubTab}
-                  setPqcSearch={setPqcSearch}
-                  setOqcSearch={setOqcSearch}
-                  setMarketDefectsSearch={setMarketDefectsSearch}
-                  setEditingModelIssue={setEditingModelIssue}
-                />
-
-                {/* THAM CHIẾU QUY TRÌNH & ĐỒNG BỘ KHÁC */}
-                <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4.5 text-center shadow-inner relative overflow-hidden" id="dashboard_iso_milestone">
-                  <div className="absolute top-0 left-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-3xl -ml-10 -mt-10"></div>
-                  <div className="relative z-10 space-y-1.5 max-w-2xl mx-auto">
-                    <p className="text-[10px] text-indigo-600 font-black tracking-widest uppercase font-mono">DKBIKE QMS CENTRAL PORTAL</p>
-                    <p className="text-xs text-slate-600 leading-relaxed font-sans">
-                      Các danh mục nhân sự và model xe lắp ráp gốc đã được di dời toàn vẹn sang phân hệ <strong>Quản lý danh sách (Master)</strong> để giữ cho Dashboard luôn được thông thoáng, tập trung 100% vào năng lực phân tích quản trị, rủi ro và các tác vụ tự động hóa chất lượng thời gian thực.
-                    </p>
-                    <div className="flex justify-center gap-3 pt-1.5">
-                      <button
-                        onClick={() => setActiveTab('master_lists')}
-                        className="px-3.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-250 text-[10px] text-slate-700 font-extrabold uppercase rounded-lg shadow-xs transition cursor-pointer"
-                      >
-                        Xem Danh Mục Master ➔
-                      </button>
-                      <button
-                        onClick={() => {
-                          setActiveTab('qms_workflow');
-                          alert("Đã chuyển hướng sang Sơ đồ quy trình liên hoàn.");
-                        }}
-                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-750 text-white text-[10px] font-extrabold uppercase rounded-lg shadow-md transition cursor-pointer"
-                      >
-                        Sơ Đồ Quy Trình QMS ➔
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            );
-          })()}
-
-
           {activeTab === 'quality_planning' && (
             <div className="space-y-6" id="view_quality_planning_content">
               <QualityPlanning
@@ -17281,11 +16558,99 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             </div>
           )}
 
-          {/* ==================================== TAB: BÁO CÁO (NGÀY / TUẦN / THÁNG + GMAIL) ==================================== */}
-          {(activeTab === 'weekly_reports' || activeTab === 'monthly_reports' || activeTab === 'gmail') && (
+          {/* ==================================== TAB: BÁO CÁO (TỔNG QUAN / NGÀY / TUẦN / THÁNG + GMAIL) ==================================== */}
+          {(activeTab === 'dashboard' || activeTab === 'weekly_reports' || activeTab === 'monthly_reports' || activeTab === 'gmail') && (() => {
+            const oqcTotalAll = oqcRecords.length;
+            const oqcPassedAll = oqcRecords.filter(r => r.status === 'Đạt').length;
+            const oqcRateAll = oqcTotalAll > 0 ? ((oqcPassedAll / oqcTotalAll) * 100).toFixed(1) : '--';
+
+            const iqcTotalAll = iqcRecords.length;
+            const iqcPassedAll = iqcRecords.filter(r => r.result === 'Đạt' || (r as any).status === 'Thông quan' || (r as any).status === 'Pass' || (r as any).result === 'Pass').length;
+            const iqcRateAll = iqcTotalAll > 0 ? ((iqcPassedAll / iqcTotalAll) * 100).toFixed(1) : '--';
+
+            const openCapasCount = capas.filter(c => c.status !== 'Đã đóng' && c.status !== 'Hoàn thành' && c.Status !== 'Closed').length;
+            const openDefectsCount = defects.filter(d => d.status !== 'Đã xử lý').length;
+
+            const overviewNode = (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div
+                    onClick={() => { setActiveTab('quality_inspection_records'); setQcMainSubTab('oqc'); }}
+                    className="bg-white rounded-2xl border-2 border-slate-200 hover:border-blue-400 p-4 shadow-sm cursor-pointer transition"
+                  >
+                    <div className="text-[11px] font-extrabold uppercase text-slate-500">Tỷ lệ đạt OQC (Tích lũy)</div>
+                    <div className="mt-1 text-2xl font-black text-blue-700 font-mono">
+                      {oqcRateAll === '--' ? '--' : `${oqcRateAll}%`}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Đạt <strong className="text-slate-700">{oqcPassedAll.toLocaleString('vi-VN')}</strong> / {oqcTotalAll.toLocaleString('vi-VN')} xe kiểm
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => { setActiveTab('quality_inspection_records'); setQcMainSubTab('iqc'); }}
+                    className="bg-white rounded-2xl border-2 border-slate-200 hover:border-emerald-400 p-4 shadow-sm cursor-pointer transition"
+                  >
+                    <div className="text-[11px] font-extrabold uppercase text-slate-500">Tỷ lệ đạt IQC (Tích lũy)</div>
+                    <div className="mt-1 text-2xl font-black text-emerald-700 font-mono">
+                      {iqcRateAll === '--' ? '--' : `${iqcRateAll}%`}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Đạt <strong className="text-slate-700">{iqcPassedAll.toLocaleString('vi-VN')}</strong> / {iqcTotalAll.toLocaleString('vi-VN')} lô nhập
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setActiveTab('tasks')}
+                    className="bg-white rounded-2xl border-2 border-slate-200 hover:border-amber-400 p-4 shadow-sm cursor-pointer transition"
+                  >
+                    <div className="text-[11px] font-extrabold uppercase text-slate-500">Hồ sơ CAPA đang mở</div>
+                    <div className="mt-1 text-2xl font-black text-amber-600 font-mono">{openCapasCount}</div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Tổng cộng <strong className="text-slate-700">{capas.length}</strong> hồ sơ CAPA
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setActiveTab('defects')}
+                    className="bg-white rounded-2xl border-2 border-slate-200 hover:border-rose-400 p-4 shadow-sm cursor-pointer transition"
+                  >
+                    <div className="text-[11px] font-extrabold uppercase text-slate-500">Phản ánh Thị trường</div>
+                    <div className="mt-1 text-2xl font-black text-rose-600 font-mono">{defects.length}</div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Chưa đóng: <strong className="text-rose-700">{openDefectsCount}</strong> sự cố
+                    </div>
+                  </div>
+                </div>
+
+                <DashboardModelDefectTracker
+                  models={models}
+                  oqcRecords={oqcRecords}
+                  pqcRecords={pqcRecords}
+                  defects={defects}
+                  setActiveTab={setActiveTab}
+                  setQcMainSubTab={setQcMainSubTab}
+                  setPqcSearch={setPqcSearch}
+                  setOqcSearch={setOqcSearch}
+                  setMarketDefectsSearch={setMarketDefectsSearch}
+                  setEditingModelIssue={setEditingModelIssue}
+                />
+              </>
+            );
+
+            return (
             <>
               <ReportsHub
-                initialPeriodType={activeTab === 'gmail' ? 'day' : activeTab === 'weekly_reports' ? 'week' : 'month'}
+                initialPeriodType={
+                  activeTab === 'gmail'
+                    ? 'day'
+                    : activeTab === 'weekly_reports'
+                      ? 'week'
+                      : activeTab === 'monthly_reports'
+                        ? 'month'
+                        : 'overview'
+                }
+                overviewContent={overviewNode}
                 dataset={{
                   dailyLogs,
                   iqcRecords,
@@ -17467,7 +16832,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 </div>
               )}
             </>
-          )}
+            );
+          })()}
           {activeTab === 'quality_inspection_records' && (
             <QualityInspectionRecords
               iqcRecords={iqcRecords}
