@@ -1610,7 +1610,7 @@ const DashboardModelDefectTracker = memo(function DashboardModelDefectTracker({
   }, [modelDefectSummaries]);
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mt-6 mb-6" id="dashboard_model_defect_tracker">
+    <div className="bg-white border-2 border-slate-300 rounded-2xl shadow-sm overflow-hidden" id="dashboard_model_defect_tracker">
       <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h3 className="text-xs font-extrabold text-slate-800 uppercase flex items-center gap-1.5">
@@ -16562,63 +16562,73 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
           {(activeTab === 'dashboard' || activeTab === 'weekly_reports' || activeTab === 'monthly_reports' || activeTab === 'gmail') && (() => {
             const oqcTotalAll = oqcRecords.length;
             const oqcPassedAll = oqcRecords.filter(r => r.status === 'Đạt').length;
+            const oqcFailedAll = oqcTotalAll - oqcPassedAll;
             const oqcRateAll = oqcTotalAll > 0 ? ((oqcPassedAll / oqcTotalAll) * 100).toFixed(1) : '--';
 
             const iqcTotalAll = iqcRecords.length;
             const iqcPassedAll = iqcRecords.filter(r => r.result === 'Đạt' || (r as any).status === 'Thông quan' || (r as any).status === 'Pass' || (r as any).result === 'Pass').length;
+            const iqcFailedAll = iqcTotalAll - iqcPassedAll;
             const iqcRateAll = iqcTotalAll > 0 ? ((iqcPassedAll / iqcTotalAll) * 100).toFixed(1) : '--';
 
             const openCapasCount = capas.filter(c => c.status !== 'Đã đóng' && c.status !== 'Hoàn thành' && c.Status !== 'Closed').length;
-            const openDefectsCount = defects.filter(d => d.status !== 'Đã xử lý').length;
+            const closedCapasCount = capas.length - openCapasCount;
+            const closedDefectsCount = defects.filter(d => d.status === 'Đã xử lý').length;
+            const openDefectsCount = defects.length - closedDefectsCount;
+            const marketResolveRateAll = defects.length > 0 ? ((closedDefectsCount / defects.length) * 100).toFixed(1) : '--';
 
             const overviewNode = (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div
                     onClick={() => { setActiveTab('quality_inspection_records'); setQcMainSubTab('oqc'); }}
-                    className="bg-white rounded-2xl border-2 border-slate-200 hover:border-blue-400 p-4 shadow-sm cursor-pointer transition"
+                    className="bg-white rounded-2xl border-2 border-slate-300 hover:border-blue-500 p-4 shadow-sm cursor-pointer transition"
                   >
-                    <div className="text-[11px] font-extrabold uppercase text-slate-500">Tỷ lệ đạt OQC (Tích lũy)</div>
-                    <div className="mt-1 text-2xl font-black text-blue-700 font-mono">
+                    <div className="text-xs font-bold uppercase text-slate-500">Tỷ lệ đạt OQC (Tích lũy)</div>
+                    <div className="mt-1 text-3xl font-extrabold text-slate-900">
                       {oqcRateAll === '--' ? '--' : `${oqcRateAll}%`}
                     </div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      Đạt <strong className="text-slate-700">{oqcPassedAll.toLocaleString('vi-VN')}</strong> / {oqcTotalAll.toLocaleString('vi-VN')} xe kiểm
+                    <div className="text-xs text-slate-600 mt-1">
+                      Đạt {oqcPassedAll.toLocaleString('vi-VN')}/{oqcTotalAll.toLocaleString('vi-VN')} xe | Lỗi: {oqcFailedAll.toLocaleString('vi-VN')}
                     </div>
                   </div>
 
                   <div
                     onClick={() => { setActiveTab('quality_inspection_records'); setQcMainSubTab('iqc'); }}
-                    className="bg-white rounded-2xl border-2 border-slate-200 hover:border-emerald-400 p-4 shadow-sm cursor-pointer transition"
+                    className="bg-white rounded-2xl border-2 border-slate-300 hover:border-blue-500 p-4 shadow-sm cursor-pointer transition"
                   >
-                    <div className="text-[11px] font-extrabold uppercase text-slate-500">Tỷ lệ đạt IQC (Tích lũy)</div>
-                    <div className="mt-1 text-2xl font-black text-emerald-700 font-mono">
+                    <div className="text-xs font-bold uppercase text-slate-500">Tỷ lệ đạt lô IQC (Tích lũy)</div>
+                    <div className="mt-1 text-3xl font-extrabold text-slate-900">
                       {iqcRateAll === '--' ? '--' : `${iqcRateAll}%`}
                     </div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      Đạt <strong className="text-slate-700">{iqcPassedAll.toLocaleString('vi-VN')}</strong> / {iqcTotalAll.toLocaleString('vi-VN')} lô nhập
+                    <div className="text-xs text-slate-600 mt-1">
+                      Đạt {iqcPassedAll.toLocaleString('vi-VN')}/{iqcTotalAll.toLocaleString('vi-VN')} lô | Lỗi: {iqcFailedAll.toLocaleString('vi-VN')}
                     </div>
                   </div>
 
                   <div
                     onClick={() => setActiveTab('tasks')}
-                    className="bg-white rounded-2xl border-2 border-slate-200 hover:border-amber-400 p-4 shadow-sm cursor-pointer transition"
+                    className="bg-white rounded-2xl border-2 border-slate-300 hover:border-blue-500 p-4 shadow-sm cursor-pointer transition"
                   >
-                    <div className="text-[11px] font-extrabold uppercase text-slate-500">Hồ sơ CAPA đang mở</div>
-                    <div className="mt-1 text-2xl font-black text-amber-600 font-mono">{openCapasCount}</div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      Tổng cộng <strong className="text-slate-700">{capas.length}</strong> hồ sơ CAPA
+                    <div className="text-xs font-bold uppercase text-slate-500">Hồ sơ CAPA đang mở</div>
+                    <div className="mt-1 text-3xl font-extrabold text-slate-900">{openCapasCount}</div>
+                    <div className="text-xs text-slate-600 mt-1">
+                      Đã đóng {closedCapasCount}/{capas.length} hồ sơ CAPA
                     </div>
                   </div>
 
                   <div
                     onClick={() => setActiveTab('defects')}
-                    className="bg-white rounded-2xl border-2 border-slate-200 hover:border-rose-400 p-4 shadow-sm cursor-pointer transition"
+                    className="bg-white rounded-2xl border-2 border-slate-300 hover:border-blue-500 p-4 shadow-sm cursor-pointer transition"
                   >
-                    <div className="text-[11px] font-extrabold uppercase text-slate-500">Phản ánh Thị trường</div>
-                    <div className="mt-1 text-2xl font-black text-rose-600 font-mono">{defects.length}</div>
-                    <div className="text-xs text-slate-500 mt-1">
-                      Chưa đóng: <strong className="text-rose-700">{openDefectsCount}</strong> sự cố
+                    <div className="text-xs font-bold uppercase text-slate-500">Xử lý Thị trường (Tích lũy)</div>
+                    <div className="mt-1 text-3xl font-extrabold text-slate-900">
+                      {marketResolveRateAll === '--' ? '--' : `${marketResolveRateAll}%`}
+                    </div>
+                    <div className="text-xs text-slate-600 mt-1">
+                      Đóng {closedDefectsCount}/{defects.length} | Còn mở:{' '}
+                      <span className={openDefectsCount > 0 ? 'font-bold text-rose-700' : ''}>
+                        {openDefectsCount}
+                      </span>
                     </div>
                   </div>
                 </div>
