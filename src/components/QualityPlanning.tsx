@@ -839,11 +839,43 @@ export default function QualityPlanning({
   const weekSuffix = `${selectedYear}_M${selectedMonth}_${selectedWeek}`;
   const monthSuffix = `${selectedYear}_M${selectedMonth}`;
 
-  // Ưu tiên đọc từ khóa tổng hợp đồng bộ Cloud (*_all[suffix]) trước, sau đó mới fallback sang khóa lẻ cục bộ
+  const MOCK_MONTHLY_SUPPLIERS = new Set([
+    'Nhà cung cấp Việt Nhật',
+    'Nhà cung cấp Shin-Etsu',
+    'Phụ tùng điện MOTO-DK',
+    'Nhựa đúc Á Châu',
+    'Ắc quy Chilwee Việt Nam'
+  ]);
+
+  const cleanMonthlySampleData = <T,>(allKey: string, data: T): T => {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+    const obj = data as Record<string, any>;
+    if (allKey === 'dk_monthly_assemblies_all') {
+      const keys = Object.keys(obj);
+      const isExactLegacySample =
+        keys.length > 0 &&
+        keys.every(k => ['DK Roma SX V2', 'DK Gogo Smart', 'DK Nova', 'DK V2'].includes(k)) &&
+        obj['DK Roma SX V2']?.['Tuần 1'] === 180 &&
+        obj['DK Gogo Smart']?.['Tuần 1'] === 220;
+      if (isExactLegacySample) return {} as T;
+    }
+    if (allKey === 'dk_monthly_supplies_all') {
+      const cleaned: Record<string, any> = {};
+      Object.keys(obj).forEach(k => {
+        if (!MOCK_MONTHLY_SUPPLIERS.has(k)) {
+          cleaned[k] = obj[k];
+        }
+      });
+      return cleaned as T;
+    }
+    return data;
+  };
+
+  // Ưu tiên đọc từ khóa tổng hợp đồng bộ Cloud (*_all[suffix]) trước, sau đó mới fallback sang khóa theo kỳ; KHÔNG đọc khóa legacy chung để tránh tự nạp dữ liệu mẫu/tháng khác
   const loadPlanningPeriodData = <T,>(
     allKey: string,
     suffixKey: string,
-    legacyKey: string,
+    _legacyKey: string,
     suffix: string,
     fallback: () => T
   ): T => {
@@ -852,13 +884,11 @@ export default function QualityPlanning({
       if (savedAll) {
         const parsedAll = JSON.parse(savedAll);
         if (parsedAll && typeof parsedAll === 'object' && parsedAll[suffix] !== undefined) {
-          return parsedAll[suffix];
+          return cleanMonthlySampleData(allKey, parsedAll[suffix]);
         }
       }
       const saved = localStorage.getItem(suffixKey);
-      if (saved) return JSON.parse(saved);
-      const oldLegacy = localStorage.getItem(legacyKey);
-      if (oldLegacy) return JSON.parse(oldLegacy);
+      if (saved) return cleanMonthlySampleData(allKey, JSON.parse(saved));
     } catch (e) {}
     return fallback();
   };
@@ -1004,7 +1034,6 @@ export default function QualityPlanning({
     setWeeklyAssemblyState(prev => {
       const nextVal = typeof updateFnOrValue === 'function' ? updateFnOrValue(prev) : updateFnOrValue;
       localStorage.setItem(`dk_weekly_assembly_${weekSuffix}`, JSON.stringify(nextVal));
-      localStorage.setItem('dk_weekly_assembly', JSON.stringify(nextVal));
       
       const savedDictStr = localStorage.getItem('dk_weekly_assemblies_all');
       let savedDict = {};
@@ -1021,7 +1050,6 @@ export default function QualityPlanning({
     setMonthlyAssemblyState(prev => {
       const nextVal = typeof updateFnOrValue === 'function' ? updateFnOrValue(prev) : updateFnOrValue;
       localStorage.setItem(`dk_monthly_assembly_${monthSuffix}`, JSON.stringify(nextVal));
-      localStorage.setItem('dk_monthly_assembly', JSON.stringify(nextVal));
       
       const savedDictStr = localStorage.getItem('dk_monthly_assemblies_all');
       let savedDict = {};
@@ -1038,7 +1066,6 @@ export default function QualityPlanning({
     setWeeklySupplyState(prev => {
       const nextVal = typeof updateFnOrValue === 'function' ? updateFnOrValue(prev) : updateFnOrValue;
       localStorage.setItem(`dk_weekly_supply_${weekSuffix}`, JSON.stringify(nextVal));
-      localStorage.setItem('dk_weekly_supply', JSON.stringify(nextVal));
       
       const savedDictStr = localStorage.getItem('dk_weekly_supplies_all');
       let savedDict = {};
@@ -1055,7 +1082,6 @@ export default function QualityPlanning({
     setMonthlySupplyState(prev => {
       const nextVal = typeof updateFnOrValue === 'function' ? updateFnOrValue(prev) : updateFnOrValue;
       localStorage.setItem(`dk_monthly_supply_${monthSuffix}`, JSON.stringify(nextVal));
-      localStorage.setItem('dk_monthly_supply', JSON.stringify(nextVal));
       
       const savedDictStr = localStorage.getItem('dk_monthly_supplies_all');
       let savedDict = {};
@@ -2026,44 +2052,20 @@ export default function QualityPlanning({
     setForceRefresh(prev => prev + 1);
   };
 
-  // Reset dữ liệu về ban đầu nhanh chóng
+  // Xóa trắng dữ liệu kỳ hiện tại (không nạp dữ liệu mẫu giả lập)
   const handleResetData = () => {
-    if (window.confirm("Bạn có chắc muốn nạp lại dữ liệu mẫu gốc của DKBike để đối chiếu hay không?")) {
-      // Nạp lại các tác vụ lập kế hoạch chất lượng mẫu
-      setTasks(getInitialQmsPlanningTasks(selectedMonth, selectedYear));
-
+    const label = planningMode === 'weekly' ? `Tuần ${selectedWeek} Tháng ${selectedMonth}/${selectedYear}` : `Tháng ${selectedMonth}/${selectedYear}`;
+    if (window.confirm(`Bạn có chắc muốn xóa trắng toàn bộ dữ liệu kế hoạch lắp ráp & nhập hàng của ${label} không?`)) {
       if (planningMode === 'weekly') {
         const defaultWTimeline = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật'];
         setWeeklyTimeline(defaultWTimeline);
-        setWeeklyAssembly({
-          'DK Roma SX V2': { 'Thứ 2': 40, 'Thứ 3': 45, 'Thứ 4': 50, 'Thứ 5': 45, 'Thứ 6': 50, 'Thứ 7': 30, 'Chủ nhật': 0 },
-          'DK Gogo Smart': { 'Thứ 2': 50, 'Thứ 3': 60, 'Thứ 4': 55, 'Thứ 5': 50, 'Thứ 6': 70, 'Thứ 7': 40, 'Chủ nhật': 0 },
-          'DK Nova': { 'Thứ 2': 20, 'Thứ 3': 25, 'Thứ 4': 20, 'Thứ 5': 30, 'Thứ 6': 25, 'Thứ 7': 15, 'Chủ nhật': 0 },
-          'DK V2': { 'Thứ 2': 30, 'Thứ 3': 35, 'Thứ 4': 30, 'Thứ 5': 40, 'Thứ 6': 35, 'Thứ 7': 20, 'Chủ nhật': 0 }
-        });
-        setWeeklySupply({
-          'Nhà cung cấp Việt Nhật': { 'Thứ 2': 'Khung sườn / 100', 'Thứ 4': 'Chén bi / 250', 'Thứ 6': 'Khung sườn / 120' },
-          'Nhà cung cấp Shin-Etsu': { 'Thứ 3': 'Rắc sạc đúc / 200', 'Thứ 5': 'Socket thun / 150' },
-          'Phụ tùng điện MOTO-DK': { 'Thứ 2': 'Động cơ / 50', 'Thứ 4': 'IC điều tốc / 120', 'Thứ 6': 'Động cơ / 80' },
-          'Nhựa đúc Á Châu': { 'Thứ 3': 'Dàn nhựa / 100 bộ', 'Thứ 5': 'Yếm xe / 150 bộ' },
-          'Ắc quy Chilwee Việt Nam': { 'Thứ 2': 'Bình điện / 500 hũ', 'Thứ 4': 'Ắc quy khô / 300 bình' }
-        });
+        setWeeklyAssembly({});
+        setWeeklySupply({});
       } else {
         const defaultMTimeline = ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4', 'Tuần 5'];
         setMonthlyTimeline(defaultMTimeline);
-        setMonthlyAssembly({
-          'DK Roma SX V2': { 'Tuần 1': 180, 'Tuần 2': 190, 'Tuần 3': 200, 'Tuần 4': 180, 'Tuần 5': 0 },
-          'DK Gogo Smart': { 'Tuần 1': 220, 'Tuần 2': 240, 'Tuần 3': 230, 'Tuần 4': 250, 'Tuần 5': 0 },
-          'DK Nova': { 'Tuần 1': 100, 'Tuần 2': 110, 'Tuần 3': 100, 'Tuần 4': 120, 'Tuần 5': 0 },
-          'DK V2': { 'Tuần 1': 120, 'Tuần 2': 130, 'Tuần 3': 140, 'Tuần 4': 120, 'Tuần 5': 0 }
-        });
-        setMonthlySupply({
-          'Nhà cung cấp Việt Nhật': { 'Tuần 1': 'Khung sườn / 400', 'Tuần 2': 'Chén bi / 1000', 'Tuần 3': 'Khung sườn / 450', 'Tuần 4': 'Chén bi / 800' },
-          'Nhà cung cấp Shin-Etsu': { 'Tuần 1': 'Rắc sạc / 800', 'Tuần 3': 'Socket thun / 600' },
-          'Phụ tùng điện MOTO-DK': { 'Tuần 1': 'Động cơ / 250', 'Tuần 2': 'IC sườn / 500', 'Tuần 3': 'Động cơ / 300', 'Tuần 4': 'Động cơ / 200' },
-          'Nhựa đúc Á Châu': { 'Tuần 2': 'Nhựa ốp / 800 bộ', 'Tuần 4': 'Dàn yếm / 1000 bộ' },
-          'Ắc quy Chilwee Việt Nam': { 'Tuần 1': 'Bình điện / 2000 hũ', 'Tuần 3': 'Ắc quy khô / 1500 bình' }
-        });
+        setMonthlyAssembly({});
+        setMonthlySupply({});
       }
       setForceRefresh(prev => prev + 1);
     }
@@ -4312,87 +4314,12 @@ export default function QualityPlanning({
 
     // 2. Đồng bộ từ dk_projects / dk_ptsp_tasks - ĐÃ HỦY ĐỒNG BỘ theo yêu cầu của anh Thao để nhập thủ công
 
-    // 3. Đồng bộ từ tác vụ phòng ban phòng QLCL chung 'dk_tasks'
-    try {
-      const savedTasks = localStorage.getItem('dk_tasks');
-      if (savedTasks) {
-        const parsedTasks = JSON.parse(savedTasks);
-        if (Array.isArray(parsedTasks)) {
-          parsedTasks.forEach((t: any, index: number) => {
-            const taskDue = t.DueDate || t.date;
-            const { month: taskMonth, year: taskYear } = parseDateYearMonth(taskDue, selectedMonth, selectedYear);
-            const taskWeek = t.week || (taskDue ? getWeekFromDateString(taskDue) : 'W1');
-            const catStr = (t.category || t.Category || '').toLowerCase();
-            let section: 'backlog' | 'capa' | 'ptsp' | 'coordination' = 'backlog';
-            if (catStr.includes('coordination') || catStr.includes('phối hợp') || catStr.includes('liên ban') || catStr.includes('audit')) {
-              section = 'coordination';
-            } else if (catStr.includes('capa') || catStr.includes('biện pháp')) {
-              section = 'capa';
-            } else if (catStr.includes('ptsp') || catStr.includes('phát triển')) {
-              section = 'backlog'; // Chuyển sang backlog thay vì ptsp để giữ ptsp hoàn toàn thủ công
-            }
-
-            let isMatch = false;
-            if (section === 'backlog') {
-              if (planningMode === 'monthly') {
-                isMatch = (taskMonth === prevMonth && taskYear === prevYear);
-              } else {
-                // planningMode === 'weekly'
-                let prevWeek = 'W1';
-                let prevWeekMonth = selectedMonth;
-                let prevWeekYear = selectedYear;
-                if (selectedWeek === 'W2') prevWeek = 'W1';
-                else if (selectedWeek === 'W3') prevWeek = 'W2';
-                else if (selectedWeek === 'W4') prevWeek = 'W3';
-                else if (selectedWeek === 'W5') prevWeek = 'W4';
-                else if (selectedWeek === 'W1') {
-                  prevWeek = 'W5';
-                  prevWeekMonth = selectedMonth === 1 ? 12 : selectedMonth - 1;
-                  prevWeekYear = selectedMonth === 1 ? selectedYear - 1 : selectedYear;
-                }
-
-                if (selectedWeek === 'W1') {
-                  isMatch = (taskMonth === prevWeekMonth && taskYear === prevWeekYear && (taskWeek === 'W5' || taskWeek === 'W4'));
-                } else {
-                  isMatch = (taskMonth === prevWeekMonth && taskYear === prevWeekYear && taskWeek === prevWeek);
-                }
-              }
-            } else {
-              if (planningMode === 'monthly') {
-                isMatch = (taskMonth === selectedMonth && taskYear === selectedYear);
-              } else {
-                isMatch = (taskMonth === selectedMonth && taskYear === selectedYear && taskWeek === selectedWeek);
-              }
-            }
-
-            if (isMatch) {
-              const statusStr = (t.status || t.Status || '').toLowerCase();
-              const isCompleted = statusStr.includes('completed') || statusStr.includes('đạt') || statusStr.includes('xong');
-              const isProgress = statusStr.includes('progress') || statusStr.includes('doing') || statusStr.includes('hành');
-
-              list.push({
-                id: `LINK-TASK-${t.WorkID || t.id || index}`,
-                section,
-                title: `${t.TaskDescription || t.content || 'Nhiệm vụ kiểm soát chất lượng'}`,
-                assignee: t.Owner || t.assignee || 'Đoàn Anh Hùng',
-                deadline: taskDue || `${selectedYear}-${selectedMonth.toString().padStart(2, '0')}-28`,
-                status: isCompleted ? 'Completed' : (isProgress ? 'In_Progress' : 'Pending'),
-                priority: (t.priority || '').toUpperCase() === 'HIGH' ? 'High' : ((t.priority || '').toUpperCase() === 'MEDIUM' ? 'Medium' : 'Low'),
-                modelOrSupplier: t.SupplierReference || t.modelOrSupplier || '',
-                month: taskMonth,
-                year: taskYear,
-                week: taskWeek
-              });
-            }
-          });
-        }
-      }
-    } catch (_) {}
+    // 3. Đã bỏ đồng bộ từ bảng dk_tasks cũ (không còn dùng để tránh dữ liệu mẫu)
 
     // 4. Đồng bộ các bản ghi công việc chưa thực hiện (statusPercent !== '100%') trong Báo cáo ngày QLCL 'dk_daily_logs'
     try {
       const savedDailyLogs = localStorage.getItem('dk_daily_logs');
-      const dailyLogsArray = savedDailyLogs ? JSON.parse(savedDailyLogs) : DAILY_LOG_DATA;
+      const dailyLogsArray = savedDailyLogs ? JSON.parse(savedDailyLogs) : [];
       if (Array.isArray(dailyLogsArray)) {
         dailyLogsArray.forEach((item: any, index: number) => {
           if (item.statusPercent !== "100%") {
@@ -4694,7 +4621,7 @@ export default function QualityPlanning({
             title="Nhập lại mẫu DKBike mặc định"
             className="p-2 border border-slate-300 text-slate-500 bg-white hover:bg-slate-50 rounded-lg transition shadow-xs cursor-pointer flex items-center gap-1 text-xs font-bold uppercase shrink-0"
           >
-            <RefreshCw className="w-3.5 h-3.5 text-indigo-500" /> Reset Mẫu
+            <RefreshCw className="w-3.5 h-3.5 text-indigo-500" /> Xóa trắng kỳ này
           </button>
         </div>
       </div>
