@@ -13,6 +13,7 @@ export interface DailyLogRecord {
   deadline: string;
   statusPercent: string;
   note: string;
+  evaluation?: string;
   year?: number;
 }
 

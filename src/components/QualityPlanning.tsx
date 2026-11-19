@@ -342,6 +342,7 @@ export interface QualityTask {
   status: 'Pending' | 'In_Progress' | 'Completed';
   priority: 'High' | 'Medium' | 'Low';
   notes?: string;
+  evaluation?: string;
   modelOrSupplier?: string;
   month?: number;
   year?: number;

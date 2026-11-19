@@ -6,6 +6,7 @@ import {
   MarketDefect,
   PTSPProject,
   PTSPTask,
+  PtspModelWorkspaceRecord,
   PartEvaluation,
   ReportNote,
   Supplier,
@@ -70,6 +71,7 @@ export interface ReportDatasetInput {
   copqs: COPQMetric[];
   ptspProjects: PTSPProject[];
   ptspTasks: PTSPTask[];
+  ptspModels?: PtspModelWorkspaceRecord[];
   planningTasks?: QualityTask[];
   suppliers: Supplier[];
   supplierProductionAudits: SupplierProductionAudit[];
@@ -209,6 +211,18 @@ export interface ReportSnapshot {
     ptspCompleted: number;
     ptspOverdue: PTSPTask[];
     ptspAvgProgress: number;
+    ptspIssuesInPeriod: {
+      id: string;
+      modelCode: string;
+      modelName: string;
+      partOrArea: string;
+      description: string;
+      severity: 'A' | 'B' | 'C';
+      ownerDept: string;
+      dueDate: string;
+      status: string;
+      createdAt: string;
+    }[];
     planningTasksInPeriod: QualityTask[];
     planningTasksOverdue: QualityTask[];
     planningTasksCompleted: number;
@@ -843,20 +857,63 @@ export function buildReportSnapshot(
     return true;
   });
 
+  // Chỉ lấy công việc tồn quá hạn thuộc ĐÚNG kỳ liền trước (tuần trước nếu Theo tuần, tháng trước nếu Theo tháng)
+  const prevStartMs = period.prev.start.getTime();
+  const prevEndMs = period.prev.end.getTime();
   const planningTasksOverdue = allPlanningTasks.filter(t => {
     if (t.status === 'Completed') return false;
     const dDate = parseFlexibleDate(t.deadline);
-    if (dDate) return dDate.getTime() < pStartMs;
+    if (dDate) {
+      const dMs = dDate.getTime();
+      return dMs >= prevStartMs && dMs <= prevEndMs;
+    }
+    if (period.type === 'month') {
+      return t.year === period.prev.year && t.month === period.prev.value;
+    }
     if (t.year && t.month) {
       const wRange = getPlanWeekRange(t.year, t.month, t.week);
-      if (wRange) return wRange.end < pStartMs;
-      const monthEnd = new Date(t.year, t.month, 0, 23, 59, 59, 999).getTime();
-      return monthEnd < pStartMs;
+      if (wRange) return wRange.start <= prevEndMs && wRange.end >= prevStartMs;
     }
     return false;
   });
 
   const planningTasksCompleted = planningTasksInPeriod.filter(t => t.status === 'Completed').length;
+
+  // --- 7C. VẤN ĐỀ MODEL PHÁT SINH TRONG KỲ TỪ PHÂN HỆ PTSP THỰC TẾ (dk_ptsp_models) ---
+  const ptspIssuesInPeriod: {
+    id: string;
+    modelCode: string;
+    modelName: string;
+    partOrArea: string;
+    description: string;
+    severity: 'A' | 'B' | 'C';
+    ownerDept: string;
+    dueDate: string;
+    status: string;
+    createdAt: string;
+  }[] = [];
+
+  (input.ptspModels || []).forEach(model => {
+    (model.issues || []).forEach(issue => {
+      const issueDate = parseFlexibleDate(issue.createdAt) || parseFlexibleDate(issue.dueDate);
+      if (!issueDate) return;
+      const ms = issueDate.getTime();
+      if (ms >= pStartMs && ms <= pEndMs) {
+        ptspIssuesInPeriod.push({
+          id: issue.id,
+          modelCode: model.code || '',
+          modelName: model.modelName || '',
+          partOrArea: issue.partOrArea || '',
+          description: issue.description || '',
+          severity: issue.severity || 'B',
+          ownerDept: issue.ownerDept || '',
+          dueDate: issue.dueDate || '',
+          status: issue.status || 'Mở',
+          createdAt: issue.createdAt || ''
+        });
+      }
+    });
+  });
 
   // --- 8. COPQ ---
   const curCopqs = input.copqs.filter(c => {
@@ -1271,6 +1328,7 @@ export function buildReportSnapshot(
       ptspCompleted,
       ptspOverdue,
       ptspAvgProgress,
+      ptspIssuesInPeriod,
       planningTasksInPeriod,
       planningTasksOverdue,
       planningTasksCompleted

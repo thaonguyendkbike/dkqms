@@ -16,12 +16,15 @@ import {
   Mail,
   MessageSquarePlus,
   Minus,
+  Pencil,
   Plus,
   Printer,
   Trash2,
   X
 } from 'lucide-react';
 import { QualityStaff, ReportNote } from '../types';
+import type { DailyLogRecord } from '../dailyLogsData';
+import type { QualityTask } from '../components/QualityPlanning';
 import GmailManager from '../components/GmailManager';
 import {
   buildReportSnapshot,
@@ -55,6 +58,8 @@ export interface ReportsHubProps {
   senderEmail?: string;
   onSaveNote: (note: ReportNote) => boolean;
   onDeleteNote: (id: string) => void;
+  onUpdateDailyLog?: (updatedLog: DailyLogRecord) => void;
+  onUpdatePlanningTask?: (updatedTask: QualityTask) => void;
   onOpenAddWeekTask: () => void;
   onNavigateTab: (tab: string) => void;
   onToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
@@ -98,6 +103,8 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
   senderEmail = 'thaonguyendkbike@gmail.com',
   onSaveNote,
   onDeleteNote,
+  onUpdateDailyLog,
+  onUpdatePlanningTask,
   onOpenAddWeekTask,
   onNavigateTab,
   onToast
@@ -121,9 +128,10 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
   const [subTab, setSubTab] = useState<ReportSubTab>('overview');
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showMissingDateModal, setShowMissingDateModal] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const [editingDailyLog, setEditingDailyLog] = useState<DailyLogRecord | null>(null);
+  const [editingPlanningTask, setEditingPlanningTask] = useState<QualityTask | null>(null);
 
   useEffect(() => {
     if (!showExportMenu) return;
@@ -565,16 +573,6 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
               <span className="font-extrabold text-slate-900 text-sm">{period.label}</span>
               <span>({period.rangeLabel} — Chuẩn ISO 8601)</span>
-              {snapshot.missingDateCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowMissingDateModal(true)}
-                  title="Bấm để xem chi tiết các bản ghi thiếu ngày hoặc sai định dạng ngày"
-                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold border border-amber-300 transition cursor-pointer"
-                >
-                  <AlertTriangle className="w-3 h-3" /> {snapshot.missingDateCount} bản ghi thiếu ngày (Xem chi tiết)
-                </button>
-              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
@@ -1308,59 +1306,61 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
       {/* ==================== TAB 5: CÔNG VIỆC ==================== */}
       {subTab === 'work' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Card 1: Công việc tồn đọng từ kỳ liền trước (cho phép Sửa & Đánh giá trực tiếp) */}
           <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <div className="text-sm font-extrabold text-slate-900">
                 Công việc tồn đọng từ {periodType === 'week' ? 'tuần trước' : 'tháng trước'} ({work.pendingDailyLogs.length})
               </div>
-              <button
-                type="button"
-                onClick={onOpenAddWeekTask}
-                className="text-xs font-bold text-blue-700 hover:underline"
-              >
-                + Bổ sung việc
-              </button>
+              <span className="text-[11px] font-semibold text-slate-500">
+                {period.prev.label}
+              </span>
             </div>
             {work.pendingByAssignee.length === 0 ? (
               <p className="text-xs text-slate-500">
                 Không có công việc tồn đọng từ {periodType === 'week' ? 'tuần trước' : 'tháng trước'}.
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
                 {work.pendingByAssignee.map((a) => (
-                  <div key={a.assignee} className="p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs">
-                    <div className="flex items-center justify-between font-bold text-slate-900">
+                  <div key={a.assignee} className="p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs space-y-2">
+                    <div className="flex items-center justify-between font-bold text-slate-900 border-b border-slate-200 pb-1.5">
                       <span>{a.assignee}</span>
                       <span className="text-rose-700">{a.count} việc tồn</span>
                     </div>
-                    <ul className="mt-1 list-disc list-inside text-slate-600 space-y-0.5">
-                      {a.items.slice(0, 3).map((item, idx) => (
-                        <li key={item.id || `${item.stt}-${idx}`}>
-                          [{formatDateStrVi(item.date)}] {item.content}
-                        </li>
+                    <div className="space-y-1.5">
+                      {a.items.map((item, idx) => (
+                        <div
+                          key={item.id || `${item.stt}-${idx}`}
+                          className="bg-white border border-slate-200 rounded-lg p-2 flex items-start justify-between gap-2"
+                        >
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <div className="text-slate-800 font-semibold">
+                              <span className="text-slate-500 font-mono text-[11px]">[{formatDateStrVi(item.date)}]</span>{' '}
+                              {item.content}
+                            </div>
+                            <div className="text-[11px] text-slate-500 flex flex-wrap gap-2">
+                              <span>Tiến độ: <strong className="text-amber-700">{item.statusPercent || '0%'}</strong></span>
+                              {item.note && <span>• Ghi chú: {item.note}</span>}
+                            </div>
+                            {item.evaluation && (
+                              <div className="text-[11px] text-blue-800 bg-blue-50 border border-blue-100 rounded px-2 py-0.5 mt-1">
+                                <strong>Đánh giá:</strong> {item.evaluation}
+                              </div>
+                            )}
+                          </div>
+                          {onUpdateDailyLog && (
+                            <button
+                              type="button"
+                              onClick={() => setEditingDailyLog({ ...item })}
+                              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[11px] font-bold cursor-pointer"
+                              title="Sửa tiến độ & nhập Đánh giá"
+                            >
+                              <Pencil className="w-3 h-3" /> Sửa
+                            </button>
+                          )}
+                        </div>
                       ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
-            <div className="text-sm font-extrabold text-slate-900 mb-3">
-              Tiến độ PTSP ({work.ptspCompleted}/{work.ptspTotal} hoàn thành • TB {work.ptspAvgProgress.toFixed(0)}%)
-            </div>
-            {work.ptspOverdue.length === 0 ? (
-              <p className="text-xs text-emerald-700 font-semibold">
-                Không có đầu việc PTSP trễ hạn đến thời điểm hiện tại.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {work.ptspOverdue.slice(0, 10).map((t) => (
-                  <div key={t.id} className="p-2.5 rounded-xl border border-rose-200 bg-rose-50 text-xs">
-                    <div className="font-bold text-rose-900">{t.name}</div>
-                    <div className="text-rose-700 mt-0.5">
-                      Phụ trách: {t.executor || '--'} | Hạn: {formatDateStrVi(t.endDate)} | Tiến độ: {t.progress}%
                     </div>
                   </div>
                 ))}
@@ -1368,21 +1368,96 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
             )}
           </div>
 
+          {/* Card 2: Vấn đề PTSP phát sinh trong kỳ (từ dữ liệu thật dk_ptsp_models, không dữ liệu mẫu) */}
+          <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-sm font-extrabold text-slate-900">
+                Vấn đề PTSP phát sinh trong kỳ ({work.ptspIssuesInPeriod.length})
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateTab('ptsp')}
+                className="text-xs font-bold text-blue-700 hover:underline cursor-pointer"
+              >
+                Mở PTSP →
+              </button>
+            </div>
+            {work.ptspIssuesInPeriod.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                Không có vấn đề model nào phát sinh trong kỳ này từ phân hệ Phát triển sản phẩm.
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                {work.ptspIssuesInPeriod.map((issue) => (
+                  <div
+                    key={issue.id}
+                    className={`p-3 rounded-xl border text-xs ${
+                      issue.status === 'Đã chốt'
+                        ? 'border-emerald-200 bg-emerald-50/50'
+                        : issue.severity === 'A'
+                          ? 'border-rose-200 bg-rose-50/60'
+                          : 'border-slate-200 bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-extrabold text-slate-900">
+                        {issue.modelName} {issue.partOrArea ? `— ${issue.partOrArea}` : ''}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
+                            issue.severity === 'A'
+                              ? 'bg-rose-600 text-white'
+                              : issue.severity === 'B'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          Mức {issue.severity}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            issue.status === 'Đã chốt'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : issue.status === 'Đang xử lý'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          {issue.status}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-slate-800 mt-1">{issue.description}</div>
+                    <div className="text-[11px] text-slate-500 mt-1 flex flex-wrap gap-2">
+                      <span>Bộ phận: <strong>{issue.ownerDept || '--'}</strong></span>
+                      <span>• Phát sinh: {formatDateStrVi(issue.createdAt)}</span>
+                      {issue.dueDate && <span>• Hạn: {formatDateStrVi(issue.dueDate)}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Card 3: Tác vụ từ Lập kế hoạch Chất lượng (cho phép Sửa & Đánh giá trực tiếp) */}
           <div className="lg:col-span-2 bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div className="text-sm font-extrabold text-slate-900">
                   Tác vụ từ Lập kế hoạch Chất lượng ({work.planningTasksInPeriod.length} việc trong kỳ • {work.planningTasksCompleted} hoàn thành
-                  {work.planningTasksOverdue.length > 0 ? ` • ${work.planningTasksOverdue.length} tồn quá hạn kỳ trước` : ''})
+                  {work.planningTasksOverdue.length > 0
+                    ? ` • ${work.planningTasksOverdue.length} tồn ${periodType === 'week' ? 'tuần trước' : 'tháng trước'}`
+                    : ''})
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Đồng bộ tự động từ phân hệ Lập kế hoạch chất lượng (Tồn đọng, CAPA, PTSP, Phối hợp, ECO).
+                  Đồng bộ 2 chiều với phân hệ Lập kế hoạch chất lượng — có thể sửa trực tiếp &amp; nhập Đánh giá ngay tại đây.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => onNavigateTab('quality_planning')}
-                className="text-xs font-bold text-blue-700 hover:underline"
+                className="text-xs font-bold text-blue-700 hover:underline cursor-pointer"
               >
                 Mở Lập kế hoạch chất lượng →
               </button>
@@ -1401,8 +1476,9 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
                       <th className="p-2 text-left font-bold">Nội dung tác vụ</th>
                       <th className="p-2 text-left font-bold">Phụ trách</th>
                       <th className="p-2 text-center font-bold">Hạn</th>
-                      <th className="p-2 text-center font-bold">Ưu tiên</th>
                       <th className="p-2 text-center font-bold">Trạng thái</th>
+                      <th className="p-2 text-left font-bold">Đánh giá</th>
+                      {onUpdatePlanningTask && <th className="p-2 text-center font-bold">Thao tác</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -1439,7 +1515,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
                             {sectionLabel[task.section] || task.section}
                             {isOverduePrev && (
                               <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-bold">
-                                Tồn kỳ trước
+                                Tồn {periodType === 'week' ? 'tuần trước' : 'tháng trước'}
                               </span>
                             )}
                           </td>
@@ -1455,12 +1531,29 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
                           <td className="p-2 text-center text-slate-700 whitespace-nowrap">
                             {task.deadline ? formatDateStrVi(task.deadline) : task.week || '--'}
                           </td>
-                          <td className="p-2 text-center text-slate-700 whitespace-nowrap">{task.priority}</td>
                           <td className="p-2 text-center whitespace-nowrap">
                             <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${statusCls}`}>
                               {statusLabel}
                             </span>
                           </td>
+                          <td className="p-2 text-slate-700 max-w-[220px]">
+                            {task.evaluation ? (
+                              <span className="text-blue-800 font-medium">{task.evaluation}</span>
+                            ) : (
+                              <span className="text-slate-400 italic">Chưa đánh giá</span>
+                            )}
+                          </td>
+                          {onUpdatePlanningTask && (
+                            <td className="p-2 text-center whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => setEditingPlanningTask({ ...task })}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[11px] font-bold cursor-pointer"
+                              >
+                                <Pencil className="w-3 h-3" /> Sửa
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -1736,97 +1829,212 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
           </div>
         </div>
       )}
-      {/* Modal Chi tiết các bản ghi thiếu ngày */}
-      {showMissingDateModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-amber-50">
+      {/* Modal Sửa & Đánh giá Công việc tồn đọng (DailyLogRecord) */}
+      {editingDailyLog && (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 w-full max-w-xl shadow-2xl overflow-hidden">
+            <div className="bg-slate-900 px-5 py-3.5 flex items-center justify-between">
+              <h3 className="text-sm font-extrabold text-white">
+                Sửa &amp; Đánh giá Công việc tồn đọng
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingDailyLog(null)}
+                className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (onUpdateDailyLog) {
+                  onUpdateDailyLog(editingDailyLog);
+                  onToast('Đã lưu cập nhật & đánh giá công việc lên Cloud.', 'success');
+                }
+                setEditingDailyLog(null);
+              }}
+              className="p-5 space-y-3.5 text-xs"
+            >
               <div>
-                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600" />
-                  Chi tiết {snapshot.missingDateCount} bản ghi thiếu ngày / sai định dạng ngày
-                </h3>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  Các bản ghi dưới đây chưa có ngày hợp lệ nên chưa được tính vào báo cáo Tuần/Tháng.
-                </p>
+                <label className="block font-bold text-slate-600 uppercase mb-1">Nội dung công việc</label>
+                <textarea
+                  rows={2}
+                  value={editingDailyLog.content}
+                  onChange={(e) => setEditingDailyLog({ ...editingDailyLog, content: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border-2 border-slate-300 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+                  required
+                />
               </div>
-              <button
-                type="button"
-                onClick={() => setShowMissingDateModal(false)}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-amber-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-wrap gap-2">
-              {(
-                [
-                  { source: 'Báo cáo ngày', tab: 'daily_logs' },
-                  { source: 'IQC', tab: 'quality_inspection_records' },
-                  { source: 'PQC', tab: 'quality_inspection_records' },
-                  { source: 'OQC', tab: 'quality_inspection_records' },
-                  { source: 'Phản ánh thị trường', tab: 'defects' }
-                ] as const
-              ).map((g) => {
-                const cnt = snapshot.missingDateRecords.filter((r) => r.source === g.source).length;
-                if (cnt === 0) return null;
-                return (
-                  <div
-                    key={g.source}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-xs"
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-600 uppercase mb-1">Phụ trách</label>
+                  <input
+                    type="text"
+                    value={editingDailyLog.assignee || ''}
+                    onChange={(e) => setEditingDailyLog({ ...editingDailyLog, assignee: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border-2 border-slate-300 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-600 uppercase mb-1">Tiến độ hoàn thành</label>
+                  <select
+                    value={editingDailyLog.statusPercent || '0%'}
+                    onChange={(e) => setEditingDailyLog({ ...editingDailyLog, statusPercent: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border-2 border-slate-300 text-sm font-bold text-slate-900 focus:border-blue-600 focus:outline-none bg-white"
                   >
-                    <span className="font-bold text-slate-800">{g.source}:</span>
-                    <span className="font-extrabold text-amber-700">{cnt} bản ghi</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowMissingDateModal(false);
-                        onNavigateTab(g.tab);
-                      }}
-                      className="text-blue-700 font-bold hover:underline ml-1"
-                    >
-                      Mở phân hệ →
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                    {['0%', '20%', '40%', '50%', '60%', '80%', '90%', '100%'].map((pct) => (
+                      <option key={pct} value={pct}>{pct}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-600 uppercase mb-1">Ghi chú / Kết quả</label>
+                <textarea
+                  rows={2}
+                  value={editingDailyLog.note || ''}
+                  onChange={(e) => setEditingDailyLog({ ...editingDailyLog, note: e.target.value })}
+                  placeholder="Nhập ghi chú xử lý..."
+                  className="w-full px-3 py-2 rounded-xl border-2 border-slate-300 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-blue-700 uppercase mb-1">Đánh giá của QLCL</label>
+                <textarea
+                  rows={2}
+                  value={editingDailyLog.evaluation || ''}
+                  onChange={(e) => setEditingDailyLog({ ...editingDailyLog, evaluation: e.target.value })}
+                  placeholder="Nhập nhận xét / đánh giá kết quả thực hiện..."
+                  className="w-full px-3 py-2 rounded-xl border-2 border-blue-300 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingDailyLog(null)}
+                  className="px-4 py-2 rounded-xl border-2 border-slate-300 text-slate-700 font-bold cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
+                >
+                  Lưu &amp; Đồng bộ
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
-            <div className="flex-1 overflow-y-auto p-4">
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
-                    <th className="p-2 text-center font-bold w-12">STT</th>
-                    <th className="p-2 text-left font-bold w-36">Phân hệ</th>
-                    <th className="p-2 text-left font-bold w-32">Mã / STT</th>
-                    <th className="p-2 text-left font-bold">Nội dung / Model / Lỗi</th>
-                    <th className="p-2 text-left font-bold w-32">Ngày đang lưu</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot.missingDateRecords.map((rec, idx) => (
-                    <tr key={`${rec.source}-${rec.code}-${idx}`} className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className="p-2 text-center text-slate-500 font-semibold">{idx + 1}</td>
-                      <td className="p-2 font-bold text-slate-800">{rec.source}</td>
-                      <td className="p-2 font-mono text-slate-700">{rec.code}</td>
-                      <td className="p-2 text-slate-800">{rec.summary}</td>
-                      <td className="p-2 font-mono text-rose-700">{rec.rawDate}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex justify-end">
+      {/* Modal Sửa & Đánh giá Tác vụ từ Lập kế hoạch Chất lượng (QualityTask) */}
+      {editingPlanningTask && (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 w-full max-w-xl shadow-2xl overflow-hidden">
+            <div className="bg-slate-900 px-5 py-3.5 flex items-center justify-between">
+              <h3 className="text-sm font-extrabold text-white">
+                Sửa &amp; Đánh giá Tác vụ Lập kế hoạch Chất lượng
+              </h3>
               <button
                 type="button"
-                onClick={() => setShowMissingDateModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold"
+                onClick={() => setEditingPlanningTask(null)}
+                className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 cursor-pointer"
               >
-                Đóng
+                <X className="w-4 h-4" />
               </button>
             </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (onUpdatePlanningTask) {
+                  onUpdatePlanningTask(editingPlanningTask);
+                  onToast('Đã lưu cập nhật & đánh giá tác vụ lên Cloud.', 'success');
+                }
+                setEditingPlanningTask(null);
+              }}
+              className="p-5 space-y-3.5 text-xs"
+            >
+              <div>
+                <label className="block font-bold text-slate-600 uppercase mb-1">Nội dung tác vụ</label>
+                <input
+                  type="text"
+                  value={editingPlanningTask.title}
+                  onChange={(e) => setEditingPlanningTask({ ...editingPlanningTask, title: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border-2 border-slate-300 text-sm font-semibold text-slate-900 focus:border-blue-600 focus:outline-none"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-600 uppercase mb-1">Phụ trách</label>
+                  <input
+                    type="text"
+                    value={editingPlanningTask.assignee || ''}
+                    onChange={(e) => setEditingPlanningTask({ ...editingPlanningTask, assignee: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border-2 border-slate-300 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-600 uppercase mb-1">Hạn hoàn thành</label>
+                  <input
+                    type="text"
+                    value={editingPlanningTask.deadline || ''}
+                    onChange={(e) => setEditingPlanningTask({ ...editingPlanningTask, deadline: e.target.value })}
+                    placeholder="DD/MM/YYYY"
+                    className="w-full px-3 py-2 rounded-xl border-2 border-slate-300 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-600 uppercase mb-1">Trạng thái</label>
+                  <select
+                    value={editingPlanningTask.status}
+                    onChange={(e) => setEditingPlanningTask({ ...editingPlanningTask, status: e.target.value as QualityTask['status'] })}
+                    className="w-full px-3 py-2 rounded-xl border-2 border-slate-300 text-sm font-bold text-slate-900 focus:border-blue-600 focus:outline-none bg-white"
+                  >
+                    <option value="Pending">Chờ xử lý</option>
+                    <option value="In_Progress">Đang làm</option>
+                    <option value="Completed">Hoàn thành</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-600 uppercase mb-1">Ghi chú</label>
+                <textarea
+                  rows={2}
+                  value={editingPlanningTask.notes || ''}
+                  onChange={(e) => setEditingPlanningTask({ ...editingPlanningTask, notes: e.target.value })}
+                  placeholder="Nhập ghi chú..."
+                  className="w-full px-3 py-2 rounded-xl border-2 border-slate-300 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-blue-700 uppercase mb-1">Đánh giá của QLCL</label>
+                <textarea
+                  rows={2}
+                  value={editingPlanningTask.evaluation || ''}
+                  onChange={(e) => setEditingPlanningTask({ ...editingPlanningTask, evaluation: e.target.value })}
+                  placeholder="Nhập nhận xét / đánh giá kết quả thực hiện..."
+                  className="w-full px-3 py-2 rounded-xl border-2 border-blue-300 text-sm text-slate-900 focus:border-blue-600 focus:outline-none"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingPlanningTask(null)}
+                  className="px-4 py-2 rounded-xl border-2 border-slate-300 text-slate-700 font-bold cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
+                >
+                  Lưu &amp; Đồng bộ
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

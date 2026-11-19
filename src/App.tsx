@@ -16278,6 +16278,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   copqs,
                   ptspProjects: [],
                   ptspTasks,
+                  ptspModels,
                   planningTasks,
                   suppliers,
                   supplierProductionAudits,
@@ -16291,6 +16292,44 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 authorName={currentUser?.name || currentUser?.email || 'QLCL'}
                 onSaveNote={handleSaveReportNote}
                 onDeleteNote={handleDeleteReportNote}
+                onUpdateDailyLog={(updatedLog) => {
+                  if (!isUserAuthorized()) {
+                    alert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
+                    return;
+                  }
+                  const updated = sanitizeDailyLogs(
+                    dailyLogs.map((l) =>
+                      (updatedLog.id && l.id === updatedLog.id) || (!updatedLog.id && l.stt === updatedLog.stt)
+                        ? updatedLog
+                        : l
+                    )
+                  );
+                  setDailyLogs(updated);
+                  safeStorage.setItem('dk_daily_logs', JSON.stringify(updated));
+                  safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+                  if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
+                  syncToServer('dk_daily_logs', updated);
+                }}
+                onUpdatePlanningTask={(updatedTask) => {
+                  if (!isUserAuthorized()) {
+                    alert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
+                    return;
+                  }
+                  const updated = planningTasks.map((t) => (t.id === updatedTask.id ? updatedTask : t));
+                  const serialized = JSON.stringify(updated);
+                  setPlanningTasks(updated);
+                  safeStorage.setItem('dk_qms_quality_planning_tasks', serialized);
+                  safeStorage.setItem('dk_qms_quality_planning_tasks_is_dirty', 'true');
+                  if (localDirtyKeys.current) localDirtyKeys.current.add('dk_qms_quality_planning_tasks');
+                  syncToServer('dk_qms_quality_planning_tasks', updated);
+                  try {
+                    window.dispatchEvent(
+                      new CustomEvent('dk_planning_reload_state', {
+                        detail: { key: 'dk_qms_quality_planning_tasks', value: serialized }
+                      })
+                    );
+                  } catch (e) { }
+                }}
                 onOpenAddWeekTask={() => setShowAddWeekTaskModal(true)}
                 onNavigateTab={(tab) => {
                   setActiveTab(tab);
