@@ -668,77 +668,19 @@ export default function GmailManager({
   };
 
   return (
-    <div className={`bg-white rounded-2xl border border-slate-200 overflow-hidden ${embeddedMode ? 'shadow-xs' : 'shadow-sm'}`} id="gmail-manager-root">
-      
-      {/* Sleek Top Header & Google Auth Pill */}
-      <div className="bg-slate-50 border-b border-slate-200 px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-indigo-100 text-indigo-700 rounded-xl">
-            <Mail className="w-4 h-4" />
-          </div>
-          <div>
-            <h2 className="text-sm font-extrabold text-slate-800 tracking-tight uppercase">
-              {externalPreset ? 'Gửi Báo Cáo Tổng Hợp Qua Gmail' : 'Báo Cáo Ngày & Gửi Gmail'}
-            </h2>
-            <p className="text-[11px] text-slate-500">
-              Tổng hợp báo cáo ngày, kế hoạch ngày mai, CAPA và gửi trực tiếp theo luồng Gmail
-            </p>
-          </div>
-        </div>
+    <div className="space-y-4" id="gmail-manager-root">
 
-        {/* Authentication Pill */}
-        <div>
-          {isLoadingAuth ? (
-            <div className="flex items-center gap-2 text-slate-500 text-xs bg-white px-3 py-1.5 rounded-xl border border-slate-200">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500" />
-              <span>Đang kiểm tra Gmail...</span>
-            </div>
-          ) : googleUser ? (
-            <div className="bg-white border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center justify-between gap-2.5 shadow-2xs">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-[11px] font-extrabold text-slate-800 truncate">{googleUser.displayName}</p>
-                  <p className="text-[10px] text-emerald-700 truncate font-mono">{googleUser.email}</p>
-                </div>
-              </div>
-              <button 
-                onClick={handleLogout}
-                title="Đăng xuất tài khoản Google"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0 cursor-pointer"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ) : (
-            <button 
-              onClick={handleLogin}
-              className="px-3.5 py-2 bg-white text-slate-700 hover:text-slate-950 rounded-xl hover:shadow-sm border border-slate-300 font-extrabold text-xs transition duration-150 flex items-center gap-2 cursor-pointer"
-            >
-              <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-4 h-4 shrink-0" style={{ display: 'block' }}>
-                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
-                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
-                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
-                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
-                <path fill="none" d="M0 0h48v48H0z"></path>
-              </svg>
-              <span>Kết nối Gmail của bạn</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Compact Status Alerts */}
+      {/* Status Alerts */}
       {(successMessage || errorMessage) && (
-        <div className="px-5 pt-3 space-y-2">
+        <div className="space-y-2">
           {successMessage && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 flex items-center gap-2 text-emerald-800 text-xs font-semibold">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center gap-2 text-emerald-800 text-xs font-semibold">
               <Check className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>{successMessage}</span>
             </div>
           )}
           {errorMessage && (
-            <div className="bg-rose-50 border border-rose-200 rounded-xl p-2.5 flex items-center gap-2 text-rose-800 text-xs font-semibold">
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-center gap-2 text-rose-800 text-xs font-semibold">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>{errorMessage}</span>
             </div>
@@ -746,422 +688,407 @@ export default function GmailManager({
         </div>
       )}
 
-      {/* Template Mode Bar + Quick OQC Strip */}
-      <div className="px-5 py-3 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex flex-wrap rounded-xl border border-slate-200 bg-slate-100 p-0.5 gap-0.5">
-          {([
-            { id: 'two_days', label: 'Báo cáo 2 Ngày', icon: Calendar },
-            { id: 'daily_log', label: 'Nhật trình ngày', icon: Clock },
-            { id: 'capa', label: 'Cảnh báo CAPA', icon: AlertCircle },
-            { id: 'custom', label: 'Soạn tự do', icon: FileText }
-          ] as const).map(tab => {
-            const Icon = tab.icon;
-            const active = presetMode === tab.id;
-            return (
+      {/* PHẦN 1: CHỌN LOẠI BÁO CÁO (NHẬT TRÌNH NGÀY / BÁO CÁO 2 NGÀY) + CHỌN NGÀY */}
+      <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* 2 nút chọn */}
+            <div className="inline-flex rounded-xl border-2 border-slate-300 bg-slate-100 p-0.5 gap-0.5">
               <button
-                key={tab.id}
                 type="button"
-                onClick={() => setPresetMode(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                  active ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                onClick={() => setPresetMode('daily_log')}
+                className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  presetMode === 'daily_log' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700 hover:bg-white'
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
+                <Clock className="w-4 h-4" />
+                <span>Nhật trình ngày</span>
               </button>
-            );
-          })}
-        </div>
+              <button
+                type="button"
+                onClick={() => setPresetMode('two_days')}
+                className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  presetMode === 'two_days' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700 hover:bg-white'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <span>Báo cáo 2 ngày</span>
+              </button>
+            </div>
 
-        {/* Light OQC Daily Quick Summary Pill */}
-        {oqcDashboardData ? (
-          <div className="flex flex-wrap items-center gap-2 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
-            <span className="font-bold text-slate-600">
-              OQC {(presetMode === 'two_days' ? selectedReportDate : selectedLogDate).split('-').reverse().join('/')}:
-            </span>
-            <span className="font-mono font-extrabold text-slate-800">{oqcDashboardData.total} xe</span>
-            <span className="text-emerald-700 font-bold">Đạt {oqcDashboardData.passed}</span>
-            <span className={`font-bold ${oqcDashboardData.failed > 0 ? 'text-rose-600' : 'text-slate-500'}`}>
-              Lỗi {oqcDashboardData.failed}
-            </span>
-            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-extrabold font-mono text-[11px]">
-              Yield {oqcDashboardData.yieldRate}%
-            </span>
-          </div>
-        ) : (
-          <span className="text-[11px] text-slate-400 italic">
-            Chưa có dữ liệu OQC ngày {(presetMode === 'two_days' ? selectedReportDate : selectedLogDate).split('-').reverse().join('/')}
-          </span>
-        )}
-      </div>
-
-      {/* Main 2-Column Workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-12">
-
-        {/* Left Column: Clean Config Cards */}
-        <div className="lg:col-span-5 p-5 border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50/70 space-y-4">
-
-          {/* Card 1: Dữ liệu nguồn theo mẫu */}
-          <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-2xs space-y-3">
-            <h3 className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">
-              1. Chọn ngày / dữ liệu báo cáo
-            </h3>
-
-            {presetMode === 'two_days' && (
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Ngày báo cáo</label>
-                  <input
-                    type="date"
-                    value={selectedReportDate}
-                    onChange={(e) => setSelectedReportDate(e.target.value)}
-                    className="w-full bg-slate-50 font-bold border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Ngày kế hoạch</label>
-                  <input
-                    type="date"
-                    value={selectedPlanDate}
-                    onChange={(e) => setSelectedPlanDate(e.target.value)}
-                    className="w-full bg-slate-50 font-bold border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
-                  />
-                </div>
-              </div>
-            )}
-
-            {presetMode === 'daily_log' && (
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Ngày xuất nhật trình</label>
+            {/* Chọn ngày đi kèm ngay bên cạnh */}
+            {presetMode === 'daily_log' ? (
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-slate-600">Ngày báo cáo:</label>
                 <input
                   type="date"
                   value={selectedLogDate}
                   onChange={(e) => setSelectedLogDate(e.target.value)}
-                  className="w-full bg-slate-50 font-bold border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  className="bg-slate-50 font-bold border-2 border-slate-300 rounded-xl px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:border-blue-600 cursor-pointer"
                 />
               </div>
-            )}
-
-            {presetMode === 'capa' && (
-              <div className="relative">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Chọn hồ sơ CAPA</label>
-                <select
-                  value={selectedCapaId}
-                  onChange={(e) => setSelectedCapaId(e.target.value)}
-                  className="w-full bg-slate-50 font-bold border border-slate-200 rounded-lg p-2 pr-8 text-xs text-slate-800 cursor-pointer focus:outline-none focus:border-indigo-500 appearance-none"
-                >
-                  {capas.length > 0 ? (
-                    capas.map((c: any) => (
-                      <option key={c.id || c.CAPAID} value={c.id || c.CAPAID}>
-                        {c.id || c.CAPAID} - {c.title || c.Issue || 'Lỗi CAPA'} ({c.source || 'Chung'})
-                      </option>
-                    ))
-                  ) : (
-                    <option value="">Không có hồ sơ CAPA</option>
-                  )}
-                </select>
-                <ChevronDown className="w-4 h-4 text-slate-400 pointer-events-none absolute bottom-2.5 right-2.5" />
-              </div>
-            )}
-
-            {presetMode === 'custom' && (
-              <div className="space-y-2.5">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Chủ đề thư</label>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs font-bold text-slate-600">Ngày báo cáo:</label>
                   <input
-                    type="text"
-                    value={emailSubject}
-                    onChange={(e) => setEmailSubject(e.target.value)}
-                    placeholder="Nhập chủ đề thư..."
-                    className="w-full bg-slate-50 font-semibold border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                    type="date"
+                    value={selectedReportDate}
+                    onChange={(e) => setSelectedReportDate(e.target.value)}
+                    className="bg-slate-50 font-bold border-2 border-slate-300 rounded-xl px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:border-blue-600 cursor-pointer"
                   />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nội dung (HTML / Văn bản)</label>
-                  <textarea
-                    value={emailBody}
-                    onChange={(e) => setEmailBody(e.target.value)}
-                    placeholder="Nhập nội dung thư..."
-                    rows={5}
-                    className="w-full bg-slate-50 font-medium border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs font-bold text-slate-600">Ngày kế hoạch:</label>
+                  <input
+                    type="date"
+                    value={selectedPlanDate}
+                    onChange={(e) => setSelectedPlanDate(e.target.value)}
+                    className="bg-slate-50 font-bold border-2 border-slate-300 rounded-xl px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:border-blue-600 cursor-pointer"
                   />
-                </div>
-              </div>
-            )}
-
-            {/* Compact OQC breakdown by Model when available */}
-            {oqcDashboardData && oqcDashboardData.models.length > 0 && (
-              <div className="pt-2 border-t border-slate-100 space-y-1.5">
-                <span className="text-[10px] font-bold text-slate-500 uppercase block">Chi tiết OQC theo dòng xe:</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {oqcDashboardData.models.map((m, i) => (
-                    <span
-                      key={i}
-                      className={`text-[10px] px-2 py-1 rounded-lg border font-semibold ${
-                        m.failed > 0
-                          ? 'bg-amber-50 border-amber-200 text-amber-900'
-                          : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                      }`}
-                    >
-                      {m.model}: {m.passed}/{m.total} ({m.yieldRate}%)
-                    </span>
-                  ))}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Card 2: Người nhận & Luồng gửi */}
-          <div className="bg-white p-4 border border-slate-200 rounded-xl shadow-2xs space-y-3">
-            <h3 className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">
-              2. Người nhận & Luồng Gmail
+          {/* Tóm tắt OQC ngày gọn */}
+          {oqcDashboardData ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+              <span className="font-bold text-slate-600">
+                OQC {(presetMode === 'two_days' ? selectedReportDate : selectedLogDate).split('-').reverse().join('/')}:
+              </span>
+              <span className="font-mono font-extrabold text-slate-900">{oqcDashboardData.total} xe</span>
+              <span className="text-emerald-700 font-bold">Đạt {oqcDashboardData.passed}</span>
+              <span className={`font-bold ${oqcDashboardData.failed > 0 ? 'text-rose-600' : 'text-slate-500'}`}>
+                Lỗi {oqcDashboardData.failed}
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-extrabold font-mono text-[11px]">
+                Yield {oqcDashboardData.yieldRate}%
+              </span>
+            </div>
+          ) : (
+            <span className="text-xs text-slate-400 italic">
+              Chưa có dữ liệu OQC ngày {(presetMode === 'two_days' ? selectedReportDate : selectedLogDate).split('-').reverse().join('/')}
+            </span>
+          )}
+        </div>
+
+        {oqcDashboardData && oqcDashboardData.models.length > 0 && (
+          <div className="pt-2 border-t border-slate-200 flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-bold text-slate-500 uppercase mr-1">Theo dòng xe:</span>
+            {oqcDashboardData.models.map((m, i) => (
+              <span
+                key={i}
+                className={`text-xs px-2.5 py-0.5 rounded-lg border font-semibold ${
+                  m.failed > 0
+                    ? 'bg-amber-50 border-amber-200 text-amber-900'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                }`}
+              >
+                {m.model}: {m.passed}/{m.total} ({m.yieldRate}%)
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* PHẦN 2: XEM NỘI DUNG BÁO CÁO (TOÀN CHIỀU NGANG) */}
+      <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-sm overflow-hidden">
+        <div className="bg-slate-50 border-b border-slate-200 px-5 py-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+            <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+              Xem nội dung báo cáo
             </h3>
+          </div>
+          <span className="text-xs font-bold text-slate-700 truncate max-w-full">
+            {emailSubject || '(Chưa có tiêu đề)'}
+          </span>
+        </div>
 
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
-                Email người nhận (To) <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={emailTo}
-                onChange={(e) => setEmailTo(e.target.value)}
-                placeholder="manager@dkbike.vn, group-qaqc@dkbike.vn"
-                className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold text-slate-800 focus:outline-none focus:border-indigo-500"
-              />
+        <div className="p-5 overflow-x-auto bg-white">
+          <div
+            className="max-w-4xl mx-auto"
+            dangerouslySetInnerHTML={{
+              __html:
+                emailBody ||
+                '<p style="color:#94a3b8; text-align:center; padding:40px 0; font-style:italic;">Chưa có nội dung báo cáo cho ngày đã chọn.</p>'
+            }}
+          />
+        </div>
+      </div>
+
+      {/* PHẦN 3: CHỨC NĂNG GỬI GMAIL */}
+      <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-sm overflow-hidden">
+        {/* Header kết nối Gmail */}
+        <div className="bg-slate-50 border-b border-slate-200 px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-indigo-100 text-indigo-700 rounded-xl">
+              <Mail className="w-4 h-4" />
             </div>
-
             <div>
-              <span className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Điền nhanh người nhận:</span>
-              <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto">
-                <button
-                  type="button"
-                  onClick={() => activatePlanningGroup(selectedThread)}
-                  className="text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-lg transition cursor-pointer"
-                  id="btn-planning-group-re"
-                >
-                  👥 Nhóm Báo cáo ({selectedThread.replace('GROUP BÁO CÁO KẾ HOẠCH ', '')})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFillStaffRecipient('sanxuat-manager@dkbike.vn')}
-                  className="text-[10px] font-bold bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 px-2 py-1 rounded-lg transition cursor-pointer"
-                >
-                  GĐ Sản xuất
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFillStaffRecipient('xuonglaprap@dkbike.vn, thaisonqc@dkbike.vn')}
-                  className="text-[10px] font-bold bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-800 px-2 py-1 rounded-lg transition cursor-pointer"
-                >
-                  Xưởng Lắp Ráp &amp; QC
-                </button>
-                {staff.map(s => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => handleFillStaffRecipient(s.email)}
-                    className="text-[10px] font-semibold bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-slate-700 px-2 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer"
-                    title={s.email}
-                  >
-                    <UserCheck className="w-3 h-3 text-indigo-500" />
-                    <span>{s.name}</span>
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => handleFillStaffRecipient(initialSenderEmail)}
-                  className="text-[10px] font-bold bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 px-2 py-1 rounded-lg transition cursor-pointer"
-                >
-                  Tôi ({initialSenderName})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEmailTo('')}
-                  className="text-[10px] font-bold bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 px-2 py-1 rounded-lg transition cursor-pointer"
-                >
-                  Xóa trắng
-                </button>
-              </div>
+              <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-tight">
+                Gửi báo cáo qua Gmail
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Chọn người nhận, cấu hình gửi theo luồng (nếu cần) và gửi trực tiếp qua tài khoản Google
+              </p>
             </div>
+          </div>
 
-            {/* Threaded Reply Config */}
-            <div className="pt-3 border-t border-slate-100 space-y-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isThreaded}
-                    onChange={(e) => {
-                      setIsThreaded(e.target.checked);
-                      if (e.target.checked) {
-                        activatePlanningGroup();
-                      } else {
-                        setThreadId(null);
-                        setLastMessageId(null);
-                      }
-                    }}
-                    className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
-                  />
-                  <span className="text-xs font-bold text-slate-700 select-none">
-                    Gửi trả lời theo luồng (Threaded Reply)
-                  </span>
-                </label>
-
-                <button
-                  type="button"
-                  onClick={() => setShowAddThreadInput(!showAddThreadInput)}
-                  className="text-[10px] text-indigo-600 hover:text-indigo-800 font-extrabold flex items-center gap-0.5 cursor-pointer"
-                >
-                  <Plus className="w-3 h-3" /> Thêm luồng
-                </button>
+          <div>
+            {isLoadingAuth ? (
+              <div className="flex items-center gap-2 text-slate-500 text-xs bg-white px-3 py-1.5 rounded-xl border border-slate-200">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500" />
+                <span>Đang kiểm tra Gmail...</span>
               </div>
-
-              {showAddThreadInput && (
-                <div className="flex items-center gap-1.5 bg-slate-50 p-2 rounded-lg border border-indigo-200">
-                  <input
-                    type="text"
-                    value={newThreadInput}
-                    onChange={(e) => setNewThreadInput(e.target.value)}
-                    placeholder="Nhập tiêu đề luồng..."
-                    className="flex-1 bg-white border border-slate-200 rounded-md px-2 py-1 text-xs font-semibold focus:outline-none focus:border-indigo-500 text-slate-800"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleAddPlanningThread(newThreadInput)}
-                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md font-bold text-xs cursor-pointer"
-                  >
-                    Lưu
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setShowAddThreadInput(false); setNewThreadInput(''); }}
-                    className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-md font-bold text-xs cursor-pointer"
-                  >
-                    Hủy
-                  </button>
+            ) : googleUser ? (
+              <div className="bg-white border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center justify-between gap-2.5 shadow-2xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-extrabold text-slate-800 truncate">{googleUser.displayName}</p>
+                    <p className="text-[10px] text-emerald-700 truncate font-mono">{googleUser.email}</p>
+                  </div>
                 </div>
-              )}
-
-              <div className="flex items-center gap-1.5">
-                <select
-                  value={selectedThread}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSelectedThread(val);
-                    safeStorage.setItem('dk_selected_planning_thread', val);
-                    setThreadId(null);
-                    setLastMessageId(null);
-                    if (isThreaded) activatePlanningGroup(val);
-                  }}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500"
-                >
-                  {planningThreads.map((thread) => (
-                    <option key={thread} value={thread}>{thread}</option>
-                  ))}
-                </select>
                 <button
-                  type="button"
-                  onClick={() => handleRemovePlanningThread(selectedThread)}
-                  title="Xóa luồng báo cáo này"
-                  className="p-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-lg transition cursor-pointer"
+                  onClick={handleLogout}
+                  title="Đăng xuất tài khoản Google"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition shrink-0 cursor-pointer"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <LogOut className="w-3.5 h-3.5" />
                 </button>
               </div>
+            ) : (
+              <button
+                onClick={handleLogin}
+                className="px-3.5 py-2 bg-white text-slate-700 hover:text-slate-950 rounded-xl hover:shadow-sm border border-slate-300 font-extrabold text-xs transition duration-150 flex items-center gap-2 cursor-pointer"
+              >
+                <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="w-4 h-4 shrink-0" style={{ display: 'block' }}>
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                  <path fill="none" d="M0 0h48v48H0z"></path>
+                </svg>
+                <span>Kết nối Gmail của bạn</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Nội dung cấu hình gửi Gmail */}
+        <div className="p-5 space-y-4">
+          {!accessToken && (
+            <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5 flex items-center gap-2 font-semibold">
+              <Info className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Anh cần bấm &ldquo;Kết nối Gmail của bạn&rdquo; ở góc trên bên phải trước khi gửi.</span>
+            </div>
+          )}
+
+          {/* Người nhận */}
+          <div className="space-y-2.5">
+            <label className="block text-xs font-bold text-slate-600 uppercase">
+              Email người nhận (To) <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={emailTo}
+              onChange={(e) => setEmailTo(e.target.value)}
+              placeholder="manager@dkbike.vn, group-qaqc@dkbike.vn"
+              className="w-full bg-slate-50 focus:bg-white border-2 border-slate-200 rounded-xl px-3.5 py-2 text-sm font-semibold text-slate-800 focus:outline-none focus:border-blue-600"
+            />
+
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={() => activatePlanningGroup(selectedThread)}
+                className="text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg transition cursor-pointer"
+                id="btn-planning-group-re"
+              >
+                👥 Nhóm Báo cáo ({selectedThread.replace('GROUP BÁO CÁO KẾ HOẠCH ', '')})
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFillStaffRecipient('sanxuat-manager@dkbike.vn')}
+                className="text-xs font-bold bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+              >
+                GĐ Sản xuất
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFillStaffRecipient('xuonglaprap@dkbike.vn, thaisonqc@dkbike.vn')}
+                className="text-xs font-bold bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-800 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+              >
+                Xưởng Lắp Ráp &amp; QC
+              </button>
+              {staff.map(s => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => handleFillStaffRecipient(s.email)}
+                  className="text-xs font-semibold bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-slate-700 px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                  title={s.email}
+                >
+                  <UserCheck className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>{s.name}</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => handleFillStaffRecipient(initialSenderEmail)}
+                className="text-xs font-bold bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+              >
+                Tôi ({initialSenderName})
+              </button>
+              <button
+                type="button"
+                onClick={() => setEmailTo('')}
+                className="text-xs font-bold bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 px-2.5 py-1.5 rounded-lg transition cursor-pointer"
+              >
+                Xóa trắng
+              </button>
+            </div>
+          </div>
+
+          {/* Gửi trả lời theo luồng */}
+          <div className="pt-4 border-t border-slate-200 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isThreaded}
+                  onChange={(e) => {
+                    setIsThreaded(e.target.checked);
+                    if (e.target.checked) {
+                      activatePlanningGroup();
+                    } else {
+                      setThreadId(null);
+                      setLastMessageId(null);
+                    }
+                  }}
+                  className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                />
+                <span className="text-xs font-bold text-slate-700 select-none">
+                  Gửi trả lời theo luồng (Threaded Reply)
+                </span>
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setShowAddThreadInput(!showAddThreadInput)}
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Thêm luồng mới
+              </button>
+            </div>
+
+            {showAddThreadInput && (
+              <div className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-indigo-200">
+                <input
+                  type="text"
+                  value={newThreadInput}
+                  onChange={(e) => setNewThreadInput(e.target.value)}
+                  placeholder="Nhập tiêu đề luồng..."
+                  className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 text-slate-800"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleAddPlanningThread(newThreadInput)}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs cursor-pointer"
+                >
+                  Lưu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowAddThreadInput(false); setNewThreadInput(''); }}
+                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold text-xs cursor-pointer"
+                >
+                  Hủy
+                </button>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={selectedThread}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedThread(val);
+                  safeStorage.setItem('dk_selected_planning_thread', val);
+                  setThreadId(null);
+                  setLastMessageId(null);
+                  if (isThreaded) activatePlanningGroup(val);
+                }}
+                className="flex-1 min-w-[240px] bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500"
+              >
+                {planningThreads.map((thread) => (
+                  <option key={thread} value={thread}>{thread}</option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={() => handleRemovePlanningThread(selectedThread)}
+                title="Xóa luồng báo cáo này"
+                className="p-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-xl transition cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
 
               {isThreaded && (
-                <div className="bg-indigo-50/70 border border-indigo-100 p-2.5 rounded-lg flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                  <div className="flex items-center gap-2">
-                    {isSearchingThread ? (
-                      <span className="font-bold text-indigo-600">Đang tìm luồng...</span>
-                    ) : threadId ? (
-                      <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                        🟢 Đã liên kết luồng
-                      </span>
-                    ) : (
-                      <span className="font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
-                        🔴 Chưa liên kết luồng
-                      </span>
-                    )}
-                  </div>
+                <>
+                  {isSearchingThread ? (
+                    <span className="text-xs font-bold text-indigo-600">Đang tìm luồng...</span>
+                  ) : threadId ? (
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-lg">
+                      🟢 Đã liên kết luồng
+                    </span>
+                  ) : (
+                    <span className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-lg">
+                      🔴 Chưa liên kết luồng
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => activatePlanningGroup(selectedThread)}
                     disabled={isSearchingThread || !accessToken}
-                    className="px-2.5 py-1 bg-white hover:bg-slate-100 disabled:opacity-50 border border-slate-200 text-[10px] font-bold text-slate-700 rounded-md flex items-center gap-1 cursor-pointer"
+                    className="px-3 py-1.5 bg-white hover:bg-slate-100 disabled:opacity-50 border border-slate-300 text-xs font-bold text-slate-700 rounded-xl flex items-center gap-1.5 cursor-pointer"
                   >
-                    <RefreshCw className={`w-3 h-3 ${isSearchingThread ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSearchingThread ? 'animate-spin' : ''}`} />
                     <span>Đồng bộ luồng</span>
                   </button>
-                </div>
+                </>
               )}
             </div>
           </div>
-        </div>
 
-        {/* Right Column: Live Email Preview & Send */}
-        <div className="lg:col-span-7 p-5 flex flex-col space-y-3 bg-slate-100/80">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">
-              Xem trước &amp; Gửi Email
-            </h3>
+          {/* Nút Gửi Gmail */}
+          <div className="pt-3 border-t border-slate-200 flex justify-end">
             <button
               type="button"
               onClick={triggerEmailDispatch}
               disabled={isSending || isLoadingAuth}
-              className={`px-4 py-2 font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-xs flex items-center gap-2 transition ${
+              className={`px-6 py-2.5 font-extrabold text-sm rounded-xl shadow-sm flex items-center gap-2 transition ${
                 !accessToken
                   ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                  : 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
               }`}
             >
               {isSending ? (
                 <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <RefreshCw className="w-4 h-4 animate-spin" />
                   <span>Đang gửi...</span>
                 </>
               ) : (
                 <>
-                  <Send className="w-3.5 h-3.5" />
+                  <Send className="w-4 h-4" />
                   <span>Gửi qua Gmail</span>
                 </>
               )}
             </button>
           </div>
-
-          {!accessToken && (
-            <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-center gap-1.5 font-semibold">
-              <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span>Anh cần bấm &ldquo;Kết nối Gmail của bạn&rdquo; ở góc trên bên phải trước khi gửi.</span>
-            </div>
-          )}
-
-          {/* Email Client Preview Box */}
-          <div className="flex-1 border border-slate-200 bg-white rounded-xl shadow-xs overflow-hidden flex flex-col min-h-[460px] max-h-[680px]">
-            <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 space-y-1.5 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400 font-semibold w-14 shrink-0">Người nhận:</span>
-                <span className="text-slate-800 bg-slate-200/70 px-2 py-0.5 rounded font-mono text-[11px] truncate">
-                  {emailTo || '(Chưa chọn người nhận)'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400 font-semibold w-14 shrink-0">Tiêu đề:</span>
-                <span className="text-slate-900 font-bold truncate">{emailSubject || '(Chưa nhập chủ đề)'}</span>
-              </div>
-            </div>
-
-            <div className="flex-1 p-4 overflow-y-auto bg-white text-xs">
-              <div
-                className="overflow-hidden"
-                dangerouslySetInnerHTML={{
-                  __html: emailBody || '<p style="color:#94a3b8; text-align:center; padding-top:40px; font-style:italic;">Chưa có nội dung báo cáo. Hãy chọn mẫu hoặc ngày ở cột bên trái.</p>'
-                }}
-              />
-            </div>
-          </div>
         </div>
-
       </div>
 
       {/* Safety Confirm Dialog (Modal Component as Instructed in Workspace-integration Skills) */}
