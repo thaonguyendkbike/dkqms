@@ -750,50 +750,8 @@ export default function KPIDashboard({
     const { start, end, key: pKey } = periodInfo;
     const curLogs = (dailyLogs || []).filter(l => isRecordInDateRange(l?.date || l?.createdAt, start, end));
 
-    // Merge 8 core /bm profiles with any extra staff in dk_staff
+    // Chỉ đánh giá đúng 8 nhân sự thuộc Phòng QLCL theo 8 Bản giao nhiệm vụ trong /bm
     const mergedProfiles: StaffBmKpiProfile[] = [...STAFF_BM_KPI_PROFILES];
-    (staffList || []).forEach(st => {
-      const sName = String(st?.fullName || st?.name || '').trim();
-      if (!sName) return;
-      const norm = normalizePersonKey(sName);
-      const exists = mergedProfiles.some(
-        p => normalizePersonKey(p.staffName) === norm || p.aliases.some(a => normalizePersonKey(a) === norm)
-      );
-      if (!exists) {
-        mergedProfiles.push({
-          staffName: sName,
-          aliases: [sName.toLowerCase()],
-          roleTitle: st?.position || st?.role || 'Nhân Viên Phòng QLCL',
-          bmDocCode: 'BG-NV-QLCL',
-          mtcvCode: 'MTCV-QLCL',
-          summary: 'Thực hiện nhiệm vụ kiểm soát chất lượng và báo cáo công việc theo phân công của Trưởng phòng QLCL.',
-          metrics: [
-            {
-              id: `BM-GEN-${norm}-01`,
-              name: 'Tỷ lệ hoàn thành mục tiêu chất lượng khâu phụ trách',
-              bmReference: 'MTCV Phòng QLCL',
-              weight: 30,
-              unit: '%',
-              target: '>= 95%',
-              targetValue: 95,
-              direction: 'higher_is_better',
-              autoMetricKey: 'OQC_FPY_RATE'
-            },
-            {
-              id: `BM-GEN-${norm}-02`,
-              name: 'Phối hợp xử lý lỗi chất lượng & đóng hồ sơ CAPA đúng hạn',
-              bmReference: 'MTCV Phòng QLCL',
-              weight: 20,
-              unit: '%',
-              target: '>= 90%',
-              targetValue: 90,
-              direction: 'higher_is_better',
-              autoMetricKey: 'CAPA_CLOSURE_RATE'
-            }
-          ]
-        });
-      }
-    });
 
     return mergedProfiles.map(profile => {
       const staffKey = normalizePersonKey(profile.staffName);

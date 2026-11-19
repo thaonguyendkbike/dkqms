@@ -581,8 +581,8 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
     ]
   },
   {
-    staffName: 'Trần Thế Quang',
-    aliases: ['trần thế quang', 'trần thế quảng', 'tran the quang'],
+    staffName: 'Trần Thế Quảng',
+    aliases: ['trần thế quảng', 'trần thế quang', 'tran the quang'],
     roleTitle: 'Nhân Viên QC Hiện Trường — Giám Sát Công Đoạn Lắp Ráp (PQC/IPQC)',
     bmDocCode: 'BG-NV-02',
     mtcvCode: 'MTCV-IQC-IPQC (doc-mtcv-04)',
@@ -624,8 +624,8 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
     ]
   },
   {
-    staffName: 'Nguyễn Văn Điểm',
-    aliases: ['nguyễn văn điểm', 'nguyễn văn diệm', 'nguyen van diem'],
+    staffName: 'Nguyễn Văn Diệm',
+    aliases: ['nguyễn văn diệm', 'nguyễn văn điểm', 'nguyen van diem'],
     roleTitle: 'Nhân Viên QC Hiện Trường — Kiểm Soát Chất Lượng Đầu Vào (IQC)',
     bmDocCode: 'BG-NV-03',
     mtcvCode: 'MTCV-IQC-IPQC (doc-mtcv-04)',
@@ -667,8 +667,8 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
     ]
   },
   {
-    staffName: 'Lãnh Xuân Hải',
-    aliases: ['lãnh xuân hải', 'lành xuân hải', 'lanh xuan hai'],
+    staffName: 'Lành Xuân Hải',
+    aliases: ['lành xuân hải', 'lãnh xuân hải', 'lanh xuan hai'],
     roleTitle: 'Nhân Viên QC Hiện Trường — Kiểm Soát Linh Kiện & Tuần Tra Lắp Ráp (IQC/IPQC)',
     bmDocCode: 'BG-NV-06',
     mtcvCode: 'MTCV-IQC-IPQC (doc-mtcv-04)',
