@@ -541,5 +541,81 @@ export const QMS_FORM_TEMPLATES: QmsFormTemplate[] = [
       { label: 'Đánh giá hiện trạng thiết bị', content: 'Tổng số thiết bị quản lý: ............ | Thiết bị đạt chuẩn hoạt động: ............ | Thiết bị chờ hiệu chuẩn/hỏng: ............' },
       { label: 'Kế hoạch hiệu chuẩn định kỳ', content: '................................................................................................................................................' }
     ]
+  },
+  {
+    id: 'bm-kttd-03',
+    code: 'BM-KTTD-03',
+    procedureCode: 'QT-KTTD-01 / QT-KTTD-02 / QT-QC-01',
+    title: 'BẢN GIAO NHIỆM VỤ, QUYỀN HẠN VÀ TRÁCH NHIỆM — NHÂN VIÊN KỸ THUẬT CHẤT LƯỢNG',
+    subtitle: 'Người được giao: Đoàn Anh Hùng · Căn cứ tổ chức thực hiện, phân quyền, đánh giá KPI và rà soát trách nhiệm',
+    department: 'Bộ phận Kỹ thuật Thẩm định',
+    revision: '01',
+    effectiveDate: '19/11/2026',
+    orientation: 'portrait',
+    fieldsColumns: 2,
+    scope: 'Phòng Quản lý Chất lượng — Công ty TNHH Xe điện DK Việt Nhật (DKBike)',
+    purpose: 'Nhân viên Kỹ thuật Chất lượng được giao nhiệm vụ thực thi các nghiệp vụ kỹ thuật chuyên sâu thuộc Phòng Quản lý Chất lượng. Vị trí đóng vai trò là chuyên viên giám định lỗi sản phẩm từ thị trường, trực tiếp xử lý các nghiệp vụ gia công, sửa chữa kỹ thuật và hỗ trợ kiểm soát chất lượng linh kiện đầu vào, đảm bảo tính khách quan và chuẩn xác về mặt kỹ thuật.',
+    signRoles: [
+      { role: 'Người nhận nhiệm vụ [T]', type: 'T', title: 'Đoàn Anh Hùng — Nhân viên Kỹ thuật Chất lượng' },
+      { role: 'Xác nhận [H]', type: 'H', title: 'Trưởng phòng Quản lý Chất lượng (QLCL)' },
+      { role: 'Phê duyệt [P]', type: 'P', title: 'Giám đốc Công ty TNHH Xe điện DK Việt Nhật' }
+    ],
+    fields: [
+      { label: 'Họ và tên người được giao', placeholder: 'Đoàn Anh Hùng' },
+      { label: 'Chức danh / Vị trí', placeholder: 'Nhân viên Kỹ thuật Chất lượng' },
+      { label: 'Phòng ban trực thuộc', placeholder: 'Phòng Quản lý Chất lượng (QLCL)' },
+      { label: 'Ngày ban hành / Hiệu lực', placeholder: '19/11/2026' }
+    ],
+    preTableNote: {
+      title: 'I. MỤC ĐÍCH VÀ PHẠM VI GIAO NHIỆM VỤ',
+      content: 'Nhân viên Kỹ thuật Chất lượng được giao nhiệm vụ thực thi các nghiệp vụ kỹ thuật chuyên sâu thuộc Phòng Quản lý Chất lượng. Vị trí đóng vai trò là chuyên viên giám định lỗi sản phẩm từ thị trường, trực tiếp xử lý các nghiệp vụ gia công, sửa chữa kỹ thuật và hỗ trợ kiểm soát chất lượng linh kiện đầu vào, đảm bảo tính khách quan và chuẩn xác về mặt kỹ thuật.'
+    },
+    tables: [
+      {
+        title: 'II. CHỨC NĂNG TỔNG QUÁT',
+        headers: ['STT', 'Nội dung chức năng tổng quát', 'Tham chiếu'],
+        rows: [
+          ['1', 'Thực hiện các công tác kỹ thuật chuyên sâu: gia công linh kiện mẫu, đồ gá và sửa chữa sản phẩm lỗi.', 'CN-KTTĐ-02'],
+          ['2', 'Quản lý hệ thống công cụ dụng cụ (CCDC), thiết bị đo lường thuộc thẩm quyền quản lý của Phòng QLCL.', 'CN-KTTĐ-02'],
+          ['3', 'Thực hiện giám định kỹ thuật, phối hợp đánh giá xác định nguyên nhân đối với các xe lỗi bảo hành từ đại lý trả về.', 'CN-KTTĐ-01'],
+          ['4', 'Tham gia kiểm tra chất lượng linh kiện đầu vào (IQC) và phối hợp với Xưởng lắp ráp tinh chỉnh xe không đạt.', 'CN-QC-01']
+        ]
+      },
+      {
+        title: 'III. NHIỆM VỤ CHUNG (CÁC NGHIỆP VỤ CỐT LÕI)',
+        headers: ['STT', 'Mô tả nhiệm vụ cốt lõi', 'Tham chiếu / SOP'],
+        rows: [
+          ['1', 'Phối hợp kiểm tra, đánh giá và giám định kỹ thuật nhằm xác luận nguyên nhân gốc rễ đối với các xe lỗi sau khi bán được đại lý trả về (xe bảo hành).', 'NV-KTTĐ-02 | SOP: QT-KTTD-01'],
+          ['2', 'Trực tiếp thực hiện các công việc sửa chữa chuyên sâu, gia công các linh kiện mẫu phục vụ công tác nghiên cứu, thử nghiệm.', 'NV-KTTĐ-05 | SOP: QT-KTTD-02'],
+          ['3', 'Thực hiện chế tạo, sửa chữa đồ gá chuyên dụng và chịu trách nhiệm trực tiếp quản lý, bảo quản hệ thống công cụ dụng cụ, thiết bị đo lường của Phòng QLCL.', 'NV-KTTĐ-04'],
+          ['4', 'Thực hiện kiểm tra đo lường chất lượng linh kiện đầu vào (IQC) theo đúng kế hoạch phân công của cấp quản lý trực tiếp.', 'NV-QC-01 | SOP: QT-QC-01'],
+          ['5', 'Phối hợp chặt chẽ với Xưởng lắp ráp để thực hiện tinh chỉnh, khắc phục và sửa chữa các xe thành phẩm không đạt chất lượng (bị lỗi) sau quá trình lắp ráp.', 'Phối hợp hiện trường']
+        ]
+      },
+      {
+        title: 'IV. QUYỀN HẠN & V. TRÁCH NHIỆM',
+        headers: ['Nhóm', 'Nội dung chi tiết'],
+        rows: [
+          ['Quyền hạn 1', 'Có quyền yêu cầu Bộ phận Kinh doanh/Bảo hành cung cấp đầy đủ thông tin, dữ liệu và hiện trạng lỗi của xe đại lý trả về để phục vụ công tác giám định.'],
+          ['Quyền hạn 2', 'Có quyền bảo lưu ý kiến chuyên môn kỹ thuật trong các biên bản xác nhận nguyên nhân lỗi xe bảo hành.'],
+          ['Quyền hạn 3', 'Có quyền tạm đình chỉ sử dụng các công cụ dụng cụ, thiết bị đo lường của Phòng QLCL nếu phát hiện hỏng hóc, sai lệch hoặc quá hạn hiệu chuẩn.'],
+          ['Quyền hạn 4', 'Có quyền lập biên bản ghi nhận linh kiện lỗi, cách ly hàng hóa không đạt tiêu chuẩn trong quá trình thực hiện kiểm tra đầu vào (IQC).'],
+          ['Trách nhiệm 1', 'Chịu trách nhiệm trực tiếp về tính chính xác, trung thực và khách quan của các kết quả giám định lỗi xe bảo hành do mình thực hiện.'],
+          ['Trách nhiệm 2', 'Chịu trách nhiệm bảo quản tốt, tránh thất thoát, hư hỏng đối với hệ thống công cụ dụng cụ và thiết bị đo lường được giao quản lý.'],
+          ['Trách nhiệm 3', 'Chịu trách nhiệm về chất lượng các chi tiết/linh kiện mẫu do mình gia công, đảm bảo đúng bản vẽ kỹ thuật và yêu cầu thử nghiệm.'],
+          ['Trách nhiệm 4', 'Chịu trách nhiệm liên đới nếu để lọt vật tư lỗi vào dây chuyền tại các lô hàng được phân công kiểm tra IQC.']
+        ]
+      }
+    ],
+    conclusions: [
+      {
+        label: 'VI. NGUYÊN TẮC THỰC HIỆN VÀ BÁO CÁO',
+        content: '• Nguyên tắc "Độc lập chuyên môn": Các phán quyết giám định lỗi bảo hành phải dựa trên thông số kỹ thuật thực tế, máy móc đo lường, tuyệt đối không bị chi phối bởi cảm tính.\n• Nguyên tắc báo cáo kịp thời: Mọi phát sinh bất thường về trang thiết bị đo lường, hoặc các lỗi hệ thống nghiêm trọng phát hiện khi giám định xe trả về, phải lập tức báo cáo Trưởng phòng QLCL.\n• NGUYÊN TẮC CỐT LÕI: “Giám định dựa trên dữ liệu kỹ thuật; quản lý thiết bị chặt chẽ; đảm bảo tính khách quan và tuân thủ tiêu chuẩn chất lượng trong mọi khâu thực thi.”'
+      },
+      {
+        label: 'VII. HIỆU LỰC THỰC HIỆN',
+        content: 'Bản giao nhiệm vụ này là tài liệu kèm theo Quyết định phân công của Giám đốc và là căn cứ để tổ chức thực hiện, phân quyền, đánh giá kết quả, xây dựng KPI và rà soát trách nhiệm của vị trí Nhân viên Kỹ thuật Chất lượng. (Người nhận nhiệm vụ: Đoàn Anh Hùng)'
+      }
+    ]
   }
 ];
