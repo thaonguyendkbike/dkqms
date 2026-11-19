@@ -13749,15 +13749,135 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
 
           {/* ==================================== TAB KPI: KPI DASHBOARD (QLCL) ==================================== */}
           {activeTab === 'kpi_dashboard' && (
-            <KPIDashboard
-              onViewDetail={(data) => setViewDetailModal({ type: 'kpi', data })}
-              iqcRecords={iqcRecords}
-              pqcRecords={pqcRecords}
-              oqcRecords={oqcRecords}
-              suppliers={suppliers}
-              kpis={kpis}
-              setKpis={setKpis}
-            />
+            <div className="space-y-6">
+              <KPIDashboard
+                onViewDetail={(data) => setViewDetailModal({ type: 'kpi', data })}
+                iqcRecords={iqcRecords}
+                pqcRecords={pqcRecords}
+                oqcRecords={oqcRecords}
+                suppliers={suppliers}
+                kpis={kpis}
+                setKpis={setKpis}
+              />
+
+              {/* Staff Score Performance assessment dashboard (Chuyển từ phân hệ CAPA sang Chỉ tiêu & KPI) */}
+              <div className="bg-white border-2 border-slate-300 rounded-2xl p-5 shadow-sm" id="employee_assessment_dashboard">
+                <div className="border-b border-slate-200 pb-3 mb-4">
+                  <h3 className="text-sm font-extrabold uppercase text-slate-800 flex items-center gap-2">
+                    <User className="w-4 h-4 text-indigo-600" /> Bảng xếp hạng và đánh giá hiệu năng kỹ sư kiểm soát chất lượng (KPI Báo cáo ngày)
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Hệ thống đánh giá tự động dựa trên tần suất báo cáo, tỷ lệ hoàn thành công tác và hiệu năng chuyên môn tại các khâu SQC, IQC, PQC và OQC từ Nhật ký báo cáo chất lượng hàng ngày.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+                  <div className="xl:col-span-3 overflow-x-auto">
+                    <table className="w-full text-left text-xs min-w-[700px]">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-400 font-extrabold text-[10px] uppercase tracking-wider">
+                          <th className="pb-2">Kỹ sư kiểm soát</th>
+                          <th className="pb-2 text-center">Báo cáo ngày</th>
+                          <th className="pb-2 text-center">Hoàn thành</th>
+                          <th className="pb-2 text-center bg-indigo-50/20 text-indigo-800">Tỷ lệ SQC</th>
+                          <th className="pb-2 text-center bg-sky-50/20 text-sky-800">Tỷ lệ IQC</th>
+                          <th className="pb-2 text-center bg-amber-50/20 text-amber-800">Tỷ lệ PQC</th>
+                          <th className="pb-2 text-center bg-emerald-50/20 text-emerald-800">Tỷ lệ OQC</th>
+                          <th className="pb-2 text-center bg-rose-50/20 text-rose-800">Tỷ lệ CS/BH</th>
+                          <th className="pb-2 text-center">Tỷ lệ chung</th>
+                          <th className="pb-2 text-center font-bold text-slate-800">Điểm Quy Đổi</th>
+                          <th className="pb-2 text-right">Xếp hạng KPI</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                        {employeePerformance.map((emp) => (
+                          <tr key={emp.name} className="hover:bg-slate-50/50 transition">
+                            <td className="py-3 text-slate-900 font-extrabold">{emp.name}</td>
+                            <td className="py-3 text-center text-slate-500">{emp.total} việc</td>
+                            <td className="py-3 text-center text-emerald-600">
+                              {emp.completed} / {emp.total}
+                            </td>
+                            <td className="py-3 text-center bg-indigo-50/10">
+                              {emp.sqcTotal > 0 ? (
+                                <span className={`text-[11px] ${emp.sqcCompleted === emp.sqcTotal ? 'text-indigo-600 font-extrabold' : 'text-slate-600'}`}>
+                                  {emp.sqcRate}% <span className="text-[9px] text-slate-400">({emp.sqcCompleted}/{emp.sqcTotal})</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-normal italic">-</span>
+                              )}
+                            </td>
+                            <td className="py-3 text-center bg-sky-50/10">
+                              {emp.iqcTotal > 0 ? (
+                                <span className={`text-[11px] ${emp.iqcCompleted === emp.iqcTotal ? 'text-sky-600 font-extrabold' : 'text-slate-600'}`}>
+                                  {emp.iqcRate}% <span className="text-[9px] text-slate-400">({emp.iqcCompleted}/{emp.iqcTotal})</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-normal italic">-</span>
+                              )}
+                            </td>
+                            <td className="py-3 text-center bg-amber-50/10">
+                              {emp.pqcTotal > 0 ? (
+                                <span className={`text-[11px] ${emp.pqcCompleted === emp.pqcTotal ? 'text-amber-600 font-extrabold' : 'text-slate-600'}`}>
+                                  {emp.pqcRate}% <span className="text-[9px] text-slate-400">({emp.pqcCompleted}/{emp.pqcTotal})</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-normal italic">-</span>
+                              )}
+                            </td>
+                            <td className="py-3 text-center bg-emerald-50/10">
+                              {emp.oqcTotal > 0 ? (
+                                <span className={`text-[11px] ${emp.oqcCompleted === emp.oqcTotal ? 'text-emerald-600 font-extrabold' : 'text-slate-600'}`}>
+                                  {emp.oqcRate}% <span className="text-[9px] text-slate-400">({emp.oqcCompleted}/{emp.oqcTotal})</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-normal italic">-</span>
+                              )}
+                            </td>
+                            <td className="py-3 text-center bg-rose-50/10">
+                              {emp.csTotal > 0 ? (
+                                <span className={`text-[11px] ${emp.csCompleted === emp.csTotal ? 'text-rose-600 font-extrabold' : 'text-slate-600'}`}>
+                                  {emp.csRate}% <span className="text-[9px] text-slate-400">({emp.csCompleted}/{emp.csTotal})</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-normal italic">-</span>
+                              )}
+                            </td>
+                            <td className="py-3 text-center text-slate-800 font-bold">{emp.rate}%</td>
+                            <td className="py-3 text-center font-mono font-black text-indigo-700 bg-slate-50">{emp.score} / 100</td>
+                            <td className="py-3 text-right">
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${emp.rating === 'Xuất sắc' ? 'bg-green-100 text-green-800' :
+                                emp.rating === 'Tốt' ? 'bg-indigo-100 text-indigo-700' :
+                                  emp.rating === 'Khá' ? 'bg-sky-100 text-sky-700' :
+                                    emp.rating === 'Trung bình' ? 'bg-yellow-100 text-amber-700' : 'bg-red-100 text-red-700'
+                                }`}>
+                                {emp.rating}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Rating guide sidebar */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-600 flex flex-col justify-between">
+                    <div>
+                      <h4 className="font-extrabold uppercase text-slate-700 mb-2">Thang đánh giá chất lượng:</h4>
+                      <p className="mb-2 leading-relaxed text-[11px]">Quy chuẩn xếp loại KPI dựa trên tổng lượng đóng và tỷ lệ dứt điểm lỗi tại hiện trường:</p>
+                      <ul className="space-y-1 bg-white p-2.5 rounded border border-slate-100 font-mono text-[10px] mb-3">
+                        <li className="flex justify-between"><span>90 - 100 điểm:</span> <span className="text-green-600 font-bold">Xuất sắc</span></li>
+                        <li className="flex justify-between"><span>80 - 89 điểm:</span> <span className="text-indigo-600 font-bold">Tốt</span></li>
+                        <li className="flex justify-between"><span>70 - 79 điểm:</span> <span className="text-sky-600 font-bold">Khá</span></li>
+                        <li className="flex justify-between"><span>60 - 69 điểm:</span> <span className="text-amber-600 font-bold">Trung bình</span></li>
+                        <li className="flex justify-between"><span>&lt; 60 điểm:</span> <span className="text-red-600 font-bold">Cần cải tiến</span></li>
+                      </ul>
+                    </div>
+                    <p className="text-[10px] italic text-slate-400 bg-white/50 p-2 rounded border border-slate-100 leading-normal">
+                      💡 <strong>Cơ chế tính điểm:</strong> 70 điểm tối đa dựa trên tỷ lệ báo cáo hoàn tất trong ngày, cộng thêm tối đa 30 điểm thưởng khi xử lý triệt để 100% mục tiêu tại các khâu chuyên trách SQC / IQC / PQC / OQC.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* ==================================== TAB QMS WORKFLOW ==================================== */}
@@ -13812,155 +13932,32 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 </div>
               </div>
 
-              {/* Staff Score Performance assessment dashboard */}
-              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm" id="employee_assessment_dashboard">
-                <div className="border-b pb-3 mb-4">
-                  <h3 className="text-sm font-extrabold uppercase text-slate-800 flex items-center gap-2">
-                    <User className="w-4 h-4 text-indigo-600" /> Bảng xếp hạng và đánh giá hiệu năng kỹ sư kiểm soát chất lượng (KPI Báo cáo ngày)
-                  </h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Hệ thống đánh giá tự động dựa trên tần suất báo cáo, tỷ lệ hoàn thành công tác và hiệu năng chuyên môn tại các khâu SQC, IQC, PQC và OQC từ Nhật ký báo cáo chất lượng hàng ngày.
-                  </p>
-                </div>
-                <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-                  <div className="xl:col-span-3 overflow-x-auto">
-                    <table className="w-full text-left text-xs min-w-[700px]">
-                      <thead>
-                        <tr className="border-b border-slate-200 text-slate-400 font-extrabold text-[10px] uppercase tracking-wider">
-                          <th className="pb-2">Kỹ sư kiểm soát</th>
-                          <th className="pb-2 text-center">Báo cáo ngày</th>
-                          <th className="pb-2 text-center">Hoàn thành</th>
-                          <th className="pb-2 text-center bg-indigo-50/20 text-indigo-800">Tỷ lệ SQC</th>
-                          <th className="pb-2 text-center bg-sky-50/20 text-sky-850">Tỷ lệ IQC</th>
-                          <th className="pb-2 text-center bg-amber-50/20 text-amber-800">Tỷ lệ PQC</th>
-                          <th className="pb-2 text-center bg-emerald-50/20 text-emerald-800">Tỷ lệ OQC</th>
-                          <th className="pb-2 text-center bg-rose-50/20 text-rose-800">Tỷ lệ CS/BH</th>
-                          <th className="pb-2 text-center">Tỷ lệ chung</th>
-                          <th className="pb-2 text-center font-bold text-slate-800">Điểm Quy Đổi</th>
-                          <th className="pb-2 text-right">Xếp hạng KPI</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                        {employeePerformance.map((emp) => (
-                          <tr key={emp.name} className="hover:bg-slate-50/50 transition">
-                            <td className="py-3 text-slate-900 font-extrabold">{emp.name}</td>
-                            <td className="py-3 text-center text-slate-500">{emp.total} việc</td>
-                            <td className="py-3 text-center text-emerald-600">
-                              {emp.completed} / {emp.total}
-                            </td>
-                            {/* SQC column */}
-                            <td className="py-3 text-center bg-indigo-50/10">
-                              {emp.sqcTotal > 0 ? (
-                                <span className={`text-[11px] ${emp.sqcCompleted === emp.sqcTotal ? 'text-indigo-600 font-extrabold' : 'text-slate-650'}`}>
-                                  {emp.sqcRate}% <span className="text-[9px] text-slate-400">({emp.sqcCompleted}/{emp.sqcTotal})</span>
-                                </span>
-                              ) : (
-                                <span className="text-slate-350 font-normal italic">-</span>
-                              )}
-                            </td>
-                            {/* IQC column */}
-                            <td className="py-3 text-center bg-sky-50/10">
-                              {emp.iqcTotal > 0 ? (
-                                <span className={`text-[11px] ${emp.iqcCompleted === emp.iqcTotal ? 'text-sky-600 font-extrabold' : 'text-slate-650'}`}>
-                                  {emp.iqcRate}% <span className="text-[9px] text-slate-400">({emp.iqcCompleted}/{emp.iqcTotal})</span>
-                                </span>
-                              ) : (
-                                <span className="text-slate-350 font-normal italic">-</span>
-                              )}
-                            </td>
-                            {/* PQC column */}
-                            <td className="py-3 text-center bg-amber-50/10">
-                              {emp.pqcTotal > 0 ? (
-                                <span className={`text-[11px] ${emp.pqcCompleted === emp.pqcTotal ? 'text-amber-600 font-extrabold' : 'text-slate-650'}`}>
-                                  {emp.pqcRate}% <span className="text-[9px] text-slate-400">({emp.pqcCompleted}/{emp.pqcTotal})</span>
-                                </span>
-                              ) : (
-                                <span className="text-slate-350 font-normal italic">-</span>
-                              )}
-                            </td>
-                            {/* OQC column */}
-                            <td className="py-3 text-center bg-emerald-50/10">
-                              {emp.oqcTotal > 0 ? (
-                                <span className={`text-[11px] ${emp.oqcCompleted === emp.oqcTotal ? 'text-emerald-600 font-extrabold' : 'text-slate-650'}`}>
-                                  {emp.oqcRate}% <span className="text-[9px] text-slate-400">({emp.oqcCompleted}/{emp.oqcTotal})</span>
-                                </span>
-                              ) : (
-                                <span className="text-slate-350 font-normal italic">-</span>
-                              )}
-                            </td>
-                            {/* CS/BH column */}
-                            <td className="py-3 text-center bg-rose-50/10">
-                              {emp.csTotal > 0 ? (
-                                <span className={`text-[11px] ${emp.csCompleted === emp.csTotal ? 'text-rose-600 font-extrabold' : 'text-slate-650'}`}>
-                                  {emp.csRate}% <span className="text-[9px] text-slate-400">({emp.csCompleted}/{emp.csTotal})</span>
-                                </span>
-                              ) : (
-                                <span className="text-slate-350 font-normal italic">-</span>
-                              )}
-                            </td>
-                            <td className="py-3 text-center text-slate-800 font-bold">{emp.rate}%</td>
-                            <td className="py-3 text-center font-mono font-black text-indigo-700 bg-slate-50">{emp.score} / 100</td>
-                            <td className="py-3 text-right">
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${emp.rating === 'Xuất sắc' ? 'bg-green-150 text-green-850' :
-                                emp.rating === 'Tốt' ? 'bg-indigo-150 text-indigo-750' :
-                                  emp.rating === 'Khá' ? 'bg-sky-100 text-sky-750' :
-                                    emp.rating === 'Trung bình' ? 'bg-yellow-105 text-amber-700' : 'bg-red-100 text-red-750'
-                                }`}>
-                                {emp.rating}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Rating guide sidebar */}
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-150 text-xs text-slate-600 flex flex-col justify-between">
-                    <div>
-                      <h4 className="font-extrabold uppercase text-slate-700 mb-2">Thang đánh giá chất lượng:</h4>
-                      <p className="mb-2 leading-relaxed text-[11px]">Quy chuẩn xếp loại KPI dựa trên tổng lượng đóng và tỷ lệ dứt điểm lỗi tại hiện trường:</p>
-                      <ul className="space-y-1 bg-white p-2.5 rounded border border-slate-100 font-mono text-[10px] mb-3">
-                        <li className="flex justify-between"><span>90 - 100 điểm:</span> <span className="text-green-600 font-bold">Xuất sắc</span></li>
-                        <li className="flex justify-between"><span>80 - 89 điểm:</span> <span className="text-indigo-600 font-bold">Tốt</span></li>
-                        <li className="flex justify-between"><span>70 - 79 điểm:</span> <span className="text-sky-600 font-bold">Khá</span></li>
-                        <li className="flex justify-between"><span>60 - 69 điểm:</span> <span className="text-amber-600 font-bold">Trung bình</span></li>
-                        <li className="flex justify-between"><span>&lt; 60 điểm:</span> <span className="text-red-600 font-bold">Cần cải tiến</span></li>
-                      </ul>
-                    </div>
-                    <p className="text-[10px] italic text-slate-400 bg-white/50 p-2 rounded border border-slate-100 leading-normal">
-                      💡 <strong>Cơ chế tính điểm:</strong> 70 điểm tối đa dựa trên tỷ lệ báo cáo hoàn tất trong ngày, cộng thêm tối đa 30 điểm thưởng khi xử lý triệt để 100% mục tiêu tại các khâu chuyên trách SQC / IQC / PQC / OQC.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
               {/* CAPA Base Database Checklist */}
-              <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm mt-8 transition-all duration-300" id="capa_tracking_sub">
-                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-100 pb-4 mb-5">
+              <div className="bg-white border-2 border-slate-300 rounded-2xl p-5 shadow-sm transition-all duration-300" id="capa_tracking_sub">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-slate-200 pb-4 mb-5">
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-                      <ShieldCheck className="w-5 h-5 text-emerald-600" /> Hệ Thống Quản Lý & Cấu Trúc Khóa Ngoại CAPA Điển Hình (DKBike Relational CAPA Panel)
+                    <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-emerald-600" /> Danh Sách Hồ Sơ Khắc Phục &amp; Phòng Ngừa (CAPA)
                     </h3>
                     <p className="text-xs text-slate-500 mt-1">
-                      Bảng vận hành liên kết ròng giữa Hồ sơ khắc phục (CAPA) với danh mục Nhà cung cấp, Dòng xe ảnh hưởng và Kỹ sư kiểm soát.
+                      Bảng vận hành liên kết giữa Hồ sơ khắc phục (CAPA) với danh mục Nhà cung cấp, Dòng xe ảnh hưởng và Kỹ sư kiểm soát.
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2.5">
                     {/* View Modes */}
-                    <div className="bg-slate-100 p-1.5 rounded-lg flex items-center gap-1.5 text-xs font-bold text-slate-650 border border-slate-200">
+                    <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1 text-xs font-bold text-slate-700 border-2 border-slate-300">
                       <button
                         type="button"
                         onClick={() => setCapaViewMode('table')}
-                        className={`px-2.5 py-1 rounded transition-colors cursor-pointer flex items-center gap-1.5 ${capaViewMode === 'table' ? 'bg-indigo-650 text-white shadow-xs' : 'hover:bg-slate-200'}`}
+                        className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${capaViewMode === 'table' ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-white'}`}
                         title="Bảng cấu trúc quan hệ"
                       >
-                        <Database className="w-3.5 h-3.5" /> Dạng Bảng CSDL
+                        <Database className="w-3.5 h-3.5" /> Dạng Bảng
                       </button>
                       <button
                         type="button"
                         onClick={() => setCapaViewMode('cards')}
-                        className={`px-2.5 py-1 rounded transition-colors cursor-pointer flex items-center gap-1.5 ${capaViewMode === 'cards' ? 'bg-indigo-650 text-white shadow-xs' : 'hover:bg-slate-200'}`}
+                        className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${capaViewMode === 'cards' ? 'bg-blue-600 text-white shadow-sm' : 'hover:bg-white'}`}
                         title="Dạng thẻ tác nghiệp trực quan"
                       >
                         <Sliders className="w-3.5 h-3.5" /> Dạng Thẻ
@@ -13970,43 +13967,51 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     <button
                       type="button"
                       onClick={() => setShowAddCapaForm(!showAddCapaForm)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition shadow-xs cursor-pointer"
                     >
-                      <Plus className="w-4 h-4" /> Khai báo CAPA liên kết mới 🚀
+                      <Plus className="w-4 h-4" /> Khai báo CAPA mới
                     </button>
                   </div>
                 </div>
 
-                {/* Live Relational CAPA Metrics Overview */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
-                  <div className="bg-slate-50 hover:bg-slate-100/60 p-3.5 rounded-xl border border-slate-150 transition-all">
-                    <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wider block">Tổng số Hồ sơ CAPA</span>
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <p className="text-2xl font-black text-slate-800 font-mono">{capas.length}</p>
-                      <span className="text-[10px] text-slate-400 font-medium">Bản ghi có sẵn</span>
+                {/* Live Relational CAPA Metrics Overview — Đồng bộ style thẻ phân hệ Báo cáo */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                  <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
+                    <div className="text-xs font-bold uppercase text-slate-500">Tổng số Hồ sơ CAPA</div>
+                    <div className="mt-1 text-3xl font-extrabold text-slate-900">{capas.length}</div>
+                    <div className="text-xs text-slate-600 mt-1">Bản ghi đang theo dõi</div>
+                  </div>
+                  <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
+                    <div className="text-xs font-bold uppercase text-slate-500">CAPA Đang Mở</div>
+                    <div className="mt-1 text-3xl font-extrabold text-slate-900">
+                      {capas.filter(c => (c.status || c.Status) === 'Mở').length}
+                    </div>
+                    <div className="text-xs text-slate-600 mt-1">
+                      Đang xử lý | Quá hạn:{' '}
+                      <span className={capas.filter(c => (c.status || c.Status) === 'Quá hạn').length > 0 ? 'font-bold text-rose-700' : ''}>
+                        {capas.filter(c => (c.status || c.Status) === 'Quá hạn').length}
+                      </span>
                     </div>
                   </div>
-                  <div className="bg-red-50/40 hover:bg-red-50 p-3.5 rounded-xl border border-red-100 transition-all">
-                    <span className="text-[10px] text-red-600 font-extrabold uppercase tracking-wider block">CAPA Đang Mở (Chờ xử lý)</span>
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <p className="text-2xl font-black text-red-600 font-mono">{capas.filter(c => (c.status || c.Status) === 'Mở').length}</p>
-                      <span className="text-[10px] text-red-500 font-bold animate-pulse">● Đang Khắc phục</span>
+                  <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
+                    <div className="text-xs font-bold uppercase text-slate-500">CAPA Đã Đóng</div>
+                    <div className="mt-1 text-3xl font-extrabold text-slate-900">
+                      {capas.filter(c => (c.status || c.Status) === 'Đóng' || (c.status || c.Status) === 'Đã đóng').length}
+                    </div>
+                    <div className="text-xs text-slate-600 mt-1">
+                      Tỷ lệ đóng:{' '}
+                      {capas.length
+                        ? `${((capas.filter(c => (c.status || c.Status) === 'Đóng' || (c.status || c.Status) === 'Đã đóng').length / capas.length) * 100).toFixed(1)}%`
+                        : '0%'}
                     </div>
                   </div>
-                  <div className="bg-emerald-50/40 hover:bg-emerald-50 p-3.5 rounded-xl border border-emerald-100 transition-all">
-                    <span className="text-[10px] text-emerald-600 font-extrabold uppercase tracking-wider block">CAPA Đã Đóng (Kết thúc)</span>
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <p className="text-2xl font-black text-emerald-700 font-mono">{capas.filter(c => (c.status || c.Status) === 'Đóng' || (c.status || c.Status) === 'Đã đóng').length}</p>
-                      <span className="text-[10px] text-emerald-600 font-bold">✓ Đạt hiệu quả</span>
+                  <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
+                    <div className="text-xs font-bold uppercase text-slate-500">Tỷ lệ Lỗi Tái Phát</div>
+                    <div className="mt-1 text-3xl font-extrabold text-slate-900">
+                      {capas.length ? `${(capas.filter(c => c.isRepeated).length / capas.length * 100).toFixed(0)}%` : '0%'}
                     </div>
-                  </div>
-                  <div className="bg-amber-50/40 hover:bg-amber-50 p-3.5 rounded-xl border border-amber-100 transition-all">
-                    <span className="text-[10px] text-amber-600 font-extrabold uppercase tracking-wider block">Rủi ro tái phát lỗi gốc</span>
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <p className="text-2xl font-black text-amber-650 font-mono">
-                        {capas.length ? (capas.filter(c => c.isRepeated).length / capas.length * 100).toFixed(0) : 0}%
-                      </p>
-                      <span className="text-[10px] text-amber-500 font-bold">Lao dốc do lặp lỗi</span>
+                    <div className="text-xs text-slate-600 mt-1">
+                      Số lỗi lặp lại: {capas.filter(c => c.isRepeated).length}/{capas.length} hồ sơ
                     </div>
                   </div>
                 </div>
@@ -14857,14 +14862,11 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     );
                   }
 
-                  // Cards view render fallback
+                  // Cards view render fallback — đồng bộ style thẻ phân hệ Báo cáo
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {filteredList.map((cap) => (
-                        <div key={cap.id} className={`p-4 rounded-xl border transition-all hover:shadow bg-white ${(cap.status || cap.Status) === 'Mở' ? 'border-red-200 bg-red-50/5' :
-                          (cap.status || cap.Status) === 'Quá hạn' ? 'border-amber-200 bg-amber-50/5' :
-                            'border-slate-200'
-                          }`}>
+                        <div key={cap.id} className="p-4 rounded-2xl border-2 border-slate-300 shadow-sm transition-all hover:border-blue-500 bg-white">
                           <div className="flex justify-between items-start">
                             <div>
                               <div className="flex flex-wrap items-center gap-1.5">
