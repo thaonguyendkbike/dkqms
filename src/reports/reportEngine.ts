@@ -377,8 +377,13 @@ function isPqcResolved(r: PQCRecord): boolean {
   return r.status === 'Đạt hoàn toàn' || r.status === 'Đã cải tiến';
 }
 
-function getCapaStatus(c: CAPA): string {
+export function getCapaStatus(c: CAPA): string {
   return (c.status || c.Status || 'Mở').trim();
+}
+
+export function isCapaClosed(c: CAPA): boolean {
+  const raw = getCapaStatus(c).toLowerCase();
+  return raw === 'đóng' || raw === 'đã đóng' || raw === 'closed' || raw === 'hoàn thành' || raw === 'đã xử lý';
 }
 
 function getCapaDueDate(c: CAPA): Date | null {
@@ -753,14 +758,14 @@ export function buildReportSnapshot(
     .sort((a, b) => b.count - a.count);
 
   // --- 6. CAPA & ECO ---
-  const openCapas = input.capas.filter(c => getCapaStatus(c) !== 'Đã đóng');
+  const openCapas = input.capas.filter(c => !isCapaClosed(c));
   const overdueCapas = openCapas.filter(c => {
     const s = getCapaStatus(c);
     if (s === 'Quá hạn') return true;
     const due = getCapaDueDate(c);
     return due ? due.getTime() < now.getTime() : false;
   });
-  const closedCapas = input.capas.filter(c => getCapaStatus(c) === 'Đã đóng');
+  const closedCapas = input.capas.filter(c => isCapaClosed(c));
   const effectiveCapas = closedCapas.filter(c => (c.effectiveness || c.Effectiveness) === 'Hiệu quả');
   const capasInPeriod = filterDated(input.capas, c => c.targetDate || c.dueDate || c.DueDate, start, end);
   const capaOnTimeScore =

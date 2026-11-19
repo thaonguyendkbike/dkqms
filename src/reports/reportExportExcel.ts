@@ -85,6 +85,7 @@ function getStatusBadgeStyle(val: string): { fill: { fgColor: { rgb: string } };
     v === 'đạt' ||
     v === 'đạt hoàn toàn' ||
     v === 'đã xử lý' ||
+    v === 'đóng' ||
     v === 'đã đóng' ||
     v === 'điểm sáng' ||
     v === 'đạt chuẩn'
@@ -489,7 +490,11 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
     // =========================================================
     const capaEcoItems: (string | number)[][] = [
       ...capaEco.capasAll
-        .filter((c) => (c.status !== 'Closed' && c.status !== 'Đã đóng') || capaEco.capasInPeriod.some((p) => p.id === c.id))
+        .filter((c) => {
+          const st = (c.status || c.Status || '').trim().toLowerCase();
+          const closed = st === 'đóng' || st === 'đã đóng' || st === 'closed' || st === 'hoàn thành';
+          return !closed || capaEco.capasInPeriod.some((p) => p.id === c.id);
+        })
         .map((c) => [
           'CAPA',
           c.title || c.issue || '--',

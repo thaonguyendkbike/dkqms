@@ -16176,7 +16176,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             const iqcFailedAll = iqcTotalAll - iqcPassedAll;
             const iqcRateAll = iqcTotalAll > 0 ? ((iqcPassedAll / iqcTotalAll) * 100).toFixed(1) : '--';
 
-            const openCapasCount = capas.filter(c => c.status !== 'Đã đóng' && c.status !== 'Hoàn thành' && c.Status !== 'Closed').length;
+            const openCapasCount = capas.filter(c => {
+              const st = (c.status || c.Status || '').trim().toLowerCase();
+              return !(st === 'đóng' || st === 'đã đóng' || st === 'closed' || st === 'hoàn thành');
+            }).length;
             const closedCapasCount = capas.length - openCapasCount;
             const closedDefectsCount = defects.filter(d => d.status === 'Đã xử lý').length;
             const openDefectsCount = defects.length - closedDefectsCount;
