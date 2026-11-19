@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   Calendar,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -121,6 +122,19 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showMissingDateModal, setShowMissingDateModal] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportMenu]);
 
   // Sync mode when user clicks sidebar
   useEffect(() => {
@@ -491,52 +505,56 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
             )}
           </div>
 
-          {/* Right: 1-Click Actions for Week/Month */}
+          {/* Right: Unified Export Dropdown for Week/Month */}
           {isPeriodReport && (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="relative" ref={exportMenuRef}>
               <button
                 type="button"
-                onClick={() => exportReportToExcel(snapshot, onToast)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
+                onClick={() => setShowExportMenu((prev) => !prev)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border-2 border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition cursor-pointer"
               >
-                <Download className="w-4 h-4" /> Xuất Excel
+                <Download className="w-4 h-4" />
+                <span>Xuất</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
               </button>
-              <button
-                type="button"
-                onClick={() => printReportA4(snapshot, onToast)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
-              >
-                <Printer className="w-4 h-4" /> In / PDF
-              </button>
-              <button
-                type="button"
-                onClick={handleCopySummary}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
-              >
-                <Copy className="w-4 h-4" /> Copy
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenPeriodGmail}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-bold cursor-pointer"
-                title="Gửi tóm tắt báo cáo kỳ này qua Gmail"
-              >
-                <Mail className="w-4 h-4" /> Gửi Gmail
-              </button>
-              <button
-                type="button"
-                onClick={openNoteModal}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-sm font-bold"
-              >
-                <MessageSquarePlus className="w-4 h-4" /> Nhận xét QLCL
-              </button>
-              <button
-                type="button"
-                onClick={onOpenAddWeekTask}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold"
-              >
-                <Plus className="w-4 h-4" /> Bổ sung việc
-              </button>
+
+              {showExportMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl border-2 border-slate-200 shadow-lg py-1.5 z-50">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowExportMenu(false);
+                      exportReportToExcel(snapshot, onToast);
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-sm font-bold text-slate-800 hover:bg-slate-100 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 text-emerald-600" />
+                    <span>Xuất Excel</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowExportMenu(false);
+                      printReportA4(snapshot, onToast);
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-sm font-bold text-slate-800 hover:bg-slate-100 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4 text-blue-600" />
+                    <span>In / PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowExportMenu(false);
+                      handleCopySummary();
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-sm font-bold text-slate-800 hover:bg-slate-100 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Copy className="w-4 h-4 text-slate-600" />
+                    <span>Copy</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
