@@ -34,6 +34,7 @@ import {
   getIsoWeekRange,
   getIsoWeeksInYear,
   getPeriodDescriptor,
+  isCapaClosed,
   parseFlexibleDate,
   ReportDatasetInput,
   ReportPeriodType,
@@ -1175,7 +1176,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
             </div>
             <div className="space-y-2">
               {capaEco.capasAll
-                .filter((c) => c.status !== 'Closed' && c.status !== 'Đã đóng')
+                .filter((c) => !isCapaClosed(c))
                 .slice(0, 15)
                 .map((c) => {
                   const isOverdue = capaEco.overdueCapas.some((o) => o.id === c.id);
@@ -1259,7 +1260,7 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
                     </div>
                   );
                 })}
-              {capaEco.capasAll.filter((c) => c.status !== 'Closed' && c.status !== 'Đã đóng')
+              {capaEco.capasAll.filter((c) => !isCapaClosed(c))
                 .length === 0 && (
                 <p className="text-xs text-slate-500">Không có hồ sơ CAPA đang mở.</p>
               )}
