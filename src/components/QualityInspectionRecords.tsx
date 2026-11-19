@@ -8251,95 +8251,91 @@ return (
           const passRateQty = totalQtySum > 0 ? (Math.round((passedQtySum / totalQtySum) * 1000) / 10) : 100;
 
           return (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {/* Card 1: Total Lots */}
-              <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden transition-all hover:border-slate-300">
-                <div className="flex justify-between items-start">
-                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase leading-tight block">
+              <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm transition-all">
+                <div className="flex justify-between items-start gap-2">
+                  <div className="text-xs font-bold uppercase text-slate-500">
                     Tổng số lô hàng nhập kiểm
-                  </span>
+                  </div>
                   {isIqcFiltered && (
-                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
                       Đã lọc
                     </span>
                   )}
                 </div>
-                <span className="text-lg sm:text-xl font-black text-slate-800 font-mono mt-0.5 sm:mt-1 block">
-                  {totalFilteredLots.toLocaleString('vi-VN')} <span className="text-xs font-semibold text-slate-500">phiếu</span>
-                </span>
-                <p className="text-[10px] text-slate-500 mt-1 flex justify-between items-center">
-                  <span>Quy mô: <strong className="font-mono text-slate-700">{totalQtySum.toLocaleString('vi-VN')}</strong> sp</span>
+                <div className="mt-1 text-3xl font-extrabold text-slate-900">
+                  {totalFilteredLots.toLocaleString('vi-VN')}
+                </div>
+                <div className="text-xs text-slate-600 mt-1 flex justify-between items-center gap-1">
+                  <span>Quy mô: <strong className="text-slate-800">{totalQtySum.toLocaleString('vi-VN')}</strong> sp</span>
                   {isIqcFiltered && (
-                    <span className="text-[9.5px] text-emerald-600 font-bold">({totalFilteredLots}/{totalLotsAll} tổng lô)</span>
+                    <span className="text-emerald-600 font-bold">({totalFilteredLots}/{totalLotsAll} lô)</span>
                   )}
-                </p>
+                </div>
               </div>
 
               {/* Card 2: Defective Lots / Defective Components */}
-              <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden transition-all hover:border-red-200">
-                <div className="flex justify-between items-start">
-                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase leading-tight block">
+              <div className="bg-white rounded-2xl border-2 border-slate-300 hover:border-red-300 p-4 shadow-sm transition-all">
+                <div className="flex justify-between items-start gap-2">
+                  <div className="text-xs font-bold uppercase text-slate-500">
                     Linh kiện có lỗi
-                  </span>
+                  </div>
                   {failedLineUnits > 0 && (
-                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 shrink-0">
                       Phát hiện lỗi
                     </span>
                   )}
                 </div>
-                <span className="text-lg sm:text-xl font-black text-red-500 font-mono mt-0.5 sm:mt-1 block">
-                  {failedLineUnits.toLocaleString('vi-VN')} <span className="text-xs font-semibold text-red-400">dòng linh kiện</span>
-                </span>
-                <p className="text-[10px] text-slate-500 mt-1 flex justify-between items-center">
-                  <span>Số linh kiện hỏng: <strong className="font-mono text-red-600">{failedQtySum.toLocaleString('vi-VN')}</strong> sp</span>
+                <div className="mt-1 text-3xl font-extrabold text-red-500">
+                  {failedLineUnits.toLocaleString('vi-VN')}
+                </div>
+                <div className="text-xs text-slate-600 mt-1 flex justify-between items-center gap-1">
+                  <span>Hỏng: <strong className="text-red-600">{failedQtySum.toLocaleString('vi-VN')}</strong> sp</span>
                   {failedLineUnits === 0 ? (
-                    <span className="text-[9.5px] text-emerald-600 font-bold">✓ 0 dòng lỗi</span>
+                    <span className="text-emerald-600 font-bold">✓ 0 dòng lỗi</span>
                   ) : (
-                    <span className="text-[9.5px] text-red-500 font-bold">({failedFilteredLots} phiếu)</span>
+                    <span className="text-red-500 font-bold">{failedFilteredLots} phiếu</span>
                   )}
-                </p>
+                </div>
               </div>
 
               {/* Card 3: Pass rate by Lot / Ticket */}
-              <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden transition-all hover:border-emerald-200">
-                <div className="flex justify-between items-start">
-                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase leading-tight block">
-                    Tỉ lệ Đạt IQC (theo Dòng linh kiện)
-                  </span>
-                  <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${passRateLot >= 95 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+              <div className="bg-white rounded-2xl border-2 border-slate-300 hover:border-emerald-300 p-4 shadow-sm transition-all">
+                <div className="flex justify-between items-start gap-2">
+                  <div className="text-xs font-bold uppercase text-slate-500">
+                    Tỉ lệ Đạt IQC (Dòng LK)
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${passRateLot >= 95 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
                     {passRateLot >= 95 ? 'Đạt chỉ tiêu' : 'Cần cải thiện'}
                   </span>
                 </div>
-                <span className={`text-lg sm:text-xl font-black font-mono mt-0.5 sm:mt-1 block ${passRateLot >= 95 ? 'text-emerald-600' : passRateLot >= 85 ? 'text-amber-600' : 'text-red-500'}`}>
+                <div className={`mt-1 text-3xl font-extrabold ${passRateLot >= 95 ? 'text-emerald-600' : passRateLot >= 85 ? 'text-amber-600' : 'text-red-500'}`}>
                   {passRateLot}%
-                </span>
-                <p className="text-[10px] text-slate-500 mt-1 flex justify-between items-center">
-                  <span>Nghiệm thu: <strong className="font-mono text-emerald-600">{passedLineUnits.toLocaleString('vi-VN')}</strong>/{totalLineUnits.toLocaleString('vi-VN')} dòng Đạt</span>
-                  <span className="text-[9.5px] font-bold text-slate-400">
-                    Target: ≥95%
-                  </span>
-                </p>
+                </div>
+                <div className="text-xs text-slate-600 mt-1 flex justify-between items-center gap-1">
+                  <span>Đạt <strong className="text-emerald-600">{passedLineUnits.toLocaleString('vi-VN')}</strong>/{totalLineUnits.toLocaleString('vi-VN')} dòng</span>
+                  <span className="font-semibold text-slate-500">≥95%</span>
+                </div>
               </div>
 
               {/* Card 4: Pass rate by Piece Quantity (Số lượng chi tiết) */}
-              <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden transition-all hover:border-indigo-200">
-                <div className="flex justify-between items-start">
-                  <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase leading-tight block">
-                    Tỉ lệ Đạt IQC (theo Chi tiết)
-                  </span>
-                  <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${passRateQty >= 98 ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
-                    {passRateQty >= 98 ? 'Đạt tiêu chuẩn' : 'Cần kiểm soát'}
+              <div className="bg-white rounded-2xl border-2 border-slate-300 hover:border-indigo-300 p-4 shadow-sm transition-all">
+                <div className="flex justify-between items-start gap-2">
+                  <div className="text-xs font-bold uppercase text-slate-500">
+                    Tỉ lệ Đạt IQC (Chi tiết)
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${passRateQty >= 98 ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                    {passRateQty >= 98 ? 'Đạt chuẩn' : 'Cần kiểm soát'}
                   </span>
                 </div>
-                <span className={`text-lg sm:text-xl font-black font-mono mt-0.5 sm:mt-1 block ${passRateQty >= 98 ? 'text-indigo-600' : passRateQty >= 95 ? 'text-amber-600' : 'text-red-500'}`}>
+                <div className={`mt-1 text-3xl font-extrabold ${passRateQty >= 98 ? 'text-indigo-600' : passRateQty >= 95 ? 'text-amber-600' : 'text-red-500'}`}>
                   {passRateQty}%
-                </span>
-                <p className="text-[10px] text-slate-500 mt-1 flex justify-between items-center">
-                  <span>Số lượng: <strong className="font-mono text-indigo-600">{passedQtySum.toLocaleString('vi-VN')}</strong>/{totalQtySum.toLocaleString('vi-VN')} sp</span>
-                  <span className="text-[9.5px] font-bold text-slate-400">
-                    Target: ≥98%
-                  </span>
-                </p>
+                </div>
+                <div className="text-xs text-slate-600 mt-1 flex justify-between items-center gap-1">
+                  <span>Đạt <strong className="text-indigo-600">{passedQtySum.toLocaleString('vi-VN')}</strong>/{totalQtySum.toLocaleString('vi-VN')} sp</span>
+                  <span className="font-semibold text-slate-500">≥98%</span>
+                </div>
               </div>
             </div>
           );
@@ -8754,22 +8750,29 @@ return (
     {qcMainSubTab === 'pqc' && (
       <div className="space-y-4">
         {renderActivePlanTargetsBanner('PQC')}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4">
-          <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm col-span-1">
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase leading-tight">Sự cố công đoạn phát hiện</span>
-            <span className="text-lg sm:text-xl font-black text-slate-800 font-mono mt-0.5 sm:mt-1 block">{pqcRecords.length} vụ việc</span>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
+            <div className="text-xs font-bold uppercase text-slate-500">Sự cố công đoạn phát hiện</div>
+            <div className="mt-1 text-3xl font-extrabold text-slate-900">{pqcRecords.length}</div>
+            <div className="text-xs text-slate-600 mt-1">Tổng vụ việc ghi nhận</div>
           </div>
-          <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm col-span-1">
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase leading-tight">Đang khắc phục cải tiến</span>
-            <span className="text-lg sm:text-xl font-black text-amber-500 font-mono mt-0.5 sm:mt-1 block">
-              {pqcRecords.filter(r => r.status === 'Đang cải tiến').length} vụ việc
-            </span>
+          <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
+            <div className="text-xs font-bold uppercase text-slate-500">Đang khắc phục cải tiến</div>
+            <div className="mt-1 text-3xl font-extrabold text-amber-500">
+              {pqcRecords.filter(r => r.status === 'Đang cải tiến').length}
+            </div>
+            <div className="text-xs text-slate-600 mt-1">Vụ việc đang theo dõi</div>
           </div>
-          <div className="bg-white p-3 sm:p-4.5 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase leading-tight">Tỷ lệ cải tiến thành công</span>
-            <span className="text-lg sm:text-xl font-black text-emerald-600 font-mono mt-0.5 sm:mt-1 block">
-              {Math.round((pqcRecords.filter(r => r.status === 'Đạt hoàn toàn' || r.status === 'Đã cải tiến').length / pqcRecords.length) * 100)}%
-            </span>
+          <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
+            <div className="text-xs font-bold uppercase text-slate-500">Tỷ lệ cải tiến thành công</div>
+            <div className="mt-1 text-3xl font-extrabold text-emerald-600">
+              {pqcRecords.length > 0
+                ? `${Math.round((pqcRecords.filter(r => r.status === 'Đạt hoàn toàn' || r.status === 'Đã cải tiến').length / pqcRecords.length) * 100)}%`
+                : '0%'}
+            </div>
+            <div className="text-xs text-slate-600 mt-1">
+              Đã đạt {pqcRecords.filter(r => r.status === 'Đạt hoàn toàn' || r.status === 'Đã cải tiến').length}/{pqcRecords.length} vụ việc
+            </div>
           </div>
         </div>
 
@@ -12467,29 +12470,33 @@ return (
       return (
       <div className="space-y-4">
         {renderActivePlanTargetsBanner('SQC')}
-        {/* Summary counters (4 compact cards) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
-          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm">
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 block uppercase leading-tight">Tổng đợt giám sát</span>
-            <span className="text-xs sm:text-sm font-black text-slate-800 font-mono mt-0.5 sm:mt-1 block">{supplierProductionAudits.length} chỉ thị</span>
+        {/* Summary counters (4 compact cards — đồng bộ font & style thẻ Báo cáo, giữ nguyên màu) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
+            <div className="text-xs font-bold uppercase text-slate-500">Tổng đợt giám sát</div>
+            <div className="mt-1 text-3xl font-extrabold text-slate-900">{supplierProductionAudits.length}</div>
+            <div className="text-xs text-slate-600 mt-1">Chỉ thị giám sát NCC</div>
           </div>
-          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-amber-500">
-            <span className="text-[9px] sm:text-[10px] font-bold text-amber-600 block uppercase leading-tight">Chờ NCC / Chờ duyệt</span>
-            <span className="text-xs sm:text-sm font-black text-amber-700 font-mono mt-0.5 sm:mt-1 block">
-              {supplierProductionAudits.filter(a => a.status === 'pending' || a.status === 'updated').length} đợt
-            </span>
+          <div className="bg-white rounded-2xl border-2 border-slate-300 border-l-4 border-l-amber-500 p-4 shadow-sm">
+            <div className="text-xs font-bold uppercase text-amber-600">Chờ NCC / Chờ duyệt</div>
+            <div className="mt-1 text-3xl font-extrabold text-amber-700">
+              {supplierProductionAudits.filter(a => a.status === 'pending' || a.status === 'updated').length}
+            </div>
+            <div className="text-xs text-slate-600 mt-1">Đợt đang chờ phản hồi</div>
           </div>
-          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-emerald-500">
-            <span className="text-[9px] sm:text-[10px] font-bold text-emerald-600 block uppercase leading-tight">Đạt chuẩn</span>
-            <span className="text-xs sm:text-sm font-black text-emerald-700 font-mono mt-0.5 sm:mt-1 block">
-              {supplierProductionAudits.filter(a => a.status === 'approved').length} đợt
-            </span>
+          <div className="bg-white rounded-2xl border-2 border-slate-300 border-l-4 border-l-emerald-500 p-4 shadow-sm">
+            <div className="text-xs font-bold uppercase text-emerald-600">Đạt chuẩn</div>
+            <div className="mt-1 text-3xl font-extrabold text-emerald-700">
+              {supplierProductionAudits.filter(a => a.status === 'approved').length}
+            </div>
+            <div className="text-xs text-slate-600 mt-1">Đợt đã ký duyệt đạt</div>
           </div>
-          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-sm border-l-2 sm:border-l-4 border-l-red-500">
-            <span className="text-[9px] sm:text-[10px] font-bold text-red-600 block uppercase leading-tight">Không đạt / Sai lệch</span>
-            <span className="text-xs sm:text-sm font-black text-red-700 font-mono mt-0.5 sm:mt-1 block">
-              {supplierProductionAudits.filter(a => a.status === 'rejected').length} đợt
-            </span>
+          <div className="bg-white rounded-2xl border-2 border-slate-300 border-l-4 border-l-red-500 p-4 shadow-sm">
+            <div className="text-xs font-bold uppercase text-red-600">Không đạt / Sai lệch</div>
+            <div className="mt-1 text-3xl font-extrabold text-red-700">
+              {supplierProductionAudits.filter(a => a.status === 'rejected').length}
+            </div>
+            <div className="text-xs text-slate-600 mt-1">Đợt cần khắc phục lại</div>
           </div>
         </div>
 
