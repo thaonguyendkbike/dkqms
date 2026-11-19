@@ -4818,6 +4818,8 @@ export function App() {
         'dk_models',
         'dk_copqs',
         'dk_ptsp_models',
+        'dk_kpis',
+        'dk_staff_kpi_evaluations',
         'dk_weekly_assemblies_all',
         'dk_monthly_assemblies_all',
         'dk_weekly_supplies_all',
@@ -4846,6 +4848,18 @@ export function App() {
             lastSyncedValues.current[key] = serialized;
             setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
             window.dispatchEvent(new CustomEvent('dk_planning_reload_state', { detail: { key, value: serialized } }));
+            return;
+          }
+          if (key === 'dk_staff_kpi_evaluations') {
+            const dict = metaData?.data && typeof metaData.data === 'object' && !Array.isArray(metaData.data) ? metaData.data : null;
+            if (!dict) return;
+            const serialized = JSON.stringify(dict);
+            safeStorage.setItem(key, serialized);
+            try { localStorage.setItem(key, serialized); } catch (e) { }
+            isRemoteUpdateRef.current[key] = true;
+            lastSyncedValues.current[key] = serialized;
+            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
+            setStaffKpiEvaluations(dict);
             return;
           }
           const list = Array.isArray(metaData?.data) ? metaData.data : [];
@@ -4881,6 +4895,10 @@ export function App() {
             setCopqs(list);
           } else if (key === 'dk_ptsp_models') {
             setPtspModels(list);
+          } else if (key === 'dk_kpis') {
+            if (list.length > 0) {
+              setKpis(list);
+            }
           }
         }, (err) => {
           console.warn(`[Doc onSnapshot Warning] for ${key}:`, err);
@@ -4903,6 +4921,7 @@ export function App() {
   // State management for all databases
   const [tasks, setTasks] = useState<Task[]>(() => getSavedState('dk_tasks', INITIAL_TASKS));
   const [kpis, setKpis] = useState<any[]>(() => getSavedState('dk_kpis', DEFAULT_DETAILED_KPIS));
+  const [staffKpiEvaluations, setStaffKpiEvaluations] = useState<Record<string, any>>(() => getSavedState('dk_staff_kpi_evaluations', {}));
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => getSavedState('dk_suppliers', INITIAL_SUPPLIERS));
   const [capas, setCapas] = useState<CAPA[]>(() => getSavedState('dk_capas', INITIAL_CAPAS));
 
@@ -8125,6 +8144,12 @@ export function App() {
       syncToServer('dk_kpis', kpis);
     }
   }, [kpis]);
+
+  useEffect(() => {
+    if (localStorage.getItem('dk_staff_kpi_evaluations_is_dirty') === 'true') {
+      syncToServer('dk_staff_kpi_evaluations', staffKpiEvaluations);
+    }
+  }, [staffKpiEvaluations]);
 
   // Auto-correct any suppliers that accidentally had address in ComponentType on startup or state updates
   useEffect(() => {
@@ -13756,127 +13781,24 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 pqcRecords={pqcRecords}
                 oqcRecords={oqcRecords}
                 suppliers={suppliers}
+                supplierProductionAudits={supplierProductionAudits}
+                capas={capas}
+                defects={defects}
+                copqs={copqs}
+                partEvaluations={partEvaluations}
+                ptspModels={ptspModels}
+                equipments={equipments}
+                dailyLogs={dailyLogs}
+                weeklyPlans={weeklyPlans}
+                monthlyPlans={monthlyPlans}
+                staffList={staff}
                 kpis={kpis}
                 setKpis={setKpis}
+                staffKpiEvaluations={staffKpiEvaluations}
+                setStaffKpiEvaluations={setStaffKpiEvaluations}
+                onSyncKpis={(updatedKpis) => syncToServer('dk_kpis', updatedKpis)}
+                onSyncStaffEvaluations={(updatedEvals) => syncToServer('dk_staff_kpi_evaluations', updatedEvals)}
               />
-
-              {/* Staff Score Performance assessment dashboard (Chuyển từ phân hệ CAPA sang Chỉ tiêu & KPI) */}
-              <div className="bg-white border-2 border-slate-300 rounded-2xl p-5 shadow-sm" id="employee_assessment_dashboard">
-                <div className="border-b border-slate-200 pb-3 mb-4">
-                  <h3 className="text-sm font-extrabold uppercase text-slate-800 flex items-center gap-2">
-                    <User className="w-4 h-4 text-indigo-600" /> Bảng xếp hạng và đánh giá hiệu năng kỹ sư kiểm soát chất lượng (KPI Báo cáo ngày)
-                  </h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Hệ thống đánh giá tự động dựa trên tần suất báo cáo, tỷ lệ hoàn thành công tác và hiệu năng chuyên môn tại các khâu SQC, IQC, PQC và OQC từ Nhật ký báo cáo chất lượng hàng ngày.
-                  </p>
-                </div>
-                <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-                  <div className="xl:col-span-3 overflow-x-auto">
-                    <table className="w-full text-left text-xs min-w-[700px]">
-                      <thead>
-                        <tr className="border-b border-slate-200 text-slate-400 font-extrabold text-[10px] uppercase tracking-wider">
-                          <th className="pb-2">Kỹ sư kiểm soát</th>
-                          <th className="pb-2 text-center">Báo cáo ngày</th>
-                          <th className="pb-2 text-center">Hoàn thành</th>
-                          <th className="pb-2 text-center bg-indigo-50/20 text-indigo-800">Tỷ lệ SQC</th>
-                          <th className="pb-2 text-center bg-sky-50/20 text-sky-800">Tỷ lệ IQC</th>
-                          <th className="pb-2 text-center bg-amber-50/20 text-amber-800">Tỷ lệ PQC</th>
-                          <th className="pb-2 text-center bg-emerald-50/20 text-emerald-800">Tỷ lệ OQC</th>
-                          <th className="pb-2 text-center bg-rose-50/20 text-rose-800">Tỷ lệ CS/BH</th>
-                          <th className="pb-2 text-center">Tỷ lệ chung</th>
-                          <th className="pb-2 text-center font-bold text-slate-800">Điểm Quy Đổi</th>
-                          <th className="pb-2 text-right">Xếp hạng KPI</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                        {employeePerformance.map((emp) => (
-                          <tr key={emp.name} className="hover:bg-slate-50/50 transition">
-                            <td className="py-3 text-slate-900 font-extrabold">{emp.name}</td>
-                            <td className="py-3 text-center text-slate-500">{emp.total} việc</td>
-                            <td className="py-3 text-center text-emerald-600">
-                              {emp.completed} / {emp.total}
-                            </td>
-                            <td className="py-3 text-center bg-indigo-50/10">
-                              {emp.sqcTotal > 0 ? (
-                                <span className={`text-[11px] ${emp.sqcCompleted === emp.sqcTotal ? 'text-indigo-600 font-extrabold' : 'text-slate-600'}`}>
-                                  {emp.sqcRate}% <span className="text-[9px] text-slate-400">({emp.sqcCompleted}/{emp.sqcTotal})</span>
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 font-normal italic">-</span>
-                              )}
-                            </td>
-                            <td className="py-3 text-center bg-sky-50/10">
-                              {emp.iqcTotal > 0 ? (
-                                <span className={`text-[11px] ${emp.iqcCompleted === emp.iqcTotal ? 'text-sky-600 font-extrabold' : 'text-slate-600'}`}>
-                                  {emp.iqcRate}% <span className="text-[9px] text-slate-400">({emp.iqcCompleted}/{emp.iqcTotal})</span>
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 font-normal italic">-</span>
-                              )}
-                            </td>
-                            <td className="py-3 text-center bg-amber-50/10">
-                              {emp.pqcTotal > 0 ? (
-                                <span className={`text-[11px] ${emp.pqcCompleted === emp.pqcTotal ? 'text-amber-600 font-extrabold' : 'text-slate-600'}`}>
-                                  {emp.pqcRate}% <span className="text-[9px] text-slate-400">({emp.pqcCompleted}/{emp.pqcTotal})</span>
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 font-normal italic">-</span>
-                              )}
-                            </td>
-                            <td className="py-3 text-center bg-emerald-50/10">
-                              {emp.oqcTotal > 0 ? (
-                                <span className={`text-[11px] ${emp.oqcCompleted === emp.oqcTotal ? 'text-emerald-600 font-extrabold' : 'text-slate-600'}`}>
-                                  {emp.oqcRate}% <span className="text-[9px] text-slate-400">({emp.oqcCompleted}/{emp.oqcTotal})</span>
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 font-normal italic">-</span>
-                              )}
-                            </td>
-                            <td className="py-3 text-center bg-rose-50/10">
-                              {emp.csTotal > 0 ? (
-                                <span className={`text-[11px] ${emp.csCompleted === emp.csTotal ? 'text-rose-600 font-extrabold' : 'text-slate-600'}`}>
-                                  {emp.csRate}% <span className="text-[9px] text-slate-400">({emp.csCompleted}/{emp.csTotal})</span>
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 font-normal italic">-</span>
-                              )}
-                            </td>
-                            <td className="py-3 text-center text-slate-800 font-bold">{emp.rate}%</td>
-                            <td className="py-3 text-center font-mono font-black text-indigo-700 bg-slate-50">{emp.score} / 100</td>
-                            <td className="py-3 text-right">
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${emp.rating === 'Xuất sắc' ? 'bg-green-100 text-green-800' :
-                                emp.rating === 'Tốt' ? 'bg-indigo-100 text-indigo-700' :
-                                  emp.rating === 'Khá' ? 'bg-sky-100 text-sky-700' :
-                                    emp.rating === 'Trung bình' ? 'bg-yellow-100 text-amber-700' : 'bg-red-100 text-red-700'
-                                }`}>
-                                {emp.rating}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Rating guide sidebar */}
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-600 flex flex-col justify-between">
-                    <div>
-                      <h4 className="font-extrabold uppercase text-slate-700 mb-2">Thang đánh giá chất lượng:</h4>
-                      <p className="mb-2 leading-relaxed text-[11px]">Quy chuẩn xếp loại KPI dựa trên tổng lượng đóng và tỷ lệ dứt điểm lỗi tại hiện trường:</p>
-                      <ul className="space-y-1 bg-white p-2.5 rounded border border-slate-100 font-mono text-[10px] mb-3">
-                        <li className="flex justify-between"><span>90 - 100 điểm:</span> <span className="text-green-600 font-bold">Xuất sắc</span></li>
-                        <li className="flex justify-between"><span>80 - 89 điểm:</span> <span className="text-indigo-600 font-bold">Tốt</span></li>
-                        <li className="flex justify-between"><span>70 - 79 điểm:</span> <span className="text-sky-600 font-bold">Khá</span></li>
-                        <li className="flex justify-between"><span>60 - 69 điểm:</span> <span className="text-amber-600 font-bold">Trung bình</span></li>
-                        <li className="flex justify-between"><span>&lt; 60 điểm:</span> <span className="text-red-600 font-bold">Cần cải tiến</span></li>
-                      </ul>
-                    </div>
-                    <p className="text-[10px] italic text-slate-400 bg-white/50 p-2 rounded border border-slate-100 leading-normal">
-                      💡 <strong>Cơ chế tính điểm:</strong> 70 điểm tối đa dựa trên tỷ lệ báo cáo hoàn tất trong ngày, cộng thêm tối đa 30 điểm thưởng khi xử lý triệt để 100% mục tiêu tại các khâu chuyên trách SQC / IQC / PQC / OQC.
-                    </p>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 

@@ -1,629 +1,755 @@
+export interface KpiPeriodOverride {
+  actual?: string;
+  target?: string;
+  status?: 'Đạt' | 'Không đạt' | 'Đang cải tiến' | 'Theo dõi';
+  note?: string;
+  scorePercent?: number; // 0..100
+  updatedAt?: string;
+}
+
 export interface DetailedKPI {
   id: string;
-  category: 'Sản lượng' | 'Nhân sự' | 'Chi phí bộ phận' | '6S, Cải tiến' | 'Báo cáo kế hoạch' | 'Chất lượng NCC' | 'IQC - Chất lượng đầu vào' | 'PQC - Chất lượng quá trình' | 'OQC - Chất lượng đầu ra' | 'Hệ thống & Hồ sơ';
+  category:
+    | 'Sản lượng'
+    | 'Nhân sự'
+    | 'Chi phí bộ phận'
+    | '6S, Cải tiến'
+    | 'Báo cáo kế hoạch'
+    | 'Chất lượng NCC'
+    | 'IQC - Chất lượng đầu vào'
+    | 'PQC - Chất lượng quá trình'
+    | 'OQC - Chất lượng đầu ra'
+    | 'Hệ thống & Hồ sơ';
   type: 'Mục tiêu hoạt động chung' | 'Mục tiêu hoạt động chuyên môn';
-  groupWeight: number; // Trọng số nhóm: e.g. 10%, 5%, 20%
+  groupWeight: number; // Trọng số nhóm (ví dụ 15%, 10%, 25%...)
+  weight?: number;     // Trọng số riêng của chỉ tiêu (tổng 16 chỉ tiêu = 100%)
   indicator: string;   // Tên chỉ tiêu
-  definition: string;  // Định nghĩa
+  definition: string;  // Định nghĩa & phương pháp đo
   unit: string;        // Đơn vị tính
-  target: string;      // Mục tiêu đề ra
-  actual: string;      // Thực tế đạt được
+  target: string;      // Mục tiêu hiển thị
+  targetValue?: number;// Ngưỡng số học chuẩn để so sánh tự động
+  direction?: 'higher_is_better' | 'lower_is_better';
+  sourceType?: 'auto' | 'manual' | 'hybrid';
+  autoMetricKey?: string;
+  actual: string;      // Giá trị mặc định / nhập tay
   status: 'Đạt' | 'Không đạt' | 'Đang cải tiến' | 'Theo dõi';
-  details?: string;    // Chi tiết bổ sung
-  month?: number;      // Tháng áp dụng chỉ tiêu (e.g. 5 cho tháng 5)
-  year?: number;       // Năm áp dụng chỉ tiêu (e.g. 2026 cho năm 2026)
+  details?: string;    // Ghi chú / dẫn chứng
+  month?: number;
+  year?: number;
+  periodOverrides?: Record<string, KpiPeriodOverride>;
+}
+
+export interface StaffRoleMetricTemplate {
+  id: string;
+  name: string;
+  bmReference: string;
+  weight: number; // Tổng nhóm Nghiệp vụ = 50
+  unit: string;
+  target: string;
+  targetValue: number;
+  direction: 'higher_is_better' | 'lower_is_better';
+  autoMetricKey: string;
+}
+
+export interface StaffBmKpiProfile {
+  staffName: string;
+  aliases: string[];
+  roleTitle: string;
+  bmDocCode: string;
+  mtcvCode: string;
+  summary: string;
+  metrics: StaffRoleMetricTemplate[];
+}
+
+export interface StaffKpiPeriodEvaluation {
+  staffKey: string;
+  periodKey: string;
+  // Tùy chỉnh kết quả hoặc ghi đè điểm cho các chỉ tiêu Nghiệp vụ (50%)
+  metricOverrides?: Record<
+    string,
+    {
+      actualText?: string;
+      targetText?: string;
+      scorePercent?: number; // 0..100% của trọng số chỉ tiêu đó
+      weight?: number;
+      name?: string;
+      note?: string;
+    }
+  >;
+  // Thêm chỉ tiêu nghiệp vụ tùy chỉnh riêng nếu Trưởng phòng bổ sung
+  customMetrics?: Array<{
+    id: string;
+    name: string;
+    bmReference?: string;
+    weight: number;
+    targetText: string;
+    actualText: string;
+    scorePercent: number; // 0..100
+  }>;
+  // Nhóm 3: Trưởng phòng đánh giá (20 điểm = 10đ thái độ/phối hợp + 10đ cải tiến/5S/kỷ luật)
+  managerResponsibilityScore: number; // 0..10
+  managerInitiativeScore: number;     // 0..10
+  managerComment: string;
+  updatedAt: string;
+  updatedBy?: string;
 }
 
 export const DEFAULT_DETAILED_KPIS: DetailedKPI[] = [
-  // === MỤC TIÊU HOẠT ĐỘNG CHUNG (35%) ===
-  // 1. Sản lượng (10%)
+  // =========================================================================
+  // I. MỤC TIÊU HOẠT ĐỘNG CHUNG (TỔNG TRỌNG SỐ: 35%)
+  // =========================================================================
+
+  // 1. Chi phí & COPQ (15%)
   {
-    id: 'KPI-GEN-01',
-    category: 'Sản lượng',
+    id: 'KPI-COM-01',
+    category: 'Chi phí bộ phận',
     type: 'Mục tiêu hoạt động chung',
-    groupWeight: 10,
-    indicator: 'Số lượng kinh doanh',
-    definition: 'Là sản lượng xe bán ra thị trường',
-    unit: 'Xe',
-    target: '50.000',
-    actual: '48.500',
-    status: 'Theo dõi',
-    details: 'Sản lượng bán hàng lũy kế đang bám sát mục tiêu năm 2026.'
-  },
-  {
-    id: 'KPI-GEN-02',
-    category: 'Sản lượng',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 10,
-    indicator: 'Số lượng xe lắp ráp',
-    definition: 'Là số lượng xe hoàn thiện đủ điều kiện xuất xưởng',
-    unit: 'Xe',
-    target: '50.174',
-    actual: '50.174',
-    status: 'Đạt',
-    details: 'Đã xuất xưởng đủ sản lượng được giao của kế hoạch xe máy điện.'
-  },
-  // 2. Hoạt động nhân sự (5%)
-  {
-    id: 'KPI-GEN-03',
-    category: 'Nhân sự',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Tổng định biên nhân sự',
-    definition: 'Định biên nhân sự tối ưu của bộ phận QLCL',
-    unit: 'Nhân sự',
-    target: '3',
-    actual: '3',
-    status: 'Đạt',
-    details: 'Nhân sự gồm 1 Trưởng phòng, 1 IQC/Supplier QC, 1 OQC/Hệ thống.'
-  },
-  {
-    id: 'KPI-GEN-04',
-    category: 'Nhân sự',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Chất lượng năng lực P2',
-    definition: 'Tỉ lệ đạt năng lực chuyên môn kĩ thuật P2 trung bình của bộ phận',
-    unit: 'Tỉ lệ %',
-    target: '>90%',
-    actual: '92%',
-    status: 'Đạt',
-    details: 'Đánh giá kỹ năng đo lường, rà soát FMEA và bóc hồ sơ kỹ thuật đạt chuẩn.'
-  },
-  {
-    id: 'KPI-GEN-05',
-    category: 'Nhân sự',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Chất lượng hiệu suất P3 Hằng tháng',
-    definition: 'Hiệu suất kết quả công việc trung bình hằng tháng',
-    unit: 'Tỉ lệ %',
-    target: '>90%',
-    actual: '91.8%',
-    status: 'Đạt',
-    details: 'Điểm KPI công việc của từng thành viên đạt bình quân trên 90 điểm.'
-  },
-  {
-    id: 'KPI-GEN-06',
-    category: 'Nhân sự',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Nội quy quy chế',
-    definition: 'Số lần vi phạm Nội quy quy chế của Công ty',
-    unit: 'Vi phạm',
-    target: '0',
+    groupWeight: 15,
+    weight: 8,
+    indicator: 'Kiểm soát tổng Chi phí kém chất lượng (COPQ) phát sinh trong kỳ',
+    definition: 'Tổng chi phí lỗi chất lượng nội bộ, ngoại vi và bồi hoàn phát sinh từ phân hệ COPQ trong kỳ so với định mức cho phép.',
+    unit: 'VNĐ',
+    target: '<= 20.000.000',
+    targetValue: 20000000,
+    direction: 'lower_is_better',
+    sourceType: 'auto',
+    autoMetricKey: 'COPQ_TOTAL',
     actual: '0',
     status: 'Đạt',
-    details: 'Tuân thủ nội quy tác phong công nghiệp, chấm công nghiêm túc.'
-  },
-  // 3. Chi phí bộ phận (10%)
-  {
-    id: 'KPI-GEN-07',
-    category: 'Chi phí bộ phận',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 10,
-    indicator: 'Xây dựng kế hoạch chi phí bộ phận',
-    definition: 'Định kỳ xây dựng kế hoạch chi phí, ngân sách bộ phận trình phê duyệt',
-    unit: 'Tháng',
-    target: '12',
-    actual: '5',
-    status: 'Theo dõi',
-    details: 'Đã hoàn tất ngân sách và kế hoạch kiểm kê chi bộ phận định kỳ 5 tháng đầu năm.'
+    details: 'Tự động tổng hợp từ dữ liệu Chi phí chất lượng (dk_copqs) trong kỳ đánh giá.'
   },
   {
-    id: 'KPI-GEN-08',
+    id: 'KPI-COM-02',
     category: 'Chi phí bộ phận',
     type: 'Mục tiêu hoạt động chung',
-    groupWeight: 10,
-    indicator: 'Tỉ lệ chênh lệch chi phí',
-    definition: 'Tỉ lệ chênh lệch chi phí bộ phận so với mục tiêu kế hoạch ngân sách',
+    groupWeight: 15,
+    weight: 4,
+    indicator: 'Tỷ lệ xử lý & đóng hồ sơ tổn thất chất lượng / bồi hoàn NCC',
+    definition: 'Số hồ sơ COPQ đã xử lý dứt điểm, quy trách nhiệm hoặc thu hồi bồi hoàn trên tổng số hồ sơ COPQ phát sinh trong kỳ.',
     unit: '%',
-    target: '<5%',
-    actual: '2.8%',
-    status: 'Đạt',
-    details: 'Kiểm soát chi tiêu tiết kiệm, các danh mục đầu tư thiết bị mẫu đều đúng dự toán.'
-  },
-  {
-    id: 'KPI-GEN-09',
-    category: 'Chi phí bộ phận',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 10,
-    indicator: 'Theo dõi phân tích biến động chi phí',
-    definition: 'Thực hiện ghi chép, tổng hợp chi phí bộ phận để phân tích lãng phí',
-    unit: 'Lượt',
-    target: '18',
-    actual: '8',
-    status: 'Theo dõi',
-    details: 'Thực hiện phân tích chi tiết hiệu suất dùng xe công vụ, đi kiểm nhà thanh tra.'
-  },
-  {
-    id: 'KPI-GEN-10',
-    category: 'Chi phí bộ phận',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 10,
-    indicator: 'Tổng hợp theo dõi theo tháng',
-    definition: 'Ghi nhận báo cáo chi phí phát sinh hàng tháng',
-    unit: 'Tháng',
-    target: '12',
-    actual: '5',
-    status: 'Theo dõi',
-    details: 'Hồ sơ tài chính nội bộ lưu trữ khoa học đầy đủ.'
-  },
-  {
-    id: 'KPI-GEN-11',
-    category: 'Chi phí bộ phận',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 10,
-    indicator: 'Phân tích chi phí định kỳ',
-    definition: 'Phân tích chi phí phát sinh định kỳ',
-    unit: 'Quý',
-    target: '4',
-    actual: '1',
-    status: 'Theo dõi',
-    details: 'Báo cáo tài chính quý I đã nộp lãnh đạo kiểm duyệt.'
-  },
-  {
-    id: 'KPI-GEN-12',
-    category: 'Chi phí bộ phận',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 10,
-    indicator: 'Đánh giá sử dụng chi phí theo định mức',
-    definition: 'Kiểm tra sử dụng chi phí so với hạn mức thực tế đầu người',
-    unit: '6 tháng/Lần',
-    target: '2',
-    actual: '1',
-    status: 'Theo dõi',
-    details: 'Đã hoàn thành đánh giá kỳ I đúng tiến độ vào tháng 5/2026.'
-  },
-  {
-    id: 'KPI-GEN-13',
-    category: 'Chi phí bộ phận',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 10,
-    indicator: 'Tiết kiệm chi phí hành chính',
-    definition: 'Tỉ lệ tiết kiệm được ngân sách hành chính nhờ cải tiến, sáng kiến số hóa',
-    unit: 'Tỉ lệ %',
-    target: '>3%',
-    actual: '4.5%',
-    status: 'Đạt',
-    details: 'Đưua vào áp dụng hệ thống Báo cáo tuần chất lượng số hóa giúp giảm in ấn giấy tờ.'
-  },
-  // 4. Hoạt động 6S, Cải tiến (5%)
-  {
-    id: 'KPI-GEN-14',
-    category: '6S, Cải tiến',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Thực hiện duy trì 6S hằng ngày',
-    definition: 'Tỉ lệ tuân thủ thực hiện 6S tại văn phòng, phòng thiết bị đo đạc hằng ngày',
-    unit: 'Tỉ lệ %',
-    target: '100%',
+    target: '>= 90%',
+    targetValue: 90,
+    direction: 'higher_is_better',
+    sourceType: 'auto',
+    autoMetricKey: 'COPQ_CLOSED_RATE',
     actual: '100%',
     status: 'Đạt',
-    details: 'Vệ sinh và bảo quản dụng cụ dưỡng kiểm, panme, thước cặp đúng vị trí phân bố.'
+    details: 'Tự động tính tỷ lệ hồ sơ COPQ có trạng thái Đã xử lý / Đóng trong kỳ.'
   },
   {
-    id: 'KPI-GEN-15',
-    category: '6S, Cải tiến',
+    id: 'KPI-COM-03',
+    category: 'Chi phí bộ phận',
     type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Chấm điểm, đánh giá 6S định kì',
-    definition: 'Thực hiện chấm chéo đánh giá 6S định kỳ hằng tháng',
-    unit: 'Tháng',
-    target: '12',
-    actual: '5',
-    status: 'Theo dõi',
-    details: 'Duy trì tham gia chấm chéo cùng ban 6S nhà máy hàng tuần/tháng đầy đủ.'
-  },
-  {
-    id: 'KPI-GEN-16',
-    category: '6S, Cải tiến',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Điểm kiểm tra 6S bộ phận',
-    definition: 'Số điểm đạt được khảo sát trên Thang 5. Điểm mục tiêu từ 4 trở lên',
-    unit: 'Điểm',
-    target: '4',
-    actual: '4.2',
-    status: 'Đạt',
-    details: 'Ghi nhận xếp hạng Xuất sắc trong khối gián tiếp phụ trợ sản xuất.'
-  },
-  {
-    id: 'KPI-GEN-17',
-    category: '6S, Cải tiến',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Xử lý triệt để phát sinh 6S',
-    definition: 'Số lượng phát hiện không phù hợp 6S được dọn dẹp vệ sinh xử lý ngay',
-    unit: 'Tỉ lệ',
-    target: '1.0',
-    actual: '1.0',
-    status: 'Đạt',
-    details: 'Cam kết 100% điểm lỗi nhắc nhở được chụp hình khắc phục trước khi ra về.'
-  },
-  {
-    id: 'KPI-GEN-18',
-    category: '6S, Cải tiến',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Thời lượng xử lý vấn đề 6S',
-    definition: 'Thời lượng xử lý các vấn đề 6S phát sinh không quá 8 tiếng từ lúc phát hiện',
-    unit: 'Giờ',
-    target: '<8 giờ',
-    actual: '3.5 giờ',
-    status: 'Đạt',
-    details: 'Chấn chỉnh gán nhãn, dán cảnh báo khu vực máy đo 3D nhanh gọn.'
-  },
-  // 5. Báo cáo kế hoạch (5%)
-  {
-    id: 'KPI-GEN-19',
-    category: 'Báo cáo kế hoạch',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Báo báo kế hoạch Tuần',
-    definition: 'Thực hiện xây dựng và gửi báo cáo tuần trực tuyến đúng tiến độ công ty',
-    unit: 'Báo cáo',
-    target: '108',
-    actual: '44',
-    status: 'Theo dõi',
-    details: 'Nộp báo cáo đầy đủ của tất cả các tuần từ đầu năm.'
-  },
-  {
-    id: 'KPI-GEN-20',
-    category: 'Báo cáo kế hoạch',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Báo cáo kế hoạch Tháng',
-    definition: 'Hoàn thành và trình duyệt báo cáo tổng kết tháng đúng hạn',
-    unit: 'Báo cáo',
-    target: '24',
-    actual: '10',
-    status: 'Theo dõi',
-    details: 'Đã hoàn thành bàn giao hồ sơ chất lượng gối đầu từng tháng.'
-  },
-  {
-    id: 'KPI-GEN-21',
-    category: 'Báo cáo kế hoạch',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Báo cáo kế hoạch Quý',
-    definition: 'Xây dựng thông số tổng kiểm chất lượng theo quý gửi BGĐ',
-    unit: 'Báo cáo',
-    target: '8',
-    actual: '3',
-    status: 'Theo dõi',
-    details: 'Đã nộp báo cáo rà soát CAPA quý I/2026.'
-  },
-  {
-    id: 'KPI-GEN-22',
-    category: 'Báo cáo kế hoạch',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Báo cáo kế hoạch Năm',
-    definition: 'Xây dựng chiến lược chất lượng, định hướng chuyển đổi phòng ban',
-    unit: 'Báo cáo',
-    target: '5',
-    actual: '1',
-    status: 'Theo dõi',
-    details: 'Kế hoạch định hướng năm đã thông qua Đại hội chỉ tiêu 2026.'
-  },
-  {
-    id: 'KPI-GEN-23',
-    category: 'Báo cáo kế hoạch',
-    type: 'Mục tiêu hoạt động chung',
-    groupWeight: 5,
-    indicator: 'Chất lượng thông tin báo cáo',
-    definition: 'Đầy đủ thông tin đầu việc, hướng dẫn, tiến độ, thời hạn rõ ràng',
-    unit: 'Tỉ lệ %',
-    target: '>90%',
+    groupWeight: 15,
+    weight: 3,
+    indicator: 'Tuân thủ ngân sách vận hành & định mức VPP / vật tư tiêu hao bộ phận',
+    definition: 'Tỷ lệ sử dụng chi phí hành chính, văn phòng phẩm, vật tư kiểm nghiệm của Phòng QLCL so với kế hoạch ngân sách được duyệt.',
+    unit: '%',
+    target: '<= 100%',
+    targetValue: 100,
+    direction: 'lower_is_better',
+    sourceType: 'manual',
     actual: '95%',
     status: 'Đạt',
-    details: 'Báo cáo số luôn có biểu đồ và dữ liệu dẫn chứng rõ ràng.'
+    details: 'Trưởng phòng nhập kết quả kiểm soát ngân sách hành chính bộ phận theo kỳ.'
   },
 
-  // === MỤC TIÊU HOẠT ĐỘNG CHUYÊN MÔN (65%) ===
-  // 1. Chất lượng NCC (5%)
+  // 2. Hệ thống & Kế hoạch (10%)
+  {
+    id: 'KPI-COM-04',
+    category: 'Báo cáo kế hoạch',
+    type: 'Mục tiêu hoạt động chung',
+    groupWeight: 10,
+    weight: 5,
+    indicator: 'Tỷ lệ hoàn thành Kế hoạch chất lượng Tuần / Tháng đúng hạn',
+    definition: 'Tỷ lệ các hạng mục công việc trong phân hệ Lập kế hoạch chất lượng (Tuần / Tháng) thuộc kỳ đánh giá đạt trạng thái Hoàn thành.',
+    unit: '%',
+    target: '>= 90%',
+    targetValue: 90,
+    direction: 'higher_is_better',
+    sourceType: 'auto',
+    autoMetricKey: 'PLAN_COMPLETION_RATE',
+    actual: '95%',
+    status: 'Đạt',
+    details: 'Tự động đối soát từ dữ liệu Kế hoạch chất lượng Tuần/Tháng đã đồng bộ.'
+  },
+  {
+    id: 'KPI-COM-05',
+    category: 'Hệ thống & Hồ sơ',
+    type: 'Mục tiêu hoạt động chung',
+    groupWeight: 10,
+    weight: 5,
+    indicator: 'Duy trì hệ thống biểu mẫu QMS (/bm), ISO 9001 & báo cáo định kỳ đúng hạn',
+    definition: 'Duy trì nhật trình báo cáo chất lượng hàng ngày và cập nhật đầy đủ hệ thống tài liệu, biểu mẫu chuẩn hóa trong /bm.',
+    unit: '%',
+    target: '>= 95%',
+    targetValue: 95,
+    direction: 'higher_is_better',
+    sourceType: 'hybrid',
+    autoMetricKey: 'DAILY_REPORT_DAYS_RATE',
+    actual: '100%',
+    status: 'Đạt',
+    details: 'Tự động theo dõi tần suất ghi nhận Nhật trình ngày kết hợp đánh giá duy trì hồ sơ ISO/QMS.'
+  },
+
+  // 3. Nhân sự & Kỷ luật (10%)
+  {
+    id: 'KPI-COM-06',
+    category: 'Nhân sự',
+    type: 'Mục tiêu hoạt động chung',
+    groupWeight: 10,
+    weight: 5,
+    indicator: 'Tỷ lệ hoàn thành nhiệm vụ & báo cáo ngày của đội ngũ nhân sự QLCL',
+    definition: 'Tỷ lệ tác vụ được giao trong Nhật trình báo cáo chất lượng hàng ngày của toàn phòng đạt trạng thái Hoàn thành trong kỳ.',
+    unit: '%',
+    target: '>= 90%',
+    targetValue: 90,
+    direction: 'higher_is_better',
+    sourceType: 'auto',
+    autoMetricKey: 'DAILY_TASK_COMPLETION_RATE',
+    actual: '92%',
+    status: 'Đạt',
+    details: 'Tự động tổng hợp từ toàn bộ bản ghi Nhật trình công việc hàng ngày (dk_daily_logs) trong kỳ.'
+  },
+  {
+    id: 'KPI-COM-07',
+    category: '6S, Cải tiến',
+    type: 'Mục tiêu hoạt động chung',
+    groupWeight: 10,
+    weight: 5,
+    indicator: 'Đào tạo nội bộ, hướng dẫn nghiệp vụ QC & tuân thủ 5S / Nội quy / ATLĐ',
+    definition: 'Thực hiện đào tạo kỹ năng kiểm tra cho nhân viên QC, duy trì 5S khu vực đo kiểm/văn phòng và không có vi phạm kỷ luật.',
+    unit: '%',
+    target: '100%',
+    targetValue: 100,
+    direction: 'higher_is_better',
+    sourceType: 'manual',
+    actual: '100%',
+    status: 'Đạt',
+    details: 'Trưởng phòng chấm điểm thực hiện 5S, kỷ luật lao động và đào tạo nội bộ trong kỳ.'
+  },
+
+  // =========================================================================
+  // II. MỤC TIÊU HOẠT ĐỘNG CHUYÊN MÔN (TỔNG TRỌNG SỐ: 65%)
+  // =========================================================================
+
+  // 1. Chất lượng NCC & IQC (15%)
   {
     id: 'KPI-PRO-01',
     category: 'Chất lượng NCC',
     type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 5,
-    indicator: 'Đánh giá NCC Định kỳ',
-    definition: 'Phối hợp với phòng Cung ứng đánh giá năng lực nhà cung cấp định kỳ (6 tháng/lần)',
-    unit: 'Nhà cc',
-    target: '9',
-    actual: '5',
-    status: 'Theo dõi',
-    details: 'Đã khảo sát đánh giá thực tế năng lực gia công nhựa và lốp của 5 nhà cung cấp đợt I.'
+    groupWeight: 15,
+    weight: 5,
+    indicator: 'Tỷ lệ đánh giá năng lực NCC & kiểm soát xử lý lỗi SQC theo kế hoạch',
+    definition: 'Tỷ lệ Nhà cung cấp được đánh giá định kỳ và các vụ việc chất lượng linh kiện NCC (SQC) được lập hồ sơ xử lý trong kỳ.',
+    unit: '%',
+    target: '>= 90%',
+    targetValue: 90,
+    direction: 'higher_is_better',
+    sourceType: 'auto',
+    autoMetricKey: 'SQC_SUPPLIER_EVAL_RATE',
+    actual: '95%',
+    status: 'Đạt',
+    details: 'Tự động tính từ danh mục Nhà cung cấp (dk_suppliers) & hồ sơ SQC (dk_supplier_production_audits).'
   },
   {
     id: 'KPI-PRO-02',
-    category: 'Chất lượng NCC',
+    category: 'IQC - Chất lượng đầu vào',
     type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 5,
-    indicator: 'Tần suất thanh tra, kiểm định',
-    definition: 'Rà soát và thanh tra đột xuất điều kiện sản xuất tại đối tác định kỳ',
-    unit: 'Tháng',
-    target: '2 tháng/Lần',
-    actual: '2 tháng/Lần',
+    groupWeight: 15,
+    weight: 6,
+    indicator: 'Kiểm soát nghiệm thu vật tư đầu vào (IQC) & tỷ lệ linh kiện đạt chuẩn',
+    definition: 'Tỷ lệ linh kiện vật tư đầu vào qua kiểm tra IQC (BM-QC-01/02) đạt yêu cầu kỹ thuật và được kiểm soát chặt trước khi nhập kho.',
+    unit: '%',
+    target: '>= 95%',
+    targetValue: 95,
+    direction: 'higher_is_better',
+    sourceType: 'auto',
+    autoMetricKey: 'IQC_PASS_RATE',
+    actual: '96.5%',
     status: 'Đạt',
-    details: 'Đã cử kỹ sư hiện trường hỗ trợ xử lý móng nhiệt tại NCC xi mạ nhựa bửng.'
+    details: 'Tự động tính từ sổ nhật ký kiểm tra đầu vào IQC (dk_iqc_records) trong kỳ.'
   },
   {
     id: 'KPI-PRO-03',
-    category: 'Chất lượng NCC',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 5,
-    indicator: 'Họp trao đổi kỹ thuật chất lượng',
-    definition: 'Tổ chức họp mặt trao đổi cải tiến chất lượng sản phẩm định kỳ hàng tháng',
-    unit: 'Nhà cc',
-    target: '9',
-    actual: '8',
-    status: 'Đạt',
-    details: 'Trực tiếp chất vấn KPI PPM lỗi cao su với Công ty KENDA và nhựa đúc Việt Nhật Precision.'
-  },
-  // 2. IQC - Chất lượng đầu vào (20%)
-  {
-    id: 'KPI-PRO-04',
     category: 'IQC - Chất lượng đầu vào',
     type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 20,
-    indicator: 'Số lệnh kiểm định tại xưởng NCC',
-    definition: 'Thực hiện kiểm soát sau đặt hàng, trong chế tạo và trước khi đối tác giao về DK',
-    unit: 'Tỉ lệ %',
-    target: '100%',
+    groupWeight: 15,
+    weight: 4,
+    indicator: 'Tỷ lệ thẩm định linh kiện mới / PTSP hoàn thành đúng tiến độ (BM-KTTD-01)',
+    definition: 'Tỷ lệ phiếu thẩm định kỹ thuật linh kiện (dk_part_evaluations) và các vấn đề PTSP phát sinh trong kỳ được kết luận & xử lý.',
+    unit: '%',
+    target: '>= 95%',
+    targetValue: 95,
+    direction: 'higher_is_better',
+    sourceType: 'auto',
+    autoMetricKey: 'PART_EVAL_PTSP_RATE',
     actual: '100%',
     status: 'Đạt',
-    details: 'Triển khai chặt chẽ quy chế COA/QA kiểm tra trước khi chuyển xưởng.'
+    details: 'Tự động tính từ dữ liệu Thẩm định linh kiện (dk_part_evaluations) và Phát triển sản phẩm (dk_ptsp_models).'
+  },
+
+  // 2. Kiểm soát Sản xuất PQC & OQC (25%)
+  {
+    id: 'KPI-PRO-04',
+    category: 'PQC - Chất lượng quá trình',
+    type: 'Mục tiêu hoạt động chuyên môn',
+    groupWeight: 25,
+    weight: 8,
+    indicator: 'Tỷ lệ đạt chất lượng bán thành phẩm công đoạn lắp ráp (PQC)',
+    definition: 'Tỷ lệ sản lượng bán thành phẩm kiểm tra trên chuyền lắp ráp (BM-QC-03/04) đạt chuẩn kỹ thuật ngay tại công đoạn.',
+    unit: '%',
+    target: '>= 98%',
+    targetValue: 98,
+    direction: 'higher_is_better',
+    sourceType: 'auto',
+    autoMetricKey: 'PQC_PASS_RATE',
+    actual: '98.5%',
+    status: 'Đạt',
+    details: 'Tự động tính từ dữ liệu kiểm tra công đoạn PQC (dk_pqc_records) trong kỳ.'
   },
   {
     id: 'KPI-PRO-05',
-    category: 'IQC - Chất lượng đầu vào',
+    category: 'OQC - Chất lượng đầu ra',
     type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 20,
-    indicator: 'Tần suất kiểm đầu vào kho DK',
-    definition: 'Tỉ lệ các lô linh kiện đầu vào được kiểm nhập kích thước dán nhãn trước khi nhập kho',
-    unit: 'Tỉ lệ %',
-    target: '100%',
-    actual: '100%',
+    groupWeight: 25,
+    weight: 10,
+    indicator: 'Tỷ lệ xe thành phẩm đạt chuẩn xuất xưởng ngay lần đầu (FPY - OQC/KCS)',
+    definition: 'Tỷ lệ xe hoàn thiện qua kiểm tra KCS cuối chuyền & chạy thử đường trường (BM-QC-05/06) đạt chuẩn xuất xưởng ngay lần đầu.',
+    unit: '%',
+    target: '>= 98%',
+    targetValue: 98,
+    direction: 'higher_is_better',
+    sourceType: 'auto',
+    autoMetricKey: 'OQC_FPY_RATE',
+    actual: '99.1%',
     status: 'Đạt',
-    details: '100% hàng hóa linh kiện về bến bãi nhà máy đều bắt buộc qua phòng dưỡng kiểm duyệt.'
+    details: 'Tự động tính từ dữ liệu nghiệm thu thành phẩm OQC (dk_oqc_records) trong kỳ.'
   },
   {
     id: 'KPI-PRO-06',
-    category: 'IQC - Chất lượng đầu vào',
+    category: 'PQC - Chất lượng quá trình',
     type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 20,
-    indicator: 'Tỷ lệ linh kiện đạt lần 1',
-    definition: 'Tỉ lệ linh kiện đạt chất lượng ngay lần kiểm ráp đầu tiên không cần hoàn trả sửa đổi',
-    unit: 'Tỉ lệ %',
-    target: '>97%',
-    actual: '96.2%',
-    status: 'Không đạt',
-    details: 'Còn vướng nhiều lô linh kiện lốp xe KENDA bị phồng bọc mủ lót ngoài và ốc gá bửng loang màu xi.'
+    groupWeight: 25,
+    weight: 7,
+    indicator: 'Tỷ lệ xử lý lỗi nội bộ & đóng hồ sơ hành động khắc phục CAPA đúng hạn',
+    definition: 'Tỷ lệ hồ sơ CAPA (CAR/PAR - 8D) trong kỳ được điều tra nguyên nhân gốc rễ và đóng hồ sơ đúng thời hạn cam kết.',
+    unit: '%',
+    target: '>= 90%',
+    targetValue: 90,
+    direction: 'higher_is_better',
+    sourceType: 'auto',
+    autoMetricKey: 'CAPA_CLOSURE_RATE',
+    actual: '95%',
+    status: 'Đạt',
+    details: 'Tự động tính từ danh sách hồ sơ CAPA (dk_capas) trong kỳ.'
   },
+
+  // 3. Chất lượng Thị trường & Bảo hành (15%)
   {
     id: 'KPI-PRO-07',
-    category: 'IQC - Chất lượng đầu vào',
+    category: 'OQC - Chất lượng đầu ra',
     type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 20,
-    indicator: 'Tỉ lệ trích mẫu kiểm tra chi tiết lỗi',
-    definition: 'Số lượng mẫu trích xuất kiểm định / Tổng quy cách linh kiện nhập lẻ của lô hàng',
-    unit: 'Tỉ lệ %',
-    target: '>10%',
-    actual: '12%',
+    groupWeight: 15,
+    weight: 10,
+    indicator: 'Kiểm soát tỷ lệ lỗi chất lượng thị trường / khiếu nại đại lý',
+    definition: 'Tỷ lệ số xe/vụ việc lỗi thị trường & bảo hành phát sinh trong kỳ so với tổng sản lượng xe xuất xưởng OQC.',
+    unit: '%',
+    target: '<= 1.0%',
+    targetValue: 1.0,
+    direction: 'lower_is_better',
+    sourceType: 'auto',
+    autoMetricKey: 'MARKET_DEFECT_RATE',
+    actual: '0.35%',
     status: 'Đạt',
-    details: 'Thực hiện trích ly mẫu đo kiểm theo phương thức quy đổi AQL tiêu chuẩn MIL-STD-105D.'
+    details: 'Tự động đối chiếu số lượng lỗi thị trường (dk_defects) trên tổng sản lượng xe kiểm OQC trong kỳ.'
   },
   {
     id: 'KPI-PRO-08',
-    category: 'IQC - Chất lượng đầu vào',
+    category: 'OQC - Chất lượng đầu ra',
     type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 20,
-    indicator: 'Tỷ lệ lỗi chất lượng nghiêm trọng đầu vào',
-    definition: 'Khuyết tật ảnh hưởng trực tiếp đến an toàn lái xe, kết cấu chính (Mục tiêu bắt buộc bằng 0)',
-    unit: 'Tỉ lệ %',
-    target: '0%',
-    actual: '0%',
+    groupWeight: 15,
+    weight: 5,
+    indicator: 'Tỷ lệ xử lý dứt điểm phản hồi chất lượng thị trường & giám định bảo hành',
+    definition: 'Tỷ lệ các vụ việc khiếu nại chất lượng đại lý / lỗi bảo hành trong kỳ đã được giám định kỹ thuật và phản hồi phương án xử lý.',
+    unit: '%',
+    target: '>= 95%',
+    targetValue: 95,
+    direction: 'higher_is_better',
+    sourceType: 'auto',
+    autoMetricKey: 'MARKET_DEFECT_RESOLVED_RATE',
+    actual: '96%',
     status: 'Đạt',
-    details: 'Chưa phát hiện lỗi nghiêm trọng liên quan đến khung gầm sườn và IC điện chính.'
+    details: 'Tự động tính từ trạng thái xử lý của các bản ghi lỗi thị trường (dk_defects) trong kỳ.'
   },
-  // 3. PQC - Chất lượng quá trình (10%)
+
+  // 4. Thiết bị Đo lường & CCDC (10%)
   {
     id: 'KPI-PRO-09',
-    category: 'PQC - Chất lượng quá trình',
+    category: 'Hệ thống & Hồ sơ',
     type: 'Mục tiêu hoạt động chuyên môn',
     groupWeight: 10,
-    indicator: 'Kiểm tra linh kiện trước khi cấp lên chuyền',
-    definition: 'Tuyển lọc và kiểm soát trạng thái linh kiện chuẩn bị tại gá trung chuyển lắp ráp',
-    unit: 'Tỉ lệ',
-    target: '>90%',
-    actual: '93.5%',
-    status: 'Đạt',
-    details: 'Xử lý gác rổ chứa phụ tùng rơ-le định vị dây điện để tổ trưởng lắp ráp nhận diện nhanh.'
-  },
-  {
-    id: 'KPI-PRO-10',
-    category: 'PQC - Chất lượng quá trình',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 10,
-    indicator: 'Tỷ lệ lỗi lọt trên băng chuyền',
-    definition: 'Linh kiện lỗi chưa qua IQC phát hiện lọt vào chuyền gây nghẽn công đoạn sản xuất',
-    unit: 'Tỉ lệ',
-    target: '< 2%',
-    actual: '1.4%',
-    status: 'Đạt',
-    details: 'Kiểm soát chặt chẽ giúp hạn chế dừng chuyền lắp ráp không đáng có.'
-  },
-  {
-    id: 'KPI-PRO-11',
-    category: 'PQC - Chất lượng quá trình',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 10,
-    indicator: 'Kiểm tra túc trực lắp ráp',
-    definition: 'Túc trực kiểm tra 4 công đoạn chính trên mỗi Lệnh sản xuất (Mỗi công đoạn đo 5 lượt)',
-    unit: 'Lượt/LSX',
-    target: '20',
-    actual: '20',
-    status: 'Đạt',
-    details: 'Rà soát bám sát xiết lực cổ phốt, lực siết bánh trước sau và giác đi dây điện sườn xe.'
-  },
-  {
-    id: 'KPI-PRO-12',
-    category: 'PQC - Chất lượng quá trình',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 10,
-    indicator: 'Thời gian dừng chuyền do sự cố chất lượng',
-    definition: 'Thời lượng dây chuyền phải ngừng máy chờ khắc phục phế phẩm hỏng trên ca',
-    unit: 'Phút',
-    target: '<15p/ca',
-    actual: '7 phút',
-    status: 'Đạt',
-    details: 'Phản ứng nhanh khắc phục bavia ổ gá sạc của model DK V1 giúp tiếp tục thông dây xưởng.'
-  },
-  {
-    id: 'KPI-PRO-13',
-    category: 'PQC - Chất lượng quá trình',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 10,
-    indicator: 'Xử lý hành động CAPA đúng hạn',
-    definition: 'Hoàn thành báo cáo phòng ngừa lỗi lặp lại đúng kỳ hạn thỏa thuận',
-    unit: 'Tỉ lệ %',
-    target: '>=95%',
-    actual: '96.8%',
-    status: 'Đạt',
-    details: 'Tất cả các phòng Kỹ thuật và Sản xuất đã phối hợp rà soát đóng hồ sơ CAPA nhanh chóng.'
-  },
-  // 4. OQC - Chất lượng đầu ra (15%)
-  {
-    id: 'KPI-PRO-14',
-    category: 'OQC - Chất lượng đầu ra',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 15,
-    indicator: 'Lỗi lọt kho thành phẩm',
-    definition: 'Phát hiện xe lỗi bám trên bệ khi đã chuyển giao nhập kho thành phẩm KCS',
-    unit: 'Tỉ lệ %',
-    target: '<0.05%',
-    actual: '0.02%',
-    status: 'Đạt',
-    details: 'Chỉ ghi nhận một vài trường hợp hở nhẹ khớp nhựa hãm bửng đã sửa tại chỗ.'
-  },
-  {
-    id: 'KPI-PRO-15',
-    category: 'OQC - Chất lượng đầu ra',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 15,
-    indicator: 'Sự cố lỗi trong vận hành sử dụng',
-    definition: 'Số xe phát sinh điểm bất thường / Tổng quy mô sản lượng xe chạy thị trường',
-    unit: 'Tỉ lệ %',
-    target: '<0.5%',
-    actual: '0.42%',
-    status: 'Đạt',
-    details: 'Khách hàng đánh giá hài lòng với khả năng vận hành êm ái của hệ thống DK Roma-X.'
-  },
-  {
-    id: 'KPI-PRO-16',
-    category: 'OQC - Chất lượng đầu ra',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 15,
-    indicator: 'Khiếu nại bất thường từ nhà phân phối',
-    definition: 'Số vụ khiếu nại chất lượng xưởng gửi về trung tâm điều phối đại lý mỗi tháng',
-    unit: 'Vụ việc',
-    target: '<3 vụ/tháng',
-    actual: '1 vụ/tháng',
-    status: 'Đạt',
-    details: 'Tháng này chỉ ghi nhận 1 trường hợp lỏng giắc còi sương mù ở lô xe gửi Nghệ An.'
-  },
-  {
-    id: 'KPI-PRO-17',
-    category: 'OQC - Chất lượng đầu ra',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 15,
-    indicator: 'Kiểm tra túc trực lắp ráp trên mỗi LSX phát hiện lỗi luồn dây còi',
-    definition: 'Nhận thông tin khiếu nại kỹ thuật đại lý và phản hồi phương án kỹ thuật',
-    unit: 'Tỉ lệ',
+    weight: 10,
+    indicator: 'Tỷ lệ thiết bị đo lường, kiểm nghiệm được hiệu chuẩn & bảo trì đúng hạn (BM-KTTD-02)',
+    definition: 'Tỷ lệ trang thiết bị đo lường, dưỡng kiểm của Phòng QLCL ở trạng thái hoạt động tốt và còn hạn hiệu chuẩn hợp lệ.',
+    unit: '%',
     target: '100%',
+    targetValue: 100,
+    direction: 'higher_is_better',
+    sourceType: 'auto',
+    autoMetricKey: 'EQUIPMENT_CALIBRATION_RATE',
     actual: '100%',
     status: 'Đạt',
-    details: 'Phương án xử lý kỹ thuật luôn được phản hồi bằng văn bản hướng dẫn chi tiết trong 24 giờ.'
+    details: 'Tự động kiểm tra trạng thái & hạn hiệu chuẩn từ danh mục Thiết bị đo kiểm (dk_equipments).'
+  }
+];
+
+// ============================================================================
+// HỒ SƠ CHỈ TIÊU KPI NGHIỆP VỤ CÁ NHÂN BÁM SÁT 8 BẢN GIAO NHIỆM VỤ & 5 MTCV (/bm)
+// ============================================================================
+export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
+  {
+    staffName: 'Nguyễn Xuân Thao',
+    aliases: ['nguyễn xuân thao', 'nguyen xuan thao'],
+    roleTitle: 'Trưởng Phòng Quản Lý Chất Lượng',
+    bmDocCode: 'BG-NV-01',
+    mtcvCode: 'MTCV-TP (doc-mtcv-01)',
+    summary: 'Chịu trách nhiệm toàn diện (Accountable) về hệ thống QMS ISO 9001, chất lượng xe xuất xưởng FPY, tỷ lệ lỗi thị trường và hiệu năng đội ngũ QLCL.',
+    metrics: [
+      {
+        id: 'BM-TP-01',
+        name: 'Tỷ lệ hoàn thành Bộ chỉ tiêu KPI toàn Phòng QLCL',
+        bmReference: 'BG-NV-01 / MTCV-TP (Quản trị hệ thống QMS)',
+        weight: 20,
+        unit: '%',
+        target: '>= 90%',
+        targetValue: 90,
+        direction: 'higher_is_better',
+        autoMetricKey: 'DEPT_OVERALL_KPI'
+      },
+      {
+        id: 'BM-TP-02',
+        name: 'Tỷ lệ xe thành phẩm đạt chuẩn xuất xưởng ngay lần đầu (FPY - OQC/KCS)',
+        bmReference: 'BG-NV-01 / MTCV-TP (Mục tiêu FPY >= 98%)',
+        weight: 15,
+        unit: '%',
+        target: '>= 98%',
+        targetValue: 98,
+        direction: 'higher_is_better',
+        autoMetricKey: 'OQC_FPY_RATE'
+      },
+      {
+        id: 'BM-TP-03',
+        name: 'Tỷ lệ đóng hồ sơ CAPA đúng hạn & kiểm soát lỗi thị trường (<= 1%)',
+        bmReference: 'BG-NV-01 / MTCV-TP (Cải tiến 8D & Bảo hành)',
+        weight: 15,
+        unit: '%',
+        target: '>= 90%',
+        targetValue: 90,
+        direction: 'higher_is_better',
+        autoMetricKey: 'CAPA_CLOSURE_RATE'
+      }
+    ]
   },
   {
-    id: 'KPI-PRO-18',
-    category: 'OQC - Chất lượng đầu ra',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 15,
-    indicator: 'Sự cố khuyết tật nghiêm trọng trên thị trường',
-    definition: 'Lôi gãy gập khung gầm, cháy nổ IC nguồn hệ thống (Trọng số bắt buộc 0)',
-    unit: 'Tỉ lệ %',
-    target: '0%',
-    actual: '0%',
-    status: 'Đạt',
-    details: 'Kiểm tra xung dòng cao KCS đầu ra kỹ lưỡng loại bỏ triệt để nguy cơ phóng điện dập tủ điện.'
-  },
-  // 5. Hệ thống & Hồ sơ (15%)
-  {
-    id: 'KPI-PRO-19',
-    category: 'Hệ thống & Hồ sơ',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 15,
-    indicator: 'Tài liệu tiêu chuẩn chất lượng',
-    definition: 'Các dòng xe xuất xưởng bắt buộc có sổ tay tiêu chuẩn chất lượng và Checklist KCS',
-    unit: 'Tỉ lệ %',
-    target: '100%',
-    actual: '100%',
-    status: 'Đạt',
-    details: 'Đã hoàn tất sổ tay HDSD và lắp ráp chuẩn hóa của dòng xe mới DK V1.'
-  },
-  {
-    id: 'KPI-PRO-20',
-    category: 'Hệ thống & Hồ sơ',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 15,
-    indicator: 'Sáng kiến cải tiến chất lượng',
-    definition: 'Mỗi model xe cải tiến ít nhất 1 lần/tháng. Đạt mục tiêu 12 lần cải tiến/năm cho sản phẩm chính',
-    unit: 'Lần',
-    target: '12',
-    actual: '5',
-    status: 'Theo dõi',
-    details: 'Vừa hoàn chỉnh phương pháp bọc lót nén bầu sạc để triệt lổ rung chấn khi tải dốc.'
-  },
-  {
-    id: 'KPI-PRO-21',
-    category: 'Hệ thống & Hồ sơ',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 15,
-    indicator: 'Tiết kiệm chi phí chất lượng kém COPQ',
-    definition: 'Tỷ lệ chi phí thiệt hại chất lượng hư hao do lỗi dây chuyền giảm thiểu so với kỳ trước',
-    unit: 'Tỉ lệ %',
-    target: '>=10%',
-    actual: '12.4%',
-    status: 'Đạt',
-    details: 'Ghi nhận tiết giảm chi phí sửa chữa sườn bệ của chuỗi băng chuyền Model DK Gogo.'
+    staffName: 'Liễu Tùng Lâm',
+    aliases: ['liễu tùng lâm', 'lieu tung lam'],
+    roleTitle: 'Kỹ Sư Đảm Bảo Chất Lượng (QA / QE / SQE)',
+    bmDocCode: 'BG-NV-07',
+    mtcvCode: 'MTCV-QA (doc-mtcv-02)',
+    summary: 'Đảm bảo chất lượng hệ thống, đánh giá định kỳ Nhà cung cấp (SQE), quản lý tiêu chuẩn kỹ thuật và theo dõi đóng hồ sơ cải tiến CAR/PAR (CAPA).',
+    metrics: [
+      {
+        id: 'BM-QA-01',
+        name: 'Đánh giá năng lực NCC định kỳ & kiểm soát xử lý lỗi SQC',
+        bmReference: 'BG-NV-07 / MTCV-QA (Quản lý chất lượng NCC - SQE)',
+        weight: 20,
+        unit: '%',
+        target: '>= 90%',
+        targetValue: 90,
+        direction: 'higher_is_better',
+        autoMetricKey: 'SQC_SUPPLIER_EVAL_RATE'
+      },
+      {
+        id: 'BM-QA-02',
+        name: 'Tỷ lệ lập & theo dõi đóng hồ sơ cải tiến CAR/PAR (CAPA - 8D) đúng hạn',
+        bmReference: 'BG-NV-07 / MTCV-QA (Quản lý CAPA & Cải tiến)',
+        weight: 15,
+        unit: '%',
+        target: '>= 90%',
+        targetValue: 90,
+        direction: 'higher_is_better',
+        autoMetricKey: 'CAPA_CLOSURE_RATE'
+      },
+      {
+        id: 'BM-QA-03',
+        name: 'Kiểm soát hồ sơ tổn thất COPQ & thu hồi bồi hoàn lỗi NCC',
+        bmReference: 'BG-NV-07 / MTCV-QA (Kiểm soát COPQ)',
+        weight: 15,
+        unit: '%',
+        target: '>= 90%',
+        targetValue: 90,
+        direction: 'higher_is_better',
+        autoMetricKey: 'COPQ_CLOSED_RATE'
+      }
+    ]
   },
   {
-    id: 'KPI-PRO-22',
-    category: 'Hệ thống & Hồ sơ',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 15,
-    indicator: 'Huấn luyện đào tạo KCS đạt chuẩn',
-    definition: 'Số lượng nhân sự được đào tạo kiểm nhận và bắt lỗi linh kiện chính xác',
-    unit: 'Nhân sự',
-    target: '4',
-    actual: '4',
-    status: 'Đạt',
-    details: 'Nhân sự rà lỗi đã được trao chứng chỉ chất lượng nội bộ quý I.'
+    staffName: 'Hoàng Văn Phấn',
+    aliases: ['hoàng văn phấn', 'hoàng văn phan', 'hoang van phan'],
+    roleTitle: 'Kỹ Sư Thẩm Định Kỹ Thuật (KTTĐ)',
+    bmDocCode: 'BG-NV-04',
+    mtcvCode: 'MTCV-KTTD (doc-mtcv-03)',
+    summary: 'Thẩm định kỹ thuật linh kiện mới, mổ xẻ phân tích linh kiện bảo hành (IC, động cơ, ắc quy - BM-KTTD-01) và quản lý sổ cái hiệu chuẩn thiết bị đo (BM-KTTD-02).',
+    metrics: [
+      {
+        id: 'BM-KTTD-P01',
+        name: 'Thẩm định kỹ thuật linh kiện mới & phê duyệt mẫu đầu (BM-KTTD-01)',
+        bmReference: 'BG-NV-04 / BM-KTTD-01 (Thẩm định linh kiện & PTSP)',
+        weight: 20,
+        unit: '%',
+        target: '>= 95%',
+        targetValue: 95,
+        direction: 'higher_is_better',
+        autoMetricKey: 'PART_EVAL_PTSP_RATE'
+      },
+      {
+        id: 'BM-KTTD-P02',
+        name: 'Quản lý sổ cái & hiệu chuẩn thiết bị đo lường đúng hạn (BM-KTTD-02)',
+        bmReference: 'BG-NV-04 / BM-KTTD-02 (100% thiết bị tem xanh hợp lệ)',
+        weight: 15,
+        unit: '%',
+        target: '100%',
+        targetValue: 100,
+        direction: 'higher_is_better',
+        autoMetricKey: 'EQUIPMENT_CALIBRATION_RATE'
+      },
+      {
+        id: 'BM-KTTD-P03',
+        name: 'Phân tích kỹ thuật chuyên sâu & xử lý lỗi bảo hành thị trường',
+        bmReference: 'BG-NV-04 / MTCV-KTTD (Giám định bảo hành)',
+        weight: 15,
+        unit: '%',
+        target: '>= 95%',
+        targetValue: 95,
+        direction: 'higher_is_better',
+        autoMetricKey: 'MARKET_DEFECT_RESOLVED_RATE'
+      }
+    ]
   },
   {
-    id: 'KPI-PRO-23',
-    category: 'Hệ thống & Hồ sơ',
-    type: 'Mục tiêu hoạt động chuyên môn',
-    groupWeight: 15,
-    indicator: 'Lưu trữ hồ sơ nghiệm kiểm ISO',
-    definition: 'Tỉ lệ lưu trữ biên bản kỹ thuật số hóa so với số lượt kiểm rà thực tế',
-    unit: 'Tỉ lệ %',
-    target: '100%',
-    actual: '100%',
-    status: 'Đạt',
-    details: 'Cơ sở dữ liệu đám mây sao lưu an toàn hàng ngày tại DK Việt Nhật.'
+    staffName: 'Đoàn Anh Hùng',
+    aliases: ['đoàn anh hùng', 'doan anh hung'],
+    roleTitle: 'Nhân Viên Kỹ Thuật Chất Lượng (KTTĐ & Gia công/Đo kiểm)',
+    bmDocCode: 'BM-KTTD-03',
+    mtcvCode: 'MTCV-KTTD (doc-mtcv-03)',
+    summary: 'Giám định lỗi xe bảo hành đại lý trả về (BM-KTTD-01), gia công linh kiện mẫu/đồ gá & sửa chữa chuyên sâu, quản lý CCDC/thiết bị đo lường (BM-KTTD-02) và tham gia kiểm tra IQC (BM-QC-01).',
+    metrics: [
+      {
+        id: 'BM-KTTD-H01',
+        name: 'Giám định lỗi xe/linh kiện bảo hành trả về & thẩm định kỹ thuật (BM-KTTD-01)',
+        bmReference: 'BM-KTTD-03 Mục II.1 & III.1 (Giám định trong 24h-48h)',
+        weight: 20,
+        unit: '%',
+        target: '>= 95%',
+        targetValue: 95,
+        direction: 'higher_is_better',
+        autoMetricKey: 'MARKET_DEFECT_RESOLVED_RATE'
+      },
+      {
+        id: 'BM-KTTD-H02',
+        name: 'Quản lý CCDC, hiệu chuẩn thiết bị đo (BM-KTTD-02) & gia công đồ gá/linh kiện mẫu',
+        bmReference: 'BM-KTTD-03 Mục II.2, II.3 & III.3 (Thiết bị & Gia công mẫu)',
+        weight: 15,
+        unit: '%',
+        target: '100%',
+        targetValue: 100,
+        direction: 'higher_is_better',
+        autoMetricKey: 'EQUIPMENT_CALIBRATION_RATE'
+      },
+      {
+        id: 'BM-KTTD-H03',
+        name: 'Tham gia kiểm tra IQC đầu vào (BM-QC-01) & hỗ trợ xưởng tinh chỉnh xe không đạt',
+        bmReference: 'BM-KTTD-03 Mục II.4 & III.4 (Hỗ trợ IQC & Xưởng lắp ráp)',
+        weight: 15,
+        unit: '%',
+        target: '>= 95%',
+        targetValue: 95,
+        direction: 'higher_is_better',
+        autoMetricKey: 'IQC_PASS_RATE'
+      }
+    ]
+  },
+  {
+    staffName: 'Trần Thế Quang',
+    aliases: ['trần thế quang', 'trần thế quảng', 'tran the quang'],
+    roleTitle: 'Nhân Viên QC Hiện Trường — Giám Sát Công Đoạn Lắp Ráp (PQC/IPQC)',
+    bmDocCode: 'BG-NV-02',
+    mtcvCode: 'MTCV-IQC-IPQC (doc-mtcv-04)',
+    summary: 'Tuần tra giám sát chất lượng hiện trường, kiểm tra nghiệm thu bán thành phẩm các công đoạn lắp ráp (BM-QC-03/04) và ngăn chặn lỗi dây chuyền.',
+    metrics: [
+      {
+        id: 'BM-PQC-Q01',
+        name: 'Thực hiện kiểm tra & nghiệm thu bán thành phẩm công đoạn lắp ráp (BM-QC-03/04)',
+        bmReference: 'BG-NV-02 / BM-QC-03 & BM-QC-04 (Tuần tra công đoạn PQC)',
+        weight: 20,
+        unit: '%',
+        target: '>= 98%',
+        targetValue: 98,
+        direction: 'higher_is_better',
+        autoMetricKey: 'PQC_PASS_RATE'
+      },
+      {
+        id: 'BM-PQC-Q02',
+        name: 'Kiểm soát lỗi lắp ráp lặp lại & phối hợp đóng CAPA hiện trường đúng hạn',
+        bmReference: 'BG-NV-02 / MTCV-IQC-IPQC (Kiểm soát lỗi công đoạn)',
+        weight: 15,
+        unit: '%',
+        target: '>= 90%',
+        targetValue: 90,
+        direction: 'higher_is_better',
+        autoMetricKey: 'CAPA_CLOSURE_RATE'
+      },
+      {
+        id: 'BM-PQC-Q03',
+        name: 'Chất lượng phối hợp đầu ra chuyền lắp ráp bàn giao sang KCS/OQC (FPY)',
+        bmReference: 'BG-NV-02 / MTCV-IQC-IPQC (Hỗ trợ mục tiêu FPY >= 98%)',
+        weight: 15,
+        unit: '%',
+        target: '>= 98%',
+        targetValue: 98,
+        direction: 'higher_is_better',
+        autoMetricKey: 'OQC_FPY_RATE'
+      }
+    ]
+  },
+  {
+    staffName: 'Nguyễn Văn Điểm',
+    aliases: ['nguyễn văn điểm', 'nguyễn văn diệm', 'nguyen van diem'],
+    roleTitle: 'Nhân Viên QC Hiện Trường — Kiểm Soát Chất Lượng Đầu Vào (IQC)',
+    bmDocCode: 'BG-NV-03',
+    mtcvCode: 'MTCV-IQC-IPQC (doc-mtcv-04)',
+    summary: 'Kiểm tra chất lượng linh kiện vật tư đầu vào theo tiêu chuẩn AQL (BM-QC-01/02), dán tem nhận diện và quản lý khu vực cách ly phế phẩm.',
+    metrics: [
+      {
+        id: 'BM-IQC-D01',
+        name: 'Thực hiện kiểm tra nghiệm thu lô vật tư linh kiện đầu vào theo AQL (BM-QC-01/02)',
+        bmReference: 'BG-NV-03 / BM-QC-01 & BM-QC-02 (100% lô nhập qua IQC)',
+        weight: 20,
+        unit: '%',
+        target: '>= 95%',
+        targetValue: 95,
+        direction: 'higher_is_better',
+        autoMetricKey: 'IQC_PASS_RATE'
+      },
+      {
+        id: 'BM-IQC-D02',
+        name: 'Phát hiện, cách ly lô hàng NCC lỗi & lập hồ sơ cảnh báo SQC chính xác',
+        bmReference: 'BG-NV-03 / MTCV-IQC-IPQC (Quản lý kho cách ly & NCR)',
+        weight: 15,
+        unit: '%',
+        target: '>= 90%',
+        targetValue: 90,
+        direction: 'higher_is_better',
+        autoMetricKey: 'SQC_SUPPLIER_EVAL_RATE'
+      },
+      {
+        id: 'BM-IQC-D03',
+        name: 'Phối hợp thẩm định linh kiện mới / lô hàng mẫu đầu vào (BM-KTTD-01)',
+        bmReference: 'BG-NV-03 / MTCV-IQC-IPQC (Kiểm soát linh kiện mới)',
+        weight: 15,
+        unit: '%',
+        target: '>= 95%',
+        targetValue: 95,
+        direction: 'higher_is_better',
+        autoMetricKey: 'PART_EVAL_PTSP_RATE'
+      }
+    ]
+  },
+  {
+    staffName: 'Lãnh Xuân Hải',
+    aliases: ['lãnh xuân hải', 'lành xuân hải', 'lanh xuan hai'],
+    roleTitle: 'Nhân Viên QC Hiện Trường — Kiểm Soát Linh Kiện & Tuần Tra Lắp Ráp (IQC/IPQC)',
+    bmDocCode: 'BG-NV-06',
+    mtcvCode: 'MTCV-IQC-IPQC (doc-mtcv-04)',
+    summary: 'Kiểm soát chất lượng linh kiện đầu vào kết hợp tuần tra giám sát công đoạn lắp ráp (IQC/IPQC), kiểm soát ngoại quan, cơ khí và mối hàn.',
+    metrics: [
+      {
+        id: 'BM-IPQC-H01',
+        name: 'Kiểm soát chất lượng linh kiện đầu vào (IQC - BM-QC-01/02)',
+        bmReference: 'BG-NV-06 / BM-QC-01 & BM-QC-02 (Kiểm soát linh kiện)',
+        weight: 20,
+        unit: '%',
+        target: '>= 95%',
+        targetValue: 95,
+        direction: 'higher_is_better',
+        autoMetricKey: 'IQC_PASS_RATE'
+      },
+      {
+        id: 'BM-IPQC-H02',
+        name: 'Tuần tra giám sát chất lượng bán thành phẩm công đoạn lắp ráp (PQC - BM-QC-03/04)',
+        bmReference: 'BG-NV-06 / BM-QC-03 & BM-QC-04 (Tuần tra công đoạn)',
+        weight: 15,
+        unit: '%',
+        target: '>= 98%',
+        targetValue: 98,
+        direction: 'higher_is_better',
+        autoMetricKey: 'PQC_PASS_RATE'
+      },
+      {
+        id: 'BM-IPQC-H03',
+        name: 'Phối hợp xử lý lỗi hiện trường & đóng hồ sơ khắc phục CAPA',
+        bmReference: 'BG-NV-06 / MTCV-IQC-IPQC (Xử lý lỗi hiện trường)',
+        weight: 15,
+        unit: '%',
+        target: '>= 90%',
+        targetValue: 90,
+        direction: 'higher_is_better',
+        autoMetricKey: 'CAPA_CLOSURE_RATE'
+      }
+    ]
+  },
+  {
+    staffName: 'Hà Khắc Việt',
+    aliases: ['hà khắc việt', 'ha khac viet'],
+    roleTitle: 'Nhân Viên Nghiệm Thu Thành Phẩm (OQC / KCS)',
+    bmDocCode: 'BG-NV-05',
+    mtcvCode: 'MTCV-OQC (doc-mtcv-05)',
+    summary: 'Kiểm tra 100% xe thành phẩm xuất xưởng (BM-QC-05/06), chạy thử đường trường, đối soát số Khung/số Máy, dán tem hợp chuẩn KCS và bàn giao kho thành phẩm.',
+    metrics: [
+      {
+        id: 'BM-OQC-V01',
+        name: 'Nghiệm thu 100% xe thành phẩm xuất xưởng & tỷ lệ đạt chuẩn lần đầu (FPY - BM-QC-05/06)',
+        bmReference: 'BG-NV-05 / BM-QC-05 & BM-QC-06 (Nghiệm thu OQC/KCS)',
+        weight: 20,
+        unit: '%',
+        target: '>= 98%',
+        targetValue: 98,
+        direction: 'higher_is_better',
+        autoMetricKey: 'OQC_FPY_RATE'
+      },
+      {
+        id: 'BM-OQC-V02',
+        name: 'Kiểm soát không để xe lỗi nghiêm trọng / sai số Khung-Máy lọt ra thị trường',
+        bmReference: 'BG-NV-05 / MTCV-OQC (0% lỗi nghiêm trọng lọt cổng KCS)',
+        weight: 15,
+        unit: '%',
+        target: '<= 1.0%',
+        targetValue: 1.0,
+        direction: 'lower_is_better',
+        autoMetricKey: 'MARKET_DEFECT_RATE'
+      },
+      {
+        id: 'BM-OQC-V03',
+        name: 'Phối hợp phản hồi & xử lý dứt điểm lỗi chất lượng đầu ra / đại lý',
+        bmReference: 'BG-NV-05 / MTCV-OQC (Truy vết & cải tiến OQC)',
+        weight: 15,
+        unit: '%',
+        target: '>= 95%',
+        targetValue: 95,
+        direction: 'higher_is_better',
+        autoMetricKey: 'MARKET_DEFECT_RESOLVED_RATE'
+      }
+    ]
   }
 ];
