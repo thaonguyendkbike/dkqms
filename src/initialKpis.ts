@@ -405,7 +405,7 @@ export const DEFAULT_DETAILED_KPIS: DetailedKPI[] = [
 ];
 
 // ============================================================================
-// HỒ SƠ CHỈ TIÊU KPI NGHIỆP VỤ CÁ NHÂN BÁM SÁT 8 BẢN GIAO NHIỆM VỤ & 5 MTCV (/bm)
+// HỒ SƠ CHỈ TIÊU KPI NGHIỆP VỤ CÁ NHÂN BÁM SÁT 8 BẢN GIAO NHIỆM VỤ & MA TRẬN ĐỐI SOÁT (/bm)
 // ============================================================================
 export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
   {
@@ -413,13 +413,13 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
     aliases: ['nguyễn xuân thao', 'nguyen xuan thao'],
     roleTitle: 'Trưởng Phòng Quản Lý Chất Lượng',
     bmDocCode: 'BG-NV-01',
-    mtcvCode: 'MTCV-TP (doc-mtcv-01)',
-    summary: 'Chịu trách nhiệm toàn diện (Accountable) về hệ thống QMS ISO 9001, chất lượng xe xuất xưởng FPY, tỷ lệ lỗi thị trường và hiệu năng đội ngũ QLCL.',
+    mtcvCode: 'CN-QLCL-01..03 / CN-QAQE-01',
+    summary: 'Tổ chức quản lý, điều hành toàn bộ hệ thống kiểm soát chất lượng Công ty; trực tiếp định hướng chuyên môn Bộ phận QA/QE & KTV Tư vấn kỹ thuật; thẩm định phê duyệt SOP, CAR/PAR, quản lý chất lượng Nhà cung cấp (SQE), chủ trì Internal Audit và ra quyết định Stop-line.',
     metrics: [
       {
         id: 'BM-TP-01',
-        name: 'Tỷ lệ hoàn thành Bộ chỉ tiêu KPI toàn Phòng QLCL',
-        bmReference: 'BG-NV-01 / MTCV-TP (Quản trị hệ thống QMS)',
+        name: 'Quản trị toàn diện P.QLCL, phê duyệt ban hành SOP/Tiêu chuẩn, chủ trì Internal Audit & hoàn thành KPI Phòng',
+        bmReference: 'BG-NV-01 [NV-QA-01, NV-QA-02, NV-QLCL-01 | SOP: QT-QLCL-01, QT-QA-01]',
         weight: 20,
         unit: '%',
         target: '>= 90%',
@@ -429,41 +429,52 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
       },
       {
         id: 'BM-TP-02',
-        name: 'Tỷ lệ xe thành phẩm đạt chuẩn xuất xưởng ngay lần đầu (FPY - OQC/KCS)',
-        bmReference: 'BG-NV-01 / MTCV-TP (Mục tiêu FPY >= 98%)',
-        weight: 15,
-        unit: '%',
-        target: '>= 98%',
-        targetValue: 98,
-        direction: 'higher_is_better',
-        autoMetricKey: 'OQC_FPY_RATE'
-      },
-      {
-        id: 'BM-TP-03',
-        name: 'Tỷ lệ đóng hồ sơ CAPA đúng hạn & kiểm soát lỗi thị trường (<= 1%)',
-        bmReference: 'BG-NV-01 / MTCV-TP (Cải tiến 8D & Bảo hành)',
+        name: 'Phê duyệt phương án khắc phục/phòng ngừa lỗi (CAR/PAR) & đánh giá hiệu quả cải tiến thực tế',
+        bmReference: 'BG-NV-01 [NV-QLCL-05, NV-QA-06 | SOP: QT-QLCL-03, QT-QA-02]',
         weight: 15,
         unit: '%',
         target: '>= 90%',
         targetValue: 90,
         direction: 'higher_is_better',
         autoMetricKey: 'CAPA_CLOSURE_RATE'
+      },
+      {
+        id: 'BM-TP-03',
+        name: 'Quản lý chất lượng Nhà cung cấp (SQE): Đàm phán, chốt tiêu chuẩn kỹ thuật & phán quyết năng lực NCC',
+        bmReference: 'BG-NV-01 [NV-QA-03, NV-QA-04, NV-QA-07 | SOP: QT-QA-01, QT-QA-02]',
+        weight: 15,
+        unit: '%',
+        target: '>= 90%',
+        targetValue: 90,
+        direction: 'higher_is_better',
+        autoMetricKey: 'SQC_SUPPLIER_EVAL_RATE'
       }
     ]
   },
   {
-    staffName: 'Liễu Tùng Lâm',
-    aliases: ['liễu tùng lâm', 'lieu tung lam'],
-    roleTitle: 'Kỹ Sư Đảm Bảo Chất Lượng (QA / QE / SQE)',
-    bmDocCode: 'BG-NV-07',
-    mtcvCode: 'MTCV-QA (doc-mtcv-02)',
-    summary: 'Đảm bảo chất lượng hệ thống, đánh giá định kỳ Nhà cung cấp (SQE), quản lý tiêu chuẩn kỹ thuật và theo dõi đóng hồ sơ cải tiến CAR/PAR (CAPA).',
+    staffName: 'Trần Thế Quảng',
+    aliases: ['trần thế quảng', 'trần thế quang', 'tran the quang'],
+    roleTitle: 'Chuyên Viên Đảm Bảo Chất Lượng (QA) — Định Hướng Trợ Lý Trưởng Phòng QLCL',
+    bmDocCode: 'BG-NV-02',
+    mtcvCode: 'CN-QAQE-01 / CN-QAQE-02',
+    summary: 'Hỗ trợ trực tiếp Trưởng phòng QLCL: Dự thảo, định dạng và lưu trữ quy trình SOP/biểu mẫu; tổng hợp dữ liệu lỗi từ QC & KTV Tư vấn để dự thảo lệnh CAR/PAR và đôn đốc khắc phục; lập Bảng chấm điểm năng lực Nhà cung cấp định kỳ và chuẩn bị hồ sơ Internal Audit / Đào tạo.',
     metrics: [
       {
-        id: 'BM-QA-01',
-        name: 'Đánh giá năng lực NCC định kỳ & kiểm soát xử lý lỗi SQC',
-        bmReference: 'BG-NV-07 / MTCV-QA (Quản lý chất lượng NCC - SQE)',
+        id: 'BM-QA-Q01',
+        name: 'Tổng hợp dữ liệu lỗi, thiết lập dự thảo Lệnh khắc phục/phòng ngừa (CAR/PAR) & đôn đốc NCC/Xưởng đúng hạn',
+        bmReference: 'BG-NV-02 [NV-QA-05, NV-QA-06, NV-QA-07 | SOP: QT-QA-02]',
         weight: 20,
+        unit: '%',
+        target: '>= 90%',
+        targetValue: 90,
+        direction: 'higher_is_better',
+        autoMetricKey: 'CAPA_CLOSURE_RATE'
+      },
+      {
+        id: 'BM-QA-Q02',
+        name: 'Tổng hợp hồ sơ, dữ liệu giao hàng & chất lượng linh kiện lập Bảng chấm điểm năng lực Nhà cung cấp định kỳ',
+        bmReference: 'BG-NV-02 [NV-QA-03, NV-QA-04 | SOP: QT-QA-01]',
+        weight: 15,
         unit: '%',
         target: '>= 90%',
         targetValue: 90,
@@ -471,128 +482,85 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         autoMetricKey: 'SQC_SUPPLIER_EVAL_RATE'
       },
       {
-        id: 'BM-QA-02',
-        name: 'Tỷ lệ lập & theo dõi đóng hồ sơ cải tiến CAR/PAR (CAPA - 8D) đúng hạn',
-        bmReference: 'BG-NV-07 / MTCV-QA (Quản lý CAPA & Cải tiến)',
+        id: 'BM-QA-Q03',
+        name: 'Soạn thảo, kiểm soát lưu hành SOP/biểu mẫu; chuẩn bị tài liệu Đánh giá nội bộ (Internal Audit) & Đào tạo chất lượng',
+        bmReference: 'BG-NV-02 [NV-QA-01, NV-QA-02, NV-QA-08 | SOP: QT-QA-01]',
         weight: 15,
         unit: '%',
-        target: '>= 90%',
-        targetValue: 90,
+        target: '>= 95%',
+        targetValue: 95,
         direction: 'higher_is_better',
-        autoMetricKey: 'CAPA_CLOSURE_RATE'
+        autoMetricKey: 'DAILY_REPORT_DAYS_RATE'
+      }
+    ]
+  },
+  {
+    staffName: 'Nguyễn Văn Diệm',
+    aliases: ['nguyễn văn diệm', 'nguyễn văn điểm', 'nguyen van diem'],
+    roleTitle: 'Kỹ Thuật Viên Tư Vấn Kỹ Thuật (Bộ Phận Kỹ Thuật Thẩm Định)',
+    bmDocCode: 'BG-NV-03',
+    mtcvCode: 'CN-KTTĐ-01 / CN-KTTĐ-02',
+    summary: 'Cầu nối chuyên môn giữa nhà máy và thị trường: Tư vấn, hướng dẫn kỹ thuật từ xa cho hệ thống đại lý; tiếp nhận, giám định và trực tiếp sửa chữa/phục hồi xe, linh kiện lỗi bảo hành quay đầu; tổng hợp dữ liệu lỗi thị trường chuyển giao cho QA/QE phân tích cải tiến và phối hợp R&D chạy thử xe mẫu.',
+    metrics: [
+      {
+        id: 'BM-KTTD-D01',
+        name: 'Tư vấn kỹ thuật từ xa cho đại lý; tiếp nhận, giám định & trực tiếp sửa chữa/phục hồi xe, linh kiện lỗi bảo hành quay đầu',
+        bmReference: 'BG-NV-03 [NV-KTTĐ-01, NV-KTTĐ-02, NV-KTTĐ-05, NV-KTTĐ-06 | SOP: QT-KTTD-01]',
+        weight: 20,
+        unit: '%',
+        target: '>= 95%',
+        targetValue: 95,
+        direction: 'higher_is_better',
+        autoMetricKey: 'MARKET_DEFECT_RESOLVED_RATE'
       },
       {
-        id: 'BM-QA-03',
-        name: 'Kiểm soát hồ sơ tổn thất COPQ & thu hồi bồi hoàn lỗi NCC',
-        bmReference: 'BG-NV-07 / MTCV-QA (Kiểm soát COPQ)',
+        id: 'BM-KTTD-D02',
+        name: 'Tổng hợp dữ liệu phản ánh thị trường chuyển giao cho QA phân tích lỗi & phối hợp QE đề xuất nâng cấp linh kiện',
+        bmReference: 'BG-NV-03 [NV-KTTĐ-03, Phối hợp NV-QA-05, NV-QA-06 | SOP: QT-QA-02]',
         weight: 15,
         unit: '%',
-        target: '>= 90%',
-        targetValue: 90,
+        target: '<= 1.0%',
+        targetValue: 1.0,
+        direction: 'lower_is_better',
+        autoMetricKey: 'MARKET_DEFECT_RATE'
+      },
+      {
+        id: 'BM-KTTD-D03',
+        name: 'Tham gia cùng bộ phận R&D chạy thử nghiệm (đường trường, tải trọng, tính năng) & đánh giá chất lượng xe mẫu mới',
+        bmReference: 'BG-NV-03 [Phối hợp NV-RD-04]',
+        weight: 15,
+        unit: '%',
+        target: '>= 95%',
+        targetValue: 95,
         direction: 'higher_is_better',
-        autoMetricKey: 'COPQ_CLOSED_RATE'
+        autoMetricKey: 'PART_EVAL_PTSP_RATE'
       }
     ]
   },
   {
     staffName: 'Hoàng Văn Phấn',
     aliases: ['hoàng văn phấn', 'hoàng văn phan', 'hoang van phan'],
-    roleTitle: 'Kỹ Sư Thẩm Định Kỹ Thuật (KTTĐ)',
+    roleTitle: 'Nhân Viên Kiểm Soát Chất Lượng (IQC & IPQC)',
     bmDocCode: 'BG-NV-04',
-    mtcvCode: 'MTCV-KTTD (doc-mtcv-03)',
-    summary: 'Thẩm định kỹ thuật linh kiện mới, mổ xẻ phân tích linh kiện bảo hành (IC, động cơ, ắc quy - BM-KTTD-01) và quản lý sổ cái hiệu chuẩn thiết bị đo (BM-KTTD-02).',
+    mtcvCode: 'CN-QC-01 / CN-QC-02',
+    summary: 'Trực tiếp thực thi đo lường, kiểm tra ngoại quan & tính năng vật tư đầu vào (IQC), dán tem nhận diện và lập biên bản/check-sheet; tuần tra giám sát chất lượng các trạm trên dây chuyền lắp ráp (IPQC); tham gia sửa chữa linh kiện lỗi, tinh chỉnh xe lỗi nặng và hỗ trợ lắp ráp xe mẫu R&D / Đăng kiểm.',
     metrics: [
       {
-        id: 'BM-KTTD-P01',
-        name: 'Thẩm định kỹ thuật linh kiện mới & phê duyệt mẫu đầu (BM-KTTD-01)',
-        bmReference: 'BG-NV-04 / BM-KTTD-01 (Thẩm định linh kiện & PTSP)',
+        id: 'BM-QC-P01',
+        name: 'Trực tiếp đo lường, kiểm tra linh kiện vật tư đầu vào (IQC), dán tem trạng thái & lập biên bản/check-sheet kiểm tra',
+        bmReference: 'BG-NV-04 [NV-QC-01, NV-QC-06 | SOP: QT-QC-01, QT-QC-02]',
         weight: 20,
-        unit: '%',
-        target: '>= 95%',
-        targetValue: 95,
-        direction: 'higher_is_better',
-        autoMetricKey: 'PART_EVAL_PTSP_RATE'
-      },
-      {
-        id: 'BM-KTTD-P02',
-        name: 'Quản lý sổ cái & hiệu chuẩn thiết bị đo lường đúng hạn (BM-KTTD-02)',
-        bmReference: 'BG-NV-04 / BM-KTTD-02 (100% thiết bị tem xanh hợp lệ)',
-        weight: 15,
-        unit: '%',
-        target: '100%',
-        targetValue: 100,
-        direction: 'higher_is_better',
-        autoMetricKey: 'EQUIPMENT_CALIBRATION_RATE'
-      },
-      {
-        id: 'BM-KTTD-P03',
-        name: 'Phân tích kỹ thuật chuyên sâu & xử lý lỗi bảo hành thị trường',
-        bmReference: 'BG-NV-04 / MTCV-KTTD (Giám định bảo hành)',
-        weight: 15,
-        unit: '%',
-        target: '>= 95%',
-        targetValue: 95,
-        direction: 'higher_is_better',
-        autoMetricKey: 'MARKET_DEFECT_RESOLVED_RATE'
-      }
-    ]
-  },
-  {
-    staffName: 'Đoàn Anh Hùng',
-    aliases: ['đoàn anh hùng', 'doan anh hung'],
-    roleTitle: 'Nhân Viên Kỹ Thuật Chất Lượng (KTTĐ & Gia công/Đo kiểm)',
-    bmDocCode: 'BM-KTTD-03',
-    mtcvCode: 'MTCV-KTTD (doc-mtcv-03)',
-    summary: 'Giám định lỗi xe bảo hành đại lý trả về (BM-KTTD-01), gia công linh kiện mẫu/đồ gá & sửa chữa chuyên sâu, quản lý CCDC/thiết bị đo lường (BM-KTTD-02) và tham gia kiểm tra IQC (BM-QC-01).',
-    metrics: [
-      {
-        id: 'BM-KTTD-H01',
-        name: 'Giám định lỗi xe/linh kiện bảo hành trả về & thẩm định kỹ thuật (BM-KTTD-01)',
-        bmReference: 'BM-KTTD-03 Mục II.1 & III.1 (Giám định trong 24h-48h)',
-        weight: 20,
-        unit: '%',
-        target: '>= 95%',
-        targetValue: 95,
-        direction: 'higher_is_better',
-        autoMetricKey: 'MARKET_DEFECT_RESOLVED_RATE'
-      },
-      {
-        id: 'BM-KTTD-H02',
-        name: 'Quản lý CCDC, hiệu chuẩn thiết bị đo (BM-KTTD-02) & gia công đồ gá/linh kiện mẫu',
-        bmReference: 'BM-KTTD-03 Mục II.2, II.3 & III.3 (Thiết bị & Gia công mẫu)',
-        weight: 15,
-        unit: '%',
-        target: '100%',
-        targetValue: 100,
-        direction: 'higher_is_better',
-        autoMetricKey: 'EQUIPMENT_CALIBRATION_RATE'
-      },
-      {
-        id: 'BM-KTTD-H03',
-        name: 'Tham gia kiểm tra IQC đầu vào (BM-QC-01) & hỗ trợ xưởng tinh chỉnh xe không đạt',
-        bmReference: 'BM-KTTD-03 Mục II.4 & III.4 (Hỗ trợ IQC & Xưởng lắp ráp)',
-        weight: 15,
         unit: '%',
         target: '>= 95%',
         targetValue: 95,
         direction: 'higher_is_better',
         autoMetricKey: 'IQC_PASS_RATE'
-      }
-    ]
-  },
-  {
-    staffName: 'Trần Thế Quảng',
-    aliases: ['trần thế quảng', 'trần thế quang', 'tran the quang'],
-    roleTitle: 'Nhân Viên QC Hiện Trường — Giám Sát Công Đoạn Lắp Ráp (PQC/IPQC)',
-    bmDocCode: 'BG-NV-02',
-    mtcvCode: 'MTCV-IQC-IPQC (doc-mtcv-04)',
-    summary: 'Tuần tra giám sát chất lượng hiện trường, kiểm tra nghiệm thu bán thành phẩm các công đoạn lắp ráp (BM-QC-03/04) và ngăn chặn lỗi dây chuyền.',
-    metrics: [
+      },
       {
-        id: 'BM-PQC-Q01',
-        name: 'Thực hiện kiểm tra & nghiệm thu bán thành phẩm công đoạn lắp ráp (BM-QC-03/04)',
-        bmReference: 'BG-NV-02 / BM-QC-03 & BM-QC-04 (Tuần tra công đoạn PQC)',
-        weight: 20,
+        id: 'BM-QC-P02',
+        name: 'Tuần tra, giám sát chất lượng tại các trạm trên dây chuyền lắp ráp (IPQC), ghi nhật ký & báo cáo kịp thời sai lệch',
+        bmReference: 'BG-NV-04 [NV-QC-04 | SOP: QT-QC-01]',
+        weight: 15,
         unit: '%',
         target: '>= 98%',
         targetValue: 98,
@@ -600,41 +568,30 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         autoMetricKey: 'PQC_PASS_RATE'
       },
       {
-        id: 'BM-PQC-Q02',
-        name: 'Kiểm soát lỗi lắp ráp lặp lại & phối hợp đóng CAPA hiện trường đúng hạn',
-        bmReference: 'BG-NV-02 / MTCV-IQC-IPQC (Kiểm soát lỗi công đoạn)',
+        id: 'BM-QC-P03',
+        name: 'Tham gia sửa chữa linh kiện lỗi, tinh chỉnh xe lỗi nặng; hỗ trợ lắp ráp xe mẫu R&D & hỗ trợ kiểm tra xe tại Cục Đăng kiểm',
+        bmReference: 'BG-NV-04 [NV-KTTĐ-05, Phối hợp NV-RD-03, NV-ĐK-01]',
         weight: 15,
         unit: '%',
-        target: '>= 90%',
-        targetValue: 90,
+        target: '>= 95%',
+        targetValue: 95,
         direction: 'higher_is_better',
-        autoMetricKey: 'CAPA_CLOSURE_RATE'
-      },
-      {
-        id: 'BM-PQC-Q03',
-        name: 'Chất lượng phối hợp đầu ra chuyền lắp ráp bàn giao sang KCS/OQC (FPY)',
-        bmReference: 'BG-NV-02 / MTCV-IQC-IPQC (Hỗ trợ mục tiêu FPY >= 98%)',
-        weight: 15,
-        unit: '%',
-        target: '>= 98%',
-        targetValue: 98,
-        direction: 'higher_is_better',
-        autoMetricKey: 'OQC_FPY_RATE'
+        autoMetricKey: 'PART_EVAL_PTSP_RATE'
       }
     ]
   },
   {
-    staffName: 'Nguyễn Văn Diệm',
-    aliases: ['nguyễn văn diệm', 'nguyễn văn điểm', 'nguyen van diem'],
-    roleTitle: 'Nhân Viên QC Hiện Trường — Kiểm Soát Chất Lượng Đầu Vào (IQC)',
-    bmDocCode: 'BG-NV-03',
-    mtcvCode: 'MTCV-IQC-IPQC (doc-mtcv-04)',
-    summary: 'Kiểm tra chất lượng linh kiện vật tư đầu vào theo tiêu chuẩn AQL (BM-QC-01/02), dán tem nhận diện và quản lý khu vực cách ly phế phẩm.',
+    staffName: 'Hà Khắc Việt',
+    aliases: ['hà khắc việt', 'ha khac viet'],
+    roleTitle: 'Tổ Trưởng Kiểm Soát Chất Lượng (Tổ Trưởng QC)',
+    bmDocCode: 'BG-NV-05',
+    mtcvCode: 'CN-QC-01 / CN-QC-02 / CN-QLCL-01',
+    summary: 'Tổ chức, quản lý trực tiếp hoạt động kiểm soát chất lượng hiện trường của đội ngũ QC; trực tiếp thực thi IQC & tuần tra IPQC; kiểm tra xác suất (Cross-check) xe thành phẩm sau OQC và chạy thử nội bộ; chủ trì Hội đồng đánh giá vật tư hỏng (MRB); hỗ trợ kỹ thuật bậc cao cho R&D, Đăng kiểm và tham gia đánh giá NCC.',
     metrics: [
       {
-        id: 'BM-IQC-D01',
-        name: 'Thực hiện kiểm tra nghiệm thu lô vật tư linh kiện đầu vào theo AQL (BM-QC-01/02)',
-        bmReference: 'BG-NV-03 / BM-QC-01 & BM-QC-02 (100% lô nhập qua IQC)',
+        id: 'BM-QC-V01',
+        name: 'Quản lý đội ngũ QC hiện trường; trực tiếp thực thi kiểm tra IQC, tuần tra dây chuyền IPQC & chủ trì Hội đồng MRB',
+        bmReference: 'BG-NV-05 [NV-QC-01, NV-QC-02, NV-QC-04 | SOP: QT-QC-01, QT-LPB-03]',
         weight: 20,
         unit: '%',
         target: '>= 95%',
@@ -643,20 +600,20 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         autoMetricKey: 'IQC_PASS_RATE'
       },
       {
-        id: 'BM-IQC-D02',
-        name: 'Phát hiện, cách ly lô hàng NCC lỗi & lập hồ sơ cảnh báo SQC chính xác',
-        bmReference: 'BG-NV-03 / MTCV-IQC-IPQC (Quản lý kho cách ly & NCR)',
+        id: 'BM-QC-V02',
+        name: 'Kiểm tra xác suất (Cross-check) xe thành phẩm sau OQC & chạy thử nội bộ trước khi xuất xưởng (chốt chặn kỹ thuật cuối)',
+        bmReference: 'BG-NV-05 [NV-QC-05 | SOP: QT-QC-02]',
         weight: 15,
         unit: '%',
-        target: '>= 90%',
-        targetValue: 90,
+        target: '>= 98%',
+        targetValue: 98,
         direction: 'higher_is_better',
-        autoMetricKey: 'SQC_SUPPLIER_EVAL_RATE'
+        autoMetricKey: 'OQC_FPY_RATE'
       },
       {
-        id: 'BM-IQC-D03',
-        name: 'Phối hợp thẩm định linh kiện mới / lô hàng mẫu đầu vào (BM-KTTD-01)',
-        bmReference: 'BG-NV-03 / MTCV-IQC-IPQC (Kiểm soát linh kiện mới)',
+        id: 'BM-QC-V03',
+        name: 'Gia công linh kiện mẫu, lắp ráp & chạy thử xe mẫu R&D; hỗ trợ Đăng kiểm tại Cục Đăng kiểm & tham gia đánh giá NCC',
+        bmReference: 'BG-NV-05 [NV-KTTĐ-05, NV-RD-03, 04, 06, NV-ĐK-01, NV-QA-03]',
         weight: 15,
         unit: '%',
         target: '>= 95%',
@@ -669,58 +626,15 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
   {
     staffName: 'Lành Xuân Hải',
     aliases: ['lành xuân hải', 'lãnh xuân hải', 'lanh xuan hai'],
-    roleTitle: 'Nhân Viên QC Hiện Trường — Kiểm Soát Linh Kiện & Tuần Tra Lắp Ráp (IQC/IPQC)',
+    roleTitle: 'Nhân Viên Kiểm Soát Xuất Xưởng (Nhân Viên OQC - KCS)',
     bmDocCode: 'BG-NV-06',
-    mtcvCode: 'MTCV-IQC-IPQC (doc-mtcv-04)',
-    summary: 'Kiểm soát chất lượng linh kiện đầu vào kết hợp tuần tra giám sát công đoạn lắp ráp (IQC/IPQC), kiểm soát ngoại quan, cơ khí và mối hàn.',
+    mtcvCode: 'CN-QC-01 / CN-QC-02',
+    summary: 'Cửa ngõ nối giữa Xưởng lắp ráp và Kho thành phẩm: Trực tiếp kiểm tra ngoại quan, chức năng xe sau lắp ráp (OQC) và lập phiếu báo lỗi; số hóa thống kê nhập dữ liệu lỗi OQC lên phần mềm hệ thống; quét mã (Scan Barcode/QR) xe Đạt (PASS) bàn giao nhập Kho thành phẩm và phối hợp Điều vận ưu tiên đơn hàng gấp.',
     metrics: [
       {
-        id: 'BM-IPQC-H01',
-        name: 'Kiểm soát chất lượng linh kiện đầu vào (IQC - BM-QC-01/02)',
-        bmReference: 'BG-NV-06 / BM-QC-01 & BM-QC-02 (Kiểm soát linh kiện)',
-        weight: 20,
-        unit: '%',
-        target: '>= 95%',
-        targetValue: 95,
-        direction: 'higher_is_better',
-        autoMetricKey: 'IQC_PASS_RATE'
-      },
-      {
-        id: 'BM-IPQC-H02',
-        name: 'Tuần tra giám sát chất lượng bán thành phẩm công đoạn lắp ráp (PQC - BM-QC-03/04)',
-        bmReference: 'BG-NV-06 / BM-QC-03 & BM-QC-04 (Tuần tra công đoạn)',
-        weight: 15,
-        unit: '%',
-        target: '>= 98%',
-        targetValue: 98,
-        direction: 'higher_is_better',
-        autoMetricKey: 'PQC_PASS_RATE'
-      },
-      {
-        id: 'BM-IPQC-H03',
-        name: 'Phối hợp xử lý lỗi hiện trường & đóng hồ sơ khắc phục CAPA',
-        bmReference: 'BG-NV-06 / MTCV-IQC-IPQC (Xử lý lỗi hiện trường)',
-        weight: 15,
-        unit: '%',
-        target: '>= 90%',
-        targetValue: 90,
-        direction: 'higher_is_better',
-        autoMetricKey: 'CAPA_CLOSURE_RATE'
-      }
-    ]
-  },
-  {
-    staffName: 'Hà Khắc Việt',
-    aliases: ['hà khắc việt', 'ha khac viet'],
-    roleTitle: 'Nhân Viên Nghiệm Thu Thành Phẩm (OQC / KCS)',
-    bmDocCode: 'BG-NV-05',
-    mtcvCode: 'MTCV-OQC (doc-mtcv-05)',
-    summary: 'Kiểm tra 100% xe thành phẩm xuất xưởng (BM-QC-05/06), chạy thử đường trường, đối soát số Khung/số Máy, dán tem hợp chuẩn KCS và bàn giao kho thành phẩm.',
-    metrics: [
-      {
-        id: 'BM-OQC-V01',
-        name: 'Nghiệm thu 100% xe thành phẩm xuất xưởng & tỷ lệ đạt chuẩn lần đầu (FPY - BM-QC-05/06)',
-        bmReference: 'BG-NV-05 / BM-QC-05 & BM-QC-06 (Nghiệm thu OQC/KCS)',
+        id: 'BM-OQC-H01',
+        name: 'Trực tiếp kiểm tra ngoại quan, chức năng xe sau lắp ráp (OQC); ghi chú chính xác phiếu báo lỗi & chuyển sửa chữa',
+        bmReference: 'BG-NV-06 [NV-QC-05, NV-QC-06 | SOP: QT-QC-02]',
         weight: 20,
         unit: '%',
         target: '>= 98%',
@@ -729,9 +643,52 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         autoMetricKey: 'OQC_FPY_RATE'
       },
       {
-        id: 'BM-OQC-V02',
-        name: 'Kiểm soát không để xe lỗi nghiêm trọng / sai số Khung-Máy lọt ra thị trường',
-        bmReference: 'BG-NV-05 / MTCV-OQC (0% lỗi nghiêm trọng lọt cổng KCS)',
+        id: 'BM-OQC-H02',
+        name: 'Số hóa dữ liệu chất lượng: Thống kê, ghi chép & trực tiếp nhập số liệu lỗi OQC lên phần mềm quản lý kịp thời, trung thực',
+        bmReference: 'BG-NV-06 [NV-QC-07 | SOP: QT-LPB-03]',
+        weight: 15,
+        unit: '%',
+        target: '>= 95%',
+        targetValue: 95,
+        direction: 'higher_is_better',
+        autoMetricKey: 'DAILY_TASK_COMPLETION_RATE'
+      },
+      {
+        id: 'BM-OQC-H03',
+        name: 'Quét mã (Scan Barcode/QR) xe Đạt (PASS) bàn giao Kho thành phẩm chuẩn xác 100% & chạy thử đường trường nội bộ',
+        bmReference: 'BG-NV-06 [NV-QC-07 / Nghiệp vụ Bàn giao Kho]',
+        weight: 15,
+        unit: '%',
+        target: '<= 1.0%',
+        targetValue: 1.0,
+        direction: 'lower_is_better',
+        autoMetricKey: 'MARKET_DEFECT_RATE'
+      }
+    ]
+  },
+  {
+    staffName: 'Liễu Tùng Lâm',
+    aliases: ['liễu tùng lâm', 'lieu tung lam'],
+    roleTitle: 'Trưởng Nhóm Nghiệm Thu Xuất Xưởng (Trưởng Nhóm OQC)',
+    bmDocCode: 'BG-NV-07',
+    mtcvCode: 'CN-QC-01 / CN-QC-02 / CN-QLCL-01',
+    summary: 'Chốt kiểm soát và xác nhận chất lượng đầu ra cuối cùng trước khi xe đóng gói lưu kho: Trực tiếp kiểm tra, nghiệm thu 100% xe thành phẩm (ngoại quan, chức năng, hệ thống điện, chạy thử Dyno/đường trường); ghi phiếu báo lỗi, lưu hồ sơ truy xuất, cách ly xe lỗi; phản hồi cảnh báo trực tiếp cho dây chuyền lắp ráp và hỗ trợ kiểm soát phụ kiện đi kèm.',
+    metrics: [
+      {
+        id: 'BM-OQC-L01',
+        name: 'Trực tiếp kiểm tra, nghiệm thu 100% xe thành phẩm (ngoại quan, chức năng, điện) & chạy thử trên thiết bị Dyno / đường trường',
+        bmReference: 'BG-NV-07 [NV-QC-05 | SOP: QT-QC-02]',
+        weight: 20,
+        unit: '%',
+        target: '>= 98%',
+        targetValue: 98,
+        direction: 'higher_is_better',
+        autoMetricKey: 'OQC_FPY_RATE'
+      },
+      {
+        id: 'BM-OQC-L02',
+        name: 'Ghi chép phiếu báo lỗi, lưu hồ sơ truy xuất từng xe, cách ly xe lỗi & chặn đứng không để xe lỗi lọt ra thị trường',
+        bmReference: 'BG-NV-07 [NV-QC-06, NV-QC-07 | SOP: QT-QC-02, QT-LPB-03]',
         weight: 15,
         unit: '%',
         target: '<= 1.0%',
@@ -740,15 +697,58 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         autoMetricKey: 'MARKET_DEFECT_RATE'
       },
       {
-        id: 'BM-OQC-V03',
-        name: 'Phối hợp phản hồi & xử lý dứt điểm lỗi chất lượng đầu ra / đại lý',
-        bmReference: 'BG-NV-05 / MTCV-OQC (Truy vết & cải tiến OQC)',
+        id: 'BM-OQC-L03',
+        name: 'Phản hồi, cảnh báo lỗi trực tiếp cho công đoạn dây chuyền lắp ráp khắc phục tại chỗ & hỗ trợ kiểm soát phụ kiện theo xe',
+        bmReference: 'BG-NV-07 [CN-QC-02 / Phản hồi dây chuyền lắp ráp]',
         weight: 15,
+        unit: '%',
+        target: '>= 98%',
+        targetValue: 98,
+        direction: 'higher_is_better',
+        autoMetricKey: 'PQC_PASS_RATE'
+      }
+    ]
+  },
+  {
+    staffName: 'Đoàn Anh Hùng',
+    aliases: ['đoàn anh hùng', 'doan anh hung'],
+    roleTitle: 'Nhân Viên Kỹ Thuật Chất Lượng',
+    bmDocCode: 'BG-NV-08',
+    mtcvCode: 'CN-KTTĐ-01 / CN-KTTĐ-02 / CN-QC-01',
+    summary: 'Thực thi các nghiệp vụ kỹ thuật chuyên sâu: Phối hợp kiểm tra, giám định kỹ thuật xác định nguyên nhân gốc rễ xe lỗi bảo hành đại lý trả về; trực tiếp sửa chữa chuyên sâu, gia công linh kiện mẫu, chế tạo/sửa chữa đồ gá chuyên dụng; quản lý toàn bộ hệ thống CCDC & thiết bị đo lường Phòng QLCL; tham gia kiểm tra IQC và phối hợp Xưởng tinh chỉnh xe thành phẩm lỗi.',
+    metrics: [
+      {
+        id: 'BM-KTTD-H01',
+        name: 'Phối hợp kiểm tra, đánh giá & giám định kỹ thuật xác định nguyên nhân gốc rễ xe lỗi bảo hành đại lý trả về',
+        bmReference: 'BG-NV-08 [NV-KTTĐ-02 | SOP: QT-KTTD-01]',
+        weight: 20,
         unit: '%',
         target: '>= 95%',
         targetValue: 95,
         direction: 'higher_is_better',
         autoMetricKey: 'MARKET_DEFECT_RESOLVED_RATE'
+      },
+      {
+        id: 'BM-KTTD-H02',
+        name: 'Trực tiếp quản lý, bảo quản CCDC & thiết bị đo lường Phòng QLCL; chế tạo/sửa chữa đồ gá & gia công linh kiện mẫu',
+        bmReference: 'BG-NV-08 [NV-KTTĐ-04, NV-KTTĐ-05 | SOP: QT-KTTD-02]',
+        weight: 15,
+        unit: '%',
+        target: '100%',
+        targetValue: 100,
+        direction: 'higher_is_better',
+        autoMetricKey: 'EQUIPMENT_CALIBRATION_RATE'
+      },
+      {
+        id: 'BM-KTTD-H03',
+        name: 'Thực hiện kiểm tra đo lường linh kiện đầu vào (IQC) theo phân công & phối hợp Xưởng lắp ráp tinh chỉnh, sửa chữa xe lỗi',
+        bmReference: 'BG-NV-08 [NV-QC-01 | SOP: QT-QC-01]',
+        weight: 15,
+        unit: '%',
+        target: '>= 95%',
+        targetValue: 95,
+        direction: 'higher_is_better',
+        autoMetricKey: 'IQC_PASS_RATE'
       }
     ]
   }

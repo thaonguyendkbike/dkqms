@@ -13603,7 +13603,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
               <FileSpreadsheet className={`w-5 h-5 shrink-0 ${activeTab === 'qms_forms' ? 'text-white' : 'text-emerald-600'}`} />
               <div className="flex-1 flex items-center justify-between">
                 <span>Biểu mẫu QLCL (/bm)</span>
-                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${activeTab === 'qms_forms' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'}`}>12 BM</span>
+                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${activeTab === 'qms_forms' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'}`}>11 BM</span>
               </div>
             </button>
 
