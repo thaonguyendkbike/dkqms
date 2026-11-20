@@ -209,11 +209,44 @@ function computeAttainmentAndStatus(
 
 function parseNumericFromActualString(str: string): number | null {
   if (!str) return null;
-  const cleaned = String(str).replace(/\./g, '').replace(/,/g, '.');
-  const match = cleaned.match(/-?\d+(\.\d+)?/);
-  if (!match) return null;
-  const num = Number(match[0]);
+  const raw = String(str).trim();
+  // Take first numeric token (supports 20.000.000, 98.5, 98,5, 1.0)
+  const tokenMatch = raw.match(/-?\d[\d.,]*/);
+  if (!tokenMatch) return null;
+  let token = tokenMatch[0];
+  // Vietnamese thousand-grouped integers like 20.000.000 or 2.825.000
+  if (/^-?\d{1,3}(\.\d{3})+$/.test(token)) {
+    token = token.replace(/\./g, '');
+  } else if (/^-?\d{1,3}(,\d{3})+$/.test(token)) {
+    token = token.replace(/,/g, '');
+  } else {
+    // Decimal number like 98.5 or 98,5 or 1.0
+    token = token.replace(/,/g, '.');
+  }
+  const num = Number(token);
   return Number.isNaN(num) ? null : num;
+}
+
+function parseTargetConstraint(
+  targetText: string | undefined,
+  fallbackValue: number | undefined,
+  fallbackDirection: 'higher_is_better' | 'lower_is_better' | undefined
+): { targetValue: number | undefined; direction: 'higher_is_better' | 'lower_is_better' | undefined } {
+  if (!targetText) {
+    return { targetValue: fallbackValue, direction: fallbackDirection };
+  }
+  const txt = String(targetText).trim();
+  let direction = fallbackDirection;
+  if (txt.includes('<=') || txt.startsWith('<')) {
+    direction = 'lower_is_better';
+  } else if (txt.includes('>=') || txt.startsWith('>')) {
+    direction = 'higher_is_better';
+  }
+  const parsedVal = parseNumericFromActualString(txt);
+  return {
+    targetValue: parsedVal !== null ? parsedVal : fallbackValue,
+    direction
+  };
 }
 
 export default function KPIDashboard({
@@ -1186,6 +1219,12 @@ export default function KPIDashboard({
       const weight = Number(k.weight ?? k.groupWeight ?? 5);
       const override = k.periodOverrides?.[pKey];
       const autoMetric = k.autoMetricKey ? autoMetricsMap[k.autoMetricKey] : undefined;
+      const effectiveTarget = override?.target || k.target;
+      const { targetValue: resolvedTargetVal, direction: resolvedDirection } = parseTargetConstraint(
+        effectiveTarget,
+        k.targetValue,
+        k.direction
+      );
 
       let effectiveActual = k.actual;
       let evidenceText = k.details || '';
@@ -1221,13 +1260,13 @@ export default function KPIDashboard({
           override.status ||
           (attainmentPct >= 95 ? 'Đạt' : attainmentPct >= 80 ? 'Theo dõi' : attainmentPct >= 60 ? 'Đang cải tiến' : 'Không đạt');
       } else if (!isOverridden && k.sourceType !== 'manual' && autoMetric) {
-        const res = computeAttainmentAndStatus(autoMetric.numericValue, k.targetValue, k.direction);
+        const res = computeAttainmentAndStatus(autoMetric.numericValue, resolvedTargetVal, resolvedDirection);
         attainmentPct = res.attainmentPct;
         computedStatus = override?.status || res.status;
       } else {
         const parsedNum = parseNumericFromActualString(effectiveActual);
-        if (parsedNum !== null && k.targetValue !== undefined) {
-          const res = computeAttainmentAndStatus(parsedNum, k.targetValue, k.direction);
+        if (parsedNum !== null && resolvedTargetVal !== undefined) {
+          const res = computeAttainmentAndStatus(parsedNum, resolvedTargetVal, resolvedDirection);
           attainmentPct = res.attainmentPct;
           computedStatus = override?.status || res.status;
         } else {
@@ -1251,7 +1290,7 @@ export default function KPIDashboard({
       return {
         ...k,
         weight,
-        effectiveTarget: override?.target || k.target,
+        effectiveTarget,
         effectiveActual,
         effectiveStatus: computedStatus,
         attainmentPct,
@@ -1885,15 +1924,28 @@ export default function KPIDashboard({
         const resolvedRoleMetrics = profile.metrics.map(m => {
           const ov = savedEval?.metricOverrides?.[m.id];
           const weight = ov?.weight !== undefined ? Number(ov.weight) : m.weight;
-          const targetText = ov?.targetText || m.target;
+          const targetText = ov?.targetText !== undefined && ov.targetText !== '' ? ov.targetText : m.target;
+          const { targetValue: resolvedTargetVal, direction: resolvedDirection } = parseTargetConstraint(
+            targetText,
+            m.targetValue,
+            m.direction
+          );
 
           const computed = computePersonRoleMetric(profile, m.autoMetricKey);
-          const hasManualOverride =
+          const hasActualOverride =
             (ov?.actualText !== undefined && ov.actualText !== '') || ov?.scorePercent !== undefined;
+          const hasAnyOverride = Boolean(
+            ov &&
+              (ov.name !== undefined ||
+                ov.weight !== undefined ||
+                ov.targetText !== undefined ||
+                ov.actualText !== undefined ||
+                ov.scorePercent !== undefined)
+          );
 
           const effectiveActualText =
             ov?.actualText !== undefined && ov.actualText !== '' ? ov.actualText : computed.actualText;
-          const isWaitingData = !computed.hasData && !hasManualOverride;
+          const isWaitingData = !computed.hasData && !hasActualOverride;
 
           let scorePercent = 0;
           if (ov?.scorePercent !== undefined) {
@@ -1902,13 +1954,13 @@ export default function KPIDashboard({
             const parsed = parseNumericFromActualString(ov.actualText);
             scorePercent =
               parsed !== null
-                ? computeAttainmentAndStatus(parsed, m.targetValue, m.direction).attainmentPct
+                ? computeAttainmentAndStatus(parsed, resolvedTargetVal, resolvedDirection).attainmentPct
                 : 100;
           } else if (computed.hasData) {
             scorePercent = computeAttainmentAndStatus(
               computed.numericValue,
-              m.targetValue,
-              m.direction
+              resolvedTargetVal,
+              resolvedDirection
             ).attainmentPct;
           }
 
@@ -1916,13 +1968,14 @@ export default function KPIDashboard({
 
           return {
             ...m,
-            name: ov?.name || m.name,
+            name: ov?.name !== undefined ? ov.name : m.name,
             weight,
             targetText,
             actualText: effectiveActualText,
             scorePercent,
             points,
             isWaitingData,
+            hasAnyOverride,
             evidence: computed.evidence,
             targetTab: computed.targetTab,
             targetTabLabel: computed.targetTabLabel,
@@ -2115,6 +2168,7 @@ export default function KPIDashboard({
   const [editNoteInput, setEditNoteInput] = useState<string>('');
   const [editIndicatorName, setEditIndicatorName] = useState<string>('');
   const [editDefinitionInput, setEditDefinitionInput] = useState<string>('');
+  const [editActualOverrideEnabled, setEditActualOverrideEnabled] = useState<boolean>(false);
 
   const [showAddKpiModal, setShowAddKpiModal] = useState<boolean>(false);
   const [newKpiType, setNewKpiType] = useState<DetailedKPI['type']>('Mục tiêu hoạt động chuyên môn');
@@ -2156,6 +2210,7 @@ export default function KPIDashboard({
       kpiItem.effectiveStatus === 'Chờ dữ liệu' ? 'Đạt' : kpiItem.effectiveStatus || kpiItem.status || 'Đạt'
     );
     setEditNoteInput(kpiItem.overrideNote || '');
+    setEditActualOverrideEnabled(kpiItem.sourceType === 'manual' || Boolean(kpiItem.isOverridden));
   };
 
   const handleSaveDeptKpiEdit = (e: React.FormEvent) => {
@@ -2165,22 +2220,48 @@ export default function KPIDashboard({
 
     const nextKpis = kpis.map(k => {
       if (k.id !== editingDeptKpi.id) return k;
+      const nextTargetText = editTargetInput.trim() || k.target;
+      const { targetValue: parsedTargetVal, direction: parsedDirection } = parseTargetConstraint(
+        nextTargetText,
+        k.targetValue,
+        k.direction
+      );
       const nextOverrides = { ...(k.periodOverrides || {}) };
-      nextOverrides[pKey] = {
-        actual: editActualInput.trim(),
-        target: editTargetInput.trim(),
-        status: editStatusInput,
-        note: editNoteInput.trim(),
-        updatedAt: new Date().toISOString()
-      };
+      const shouldOverrideActual = k.sourceType === 'manual' || editActualOverrideEnabled;
+
+      if (shouldOverrideActual) {
+        nextOverrides[pKey] = {
+          actual: editActualInput.trim(),
+          target: nextTargetText,
+          status: editStatusInput,
+          note: editNoteInput.trim(),
+          updatedAt: new Date().toISOString()
+        };
+      } else {
+        // Giữ nguyên chế độ tự động lấy số liệu từ App: chỉ lưu lại Target mới và Ghi chú kỳ (nếu có)
+        if (nextOverrides[pKey]) {
+          delete nextOverrides[pKey].actual;
+          delete nextOverrides[pKey].status;
+          delete nextOverrides[pKey].scorePercent;
+        }
+        nextOverrides[pKey] = {
+          ...(nextOverrides[pKey] || {}),
+          target: nextTargetText,
+          note: editNoteInput.trim(),
+          updatedAt: new Date().toISOString()
+        };
+      }
+
       return {
         ...k,
         indicator: editIndicatorName.trim() || k.indicator,
         definition: editDefinitionInput.trim() || k.definition,
         weight: Number(editWeightInput) || k.weight || 5,
-        target: editTargetInput.trim() || k.target,
-        actual: editActualInput.trim() || k.actual,
-        status: editStatusInput,
+        target: nextTargetText,
+        targetValue: parsedTargetVal,
+        direction: parsedDirection,
+        actual: shouldOverrideActual ? editActualInput.trim() || k.actual : k.actual,
+        status: shouldOverrideActual ? editStatusInput : k.status,
         periodOverrides: nextOverrides
       };
     });
@@ -2199,6 +2280,17 @@ export default function KPIDashboard({
     });
     persistKpis(nextKpis);
     setEditingDeptKpi(null);
+  };
+
+  const handleResetStaffMetricOverride = (staffKey: string, metricId: string) => {
+    updateStaffEvaluation(staffKey, prev => {
+      const nextMetricOverrides = { ...(prev.metricOverrides || {}) };
+      delete nextMetricOverrides[metricId];
+      return {
+        ...prev,
+        metricOverrides: nextMetricOverrides
+      };
+    });
   };
 
   const handleAddCustomDeptKpi = (e: React.FormEvent) => {
@@ -4057,16 +4149,100 @@ export default function KPIDashboard({
                       {selectedStaffComputed.allRoleMetrics.map((m: any) => (
                         <tr key={m.id} className="hover:bg-slate-50/90">
                           <td className="py-3.5 px-4">
-                            <div className="font-black text-slate-950 text-sm md:text-[15px] leading-snug">
-                              {m.name}
+                            <input
+                              type="text"
+                              value={m.name}
+                              onChange={e => {
+                                const val = e.target.value;
+                                if (m.isCustom) {
+                                  updateStaffEvaluation(selectedStaffComputed.staffKey, prev => ({
+                                    ...prev,
+                                    customMetrics: (prev.customMetrics || []).map(cm =>
+                                      cm.id === m.id ? { ...cm, name: val } : cm
+                                    )
+                                  }));
+                                } else {
+                                  updateStaffEvaluation(selectedStaffComputed.staffKey, prev => ({
+                                    ...prev,
+                                    metricOverrides: {
+                                      ...(prev.metricOverrides || {}),
+                                      [m.id]: {
+                                        ...(prev.metricOverrides?.[m.id] || {}),
+                                        name: val
+                                      }
+                                    }
+                                  }));
+                                }
+                              }}
+                              title="Bấm để sửa trực tiếp tên chỉ tiêu nghiệp vụ"
+                              className="w-full px-2.5 py-1.5 bg-white hover:bg-slate-50 border border-transparent hover:border-slate-300 focus:border-indigo-500 rounded-lg font-black text-slate-950 text-sm md:text-[15px] leading-snug focus:outline-none transition"
+                            />
+                            <div className="text-xs text-indigo-800 font-extrabold mt-1 px-2.5">{m.bmReference}</div>
+                          </td>
+                          <td className="py-3.5 px-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <input
+                                type="number"
+                                min={1}
+                                max={50}
+                                value={m.weight}
+                                onChange={e => {
+                                  const w = Math.max(1, Math.min(50, Number(e.target.value) || 1));
+                                  if (m.isCustom) {
+                                    updateStaffEvaluation(selectedStaffComputed.staffKey, prev => ({
+                                      ...prev,
+                                      customMetrics: (prev.customMetrics || []).map(cm =>
+                                        cm.id === m.id ? { ...cm, weight: w } : cm
+                                      )
+                                    }));
+                                  } else {
+                                    updateStaffEvaluation(selectedStaffComputed.staffKey, prev => ({
+                                      ...prev,
+                                      metricOverrides: {
+                                        ...(prev.metricOverrides || {}),
+                                        [m.id]: {
+                                          ...(prev.metricOverrides?.[m.id] || {}),
+                                          weight: w
+                                        }
+                                      }
+                                    }));
+                                  }
+                                }}
+                                title="Sửa trọng số điểm của chỉ tiêu"
+                                className="w-16 px-2 py-1.5 text-center bg-white border-2 border-slate-300 focus:border-indigo-500 rounded-lg font-mono font-black text-sm text-slate-950 focus:outline-none"
+                              />
+                              <span className="text-xs font-black text-slate-700">đ</span>
                             </div>
-                            <div className="text-xs text-indigo-800 font-extrabold mt-1">{m.bmReference}</div>
                           </td>
-                          <td className="py-3.5 px-3 text-center font-mono font-black text-sm text-slate-950">
-                            {m.weight}đ
-                          </td>
-                          <td className="py-3.5 px-3 text-center font-mono font-extrabold text-sm text-slate-800">
-                            {m.targetText}
+                          <td className="py-3.5 px-3 text-center">
+                            <input
+                              type="text"
+                              value={m.targetText}
+                              onChange={e => {
+                                const val = e.target.value;
+                                if (m.isCustom) {
+                                  updateStaffEvaluation(selectedStaffComputed.staffKey, prev => ({
+                                    ...prev,
+                                    customMetrics: (prev.customMetrics || []).map(cm =>
+                                      cm.id === m.id ? { ...cm, targetText: val } : cm
+                                    )
+                                  }));
+                                } else {
+                                  updateStaffEvaluation(selectedStaffComputed.staffKey, prev => ({
+                                    ...prev,
+                                    metricOverrides: {
+                                      ...(prev.metricOverrides || {}),
+                                      [m.id]: {
+                                        ...(prev.metricOverrides?.[m.id] || {}),
+                                        targetText: val
+                                      }
+                                    }
+                                  }));
+                                }
+                              }}
+                              title="Sửa ngưỡng chỉ tiêu (Target) — tự động chấm lại % đạt"
+                              className="w-24 px-2 py-1.5 text-center bg-white border-2 border-slate-300 focus:border-indigo-500 rounded-lg font-mono font-extrabold text-sm text-slate-900 focus:outline-none"
+                            />
                           </td>
                           <td className="py-3.5 px-3 text-center">
                             <input
@@ -4144,6 +4320,18 @@ export default function KPIDashboard({
                           </td>
                           <td className="py-3.5 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {!m.isCustom && m.hasAnyOverride && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleResetStaffMetricOverride(selectedStaffComputed.staffKey, m.id)
+                                  }
+                                  className="p-2 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition cursor-pointer"
+                                  title="Khôi phục tên, trọng số, chỉ tiêu mặc định /bm & tự động tính từ App"
+                                >
+                                  <RefreshCw className="w-4 h-4" />
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() =>
@@ -4531,7 +4719,7 @@ export default function KPIDashboard({
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-extrabold text-slate-700 mb-1">Trọng số (%)</label>
                   <input
@@ -4544,14 +4732,39 @@ export default function KPIDashboard({
                   />
                 </div>
                 <div>
-                  <label className="block font-extrabold text-slate-700 mb-1">Mục tiêu (Target)</label>
+                  <label className="block font-extrabold text-slate-700 mb-1">
+                    Mục tiêu / Ngưỡng chấm (Target)
+                  </label>
                   <input
                     type="text"
                     value={editTargetInput}
                     onChange={e => setEditTargetInput(e.target.value)}
+                    placeholder="VD: >= 95% hoặc <= 15.000.000"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-slate-900"
                   />
                 </div>
+              </div>
+
+              {editingDeptKpi.sourceType !== 'manual' && (
+                <div className="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-200 flex items-center justify-between gap-2">
+                  <div className="text-[11px] font-semibold text-indigo-950">
+                    {editActualOverrideEnabled
+                      ? 'Đang bật chế độ ghi đè tay: số Thực tế đạt kỳ này sẽ dùng giá trị bạn nhập bên dưới.'
+                      : 'Đang giữ chế độ Tự động từ App: hệ thống vẫn tự cập nhật số liệu mới và chấm Đạt/Không đạt theo Mục tiêu vừa sửa.'}
+                  </div>
+                  <label className="inline-flex items-center gap-1.5 shrink-0 cursor-pointer font-extrabold text-indigo-800">
+                    <input
+                      type="checkbox"
+                      checked={editActualOverrideEnabled}
+                      onChange={e => setEditActualOverrideEnabled(e.target.checked)}
+                      className="w-4 h-4 accent-indigo-600 cursor-pointer"
+                    />
+                    <span>Ghi đè tay</span>
+                  </label>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-extrabold text-slate-700 mb-1">
                     Thực tế đạt ({periodInfo.label})
@@ -4559,20 +4772,31 @@ export default function KPIDashboard({
                   <input
                     type="text"
                     value={editActualInput}
+                    disabled={editingDeptKpi.sourceType !== 'manual' && !editActualOverrideEnabled}
                     onChange={e => setEditActualInput(e.target.value)}
-                    placeholder="VD: 98.5%"
-                    className="w-full px-3 py-2 border-2 border-indigo-400 rounded-lg font-mono font-black text-indigo-900 bg-indigo-50/40"
+                    placeholder={
+                      editingDeptKpi.sourceType !== 'manual' && !editActualOverrideEnabled
+                        ? 'Tự động lấy từ dữ liệu App'
+                        : 'VD: 98.5%'
+                    }
+                    className={`w-full px-3 py-2 border-2 rounded-lg font-mono font-black ${
+                      editingDeptKpi.sourceType !== 'manual' && !editActualOverrideEnabled
+                        ? 'border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed'
+                        : 'border-indigo-400 bg-indigo-50/40 text-indigo-900'
+                    }`}
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-extrabold text-slate-700 mb-1">Trạng thái đánh giá</label>
                   <select
                     value={editStatusInput}
+                    disabled={editingDeptKpi.sourceType !== 'manual' && !editActualOverrideEnabled}
                     onChange={e => setEditStatusInput(e.target.value as DetailedKPI['status'])}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold text-slate-800"
+                    className={`w-full px-3 py-2 border rounded-lg font-bold ${
+                      editingDeptKpi.sourceType !== 'manual' && !editActualOverrideEnabled
+                        ? 'border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed'
+                        : 'border-slate-300 text-slate-800'
+                    }`}
                   >
                     <option value="Đạt">Đạt</option>
                     <option value="Theo dõi">Theo dõi</option>
@@ -4580,16 +4804,17 @@ export default function KPIDashboard({
                     <option value="Không đạt">Không đạt</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block font-extrabold text-slate-700 mb-1">Ghi chú giải trình kỳ này</label>
-                  <input
-                    type="text"
-                    value={editNoteInput}
-                    onChange={e => setEditNoteInput(e.target.value)}
-                    placeholder="Nhập ghi chú dẫn chứng..."
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
-                  />
-                </div>
+              </div>
+
+              <div>
+                <label className="block font-extrabold text-slate-700 mb-1">Ghi chú giải trình kỳ này</label>
+                <input
+                  type="text"
+                  value={editNoteInput}
+                  onChange={e => setEditNoteInput(e.target.value)}
+                  placeholder="Nhập ghi chú dẫn chứng..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
+                />
               </div>
 
               <div className="flex items-center justify-between pt-3 border-t border-slate-200">
