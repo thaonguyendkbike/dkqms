@@ -42,7 +42,9 @@ import {
   bulkImportModelBom,
   deleteBomPartRecord,
   inferPartImageMode,
+  isColoredPlasticSpec,
   loadOqcModelGroups,
+  normalizeColoredPlasticPart,
   readCachedBomCatalog,
   restoreBomBackupPayload,
   saveBomModelRecord,
@@ -188,6 +190,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
     fileName: string;
     rows: EcountParsedBomRow[];
     warnings: string[];
+    normalizedColoredCount: number;
     replaceExistingLines: boolean;
   } | null>(null);
   const [importingExcel, setImportingExcel] = useState(false);
@@ -481,19 +484,33 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
     }
   };
 
+  const knownOqcColors = useMemo(() => {
+    const set = new Set<string>();
+    oqcModels.forEach((m) => {
+      m.colors.forEach((c) => {
+        if (c.color && c.color.trim()) set.add(c.color.trim());
+      });
+    });
+    return Array.from(set);
+  }, [oqcModels]);
+
   const handleExcelFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !selectedModelEntry || readOnly) return;
 
     try {
-      const parsed = await parseEcountBomExcel(file);
+      const parsed = await parseEcountBomExcel(file, {
+        normalizeColoredPlastic: true,
+        extraColors: knownOqcColors
+      });
       setImportModalState({
         modelKey: selectedModelEntry.summary.modelKey,
         modelName: selectedModelEntry.summary.modelName,
         fileName: file.name,
         rows: parsed.rows,
         warnings: parsed.warnings,
+        normalizedColoredCount: parsed.normalizedColoredCount,
         replaceExistingLines: true
       });
     } catch (err: any) {
@@ -2116,23 +2133,48 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                   <label className="block font-bold text-slate-700 mb-1">
                     Thông số / Nhóm vật tư (Ecount)
                   </label>
-                  <input
-                    type="text"
-                    list="dk_bom_spec_groups"
-                    disabled={partModalMode === 'view' || readOnly}
-                    value={partForm.specGroup}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setPartForm((prev) => ({
-                        ...prev,
-                        specGroup: val,
-                        imageMode:
-                          partModalMode === 'create' ? inferPartImageMode(val) : prev.imageMode
-                      }));
-                    }}
-                    placeholder="VD: PT điện, PT khung, Nhựa chung..."
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 disabled:bg-slate-100"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      list="dk_bom_spec_groups"
+                      disabled={partModalMode === 'view' || readOnly}
+                      value={partForm.specGroup}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setPartForm((prev) => ({
+                          ...prev,
+                          specGroup: val,
+                          imageMode:
+                            partModalMode === 'create' ? inferPartImageMode(val) : prev.imageMode
+                        }));
+                      }}
+                      placeholder="VD: PT điện, PT khung, Nhựa chung..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 disabled:bg-slate-100"
+                    />
+                    {partModalMode === 'create' && !readOnly && isColoredPlasticSpec(partForm.specGroup) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const norm = normalizeColoredPlasticPart(
+                            partForm.partCode,
+                            partForm.partName,
+                            partForm.specGroup,
+                            knownOqcColors
+                          );
+                          setPartForm((prev) => ({
+                            ...prev,
+                            partCode: norm.partCode,
+                            partName: norm.partName
+                          }));
+                          showToast('Đã chuẩn hóa về mã & tên Phôi (bỏ 4 số cuối & tên màu).', 'info');
+                        }}
+                        className="px-2.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-[11px] font-extrabold shrink-0 cursor-pointer"
+                        title="Bỏ 4 số cuối của mã & bỏ tên màu ở cuối tên (nhựa màu -> phôi)"
+                      >
+                        Bỏ màu (Phôi)
+                      </button>
+                    )}
+                  </div>
                   <datalist id="dk_bom_spec_groups">
                     {allSpecGroups.map((g) => (
                       <option key={g} value={g} />
@@ -2540,6 +2582,14 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                 );
               })()}
 
+              {importModalState.normalizedColoredCount > 0 && (
+                <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900">
+                  <p className="font-extrabold">
+                    Đã tự động chuẩn hóa {importModalState.normalizedColoredCount} dòng &ldquo;Nhựa màu&rdquo; về Phôi chuẩn (bỏ 4 số cuối mã &amp; bỏ tên màu sau tên linh kiện).
+                  </p>
+                </div>
+              )}
+
               {importModalState.warnings.length > 0 && (
                 <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 space-y-1">
                   <p className="font-extrabold">Lưu ý khi đọc file:</p>
@@ -2582,8 +2632,22 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                       return (
                         <tr key={r.partCode}>
                           <td className="py-1.5 px-3 font-bold text-slate-500">{r.lineNo}</td>
-                          <td className="py-1.5 px-3 font-mono font-bold text-indigo-700">{r.partCode}</td>
-                          <td className="py-1.5 px-3 font-semibold">{r.partName}</td>
+                          <td className="py-1.5 px-3 font-mono font-bold text-indigo-700">
+                            <div>{r.partCode}</div>
+                            {r.rawPartCode && r.rawPartCode !== r.partCode && (
+                              <div className="text-[10px] font-normal text-slate-400">
+                                Gốc: {r.rawPartCode}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-1.5 px-3 font-semibold">
+                            <div>{r.partName}</div>
+                            {r.detectedColor && (
+                              <div className="text-[10px] font-normal text-amber-700">
+                                Đã tách màu: {r.detectedColor}
+                              </div>
+                            )}
+                          </td>
                           <td className="py-1.5 px-3">{r.specGroup || '—'}</td>
                           <td className="py-1.5 px-3">{r.unit}</td>
                           <td className="py-1.5 px-3 text-right font-bold">{r.qty}</td>

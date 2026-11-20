@@ -5,6 +5,7 @@ import {
   BomPartMasterItem,
   EcountParsedBomRow
 } from '../types/bomCatalog';
+import { normalizeColoredPlasticPart } from '../services/bomCatalogService';
 
 const BRAND_TITLE = 'CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT';
 const BRAND_SUB = 'DKBike — Xe cho cả gia đình | Phòng Quản lý chất lượng (QLCL / DK QMS)';
@@ -40,11 +41,22 @@ function parseNumericQty(raw: any): number {
 /**
  * Phân tích file Excel BOM xuất từ Ecount theo đúng các cột:
  * STT | Mã mặt hàng | Tên mặt hàng | Thông số | Đơn vị | Số lượng | Ghi chú
+ * Tự động chuẩn hóa linh kiện "Nhựa màu" về phôi không màu (bỏ 4 số cuối mã & bỏ tên màu sau tên linh kiện).
  */
-export async function parseEcountBomExcel(file: File): Promise<{
+export async function parseEcountBomExcel(
+  file: File,
+  options?: {
+    normalizeColoredPlastic?: boolean;
+    extraColors?: string[];
+  }
+): Promise<{
   rows: EcountParsedBomRow[];
   warnings: string[];
+  normalizedColoredCount: number;
 }> {
+  const normalizeColoredPlastic = options?.normalizeColoredPlastic !== false;
+  const extraColors = options?.extraColors || [];
+
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array' });
   const firstSheetName = workbook.SheetNames[0];
@@ -92,21 +104,22 @@ export async function parseEcountBomExcel(file: File): Promise<{
     }
   }
 
-  // Fallback nếu file không có header chuẩn (giả định thứ tự cột như ảnh Ecount: [STT], Mã, Tên, Thông số, Đơn vị, Số lượng, ..., Ghi chú)
+  // Fallback nếu file không có header chuẩn
   let dataStartRow = headerRowIdx + 1;
   if (headerRowIdx === -1) {
     dataStartRow = 0;
     const firstNonEmpty = rawMatrix.find(r => Array.isArray(r) && r.some(c => String(c ?? '').trim() !== ''));
     const looksLikeSttFirst = firstNonEmpty && /^\d+$/.test(String(firstNonEmpty[0] ?? '').trim());
     if (looksLikeSttFirst) {
-      colMap = { stt: 0, partCode: 1, partName: 2, specGroup: 3, unit: 4, qty: 5, note: 7 };
+      colMap = { stt: 0, partCode: 1, partName: 2, specGroup: 3, unit: 4, qty: 5, note: -1 };
     } else {
-      colMap = { stt: -1, partCode: 0, partName: 1, specGroup: 2, unit: 3, qty: 4, note: 6 };
+      colMap = { stt: -1, partCode: 0, partName: 1, specGroup: 2, unit: 3, qty: 4, note: -1 };
     }
   }
 
-  const parsedMap = new Map<string, EcountParsedBomRow>();
+  const parsedMap = new Map<string, EcountParsedBomRow & { _rawCodesSeen: Set<string> }>();
   const warnings: string[] = [];
+  let normalizedColoredCount = 0;
 
   for (let r = dataStartRow; r < rawMatrix.length; r++) {
     const row = rawMatrix[r];
@@ -132,29 +145,61 @@ export async function parseEcountBomExcel(file: File): Promise<{
     const sttVal = colMap.stt >= 0 ? Number(row[colMap.stt]) : NaN;
     const lineNo = Number.isFinite(sttVal) && sttVal > 0 ? sttVal : parsedMap.size + 1;
 
-    if (parsedMap.has(rawCode)) {
-      // Nếu file BOM lặp cùng 1 mã linh kiện ở nhiều dòng -> cộng dồn định mức số lượng
-      const existing = parsedMap.get(rawCode)!;
-      existing.qty = Number((existing.qty + qty).toFixed(4));
+    let finalCode = rawCode;
+    let finalName = rawName || rawCode;
+    let detectedColor = '';
+    let isNormalizedFromColor = false;
+
+    if (normalizeColoredPlastic) {
+      const normRes = normalizeColoredPlasticPart(rawCode, rawName, specGroup, extraColors);
+      finalCode = normRes.partCode;
+      finalName = normRes.partName || rawName || finalCode;
+      detectedColor = normRes.detectedColor;
+      isNormalizedFromColor = normRes.codeWasStripped || normRes.nameWasStripped;
+      if (isNormalizedFromColor) {
+        normalizedColoredCount++;
+      }
+    }
+
+    if (parsedMap.has(finalCode)) {
+      const existing = parsedMap.get(finalCode)!;
+      if (existing._rawCodesSeen.has(rawCode)) {
+        // Trùng y hệt mã gốc trong cùng 1 file BOM -> cộng dồn số lượng
+        existing.qty = Number((existing.qty + qty).toFixed(4));
+        warnings.push(`Mã ${finalCode} (gốc ${rawCode}) xuất hiện lặp lại ở dòng ${r + 1} -> đã tự cộng dồn số lượng (${existing.qty}).`);
+      } else {
+        // Khác màu nhưng quy về cùng 1 Phôi -> giữ định mức lớn nhất (không nhân đôi SL/xe)
+        existing._rawCodesSeen.add(rawCode);
+        existing.qty = Math.max(existing.qty, qty);
+        if (detectedColor && existing.detectedColor && !existing.detectedColor.includes(detectedColor)) {
+          existing.detectedColor = `${existing.detectedColor}, ${detectedColor}`;
+        } else if (detectedColor && !existing.detectedColor) {
+          existing.detectedColor = detectedColor;
+        }
+      }
       if (note && !existing.note.includes(note)) {
         existing.note = existing.note ? `${existing.note}; ${note}` : note;
       }
-      warnings.push(`Mã ${rawCode} xuất hiện lặp lại ở dòng ${r + 1} -> đã tự cộng dồn số lượng (${existing.qty}).`);
     } else {
-      parsedMap.set(rawCode, {
+      parsedMap.set(finalCode, {
         lineNo,
-        partCode: rawCode,
-        partName: rawName || rawCode,
+        partCode: finalCode,
+        partName: finalName,
         specGroup,
         unit,
         qty,
         note,
-        rawRowNumber: r + 1
+        rawRowNumber: r + 1,
+        rawPartCode: rawCode,
+        rawPartName: rawName,
+        detectedColor,
+        isNormalizedFromColor,
+        _rawCodesSeen: new Set([rawCode])
       });
     }
   }
 
-  const rows = Array.from(parsedMap.values()).map((item, idx) => ({
+  const rows: EcountParsedBomRow[] = Array.from(parsedMap.values()).map(({ _rawCodesSeen, ...item }, idx) => ({
     ...item,
     lineNo: idx + 1
   }));
@@ -163,7 +208,7 @@ export async function parseEcountBomExcel(file: File): Promise<{
     throw new Error('Không đọc được dòng linh kiện hợp lệ nào. Vui lòng kiểm tra cột "Mã mặt hàng" và "Tên mặt hàng".');
   }
 
-  return { rows, warnings };
+  return { rows, warnings, normalizedColoredCount };
 }
 
 function applyStyledSheet(

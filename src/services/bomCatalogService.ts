@@ -54,6 +54,268 @@ export function inferPartImageMode(specGroup?: string): 'single' | 'multi' {
   return 'multi';
 }
 
+function normalizeViText(val: string): string {
+  return String(val || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function isColoredPlasticSpec(specGroup?: string): boolean {
+  const norm = normalizeViText(specGroup || '');
+  return norm.includes('nhua mau');
+}
+
+const DEFAULT_COLOR_PHRASES = [
+  'đỏ đun bóng',
+  'đỏ đun pha lê',
+  'đỏ đun',
+  'đỏ hồng khói',
+  'đỏ cherry',
+  'đỏ đen',
+  'đỏ',
+  'đen khói',
+  'đen pha lê',
+  'đen bóng',
+  'đen sần',
+  'đen nhám',
+  'đen mờ',
+  'đen bạc',
+  'đen cam',
+  'đen cửu long',
+  'đen trắng',
+  'đen đỏ',
+  'đen',
+  'trắng ngọc trai',
+  'trắng khói tuyết',
+  'trắng pha lê',
+  'trắng thiên thanh',
+  'trắng cà phê',
+  'trắng cafe',
+  'trắng camay',
+  'trắng bóng',
+  'trắng sữa',
+  'trắng hồng',
+  'trắng tím',
+  'trắng cam',
+  'trắng đen',
+  'trắng ghi',
+  'trắng',
+  'xám khói tuyết',
+  'xám khói',
+  'xám xi măng',
+  'xám',
+  'ghi pha lê',
+  'ghi khói',
+  'ghi sần',
+  'ghi bóng',
+  'ghi bạc',
+  'ghi cam',
+  'ghi đen',
+  'ghi hồng',
+  'ghi',
+  'xanh thiên thanh',
+  'xanh ngân hà',
+  'xanh ngọc bích',
+  'xanh ngọc',
+  'xanh rêu nhám',
+  'xanh rêu',
+  'xanh cửu long',
+  'xanh dương',
+  'xanh lam',
+  'xanh lá',
+  'xanh mint',
+  'xanh magic',
+  'xanh rubi',
+  'xanh ghi',
+  'xanh xám',
+  'xanh bơ',
+  'xanh đá',
+  'xanh',
+  'vàng cát sa mạc',
+  'vàng đồng',
+  'vàng kem',
+  'vàng trắng',
+  'vàng chanh',
+  'vàng',
+  'hồng khói nhạt',
+  'hồng khói',
+  'hồng pha lê',
+  'hồng baby',
+  'hồng baky',
+  'hồng rose',
+  'hồng',
+  'tím thiên thanh khói',
+  'tím thiên thanh',
+  'tím mix khói',
+  'tím ngân hà',
+  'tím pha lê',
+  'tím ánh',
+  'tím nhạt',
+  'tím',
+  'ánh tím',
+  'cam kẹo ngọt',
+  'cam pha lê',
+  'cam trắng',
+  'cam đen',
+  'cam',
+  'cà phê gold',
+  'cafe gold',
+  'cà phê',
+  'cafe',
+  'nâu cà phê',
+  'nâu đất',
+  'nâu',
+  'rêu pha lê',
+  'rêu khói',
+  'đồng khói',
+  'cửu long pha lê',
+  'cửu long',
+  'thiên thanh',
+  'baby blue',
+  'bạc blue',
+  'bạc',
+  'be mờ',
+  'be',
+  'nhũ bạc',
+  'mộc'
+];
+
+const FINISH_MODIFIER_WORDS = [
+  'bong',
+  'san',
+  'nham',
+  'mo',
+  'nhat',
+  'dam',
+  'tuoi',
+  'pha le',
+  'khoi',
+  'tuyet',
+  'ngoc trai',
+  'kim loai',
+  'gold',
+  'camay'
+];
+
+/**
+ * Chuẩn hóa linh kiện Nhựa màu về linh kiện chuẩn (Phôi - không màu):
+ * - Mã mặt hàng: bỏ 4 số cuối (VD: LEMROM0101050224 -> LEMROM010105)
+ * - Tên mặt hàng: nhận dạng & cắt tên màu ở cuối (VD: "Chân yếm trước trái Roma SX Đỏ đun bóng" -> "Chân yếm trước trái Roma SX")
+ */
+export function normalizeColoredPlasticPart(
+  rawCode: string,
+  rawName: string,
+  specGroup?: string,
+  extraColors: string[] = []
+): {
+  partCode: string;
+  partName: string;
+  detectedColor: string;
+  codeWasStripped: boolean;
+  nameWasStripped: boolean;
+} {
+  const cleanCode = String(rawCode || '').trim().toUpperCase();
+  const cleanName = String(rawName || '').trim().replace(/\s+/g, ' ');
+
+  if (!isColoredPlasticSpec(specGroup)) {
+    return {
+      partCode: cleanCode,
+      partName: cleanName,
+      detectedColor: '',
+      codeWasStripped: false,
+      nameWasStripped: false
+    };
+  }
+
+  // 1. Bỏ 4 số cuối nếu mã đủ dài (tránh cắt nhầm mã quá ngắn)
+  let baseCode = cleanCode;
+  let codeWasStripped = false;
+  if (cleanCode.length > 6 && /\d{4}$/.test(cleanCode)) {
+    baseCode = cleanCode.slice(0, -4);
+    codeWasStripped = true;
+  }
+
+  // 2. Tạo tập hợp tên màu đã chuẩn hóa (ưu tiên cụm dài trước)
+  const colorPool = new Set<string>();
+  [...DEFAULT_COLOR_PHRASES, ...extraColors].forEach((c) => {
+    const cleaned = String(c || '').trim();
+    if (!cleaned || cleaned.length < 2) return;
+    // Bỏ qua các giá trị màu ở OQC bị dính tiền tố tên xe (như "DK Roma SX ...")
+    if (/^(dk\s|xinba\s|roma\s)/i.test(cleaned)) return;
+    if (normalizeViText(cleaned) === 'mau') return;
+    colorPool.add(cleaned);
+    // Thêm biến thể kết hợp modifier ở cuối (VD: "Đỏ đun" + " bóng" -> "Đỏ đun bóng")
+    FINISH_MODIFIER_WORDS.forEach((mod) => {
+      colorPool.add(`${cleaned} ${mod}`);
+    });
+  });
+
+  const sortedColors = Array.from(colorPool)
+    .map((orig) => ({ orig, norm: normalizeViText(orig) }))
+    .filter((x) => x.norm.length >= 2)
+    .sort((a, b) => b.norm.length - a.norm.length);
+
+  // Tách từ trong cleanName kèm vị trí ký tự gốc để cắt giữ nguyên dấu và chữ hoa/thường
+  const wordMatches = Array.from(cleanName.matchAll(/[^\s]+/g));
+  let baseName = cleanName;
+  let detectedColor = '';
+  let nameWasStripped = false;
+
+  if (wordMatches.length >= 2) {
+    // Khớp từ cuối ngược về trước theo cụm màu chuẩn hóa
+    for (const colorItem of sortedColors) {
+      const colorWords = colorItem.norm.split(' ');
+      if (colorWords.length >= wordMatches.length) continue;
+
+      const tailSlice = wordMatches.slice(wordMatches.length - colorWords.length);
+      const tailNorm = tailSlice.map((m) => normalizeViText(m[0].replace(/^[-–:,]+|[-–:,]+$/g, ''))).join(' ');
+
+      if (tailNorm === colorItem.norm) {
+        const cutPos = tailSlice[0].index ?? cleanName.length;
+        let prefix = cleanName.slice(0, cutPos).trim();
+        // Xóa dấu ngăn cách thừa ở cuối tên phôi (VD: "Đế logo Roma SX, GT -" -> "Đế logo Roma SX, GT")
+        prefix = prefix.replace(/[-–:,]+$/g, '').trim();
+        if (prefix.length >= 2) {
+          baseName = prefix;
+          detectedColor = tailSlice.map((m) => m[0]).join(' ').replace(/^[-–:,]+/g, '').trim();
+          nameWasStripped = true;
+          break;
+        }
+      }
+    }
+
+    // Fallback: nếu tên có dạng "... - <Tên màu bất kỳ>" sau dấu gạch ngang ở cuối
+    if (!nameWasStripped) {
+      const dashMatch = cleanName.match(/^(.+?)\s+[-–]\s+([^\-–]+)$/);
+      if (dashMatch) {
+        const candidatePrefix = dashMatch[1].trim();
+        const candidateColor = dashMatch[2].trim();
+        const normCandidate = normalizeViText(candidateColor);
+        const looksLikeColor = sortedColors.some(
+          (c) => normCandidate === c.norm || normCandidate.startsWith(`${c.norm} `)
+        );
+        if (looksLikeColor && candidatePrefix.length >= 2) {
+          baseName = candidatePrefix;
+          detectedColor = candidateColor;
+          nameWasStripped = true;
+        }
+      }
+    }
+  }
+
+  return {
+    partCode: baseCode,
+    partName: baseName,
+    detectedColor,
+    codeWasStripped,
+    nameWasStripped
+  };
+}
+
 function groupPartCodesByModel(items: OqcPartCodeItem[]): OqcModelSummary[] {
   const map = new Map<string, OqcModelSummary>();
   items.forEach((item) => {

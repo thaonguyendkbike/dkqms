@@ -69,4 +69,8 @@ export interface EcountParsedBomRow {
   qty: number;
   note: string;
   rawRowNumber: number;
+  rawPartCode?: string;
+  rawPartName?: string;
+  detectedColor?: string;
+  isNormalizedFromColor?: boolean;
 }
