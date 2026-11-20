@@ -4,9 +4,11 @@ import {
   ArrowLeft,
   Bike,
   Camera,
+  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Download,
   Edit3,
   Eye,
@@ -165,6 +167,8 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
   const [partForm, setPartForm] = useState<PartFormState>(EMPTY_PART_FORM);
   const [partImagesUploading, setPartImagesUploading] = useState(false);
   const [partSaving, setPartSaving] = useState(false);
+  const [selectedViewImageIdx, setSelectedViewImageIdx] = useState<number>(0);
+  const [copiedPartCode, setCopiedPartCode] = useState(false);
   const [attachToCurrentModelQty, setAttachToCurrentModelQty] = useState<number>(1);
   const [attachToCurrentModel, setAttachToCurrentModel] = useState<boolean>(false);
 
@@ -566,6 +570,8 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       note: existing.note || ''
     });
     setAttachToCurrentModel(false);
+    setSelectedViewImageIdx(0);
+    setCopiedPartCode(false);
     setPartModalMode('view');
     setPartModalOpen(true);
   };
@@ -1921,22 +1927,26 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         </div>
       )}
 
-      {/* MODAL CHI TIẾT / TẠO MỚI / CHỈNH SỬA LINH KIỆN (UNIFIED FORM) */}
+      {/* MODAL CHI TIẾT / TẠO MỚI / CHỈNH SỬA LINH KIỆN (UNIFIED FORM + VIEW SPEC SHEET) */}
       {partModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4">
+          <div
+            className={`bg-white rounded-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden ${
+              partModalMode === 'view' ? 'max-w-5xl' : 'max-w-4xl'
+            }`}
+          >
             {/* Header */}
-            <div className="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between gap-3">
+            <div className="px-4 sm:px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="text-sm sm:text-base font-black truncate">
                   {partModalMode === 'create'
                     ? 'Thêm Mã Linh Kiện Mới vào Kho'
                     : partModalMode === 'edit'
                       ? `Chỉnh sửa Linh Kiện: ${partForm.partCode}`
-                      : `Hồ Sơ Linh Kiện: ${partForm.partCode}`}
+                      : `Chi tiết Linh Kiện: ${partForm.partCode}`}
                 </h3>
                 <p className="text-[11px] text-indigo-200 truncate">
-                  Công ty TNHH Xe điện DK Việt Nhật — DKBike | Quản lý chất lượng (QLCL)
+                  Công ty TNHH Xe điện DK Việt Nhật — DKBike (Xe cho cả gia đình) | Quản lý chất lượng (QLCL)
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -1960,8 +1970,308 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
               </div>
             </div>
 
-            {/* Body */}
-            <form onSubmit={handleSavePartModal} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
+            {/* CHẾ ĐỘ XEM CHI TIẾT 1 LINH KIỆN (LAYOUT 2 CỘT RÕ NÉT) */}
+            {partModalMode === 'view' ? (
+              (() => {
+                const codeUpper = partForm.partCode.trim().toUpperCase();
+                const currentPartObj = partsByCode.get(codeUpper);
+                const images = partForm.images || [];
+                const safeIdx = Math.min(selectedViewImageIdx, Math.max(0, images.length - 1));
+                const activeImage = images[safeIdx];
+                const usedModels = whereUsedMap.get(codeUpper) || [];
+
+                return (
+                  <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                      {/* CỘT TRÁI: TRÌNH XEM ẢNH CHÍNH + THUMBNAILS */}
+                      <div className="lg:col-span-6 space-y-3">
+                        <div className="relative h-72 sm:h-80 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden group">
+                          {activeImage ? (
+                            <>
+                              <img
+                                src={activeImage.url}
+                                alt={activeImage.caption || partForm.partName}
+                                onClick={() =>
+                                  openLightbox(
+                                    `${codeUpper} - ${partForm.partName}`,
+                                    images.map((i) => ({ url: i.url, caption: i.caption })),
+                                    safeIdx
+                                  )
+                                }
+                                className="w-full h-full object-contain p-3 cursor-zoom-in transition group-hover:scale-[1.02]"
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openLightbox(
+                                    `${codeUpper} - ${partForm.partName}`,
+                                    images.map((i) => ({ url: i.url, caption: i.caption })),
+                                    safeIdx
+                                  )
+                                }
+                                className="absolute top-3 right-3 px-2.5 py-1.5 rounded-xl bg-slate-900/75 hover:bg-slate-900 text-white text-[11px] font-bold flex items-center gap-1 shadow cursor-pointer"
+                              >
+                                <ZoomIn className="w-3.5 h-3.5" />
+                                Phóng to
+                              </button>
+                              {images.length > 1 && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedViewImageIdx(
+                                        (safeIdx - 1 + images.length) % images.length
+                                      )
+                                    }
+                                    className="absolute left-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/90 hover:bg-white text-slate-800 shadow border border-slate-200 cursor-pointer"
+                                  >
+                                    <ChevronLeft className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedViewImageIdx((safeIdx + 1) % images.length)
+                                    }
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/90 hover:bg-white text-slate-800 shadow border border-slate-200 cursor-pointer"
+                                  >
+                                    <ChevronRight className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                              <div className="absolute bottom-2.5 inset-x-3 flex items-center justify-between gap-2 pointer-events-none">
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-900/75 text-white text-[11px] font-bold truncate">
+                                  {activeImage.caption || `Ảnh ${safeIdx + 1}`}
+                                </span>
+                                <span className="px-2 py-1 rounded-lg bg-slate-900/75 text-white text-[11px] font-extrabold shrink-0">
+                                  {safeIdx + 1} / {images.length}
+                                </span>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-center p-6 space-y-2.5">
+                              <ImageIcon className="w-12 h-12 text-slate-300 mx-auto" />
+                              <p className="text-xs font-semibold text-slate-500">
+                                Chưa có hình ảnh cho mã linh kiện này
+                              </p>
+                              {!readOnly && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPartModalMode('edit')}
+                                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <Camera className="w-3.5 h-3.5" />
+                                  Tải ảnh lên ngay
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {images.length > 1 && (
+                          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                            {images.map((img, idx) => (
+                              <button
+                                key={img.id}
+                                type="button"
+                                onClick={() => setSelectedViewImageIdx(idx)}
+                                className={`w-16 h-16 rounded-xl border-2 overflow-hidden bg-white shrink-0 transition cursor-pointer ${
+                                  idx === safeIdx
+                                    ? 'border-indigo-600 ring-2 ring-indigo-200'
+                                    : 'border-slate-200 opacity-75 hover:opacity-100'
+                                }`}
+                                title={img.caption || `Ảnh ${idx + 1}`}
+                              >
+                                <img
+                                  src={img.url}
+                                  alt={img.caption || `Ảnh ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* CỘT PHẢI: HỒ SƠ THÔNG TIN & THÔNG SỐ KỸ THUẬT */}
+                      <div className="lg:col-span-6 flex flex-col justify-between gap-4">
+                        <div className="space-y-4">
+                          {/* Badges */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-xs font-extrabold border ${
+                                STATUS_BADGE_MAP[partForm.status || 'Đang dùng']
+                              }`}
+                            >
+                              {partForm.status || 'Đang dùng'}
+                            </span>
+                            {partForm.specGroup && (
+                              <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold">
+                                {partForm.specGroup}
+                              </span>
+                            )}
+                            <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold">
+                              ĐVT: {partForm.unit || 'Cái'}
+                            </span>
+                            <span className="px-2.5 py-1 rounded-full bg-slate-50 text-slate-600 border border-slate-200 text-[11px] font-semibold">
+                              {partForm.imageMode === 'single' ? '1 ảnh' : `${images.length} ảnh`}
+                            </span>
+                          </div>
+
+                          {/* Tên & Mã mặt hàng */}
+                          <div className="space-y-2">
+                            <h2 className="text-lg sm:text-xl font-black text-slate-900 leading-snug">
+                              {partForm.partName}
+                            </h2>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="px-3 py-1 rounded-xl bg-slate-900 text-white font-mono text-xs sm:text-sm font-black tracking-wide">
+                                {codeUpper}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard?.writeText(codeUpper);
+                                  setCopiedPartCode(true);
+                                  setTimeout(() => setCopiedPartCode(false), 1500);
+                                }}
+                                className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold inline-flex items-center gap-1 transition cursor-pointer"
+                              >
+                                {copiedPartCode ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                    Đã chép mã
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3.5 h-3.5" />
+                                    Copy mã Ecount
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Thông số kỹ thuật */}
+                          <div className="rounded-2xl bg-slate-50 border border-slate-200 p-3.5 space-y-1.5">
+                            <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                              Thông số kỹ thuật chi tiết
+                            </p>
+                            <p className="text-xs sm:text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
+                              {partForm.techSpecs?.trim()
+                                ? partForm.techSpecs
+                                : 'Chưa cập nhật thông số kỹ thuật chi tiết.'}
+                            </p>
+                          </div>
+
+                          {/* Nhà cung cấp & Ghi chú */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                              <span className="block text-[11px] font-bold text-slate-400 uppercase">
+                                Nhà cung cấp
+                              </span>
+                              <span className="mt-1 block font-bold text-slate-800">
+                                {partForm.supplierName?.trim() || 'Chưa cập nhật'}
+                              </span>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                              <span className="block text-[11px] font-bold text-slate-400 uppercase">
+                                Ghi chú kỹ thuật
+                              </span>
+                              <span className="mt-1 block font-semibold text-slate-700">
+                                {partForm.note?.trim() || 'Không có ghi chú'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {currentPartObj?.updatedAt && (
+                          <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-100">
+                            Cập nhật lần cuối:{' '}
+                            {new Date(currentPartObj.updatedAt).toLocaleString('vi-VN')}
+                            {currentPartObj.updatedBy ? ` bởi ${currentPartObj.updatedBy}` : ''}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* DANH SÁCH MODEL DÙNG CHUNG (WHERE-USED) */}
+                    <div className="bg-indigo-50/70 rounded-2xl border border-indigo-200 p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="text-xs font-black text-indigo-950 uppercase flex items-center gap-1.5">
+                          <Share2 className="w-4 h-4 text-indigo-600" />
+                          Các Model xe đang dùng chung linh kiện này ({usedModels.length} model)
+                        </h4>
+                      </div>
+                      {usedModels.length === 0 ? (
+                        <p className="text-xs text-slate-500">
+                          Mã linh kiện này chưa được gắn vào BOM của Model nào.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                          {usedModels.map((entry) => {
+                            const modelObj = bomModelsMap.get(entry.modelKey);
+                            return (
+                              <button
+                                key={entry.modelKey}
+                                type="button"
+                                onClick={() => {
+                                  setPartModalOpen(false);
+                                  setActiveSubTab('models');
+                                  setSelectedModelKey(entry.modelKey);
+                                }}
+                                className="p-2.5 rounded-xl bg-white hover:bg-indigo-600 text-slate-800 hover:text-white border border-indigo-200 shadow-2xs transition flex items-center gap-2.5 text-left group cursor-pointer"
+                              >
+                                <div className="w-11 h-9 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                                  {modelObj?.imageUrl ? (
+                                    <img
+                                      src={modelObj.imageUrl}
+                                      alt={entry.modelName}
+                                      className="w-full h-full object-contain"
+                                    />
+                                  ) : (
+                                    <Bike className="w-4 h-4 text-slate-400" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-black truncate">{entry.modelName}</p>
+                                  <p className="text-[11px] text-slate-500 group-hover:text-indigo-100 font-semibold">
+                                    Định mức: {entry.qty} {entry.unit} / xe
+                                  </p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer View */}
+                    <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
+                      {!readOnly ? (
+                        <button
+                          type="button"
+                          onClick={() => setPartModalMode('edit')}
+                          className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          Chỉnh sửa / Thêm ảnh
+                        </button>
+                      ) : (
+                        <div />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setPartModalOpen(false)}
+                        className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold cursor-pointer"
+                      >
+                        Đóng
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : (
+              /* CHẾ ĐỘ TẠO MỚI / CHỈNH SỬA (UNIFIED FORM) */
+              <form onSubmit={handleSavePartModal} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
               {/* GALLERY ẢNH LINH KIỆN */}
               <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2343,6 +2653,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                 </div>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}
