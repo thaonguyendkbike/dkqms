@@ -534,17 +534,17 @@ export default function MachineryMaintenance({
         prev.map(item =>
           item.id === eq.id
             ? {
-                ...item,
-                status: 'Running',
-                healthRate: 100,
-                calibrationStatus: 'Đã dán tem ĐẠT',
-                lastCalibrationDate: todayStr,
-                lastMaintenanceDate: todayStr,
-                nextCalibrationDate: nextDateStr,
-                nextMaintenanceDate: nextDateStr,
-                suspensionReason: undefined,
-                updatedAt: new Date().toISOString()
-              }
+              ...item,
+              status: 'Running',
+              healthRate: 100,
+              calibrationStatus: 'Đã dán tem ĐẠT',
+              lastCalibrationDate: todayStr,
+              lastMaintenanceDate: todayStr,
+              nextCalibrationDate: nextDateStr,
+              nextMaintenanceDate: nextDateStr,
+              suspensionReason: undefined,
+              updatedAt: new Date().toISOString()
+            }
             : item
         )
       );
@@ -577,13 +577,13 @@ export default function MachineryMaintenance({
         prev.map(item =>
           item.id === suspendTargetEq.id
             ? {
-                ...item,
-                status: 'Stopped',
-                calibrationStatus: 'Đình chỉ sử dụng',
-                suspensionReason: reason,
-                healthRate: Math.min(item.healthRate || 100, 40),
-                updatedAt: new Date().toISOString()
-              }
+              ...item,
+              status: 'Stopped',
+              calibrationStatus: 'Đình chỉ sử dụng',
+              suspensionReason: reason,
+              healthRate: Math.min(item.healthRate || 100, 40),
+              updatedAt: new Date().toISOString()
+            }
             : item
         )
       );
@@ -614,17 +614,17 @@ export default function MachineryMaintenance({
         prev.map(item =>
           item.id === eq.id
             ? {
-                ...item,
-                status: 'Running',
-                healthRate: 95,
-                calibrationStatus: 'Đã dán tem ĐẠT',
-                suspensionReason: undefined,
-                lastCalibrationDate: todayStr,
-                lastMaintenanceDate: todayStr,
-                nextCalibrationDate: nextDateStr,
-                nextMaintenanceDate: nextDateStr,
-                updatedAt: new Date().toISOString()
-              }
+              ...item,
+              status: 'Running',
+              healthRate: 95,
+              calibrationStatus: 'Đã dán tem ĐẠT',
+              suspensionReason: undefined,
+              lastCalibrationDate: todayStr,
+              lastMaintenanceDate: todayStr,
+              nextCalibrationDate: nextDateStr,
+              nextMaintenanceDate: nextDateStr,
+              updatedAt: new Date().toISOString()
+            }
             : item
         )
       );
@@ -675,25 +675,25 @@ export default function MachineryMaintenance({
           item.id === newLog.equipmentId
             ? isCalibrationFail
               ? {
-                  ...item,
-                  status: 'Stopped',
-                  healthRate: 40,
-                  calibrationStatus: 'Đình chỉ sử dụng',
-                  suspensionReason: newLog.details || 'Không đạt kiểm chuẩn (BM-KTTD-02)',
-                  updatedAt: new Date().toISOString()
-                }
+                ...item,
+                status: 'Stopped',
+                healthRate: 40,
+                calibrationStatus: 'Đình chỉ sử dụng',
+                suspensionReason: newLog.details || 'Không đạt kiểm chuẩn (BM-KTTD-02)',
+                updatedAt: new Date().toISOString()
+              }
               : {
-                  ...item,
-                  status: 'Running',
-                  healthRate: 100,
-                  calibrationStatus: 'Đã dán tem ĐẠT',
-                  suspensionReason: undefined,
-                  lastMaintenanceDate: todayStr,
-                  lastCalibrationDate: todayStr,
-                  nextMaintenanceDate: nextDateComputed,
-                  nextCalibrationDate: nextDateComputed,
-                  updatedAt: new Date().toISOString()
-                }
+                ...item,
+                status: 'Running',
+                healthRate: 100,
+                calibrationStatus: 'Đã dán tem ĐẠT',
+                suspensionReason: undefined,
+                lastMaintenanceDate: todayStr,
+                lastCalibrationDate: todayStr,
+                nextMaintenanceDate: nextDateComputed,
+                nextCalibrationDate: nextDateComputed,
+                updatedAt: new Date().toISOString()
+              }
             : item
         )
       );
@@ -797,11 +797,11 @@ export default function MachineryMaintenance({
         prev.map(j =>
           j.id === job.id
             ? {
-                ...j,
-                status: 'Hoàn thành & Bàn giao',
-                completedDate: getLocalDmy(),
-                updatedAt: new Date().toISOString()
-              }
+              ...j,
+              status: 'Hoàn thành & Bàn giao',
+              completedDate: getLocalDmy(),
+              updatedAt: new Date().toISOString()
+            }
             : j
         )
       );
@@ -844,11 +844,11 @@ export default function MachineryMaintenance({
         prev.map(item =>
           item.id === newInc.equipmentId
             ? {
-                ...item,
-                status: 'Under Repair',
-                healthRate: Math.max(20, (item.healthRate || 100) - 30),
-                updatedAt: new Date().toISOString()
-              }
+              ...item,
+              status: 'Under Repair',
+              healthRate: Math.max(20, (item.healthRate || 100) - 30),
+              updatedAt: new Date().toISOString()
+            }
             : item
         )
       );
@@ -875,15 +875,15 @@ export default function MachineryMaintenance({
         prev.map(inc =>
           inc.id === showResolveIncModal.id
             ? {
-                ...inc,
-                status: 'Resolved',
-                resolvedDate: todayStr,
-                rootCause: resolveRootCause || 'Hao mòn cơ khí / sai lệch cảm biến',
-                repairAction: resolveRepairAction || 'Thay thế linh kiện & cân chỉnh lại thông số',
-                technician: resolveTechnician || defaultHungName,
-                repairCost: Number(resolveRepairCost) || 0,
-                downtimeMinutes: Number(resolveDowntime) || 0
-              }
+              ...inc,
+              status: 'Resolved',
+              resolvedDate: todayStr,
+              rootCause: resolveRootCause || 'Hao mòn cơ khí / sai lệch cảm biến',
+              repairAction: resolveRepairAction || 'Thay thế linh kiện & cân chỉnh lại thông số',
+              technician: resolveTechnician || defaultHungName,
+              repairCost: Number(resolveRepairCost) || 0,
+              downtimeMinutes: Number(resolveDowntime) || 0
+            }
             : inc
         )
       );
@@ -892,12 +892,12 @@ export default function MachineryMaintenance({
         prev.map(eq =>
           eq.id === showResolveIncModal.equipmentId
             ? {
-                ...eq,
-                status: 'Running',
-                healthRate: 95,
-                suspensionReason: undefined,
-                updatedAt: new Date().toISOString()
-              }
+              ...eq,
+              status: 'Running',
+              healthRate: 95,
+              suspensionReason: undefined,
+              updatedAt: new Date().toISOString()
+            }
             : eq
         )
       );
@@ -965,10 +965,10 @@ export default function MachineryMaintenance({
       const evalText = meta.isSuspended
         ? `NGỪNG DÙNG (${eq.suspensionReason || 'Đình chỉ'})`
         : meta.isOverdue
-        ? `CHỜ HIỆU CHUẨN LẠI (${meta.dueText})`
-        : meta.isCompliant
-        ? 'ĐẠT - ĐANG SỬ DỤNG'
-        : `${eq.status}`;
+          ? `CHỜ HIỆU CHUẨN LẠI (${meta.dueText})`
+          : meta.isCompliant
+            ? 'ĐẠT - ĐANG SỬ DỤNG'
+            : `${eq.status}`;
 
       return [eq.id, eq.name, specText || '--', lastStr, nextStr, temText, evalText];
     });
@@ -1076,10 +1076,10 @@ export default function MachineryMaintenance({
         eqFilterCal === 'All'
           ? true
           : eqFilterCal === 'passed'
-          ? meta.isCompliant && !meta.isOverdue && !meta.isSuspended
-          : eqFilterCal === 'due_soon'
-          ? meta.isOverdue || meta.isSoon
-          : meta.isSuspended;
+            ? meta.isCompliant && !meta.isOverdue && !meta.isSuspended
+            : eqFilterCal === 'due_soon'
+              ? meta.isOverdue || meta.isSoon
+              : meta.isSuspended;
       const kw = eqSearch.trim().toLowerCase();
       const matchWord =
         !kw ||
@@ -1142,181 +1142,167 @@ export default function MachineryMaintenance({
   );
 
   return (
-    <div className="space-y-4" id="machinery_maintenance_module">
-      {/* HEADER SECTION — GỌN GÀNG, ĐƠN GIẢN, ÍT MÀU MÈ */}
-      <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2.5 rounded-xl bg-slate-100 text-slate-700 shrink-0">
-            <Wrench className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
-                Thiết bị
-              </h2>
-              <span className="text-[11px] font-mono font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
-                BM-KTTD-02
-              </span>
+    <div className="space-y-4 pb-10" id="machinery_maintenance_module">
+      {/* Top Control & Action Bar — Đồng bộ phong cách phân hệ Báo cáo */}
+      <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="inline-flex flex-wrap rounded-xl border-2 border-slate-300 bg-slate-100 p-0.5">
+              <button
+                type="button"
+                onClick={() => setSubTab('overview')}
+                className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition cursor-pointer ${
+                  subTab === 'overview'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-white'
+                }`}
+              >
+                Danh mục ({filteredEquipments.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubTab('maintenance')}
+                className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition cursor-pointer ${
+                  subTab === 'maintenance'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-white'
+                }`}
+              >
+                Hiệu chuẩn & Bảo trì ({filteredLogs.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubTab('fabrication')}
+                className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition cursor-pointer ${
+                  subTab === 'fabrication'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-white'
+                }`}
+              >
+                Đồ gá & Sửa chữa ({filteredFabJobs.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSubTab('incidents')}
+                className={`px-3.5 py-1.5 rounded-lg text-sm font-bold transition cursor-pointer ${
+                  subTab === 'incidents'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-white'
+                }`}
+              >
+                Sự cố & Đình chỉ ({filteredIncidents.length + suspendedEquipments.length})
+              </button>
             </div>
-            <p className="text-xs text-slate-500 truncate">
-              CCDC, Thiết bị đo QLCL, Đồ gá & Bảo dưỡng thiết bị
-            </p>
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              setNewEq(createInitialNewEq());
-              setShowAddEqModal(true);
-            }}
-            className="px-3 py-2 bg-slate-900 hover:bg-slate-800 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer text-white transition"
-          >
-            <Plus className="w-3.5 h-3.5" /> Thêm thiết bị
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowAddLogModal(true)}
-            className="px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer text-slate-700 transition"
-          >
-            <CheckCircle className="w-3.5 h-3.5 text-slate-600" /> Hiệu chuẩn
-          </button>
-          <button
-            type="button"
-            onClick={openCreateFabModal}
-            className="px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer text-slate-700 transition"
-          >
-            <Hammer className="w-3.5 h-3.5 text-slate-600" /> Đồ gá
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowAddIncModal(true)}
-            className="px-3 py-2 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer text-rose-700 transition"
-          >
-            <AlertTriangle className="w-3.5 h-3.5" /> Báo sự cố
-          </button>
-          <button
-            type="button"
-            onClick={handleExportBmKttd02Excel}
-            className="px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer text-slate-700 transition"
-            title="Xuất Sổ theo dõi hiệu chuẩn thiết bị BM-KTTD-02 (.xlsx)"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-slate-600" /> Xuất Excel
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setNewEq(createInitialNewEq());
+                setShowAddEqModal(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border-2 border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" /> Thêm thiết bị
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddLogModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-bold transition cursor-pointer"
+            >
+              <CheckCircle className="w-4 h-4 text-slate-600" /> Hiệu chuẩn
+            </button>
+            <button
+              type="button"
+              onClick={openCreateFabModal}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-bold transition cursor-pointer"
+            >
+              <Hammer className="w-4 h-4 text-slate-600" /> Đồ gá
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddIncModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-rose-50 text-rose-700 text-sm font-bold transition cursor-pointer"
+            >
+              <AlertTriangle className="w-4 h-4" /> Báo sự cố
+            </button>
+            <button
+              type="button"
+              onClick={handleExportBmKttd02Excel}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-bold transition cursor-pointer"
+              title="Xuất Sổ theo dõi hiệu chuẩn thiết bị BM-KTTD-02 (.xlsx)"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-700" /> Xuất Excel
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* METRIC STATISTICS GRID (4 CARDS GỌN) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" id="eq_statistics_bento">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
-          <div className="space-y-0.5 min-w-0">
-            <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wide">
-              Tổng thiết bị
-            </p>
-            <h3 className="text-xl font-black text-slate-900">{equipments.length}</h3>
-            <p className="text-[11px] text-slate-500 truncate">
-              Đo: {equipmentStats.measuringCount} • Đồ gá: {equipmentStats.jigCount} • SX: {equipmentStats.lineOrOqcCount}
-            </p>
+      {/* 4 Large-Number KPI Cards — Đồng bộ kích thước, font & màu với ReportsHub */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" id="eq_statistics_bento">
+        <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
+          <div className="text-xs font-bold uppercase text-slate-500">Tổng thiết bị</div>
+          <div className="mt-1 text-3xl font-extrabold text-slate-900">
+            {equipments.length}
+            <span className="text-base font-bold text-slate-500 ml-1">thiết bị</span>
           </div>
-          <Settings className="w-5 h-5 text-slate-400 shrink-0" />
+          <div className="text-xs text-slate-600 mt-1">
+            Đo lường: {equipmentStats.measuringCount} | Đồ gá: {equipmentStats.jigCount} | SX/KCS: {equipmentStats.lineOrOqcCount}
+          </div>
+          <div className="mt-2 text-xs font-semibold text-slate-500">Sổ cái BM-KTTD-02</div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
-          <div className="space-y-0.5 min-w-0">
-            <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wide">
-              Tem hiệu chuẩn
-            </p>
-            <h3 className="text-xl font-black text-slate-900 flex items-center gap-1.5">
-              {equipmentStats.calComplianceRate}%
-              <span className="text-[11px] font-bold text-slate-500">
-                ({equipmentStats.compliantCount}/{equipments.length})
-              </span>
-            </h3>
-            <p className="text-[11px] text-slate-500 truncate">
-              Hạn/Quá hạn: {equipmentStats.dueSoonOrOverdueCount} • Đình chỉ: {equipmentStats.suspendedCount}
-            </p>
+        <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
+          <div className="text-xs font-bold uppercase text-slate-500">Tem hiệu chuẩn</div>
+          <div className="mt-1 text-3xl font-extrabold text-slate-900">
+            {equipments.length > 0 ? `${equipmentStats.calComplianceRate}%` : '--'}
           </div>
-          <Award className="w-5 h-5 text-slate-400 shrink-0" />
+          <div className="text-xs text-slate-600 mt-1">
+            Đạt chuẩn {equipmentStats.compliantCount}/{equipments.length} | Hạn/Trễ:{' '}
+            <span className={equipmentStats.dueSoonOrOverdueCount > 0 ? 'font-bold text-amber-700' : ''}>
+              {equipmentStats.dueSoonOrOverdueCount}
+            </span>
+          </div>
+          <div
+            className={`mt-2 text-xs font-bold ${
+              equipmentStats.suspendedCount > 0 ? 'text-rose-700' : 'text-emerald-700'
+            }`}
+          >
+            {equipmentStats.suspendedCount > 0
+              ? `Đang đình chỉ: ${equipmentStats.suspendedCount} thiết bị`
+              : 'Không có thiết bị bị đình chỉ'}
+          </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
-          <div className="space-y-0.5 min-w-0">
-            <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wide">
-              Đồ gá & Sửa chữa
-            </p>
-            <h3 className="text-xl font-black text-slate-900">{fabricationJobs.length}</h3>
-            <p className="text-[11px] text-slate-500 truncate">
-              Đang làm: {equipmentStats.activeFabCount} • Xong: {equipmentStats.doneFabCount}
-            </p>
+        <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
+          <div className="text-xs font-bold uppercase text-slate-500">Đồ gá & Sửa chữa</div>
+          <div className="mt-1 text-3xl font-extrabold text-slate-900">
+            {fabricationJobs.length}
+            <span className="text-base font-bold text-slate-500 ml-1">phiếu</span>
           </div>
-          <Hammer className="w-5 h-5 text-slate-400 shrink-0" />
+          <div className="text-xs text-slate-600 mt-1">
+            Đang thực hiện: {equipmentStats.activeFabCount} | Hoàn thành: {equipmentStats.doneFabCount}
+          </div>
+          <div className="mt-2 text-xs font-semibold text-slate-500">
+            Đúng hạn: {equipmentStats.onTimeFabCount}/{equipmentStats.doneFabCount} phiếu
+          </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
-          <div className="space-y-0.5 min-w-0">
-            <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wide">
-              Sự cố & Chi phí
-            </p>
-            <h3 className="text-xl font-black text-slate-900">
-              {(equipmentStats.totalCosts / 1000000).toFixed(1)}{' '}
-              <span className="text-xs font-semibold text-slate-500">Tr</span>
-            </h3>
-            <p className="text-[11px] text-slate-500 truncate">
-              Sự cố mở: {equipmentStats.activeBreakdownsCount} • Dừng: {equipmentStats.totalDowntime}p
-            </p>
+        <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
+          <div className="text-xs font-bold uppercase text-slate-500">Sự cố & Chi phí</div>
+          <div className="mt-1 text-3xl font-extrabold text-slate-900">
+            {equipmentStats.totalCosts.toLocaleString('vi-VN')} đ
           </div>
-          <DollarSign className="w-5 h-5 text-slate-400 shrink-0" />
+          <div className="text-xs text-slate-600 mt-1">
+            Sự cố mở:{' '}
+            <span className={equipmentStats.activeBreakdownsCount > 0 ? 'font-bold text-rose-700' : ''}>
+              {equipmentStats.activeBreakdownsCount}
+            </span>{' '}
+            | Dừng máy: {equipmentStats.totalDowntime} phút
+          </div>
+          <div className="mt-2 text-xs font-semibold text-slate-500">Bảo trì & Khắc phục sự cố</div>
         </div>
-      </div>
-
-      {/* 4 SUB-TABS NAVIGATION — ĐỒNG NHẤT, GỌN */}
-      <div className="flex flex-wrap gap-1 border border-slate-200 bg-slate-50 p-1 rounded-xl">
-        <button
-          type="button"
-          onClick={() => setSubTab('overview')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-            subTab === 'overview'
-              ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Database className="w-3.5 h-3.5" /> Danh mục ({filteredEquipments.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubTab('maintenance')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-            subTab === 'maintenance'
-              ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Calendar className="w-3.5 h-3.5" /> Hiệu chuẩn & Bảo trì ({filteredLogs.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubTab('fabrication')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-            subTab === 'fabrication'
-              ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Hammer className="w-3.5 h-3.5" /> Đồ gá & Sửa chữa ({filteredFabJobs.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setSubTab('incidents')}
-          className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-            subTab === 'incidents'
-              ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <AlertTriangle className="w-3.5 h-3.5" /> Sự cố & Đình chỉ (
-          {filteredIncidents.length + suspendedEquipments.length})
-        </button>
       </div>
 
       {/* ========================================================================= */}
@@ -1324,23 +1310,23 @@ export default function MachineryMaintenance({
       {/* ========================================================================= */}
       {subTab === 'overview' && (
         <div className="space-y-4" id="view_overview_equipment">
-          <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-wrap gap-3 items-center justify-between">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm flex flex-wrap gap-3 items-center justify-between">
             <div className="flex flex-wrap gap-2.5 items-center flex-1">
               <div className="relative flex-1 min-w-[220px] max-w-xs">
                 <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Tìm mã TB, seri, tên thiết bị, dải đo, người PT..."
+                  placeholder="Tìm mã TB, seri, tên thiết bị..."
                   value={eqSearch}
                   onChange={e => setEqSearch(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-none font-medium"
+                  className="w-full bg-white border-2 border-slate-300 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-800 focus:border-blue-600 focus:outline-none font-bold"
                 />
               </div>
 
               <select
                 value={eqFilterGroup}
                 onChange={e => setEqFilterGroup(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 cursor-pointer focus:border-slate-400 focus:outline-none"
+                className="bg-white border-2 border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 cursor-pointer focus:border-blue-600 focus:outline-none"
               >
                 <option value="All">Nhóm: Tất cả</option>
                 <option value="measuring">Thiết bị đo lường QLCL</option>
@@ -1352,7 +1338,7 @@ export default function MachineryMaintenance({
               <select
                 value={eqFilterStatus}
                 onChange={e => setEqFilterStatus(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 cursor-pointer focus:border-slate-400 focus:outline-none"
+                className="bg-white border-2 border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 cursor-pointer focus:border-blue-600 focus:outline-none"
               >
                 <option value="All">Trạng thái: Tất cả</option>
                 <option value="Running">Running (Hoạt động)</option>
@@ -1365,7 +1351,7 @@ export default function MachineryMaintenance({
               <select
                 value={eqFilterCal}
                 onChange={e => setEqFilterCal(e.target.value as any)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 cursor-pointer focus:border-slate-400 focus:outline-none"
+                className="bg-white border-2 border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 cursor-pointer focus:border-blue-600 focus:outline-none"
               >
                 <option value="All">Tem HC: Tất cả</option>
                 <option value="passed">Đã dán tem ĐẠT</option>
@@ -1373,46 +1359,44 @@ export default function MachineryMaintenance({
                 <option value="suspended">Đang đình chỉ</option>
               </select>
 
-              <div className="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50 gap-1 shrink-0 select-none">
+              <div className="inline-flex rounded-xl border-2 border-slate-300 p-0.5 bg-slate-100 gap-0.5 shrink-0 select-none">
                 <button
                   type="button"
                   onClick={() => setViewMode('list')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 cursor-pointer transition ${
-                    viewMode === 'list'
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5 cursor-pointer transition ${viewMode === 'list'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-white'
+                    }`}
                 >
-                  <List className="w-3.5 h-3.5" /> Bảng
+                  <List className="w-4 h-4" /> Bảng
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode('grid')}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 cursor-pointer transition ${
-                    viewMode === 'grid'
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
-                  }`}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1.5 cursor-pointer transition ${viewMode === 'grid'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-700 hover:bg-white'
+                    }`}
                 >
-                  <LayoutGrid className="w-3.5 h-3.5" /> Thẻ
+                  <LayoutGrid className="w-4 h-4" /> Thẻ
                 </button>
               </div>
             </div>
 
-            <div className="text-[11px] text-slate-600 font-mono font-bold">
-              Hiển thị {filteredEquipments.length} / {equipments.length} thiết bị
+            <div className="text-xs text-slate-600 font-bold">
+              Hiển thị {filteredEquipments.length}/{equipments.length}
             </div>
           </div>
 
           {viewMode === 'list' ? (
             <div
-              className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden"
+              className="bg-white rounded-2xl border-2 border-slate-300 shadow-sm overflow-hidden"
               id="machinery_devices_list_mode"
             >
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs select-text">
+                <table className="w-full text-left border-collapse text-sm select-text">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-black uppercase text-[10px] tracking-wider select-none">
+                    <tr className="bg-slate-100 border-b-2 border-slate-200 text-slate-700 font-bold uppercase text-xs select-none">
                       <th className="p-3.5 w-28">Mã TB / Seri</th>
                       <th className="p-3.5 min-w-[230px]">Tên Thiết Bị & Dải Đo (BM-KTTD-02)</th>
                       <th className="p-3.5 min-w-[140px]">Nhóm Thiết Bị</th>
@@ -1436,13 +1420,12 @@ export default function MachineryMaintenance({
                       return (
                         <tr
                           key={eq.id}
-                          className={`hover:bg-indigo-50/20 transition-colors ${
-                            calMeta.isSuspended || eq.status === 'Under Repair'
-                              ? 'bg-rose-50/35'
-                              : calMeta.isOverdue
+                          className={`hover:bg-indigo-50/20 transition-colors ${calMeta.isSuspended || eq.status === 'Under Repair'
+                            ? 'bg-rose-50/35'
+                            : calMeta.isOverdue
                               ? 'bg-amber-50/35'
                               : ''
-                          }`}
+                            }`}
                         >
                           <td className="p-3.5 align-top">
                             <span className="font-mono font-black text-slate-800 text-[11px] block select-all">
@@ -1512,13 +1495,12 @@ export default function MachineryMaintenance({
                             </span>
                             <div>
                               <span
-                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border inline-block ${
-                                  eq.status === 'Running'
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                    : eq.status === 'Under Repair'
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border inline-block ${eq.status === 'Running'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : eq.status === 'Under Repair'
                                     ? 'bg-rose-50 text-rose-700 border-rose-200'
                                     : 'bg-slate-100 text-slate-700 border-slate-200'
-                                }`}
+                                  }`}
                               >
                                 {eq.status}
                               </span>
@@ -1534,8 +1516,8 @@ export default function MachineryMaintenance({
                                     eq.healthRate >= 90
                                       ? 'text-emerald-700 font-mono'
                                       : eq.healthRate >= 75
-                                      ? 'text-amber-700 font-mono'
-                                      : 'text-rose-700 font-mono'
+                                        ? 'text-amber-700 font-mono'
+                                        : 'text-rose-700 font-mono'
                                   }
                                 >
                                   {eq.healthRate}%
@@ -1543,13 +1525,12 @@ export default function MachineryMaintenance({
                               </div>
                               <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                                 <div
-                                  className={`h-full transition-all duration-300 ${
-                                    eq.healthRate >= 90
-                                      ? 'bg-emerald-500'
-                                      : eq.healthRate >= 75
+                                  className={`h-full transition-all duration-300 ${eq.healthRate >= 90
+                                    ? 'bg-emerald-500'
+                                    : eq.healthRate >= 75
                                       ? 'bg-amber-500'
                                       : 'bg-rose-500'
-                                  }`}
+                                    }`}
                                   style={{ width: `${Math.min(100, Math.max(0, eq.healthRate))}%` }}
                                 ></div>
                               </div>
@@ -1580,13 +1561,12 @@ export default function MachineryMaintenance({
                               {formatDateStrVi(eq.nextCalibrationDate || eq.nextMaintenanceDate)}
                             </div>
                             <div
-                              className={`text-[10px] font-extrabold mt-0.5 ${
-                                calMeta.isSuspended || calMeta.isOverdue
-                                  ? 'text-rose-700'
-                                  : calMeta.isSoon
+                              className={`text-[10px] font-extrabold mt-0.5 ${calMeta.isSuspended || calMeta.isOverdue
+                                ? 'text-rose-700'
+                                : calMeta.isSoon
                                   ? 'text-amber-700'
                                   : 'text-emerald-700'
-                              }`}
+                                }`}
                             >
                               {calMeta.dueText}
                             </div>
@@ -1668,22 +1648,20 @@ export default function MachineryMaintenance({
                 return (
                   <div
                     key={eq.id}
-                    className={`bg-white rounded-2xl border shadow-sm relative overflow-hidden flex flex-col justify-between hover:shadow-md transition ${
-                      calMeta.isSuspended || eq.status === 'Under Repair'
-                        ? 'border-rose-300 bg-rose-50/15'
-                        : calMeta.isOverdue
+                    className={`bg-white rounded-2xl border shadow-sm relative overflow-hidden flex flex-col justify-between hover:shadow-md transition ${calMeta.isSuspended || eq.status === 'Under Repair'
+                      ? 'border-rose-300 bg-rose-50/15'
+                      : calMeta.isOverdue
                         ? 'border-amber-300'
                         : 'border-slate-200'
-                    }`}
+                      }`}
                   >
                     <div
-                      className={`h-1.5 w-full ${
-                        calMeta.isSuspended || eq.status === 'Under Repair'
-                          ? 'bg-rose-500'
-                          : calMeta.isOverdue || eq.status === 'Maintenance'
+                      className={`h-1.5 w-full ${calMeta.isSuspended || eq.status === 'Under Repair'
+                        ? 'bg-rose-500'
+                        : calMeta.isOverdue || eq.status === 'Maintenance'
                           ? 'bg-amber-500'
                           : 'bg-emerald-500'
-                      }`}
+                        }`}
                     ></div>
 
                     <div
@@ -1754,13 +1732,12 @@ export default function MachineryMaintenance({
                         <div>
                           <span className="text-[10px] text-slate-500 font-black uppercase block">⏱️ Tình trạng hạn</span>
                           <span
-                            className={`font-black block ${
-                              calMeta.isOverdue || calMeta.isSuspended
-                                ? 'text-rose-700'
-                                : calMeta.isSoon
+                            className={`font-black block ${calMeta.isOverdue || calMeta.isSuspended
+                              ? 'text-rose-700'
+                              : calMeta.isSoon
                                 ? 'text-amber-700'
                                 : 'text-emerald-700'
-                            }`}
+                              }`}
                           >
                             {calMeta.dueText}
                           </span>
@@ -1860,25 +1837,25 @@ export default function MachineryMaintenance({
       {/* ========================================================================= */}
       {subTab === 'maintenance' && (
         <div className="space-y-4" id="view_maintenance_logs">
-          <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-wrap gap-3 items-center justify-between">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm flex flex-wrap gap-3 items-center justify-between">
             <div className="flex flex-wrap gap-3 items-center flex-1">
               <div className="relative flex-1 max-w-xs">
                 <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Tìm thiết bị, số chứng chỉ HC, kỹ sư..."
+                  placeholder="Tìm thiết bị, số chứng chỉ, kỹ sư..."
                   value={mLogSearch}
                   onChange={e => setMLogSearch(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                  className="w-full bg-white border-2 border-slate-300 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-800 outline-none focus:border-blue-600 font-bold"
                 />
               </div>
               <select
                 value={mLogFilterType}
                 onChange={e => setMLogFilterType(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 cursor-pointer"
+                className="bg-white border-2 border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 cursor-pointer focus:border-blue-600 focus:outline-none"
               >
-                <option value="All">🛠️ Tất cả loại hình</option>
-                <option value="Hiệu chuẩn">Hiệu chuẩn / Kiểm định (BM-KTTD-02)</option>
+                <option value="All">Loại hình: Tất cả</option>
+                <option value="Hiệu chuẩn">Hiệu chuẩn / Kiểm định</option>
                 <option value="Định kỳ">Bảo dưỡng định kỳ</option>
                 <option value="Đột xuất">Sửa chữa đột xuất</option>
                 <option value="Nâng cấp">Nâng cấp / Cải tiến</option>
@@ -1888,17 +1865,17 @@ export default function MachineryMaintenance({
             <button
               type="button"
               onClick={() => setShowAddLogModal(true)}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-3.5 py-2 rounded-lg gap-1.5 cursor-pointer flex items-center transition"
+              className="px-4 py-2 rounded-xl border-2 border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition cursor-pointer inline-flex items-center gap-1.5"
             >
-              <Plus className="w-3.5 h-3.5" /> Ghi nhận
+              <Plus className="w-4 h-4" /> Ghi nhận
             </button>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto text-xs">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto text-sm">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase font-black text-[10px] tracking-wider">
+                  <tr className="bg-slate-100 border-b-2 border-slate-200 text-slate-700 uppercase font-bold text-xs">
                     <th className="p-3.5 w-24">Mã Log</th>
                     <th className="p-3.5 min-w-[200px]">Thiết Bị / CCDC</th>
                     <th className="p-3.5 w-28">Ngày Làm</th>
@@ -1926,15 +1903,14 @@ export default function MachineryMaintenance({
                       </td>
                       <td className="p-3.5">
                         <span
-                          className={`px-2 py-0.5 rounded font-black text-[10px] border uppercase ${
-                            log.type === 'Hiệu chuẩn'
-                              ? 'bg-cyan-100 text-cyan-800 border-cyan-200'
-                              : log.type === 'Định kỳ'
+                          className={`px-2 py-0.5 rounded font-black text-[10px] border uppercase ${log.type === 'Hiệu chuẩn'
+                            ? 'bg-cyan-100 text-cyan-800 border-cyan-200'
+                            : log.type === 'Định kỳ'
                               ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
                               : log.type === 'Nâng cấp'
-                              ? 'bg-purple-100 text-purple-800 border-purple-200'
-                              : 'bg-amber-100 text-amber-800 border-amber-200'
-                          }`}
+                                ? 'bg-purple-100 text-purple-800 border-purple-200'
+                                : 'bg-amber-100 text-amber-800 border-amber-200'
+                            }`}
                         >
                           {log.type}
                         </span>
@@ -1955,11 +1931,10 @@ export default function MachineryMaintenance({
                       <td className="p-3.5">
                         {log.calibrationResult && (
                           <span
-                            className={`px-2 py-0.5 rounded font-black text-[10px] border inline-block mb-1 ${
-                              log.calibrationResult === 'ĐẠT'
-                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                : 'bg-rose-100 text-rose-800 border-rose-200'
-                            }`}
+                            className={`px-2 py-0.5 rounded font-black text-[10px] border inline-block mb-1 ${log.calibrationResult === 'ĐẠT'
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                              : 'bg-rose-100 text-rose-800 border-rose-200'
+                              }`}
                           >
                             {log.calibrationResult}
                           </span>
@@ -2009,38 +1984,38 @@ export default function MachineryMaintenance({
       {/* ========================================================================= */}
       {subTab === 'fabrication' && (
         <div className="space-y-4" id="view_fabrication_jobs">
-          <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-wrap gap-3 items-center justify-between">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm flex flex-wrap gap-3 items-center justify-between">
             <div className="flex flex-wrap gap-2.5 items-center flex-1">
               <div className="relative flex-1 min-w-[220px] max-w-xs">
                 <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Tìm mã phiếu, tên đồ gá, dòng xe, người làm..."
+                  placeholder="Tìm mã phiếu, đồ gá, dòng xe..."
                   value={fabSearch}
                   onChange={e => setFabSearch(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs text-slate-800 outline-none focus:border-violet-500 focus:bg-white"
+                  className="w-full bg-white border-2 border-slate-300 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-800 outline-none focus:border-blue-600 font-bold"
                 />
               </div>
 
               <select
                 value={fabFilterType}
                 onChange={e => setFabFilterType(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 cursor-pointer"
+                className="bg-white border-2 border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 cursor-pointer focus:border-blue-600 focus:outline-none"
               >
-                <option value="All">🔨 Tất cả hạng mục kỹ thuật</option>
-                <option value="Chế tạo đồ gá">Chế tạo đồ gá chuyên dụng</option>
-                <option value="Sửa chữa đồ gá">Sửa chữa / hiệu chỉnh đồ gá</option>
-                <option value="Gia công linh kiện mẫu">Gia công linh kiện mẫu (R&D/PTSP)</option>
-                <option value="Sửa chữa chuyên sâu">Sửa chữa chuyên sâu (IC/Động cơ/Điện)</option>
-                <option value="Tinh chỉnh xe lỗi xưởng">Phối hợp Xưởng tinh chỉnh xe lỗi</option>
+                <option value="All">Hạng mục: Tất cả</option>
+                <option value="Chế tạo đồ gá">Chế tạo đồ gá</option>
+                <option value="Sửa chữa đồ gá">Sửa chữa đồ gá</option>
+                <option value="Gia công linh kiện mẫu">Gia công linh kiện mẫu</option>
+                <option value="Sửa chữa chuyên sâu">Sửa chữa chuyên sâu</option>
+                <option value="Tinh chỉnh xe lỗi xưởng">Tinh chỉnh xe lỗi xưởng</option>
               </select>
 
               <select
                 value={fabFilterStatus}
                 onChange={e => setFabFilterStatus(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 cursor-pointer"
+                className="bg-white border-2 border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 cursor-pointer focus:border-blue-600 focus:outline-none"
               >
-                <option value="All">🚦 Tất cả tiến độ</option>
+                <option value="All">Tiến độ: Tất cả</option>
                 <option value="Chờ thực hiện">Chờ thực hiện</option>
                 <option value="Đang thực hiện">Đang thực hiện</option>
                 <option value="Hoàn thành & Bàn giao">Hoàn thành & Bàn giao</option>
@@ -2051,17 +2026,17 @@ export default function MachineryMaintenance({
             <button
               type="button"
               onClick={openCreateFabModal}
-              className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-3.5 py-2 rounded-lg gap-1.5 cursor-pointer flex items-center transition"
+              className="px-4 py-2 rounded-xl border-2 border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition cursor-pointer inline-flex items-center gap-1.5"
             >
-              <Plus className="w-3.5 h-3.5" /> Tạo phiếu
+              <Plus className="w-4 h-4" /> Tạo phiếu
             </button>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto text-xs">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto text-sm">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase font-black text-[10px] tracking-wider">
+                  <tr className="bg-slate-100 border-b-2 border-slate-200 text-slate-700 uppercase font-bold text-xs">
                     <th className="p-3.5 w-24">Mã Phiếu</th>
                     <th className="p-3.5 min-w-[260px]">Loại & Nội Dung Kỹ Thuật (NV-KTTĐ-05)</th>
                     <th className="p-3.5 min-w-[150px]">Đơn Vị YC / Dòng Xe</th>
@@ -2081,13 +2056,12 @@ export default function MachineryMaintenance({
                         <td className="p-3.5 align-top font-mono font-black text-violet-700">
                           {job.id}
                           <span
-                            className={`mt-1 block w-fit px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${
-                              job.priority === 'Khẩn cấp'
-                                ? 'bg-rose-100 text-rose-800'
-                                : job.priority === 'Cao'
+                            className={`mt-1 block w-fit px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${job.priority === 'Khẩn cấp'
+                              ? 'bg-rose-100 text-rose-800'
+                              : job.priority === 'Cao'
                                 ? 'bg-amber-100 text-amber-800'
                                 : 'bg-slate-100 text-slate-600'
-                            }`}
+                              }`}
                           >
                             {job.priority}
                           </span>
@@ -2144,15 +2118,14 @@ export default function MachineryMaintenance({
                         </td>
                         <td className="p-3.5 align-top text-center">
                           <span
-                            className={`px-2 py-1 rounded-full font-black text-[10px] border inline-block ${
-                              job.status === 'Hoàn thành & Bàn giao'
-                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                                : job.status === 'Đang thực hiện'
+                            className={`px-2 py-1 rounded-full font-black text-[10px] border inline-block ${job.status === 'Hoàn thành & Bàn giao'
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                              : job.status === 'Đang thực hiện'
                                 ? 'bg-violet-100 text-violet-800 border-violet-200'
                                 : job.status === 'Tạm dừng'
-                                ? 'bg-rose-100 text-rose-800 border-rose-200'
-                                : 'bg-slate-100 text-slate-700 border-slate-200'
-                            }`}
+                                  ? 'bg-rose-100 text-rose-800 border-rose-200'
+                                  : 'bg-slate-100 text-slate-700 border-slate-200'
+                              }`}
                           >
                             {job.status}
                           </span>
@@ -2256,25 +2229,25 @@ export default function MachineryMaintenance({
             </div>
           )}
 
-          <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-wrap gap-3 items-center justify-between">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm flex flex-wrap gap-3 items-center justify-between">
             <div className="flex flex-wrap gap-3 items-center flex-1">
               <div className="relative flex-1 max-w-xs">
                 <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Tìm sự cố thiết bị, người báo cáo..."
+                  placeholder="Tìm sự cố thiết bị, người báo..."
                   value={incSearch}
                   onChange={e => setIncSearch(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-4 py-2 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                  className="w-full bg-white border-2 border-slate-300 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-800 outline-none focus:border-blue-600 font-bold"
                 />
               </div>
 
               <select
                 value={incFilterSeverity}
                 onChange={e => setIncFilterSeverity(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 cursor-pointer"
+                className="bg-white border-2 border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 cursor-pointer focus:border-blue-600 focus:outline-none"
               >
-                <option value="All">🔴 Mọi mức độ</option>
+                <option value="All">Mức độ: Tất cả</option>
                 <option value="Critical">Critical (Khẩn cấp)</option>
                 <option value="Warning">Warning (Cảnh báo)</option>
                 <option value="Minor">Minor (Nhẹ)</option>
@@ -2283,9 +2256,9 @@ export default function MachineryMaintenance({
               <select
                 value={incFilterStatus}
                 onChange={e => setIncFilterStatus(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 cursor-pointer"
+                className="bg-white border-2 border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 cursor-pointer focus:border-blue-600 focus:outline-none"
               >
-                <option value="All">🚦 Mọi trạng thái</option>
+                <option value="All">Trạng thái: Tất cả</option>
                 <option value="Pending">Pending (Chờ xử lý)</option>
                 <option value="Repairing">Repairing (Đang sửa)</option>
                 <option value="Resolved">Resolved (Đã khắc phục)</option>
@@ -2295,17 +2268,17 @@ export default function MachineryMaintenance({
             <button
               type="button"
               onClick={() => setShowAddIncModal(true)}
-              className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3.5 py-2 rounded-lg gap-1.5 cursor-pointer flex items-center transition"
+              className="px-4 py-2 rounded-xl border-2 border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition cursor-pointer inline-flex items-center gap-1.5"
             >
-              <Plus className="w-3.5 h-3.5" /> Báo sự cố
+              <Plus className="w-4 h-4" /> Báo sự cố
             </button>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto text-xs">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto text-sm">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 uppercase font-black text-[10px] tracking-wider">
+                  <tr className="bg-slate-100 border-b-2 border-slate-200 text-slate-700 uppercase font-bold text-xs">
                     <th className="p-3.5 w-24">Mã SC</th>
                     <th className="p-3.5 w-48">Thiết Bị</th>
                     <th className="p-3.5 w-24">Ngày</th>
@@ -2333,13 +2306,12 @@ export default function MachineryMaintenance({
                       <td className="p-3.5 font-bold">{inc.reportedBy || '--'}</td>
                       <td className="p-3.5">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                            inc.severity === 'Critical'
-                              ? 'bg-red-600 text-white'
-                              : inc.severity === 'Warning'
+                          className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${inc.severity === 'Critical'
+                            ? 'bg-red-600 text-white'
+                            : inc.severity === 'Warning'
                               ? 'bg-amber-100 text-amber-800 border border-amber-200'
                               : 'bg-slate-100 text-slate-700'
-                          }`}
+                            }`}
                         >
                           {inc.severity}
                         </span>
@@ -2366,13 +2338,12 @@ export default function MachineryMaintenance({
                       </td>
                       <td className="p-3.5 text-center">
                         <span
-                          className={`px-2 py-0.5 rounded font-black text-[10px] uppercase border ${
-                            inc.status === 'Resolved'
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                              : inc.status === 'Repairing'
+                          className={`px-2 py-0.5 rounded font-black text-[10px] uppercase border ${inc.status === 'Resolved'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                            : inc.status === 'Repairing'
                               ? 'bg-amber-100 text-amber-800 border-amber-200'
                               : 'bg-rose-600 text-white border-rose-700'
-                          }`}
+                            }`}
                         >
                           {inc.status}
                         </span>
@@ -2718,11 +2689,10 @@ export default function MachineryMaintenance({
                       Hình Ảnh Thiết Bị (Tự động nén &lt; 30KB)
                     </label>
                     <div
-                      className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition ${
-                        (isEdit ? isEditDragOver : isNewDragOver)
-                          ? 'border-indigo-500 bg-indigo-50'
-                          : 'border-slate-300 hover:border-indigo-400 bg-slate-50'
-                      }`}
+                      className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition ${(isEdit ? isEditDragOver : isNewDragOver)
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-slate-300 hover:border-indigo-400 bg-slate-50'
+                        }`}
                       onDragOver={e => {
                         e.preventDefault();
                         isEdit ? setIsEditDragOver(true) : setIsNewDragOver(true);
