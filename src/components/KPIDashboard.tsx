@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import XLSXStyle from 'xlsx-js-style';
 import {
   DEFAULT_DETAILED_KPIS,
   STAFF_BM_KPI_PROFILES,
@@ -2294,96 +2295,806 @@ export default function KPIDashboard({
   };
 
   // ============================================================================
-  // EXPORT EXCEL (CSV UTF-8 BOM) & PRINT / PDF FUNCTIONS
+  // EXPORT EXCEL (.XLSX MULTI-SHEET WITH FULL STYLING, ALIGNMENT & 8 STAFF)
   // ============================================================================
   const handleExportExcel = () => {
-    const rows: string[][] = [
-      ['CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT'],
-      ['Thương hiệu: DKBike — Slogan: Xe cho cả gia đình'],
-      ['Phòng ban: Quản lý chất lượng (QLCL / DK QMS)'],
-      [`BÁO CÁO ĐÁNH GIÁ CHỈ TIÊU & KPI PHÒNG QLCL — KỲ: ${periodInfo.label.toUpperCase()} (${periodInfo.rangeText})`],
-      [`Tổng điểm KPI Phòng QLCL: ${deptSummary.normalizedScore}/100 điểm — Xếp loại: ${deptSummary.rating}`],
-      [],
-      ['PHẦN I & II: BẢNG CHỈ TIÊU KPI PHÒNG QLCL (35% MỤC TIÊU CHUNG + 65% MỤC TIÊU CHUYÊN MÔN)'],
-      [
+    try {
+      const wb = XLSXStyle.utils.book_new();
+      const BRAND_TITLE = 'CÔNG TY TNHH XE ĐIỆN DK VIỆT NHẬT';
+      const BRAND_SUB = 'Thương hiệu: DKBike — Slogan: Xe cho cả gia đình | Phòng Quản lý chất lượng (QLCL / DK QMS)';
+
+      const HEADER_FILL = { fgColor: { rgb: '1E3A8A' } };
+      const SUBHEADER_FILL = { fgColor: { rgb: 'EFF6FF' } };
+      const SECTION_FILL = { fgColor: { rgb: 'E0E7FF' } };
+      const TH_FILL = { fgColor: { rgb: '1E40AF' } };
+      const ZEBRA_FILL = { fgColor: { rgb: 'F8FAFC' } };
+      const TOTAL_FILL = { fgColor: { rgb: 'E2E8F0' } };
+      const POSITIVE_FILL = { fgColor: { rgb: 'ECFDF5' } };
+      const NEGATIVE_FILL = { fgColor: { rgb: 'FFF1F2' } };
+      const WARN_FILL = { fgColor: { rgb: 'FFFBEB' } };
+      const MUTED_FILL = { fgColor: { rgb: 'F1F5F9' } };
+
+      const BORDER_THIN = {
+        top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+        bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+        left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+        right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+      };
+      const BORDER_SECTION = {
+        top: { style: 'thin', color: { rgb: '93C5FD' } },
+        bottom: { style: 'thin', color: { rgb: '93C5FD' } },
+        left: { style: 'medium', color: { rgb: '1D4ED8' } },
+        right: { style: 'thin', color: { rgb: '93C5FD' } }
+      };
+      const BORDER_TOTAL = {
+        top: { style: 'medium', color: { rgb: '475569' } },
+        bottom: { style: 'medium', color: { rgb: '475569' } },
+        left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+        right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+      };
+
+      const getColAlign = (header: string): 'center' | 'right' | 'left' => {
+        const h = (header || '').trim().toLowerCase();
+        if (
+          h === 'stt' ||
+          h === 'hạng' ||
+          h.includes('mã') ||
+          h.includes('nguồn đo') ||
+          h.includes('đơn vị') ||
+          h.includes('chỉ tiêu') ||
+          h.includes('thực tế') ||
+          h.includes('hoàn thành') ||
+          h.includes('đánh giá') ||
+          h.includes('xếp loại') ||
+          h.includes('trạng thái') ||
+          h.includes('tỷ lệ') ||
+          h.includes('ngày')
+        ) {
+          return 'center';
+        }
+        if (
+          h.includes('trọng số') ||
+          h.includes('điểm') ||
+          h.includes('tổng kpi') ||
+          h.includes('số lượng')
+        ) {
+          return 'center';
+        }
+        return 'left';
+      };
+
+      const getBadgeStyle = (valStr: string) => {
+        const v = (valStr || '').trim().toLowerCase();
+        if (v === 'đạt' || v === 'xuất sắc' || v === 'tốt' || v === 'hoàn thành' || v === 'pass - đã bàn giao kho') {
+          return { fill: POSITIVE_FILL, color: '065F46', bold: true };
+        }
+        if (v === 'không đạt' || v === 'cần cải tiến' || v === 'quá hạn' || v === 'lỗi') {
+          return { fill: NEGATIVE_FILL, color: '9F1239', bold: true };
+        }
+        if (v === 'theo dõi' || v === 'đang cải tiến' || v === 'khá' || v === 'trung bình') {
+          return { fill: WARN_FILL, color: '92400E', bold: true };
+        }
+        if (v === 'chờ dữ liệu' || v.includes('chưa có dữ liệu')) {
+          return { fill: MUTED_FILL, color: '64748B', bold: false };
+        }
+        return null;
+      };
+
+      const buildStyledSheet = (
+        sheetTitle: string,
+        subtitleInfo: string,
+        sections: { title: string; headers: string[]; rows: (string | number)[][] }[],
+        colWidths: number[]
+      ) => {
+        const maxCols = Math.max(4, colWidths.length, ...sections.map(s => s.headers.length));
+        const aoa: (string | number)[][] = [
+          [BRAND_TITLE],
+          [BRAND_SUB],
+          [`${sheetTitle} — KỲ: ${periodInfo.label.toUpperCase()} (${periodInfo.rangeText})`],
+          [subtitleInfo],
+          []
+        ];
+
+        const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = [
+          { s: { r: 0, c: 0 }, e: { r: 0, c: maxCols - 1 } },
+          { s: { r: 1, c: 0 }, e: { r: 1, c: maxCols - 1 } },
+          { s: { r: 2, c: 0 }, e: { r: 2, c: maxCols - 1 } },
+          { s: { r: 3, c: 0 }, e: { r: 3, c: maxCols - 1 } }
+        ];
+
+        const sectionRowMeta: { rowIdx: number; colCount: number }[] = [];
+        const headerRowMeta: { rowIdx: number; headers: string[] }[] = [];
+        const dataRowMeta: { rowIdx: number; headers: string[]; zebra: boolean; isTotal: boolean }[] = [];
+
+        for (const sec of sections) {
+          const secColSpan = Math.max(sec.headers.length, maxCols);
+          const secRowIdx = aoa.length;
+          aoa.push([sec.title]);
+          merges.push({ s: { r: secRowIdx, c: 0 }, e: { r: secRowIdx, c: secColSpan - 1 } });
+          sectionRowMeta.push({ rowIdx: secRowIdx, colCount: secColSpan });
+
+          const thRowIdx = aoa.length;
+          aoa.push(sec.headers);
+          headerRowMeta.push({ rowIdx: thRowIdx, headers: sec.headers });
+
+          sec.rows.forEach((row, idx) => {
+            const absR = aoa.length;
+            aoa.push(row);
+            const firstCells = `${row[0] ?? ''} ${row[1] ?? ''} ${row[2] ?? ''}`.toLowerCase();
+            const isTotal =
+              firstCells.includes('tổng cộng') ||
+              firstCells.includes('tổng điểm') ||
+              firstCells.includes('điểm trung bình');
+            dataRowMeta.push({ rowIdx: absR, headers: sec.headers, zebra: idx % 2 === 1, isTotal });
+          });
+
+          aoa.push([]);
+        }
+
+        // Signature block at bottom of sheet
+        const sigRowIdx = aoa.length;
+        const sigColMid = Math.floor(maxCols / 2);
+        const sigColRight = Math.max(sigColMid + 1, maxCols - 2);
+        const sigHeaderRow = Array(maxCols).fill('');
+        const sigNameRow = Array(maxCols).fill('');
+        sigHeaderRow[1] = 'NGƯỜI LẬP BÁO CÁO';
+        sigHeaderRow[sigColMid] = 'TRƯỞNG PHÒNG QLCL';
+        sigHeaderRow[sigColRight] = 'BAN GIÁM ĐỐC PHÊ DUYỆT';
+        sigNameRow[1] = 'Trần Thế Quảng (Chuyên viên QA)';
+        sigNameRow[sigColMid] = 'Nguyễn Xuân Thao';
+        sigNameRow[sigColRight] = '(Ký, đóng dấu & phê duyệt)';
+        aoa.push(sigHeaderRow);
+        aoa.push(sigNameRow);
+
+        const ws = XLSXStyle.utils.aoa_to_sheet(aoa);
+        ws['!merges'] = merges;
+
+        const setCellStyle = (r: number, c: number, s: Record<string, unknown>) => {
+          const addr = XLSXStyle.utils.encode_cell({ r, c });
+          if (!ws[addr]) ws[addr] = { t: 's', v: '' };
+          ws[addr].s = s;
+        };
+
+        for (let c = 0; c < maxCols; c++) {
+          setCellStyle(0, c, {
+            font: { name: 'Arial', bold: true, sz: 13, color: { rgb: 'FFFFFF' } },
+            fill: HEADER_FILL,
+            alignment: { horizontal: 'left', vertical: 'center' }
+          });
+          setCellStyle(1, c, {
+            font: { name: 'Arial', italic: true, sz: 10, color: { rgb: '1E3A8A' } },
+            fill: SUBHEADER_FILL,
+            border: { bottom: { style: 'thin', color: { rgb: '93C5FD' } } },
+            alignment: { horizontal: 'left', vertical: 'center' }
+          });
+          setCellStyle(2, c, {
+            font: { name: 'Arial', bold: true, sz: 11.5, color: { rgb: '0F172A' } },
+            alignment: { horizontal: 'left', vertical: 'center' }
+          });
+          setCellStyle(3, c, {
+            font: { name: 'Arial', bold: true, sz: 9.5, color: { rgb: '334155' } },
+            border: { bottom: { style: 'thin', color: { rgb: 'CBD5E1' } } },
+            alignment: { horizontal: 'left', vertical: 'center' }
+          });
+        }
+
+        for (const { rowIdx, colCount } of sectionRowMeta) {
+          for (let c = 0; c < colCount; c++) {
+            setCellStyle(rowIdx, c, {
+              font: { name: 'Arial', bold: true, sz: 10.5, color: { rgb: '1E3A8A' } },
+              fill: SECTION_FILL,
+              border: {
+                ...BORDER_SECTION,
+                left: c === 0 ? BORDER_SECTION.left : { style: 'thin', color: { rgb: '93C5FD' } }
+              },
+              alignment: { horizontal: 'left', vertical: 'center' }
+            });
+          }
+        }
+
+        for (const { rowIdx, headers } of headerRowMeta) {
+          for (let c = 0; c < headers.length; c++) {
+            setCellStyle(rowIdx, c, {
+              font: { name: 'Arial', bold: true, sz: 10, color: { rgb: 'FFFFFF' } },
+              fill: TH_FILL,
+              border: BORDER_THIN,
+              alignment: { horizontal: 'center', vertical: 'center', wrapText: true }
+            });
+          }
+        }
+
+        const rowHeights: { hpt: number }[] = [
+          { hpt: 28 },
+          { hpt: 20 },
+          { hpt: 24 },
+          { hpt: 20 },
+          { hpt: 10 }
+        ];
+        const setRowHeight = (r: number, hpt: number) => {
+          while (rowHeights.length <= r) rowHeights.push({ hpt: 20 });
+          rowHeights[r] = { hpt: Math.max(rowHeights[r]?.hpt || 0, hpt) };
+        };
+        sectionRowMeta.forEach(({ rowIdx }) => setRowHeight(rowIdx, 24));
+        headerRowMeta.forEach(({ rowIdx }) => setRowHeight(rowIdx, 28));
+
+        for (const { rowIdx, headers, zebra, isTotal } of dataRowMeta) {
+          let maxLines = 1;
+          for (let c = 0; c < headers.length; c++) {
+            const addr = XLSXStyle.utils.encode_cell({ r: rowIdx, c });
+            const cell = ws[addr];
+            const rawVal = cell ? String(cell.v ?? '') : '';
+            const colW = Math.max((colWidths[c] || 16) - 2, 10);
+            const explicitLines = rawVal.split(/\r?\n/);
+            const wrappedCount = explicitLines.reduce(
+              (sum, part) => sum + Math.max(1, Math.ceil(part.length / colW)),
+              0
+            );
+            if (wrappedCount > maxLines) maxLines = wrappedCount;
+
+            const horizontal = getColAlign(headers[c] || '');
+            const badge = !isTotal ? getBadgeStyle(rawVal) : null;
+
+            setCellStyle(rowIdx, c, {
+              font: {
+                name: 'Arial',
+                sz: 10,
+                bold: isTotal || Boolean(badge?.bold) || c === 1,
+                color: { rgb: badge ? badge.color : '0F172A' }
+              },
+              fill: isTotal ? TOTAL_FILL : badge ? badge.fill : zebra ? ZEBRA_FILL : undefined,
+              border: isTotal ? BORDER_TOTAL : BORDER_THIN,
+              alignment: {
+                horizontal,
+                vertical: 'center',
+                wrapText: true
+              }
+            });
+          }
+          setRowHeight(rowIdx, Math.min(115, Math.max(22, maxLines * 14.5 + 6)));
+        }
+
+        setRowHeight(sigRowIdx, 24);
+        setRowHeight(sigRowIdx + 1, 45);
+        for (let c = 0; c < maxCols; c++) {
+          setCellStyle(sigRowIdx, c, {
+            font: { name: 'Arial', bold: true, sz: 10, color: { rgb: '0F172A' } },
+            alignment: { horizontal: 'center', vertical: 'center' }
+          });
+          setCellStyle(sigRowIdx + 1, c, {
+            font: { name: 'Arial', italic: true, sz: 9.5, color: { rgb: '334155' } },
+            alignment: { horizontal: 'center', vertical: 'bottom' }
+          });
+        }
+
+        ws['!cols'] = colWidths.map(wch => ({ wch }));
+        ws['!rows'] = rowHeights;
+        ws['!views'] = [{ state: 'frozen', ySplit: 4 }];
+        ws['!pageSetup'] = { paperSize: 9, orientation: 'landscape', fitToWidth: 1, fitToHeight: 0 };
+        return ws;
+      };
+
+      const exportTimestamp = new Date().toLocaleString('vi-VN');
+      const commonList = resolvedDeptKpis.filter(k => k.type === 'Mục tiêu hoạt động chung');
+      const proList = resolvedDeptKpis.filter(k => k.type === 'Mục tiêu hoạt động chuyên môn');
+
+      // =======================================================================
+      // SHEET 1: BÁO CÁO CHỈ TIÊU & KPI PHÒNG QLCL (35% CHUNG + 65% CHUYÊN MÔN)
+      // =======================================================================
+      const deptKpiHeaders = [
+        'STT',
         'Mã KPI',
-        'Phân nhóm',
-        'Nhóm mục tiêu',
-        'Tên chỉ tiêu KPI',
+        'Nhóm danh mục',
+        'Tên chỉ tiêu KPI Phòng QLCL',
+        'Định nghĩa & Phương pháp đo lường',
         'Nguồn đo',
         'Trọng số (%)',
         'Chỉ tiêu (Target)',
-        'Thực tế đạt',
-        'Tỷ lệ hoàn thành (%)',
-        'Điểm quy đổi',
+        'Thực tế đạt (Trong App)',
+        'Tỷ lệ hoàn thành',
+        'Điểm KPI đạt',
         'Đánh giá',
-        'Dẫn chứng dữ liệu / Ghi chú'
-      ]
-    ];
+        'Dẫn chứng dữ liệu thực tế truyền từ App / Ghi chú'
+      ];
 
-    resolvedDeptKpis.forEach(k => {
-      rows.push([
-        k.id,
-        k.type,
-        k.category,
-        k.indicator,
-        k.sourceType === 'manual' ? 'Nhập tay' : 'Tự động từ App',
-        String(k.weight),
-        k.effectiveTarget,
-        k.effectiveActual,
-        k.isWaitingData ? 'Chờ dữ liệu' : `${k.attainmentPct}%`,
-        String(k.achievedPoints),
-        k.effectiveStatus,
-        k.evidenceText || ''
+      const mapDeptKpiRows = (list: typeof resolvedDeptKpis) =>
+        list.map((k, idx) => [
+          idx + 1,
+          k.id,
+          k.category,
+          k.indicator,
+          k.definition,
+          k.sourceType === 'manual' ? 'Nhập tay' : 'Tự động từ App',
+          `${k.weight}%`,
+          k.effectiveTarget,
+          k.effectiveActual,
+          k.isWaitingData ? 'Chờ dữ liệu' : `${k.attainmentPct}%`,
+          k.isWaitingData ? 'Không tính mẫu' : `${k.achievedPoints} / ${k.weight}`,
+          k.effectiveStatus,
+          k.evidenceText || ''
+        ]);
+
+      const sheet1Sections = [
+        {
+          title: 'I. TỔNG HỢP KẾT QUẢ ĐÁNH GIÁ KPI PHÒNG QUẢN LÝ CHẤT LƯỢNG TRONG KỲ',
+          headers: deptKpiHeaders,
+          rows: [
+            [
+              1,
+              'KPI-DEPT-ALL',
+              'Toàn Phòng QLCL',
+              `ĐIỂM TỔNG KPI PHÒNG QUẢN LÝ CHẤT LƯỢNG (${periodInfo.label})`,
+              'Tổng hợp từ Phần I: Mục tiêu hoạt động chung (35%) + Phần II: Mục tiêu hoạt động chuyên môn (65%)',
+              'Tự động tổng hợp',
+              '100%',
+              '>= 90 điểm',
+              `${deptSummary.normalizedScore} / 100 điểm`,
+              `${deptSummary.normalizedScore}%`,
+              `${deptSummary.normalizedScore} / 100`,
+              deptSummary.rating,
+              `Tính trên ${deptSummary.activeIndicatorsCount}/${deptSummary.totalCount} chỉ tiêu có dữ liệu trong kỳ (${deptSummary.passedCount} chỉ tiêu Đạt, ${deptSummary.waitingIndicatorsCount} chỉ tiêu Chờ dữ liệu)`
+            ],
+            [
+              2,
+              'KPI-DEPT-COM',
+              'I. Mục tiêu chung',
+              'Điểm quy đổi Khối I — Mục tiêu Hoạt động Chung (Tỷ trọng chuẩn 35%)',
+              'Chi phí & COPQ (15%) • Kế hoạch chất lượng & Hồ sơ QMS /bm (10%) • Kỷ luật báo cáo ngày & 5S (10%)',
+              'Tự động + Nhập tay',
+              '35%',
+              '35.0 điểm',
+              `${deptSummary.commonAchieved} / ${deptSummary.commonMax} điểm`,
+              `${Math.round((deptSummary.commonAchieved / (deptSummary.commonMax || 35)) * 100)}%`,
+              `${deptSummary.commonAchieved} / ${deptSummary.commonMax}`,
+              deptSummary.commonAchieved >= 28 ? 'Đạt' : 'Theo dõi',
+              `Đạt ${deptSummary.commonPassedCount}/${deptSummary.commonTotalCount} chỉ tiêu thuộc Khối Mục tiêu hoạt động chung`
+            ],
+            [
+              3,
+              'KPI-DEPT-PRO',
+              'II. Chuyên môn QLCL',
+              'Điểm quy đổi Khối II — Mục tiêu Hoạt động Chuyên môn QLCL (Tỷ trọng chuẩn 65%)',
+              'Chất lượng NCC & IQC (15%) • Kiểm soát PQC & OQC/KCS (25%) • Thị trường & Bảo hành (15%) • Thiết bị đo (10%)',
+              'Tự động 100% từ App',
+              '65%',
+              '65.0 điểm',
+              `${deptSummary.proAchieved} / ${deptSummary.proMax} điểm`,
+              `${Math.round((deptSummary.proAchieved / (deptSummary.proMax || 65)) * 100)}%`,
+              `${deptSummary.proAchieved} / ${deptSummary.proMax}`,
+              deptSummary.proAchieved >= 52 ? 'Đạt' : 'Theo dõi',
+              `Đạt ${deptSummary.proPassedCount}/${deptSummary.proTotalCount} chỉ tiêu thuộc Khối Mục tiêu chuyên môn QLCL`
+            ],
+            [
+              4,
+              'KPI-STAFF-AVG',
+              '8 Nhân sự Phòng QLCL',
+              'Điểm KPI Trung bình của 8 Nhân sự Phòng Quản lý Chất lượng (Theo Bản giao nhiệm vụ /bm)',
+              'Trung bình cộng điểm KPI cá nhân (50đ Nghiệp vụ /bm + 30đ Báo cáo ngày + 20đ Trưởng phòng đánh giá)',
+              'Tự động + TP chấm',
+              '100đ',
+              '>= 80 điểm',
+              `${staffSummary.avgScore} / 100 điểm`,
+              `${staffSummary.avgScore}%`,
+              `${staffSummary.avgScore} / 100`,
+              staffSummary.avgScore >= 90 ? 'Xuất sắc' : staffSummary.avgScore >= 80 ? 'Tốt' : 'Khá',
+              `${staffSummary.goodOrAboveCount}/${staffSummary.totalStaff} nhân sự đạt loại Tốt trở lên • Nhân sự dẫn đầu kỳ: ${staffSummary.topPerformer}`
+            ]
+          ]
+        },
+        {
+          title: 'II. PHẦN I — BẢNG CHỈ TIÊU MỤC TIÊU HOẠT ĐỘNG CHUNG (TỔNG TRỌNG SỐ CHUẨN: 35%)',
+          headers: deptKpiHeaders,
+          rows: [
+            ...mapDeptKpiRows(commonList),
+            [
+              '',
+              'TỔNG CỘNG PHẦN I',
+              'Mục tiêu chung',
+              'TỔNG ĐIỂM QUY ĐỔI PHẦN I — MỤC TIÊU HOẠT ĐỘNG CHUNG',
+              '',
+              '',
+              `${deptSummary.commonMax}%`,
+              '35.0 điểm',
+              `${deptSummary.commonAchieved} điểm`,
+              `${Math.round((deptSummary.commonAchieved / (deptSummary.commonMax || 35)) * 100)}%`,
+              `${deptSummary.commonAchieved} / ${deptSummary.commonMax}`,
+              deptSummary.commonAchieved >= 28 ? 'Đạt' : 'Theo dõi',
+              `Đạt chuẩn ${deptSummary.commonPassedCount}/${deptSummary.commonTotalCount} chỉ tiêu`
+            ]
+          ]
+        },
+        {
+          title: 'III. PHẦN II — BẢNG CHỈ TIÊU MỤC TIÊU HOẠT ĐỘNG CHUYÊN MÔN QLCL (TỔNG TRỌNG SỐ CHUẨN: 65%)',
+          headers: deptKpiHeaders,
+          rows: [
+            ...mapDeptKpiRows(proList),
+            [
+              '',
+              'TỔNG CỘNG PHẦN II',
+              'Mục tiêu chuyên môn',
+              'TỔNG ĐIỂM QUY ĐỔI PHẦN II — MỤC TIÊU HOẠT ĐỘNG CHUYÊN MÔN QLCL',
+              '',
+              '',
+              `${deptSummary.proMax}%`,
+              '65.0 điểm',
+              `${deptSummary.proAchieved} điểm`,
+              `${Math.round((deptSummary.proAchieved / (deptSummary.proMax || 65)) * 100)}%`,
+              `${deptSummary.proAchieved} / ${deptSummary.proMax}`,
+              deptSummary.proAchieved >= 52 ? 'Đạt' : 'Theo dõi',
+              `Đạt chuẩn ${deptSummary.proPassedCount}/${deptSummary.proTotalCount} chỉ tiêu`
+            ],
+            [
+              '',
+              'TỔNG ĐIỂM KPI PHÒNG',
+              'Toàn Phòng QLCL',
+              `TỔNG ĐIỂM KPI PHÒNG QUẢN LÝ CHẤT LƯỢNG KỲ ${periodInfo.label.toUpperCase()} (PHẦN I + PHẦN II QUY ĐỔI THANG 100)`,
+              '',
+              '',
+              '100%',
+              '100 điểm',
+              `${deptSummary.normalizedScore} / 100 điểm`,
+              `${deptSummary.normalizedScore}%`,
+              `${deptSummary.normalizedScore} / 100`,
+              deptSummary.rating,
+              `Xếp loại chung Phòng QLCL: ${deptSummary.rating.toUpperCase()}`
+            ]
+          ]
+        }
+      ];
+
+      XLSXStyle.utils.book_append_sheet(
+        wb,
+        buildStyledSheet(
+          'BÁO CÁO CHỈ TIÊU & KPI PHÒNG QUẢN LÝ CHẤT LƯỢNG',
+          `Xuất lúc: ${exportTimestamp} | Điểm KPI Phòng QLCL: ${deptSummary.normalizedScore}/100 (${deptSummary.rating}) | Điểm TB 8 Nhân sự: ${staffSummary.avgScore}/100`,
+          sheet1Sections,
+          [6, 15, 22, 38, 44, 15, 13, 16, 20, 16, 16, 15, 52]
+        ),
+        '1_KPI_Phong_QLCL'
+      );
+
+      // =======================================================================
+      // SHEET 2: BẢNG XẾP HẠNG & TỔNG HỢP KPI 8 NHÂN SỰ PHÒNG QLCL
+      // =======================================================================
+      const staffRankingHeaders = [
+        'Hạng',
+        'Họ và tên nhân sự',
+        'Chức danh / Vị trí thực tế (Theo Bản giao nhiệm vụ /bm)',
+        'Mã Văn bản /bm',
+        'Mã Chức năng RACI',
+        '1. Điểm Nghiệp vụ /bm (50đ)',
+        '2. Điểm Báo cáo ngày (30đ)',
+        'Hoàn thành việc (100%)',
+        'Việc quá hạn',
+        'Tỷ lệ QA/SQC',
+        'Tỷ lệ IQC',
+        'Tỷ lệ PQC',
+        'Tỷ lệ OQC',
+        'Tỷ lệ CS/BH',
+        '3. Điểm Trưởng phòng (20đ)',
+        'Chi tiết điểm TP (TN + CT)',
+        'TỔNG KPI (/100đ)',
+        'Xếp loại KPI',
+        'Nhận xét & Đánh giá của Trưởng phòng QLCL'
+      ];
+
+      const staffRankingRows: (string | number)[][] = staffEvaluationsComputed.map((item, idx) => {
+        const ds = item.dailyStats;
+        return [
+          idx + 1,
+          item.profile.staffName,
+          item.profile.roleTitle,
+          item.profile.bmDocCode,
+          item.profile.mtcvCode,
+          `${item.roleScore50} / 50`,
+          `${item.dailyScore30} / 30`,
+          `${ds.completedTasks}/${ds.totalTasks} việc (${ds.taskCompletionRate}%)`,
+          `${ds.overdueTasks} việc`,
+          ds.sqcStat.total > 0 ? `${ds.sqcStat.rate}% (${ds.sqcStat.completed}/${ds.sqcStat.total})` : '-',
+          ds.iqcStat.total > 0 ? `${ds.iqcStat.rate}% (${ds.iqcStat.completed}/${ds.iqcStat.total})` : '-',
+          ds.pqcStat.total > 0 ? `${ds.pqcStat.rate}% (${ds.pqcStat.completed}/${ds.pqcStat.total})` : '-',
+          ds.oqcStat.total > 0 ? `${ds.oqcStat.rate}% (${ds.oqcStat.completed}/${ds.oqcStat.total})` : '-',
+          ds.csStat.total > 0 ? `${ds.csStat.rate}% (${ds.csStat.completed}/${ds.csStat.total})` : '-',
+          `${item.managerScore20} / 20`,
+          `TN: ${item.mgrResp}/10 + CT: ${item.mgrInit}/10`,
+          `${item.totalScore100} / 100`,
+          item.rating,
+          item.managerComment || 'Đảm bảo tiến độ & chất lượng công việc theo Bản giao nhiệm vụ /bm'
+        ];
+      });
+
+      const avgRole50 =
+        staffEvaluationsComputed.length > 0
+          ? Number(
+              (
+                staffEvaluationsComputed.reduce((s, x) => s + x.roleScore50, 0) /
+                staffEvaluationsComputed.length
+              ).toFixed(1)
+            )
+          : 0;
+      const avgDaily30 =
+        staffEvaluationsComputed.length > 0
+          ? Number(
+              (
+                staffEvaluationsComputed.reduce((s, x) => s + x.dailyScore30, 0) /
+                staffEvaluationsComputed.length
+              ).toFixed(1)
+            )
+          : 0;
+      const avgMgr20 =
+        staffEvaluationsComputed.length > 0
+          ? Number(
+              (
+                staffEvaluationsComputed.reduce((s, x) => s + x.managerScore20, 0) /
+                staffEvaluationsComputed.length
+              ).toFixed(1)
+            )
+          : 0;
+      const totalStaffTasks = staffEvaluationsComputed.reduce((s, x) => s + x.dailyStats.totalTasks, 0);
+      const totalStaffCompleted = staffEvaluationsComputed.reduce(
+        (s, x) => s + x.dailyStats.completedTasks,
+        0
+      );
+      const totalStaffOverdue = staffEvaluationsComputed.reduce(
+        (s, x) => s + x.dailyStats.overdueTasks,
+        0
+      );
+
+      staffRankingRows.push([
+        '',
+        'ĐIỂM TRUNG BÌNH 8 NHÂN SỰ',
+        'Tổng hợp toàn bộ 8 nhân sự Phòng Quản lý Chất lượng (BG-NV-01 đến BG-NV-08)',
+        'BG-NV-01..08',
+        'Toàn Phòng QLCL',
+        `${avgRole50} / 50`,
+        `${avgDaily30} / 30`,
+        `${totalStaffCompleted}/${totalStaffTasks} lượt việc`,
+        `${totalStaffOverdue} việc`,
+        '-',
+        '-',
+        '-',
+        '-',
+        '-',
+        `${avgMgr20} / 20`,
+        'TB toàn phòng',
+        `${staffSummary.avgScore} / 100`,
+        staffSummary.avgScore >= 90 ? 'Xuất sắc' : staffSummary.avgScore >= 80 ? 'Tốt' : 'Khá',
+        `Dẫn đầu kỳ: ${staffSummary.topPerformer} (${staffSummary.goodOrAboveCount}/${staffSummary.totalStaff} nhân sự đạt Tốt trở lên)`
       ]);
-    });
 
-    rows.push([]);
-    rows.push(['PHẦN III: BẢNG TỔNG HỢP ĐÁNH GIÁ KPI 8 NHÂN SỰ PHÒNG QLCL (THEO BẢN GIAO NHIỆM VỤ /bm & BÁO CÁO NGÀY)']);
-    rows.push([
-      'STT',
-      'Họ và tên nhân sự',
-      'Chức danh / Vị trí',
-      'Mã văn bản /bm',
-      'Điểm Nghiệp vụ /bm (50đ)',
-      'Điểm Báo cáo ngày (30đ)',
-      'Điểm Trưởng phòng chấm (20đ)',
-      'Tổng điểm KPI (/100đ)',
-      'Xếp loại KPI',
-      'Hoàn thành việc trong kỳ',
-      'Nhận xét của Trưởng phòng'
-    ]);
+      XLSXStyle.utils.book_append_sheet(
+        wb,
+        buildStyledSheet(
+          'BẢNG XẾP HẠNG & ĐÁNH GIÁ TỔNG HỢP KPI 8 NHÂN SỰ PHÒNG QLCL',
+          `Xuất lúc: ${exportTimestamp} | Tổng điểm 100 = 50đ Nghiệp vụ (/bm) + 30đ Báo cáo ngày + 20đ Trưởng phòng đánh giá | Điểm TB: ${staffSummary.avgScore}/100`,
+          [
+            {
+              title: `I. BẢNG XẾP HẠNG TỔNG HỢP KPI 8 NHÂN SỰ PHÒNG QUẢN LÝ CHẤT LƯỢNG — KỲ ${periodInfo.label.toUpperCase()}`,
+              headers: staffRankingHeaders,
+              rows: staffRankingRows
+            }
+          ],
+          [7, 22, 42, 14, 22, 16, 16, 20, 13, 14, 14, 14, 14, 14, 16, 20, 16, 15, 46]
+        ),
+        '2_Xep_Hang_8_Nhan_Su'
+      );
 
-    staffEvaluationsComputed.forEach((st, idx) => {
-      rows.push([
-        String(idx + 1),
-        st.profile.staffName,
-        st.profile.roleTitle,
-        `${st.profile.bmDocCode} / ${st.profile.mtcvCode}`,
-        String(st.roleScore50),
-        String(st.dailyScore30),
-        String(st.managerScore20),
-        String(st.totalScore100),
-        st.rating,
-        `${st.dailyStats.completedTasks}/${st.dailyStats.totalTasks} việc (${st.dailyStats.taskCompletionRate}%)`,
-        st.managerComment || 'Đảm bảo tiến độ công việc được giao'
+      // =======================================================================
+      // SHEET 3: CHI TIẾT PHIẾU ĐÁNH GIÁ KPI CÁ NHÂN CỦA CẢ 8 NHÂN SỰ (/bm)
+      // =======================================================================
+      const staffDetailHeaders = [
+        'STT',
+        'Họ tên Nhân sự',
+        'Mã Văn bản /bm',
+        'Nhóm đánh giá KPI cá nhân',
+        'Tên chỉ tiêu / Hạng mục đánh giá chi tiết',
+        'Căn cứ Văn bản /bm & Quy trình SOP',
+        'Trọng số tối đa',
+        'Chỉ tiêu (Target)',
+        'Thực tế đạt (Trong App)',
+        'Tỷ lệ hoàn thành',
+        'Điểm KPI đạt',
+        'Trạng thái',
+        'Dẫn chứng bản ghi gốc từ App / Nhận xét của Trưởng phòng'
+      ];
+
+      const staffDetailSections = staffEvaluationsComputed.map((item, sIdx) => {
+        const ds = item.dailyStats;
+        const rows: (string | number)[][] = [];
+
+        // 1. Role Metrics (50đ)
+        item.allRoleMetrics.forEach((m: any, mIdx: number) => {
+          rows.push([
+            `I.${mIdx + 1}`,
+            item.profile.staffName,
+            item.profile.bmDocCode,
+            'I. Nghiệp vụ chuyên môn /bm (50đ)',
+            m.name,
+            m.bmReference,
+            `${m.weight} điểm`,
+            m.targetText,
+            m.actualText,
+            m.isWaitingData ? 'Chờ dữ liệu' : `${m.scorePercent}%`,
+            m.isWaitingData ? 'Chờ dữ liệu' : `${m.points} / ${m.weight}`,
+            m.isWaitingData ? 'Chờ dữ liệu' : m.scorePercent >= 95 ? 'Đạt' : m.scorePercent >= 80 ? 'Theo dõi' : 'Cần cải tiến',
+            m.evidence || ''
+          ]);
+        });
+
+        rows.push([
+          'I.TỔNG',
+          item.profile.staffName,
+          item.profile.bmDocCode,
+          'Tổng Nhóm I (Quy đổi chuẩn 50đ)',
+          `Cộng điểm Chỉ tiêu Nghiệp vụ chuyên môn theo Bản giao nhiệm vụ ${item.profile.bmDocCode}`,
+          item.profile.mtcvCode,
+          '50 điểm',
+          '50.0 điểm',
+          `${item.roleScore50} / 50 điểm`,
+          `${Math.round((item.roleScore50 / 50) * 100)}%`,
+          `${item.roleScore50} / 50`,
+          item.roleScore50 >= 40 ? 'Đạt' : 'Theo dõi',
+          `Tính trên ${item.activeRoleMetricsCount}/${item.allRoleMetrics.length} chỉ tiêu nghiệp vụ có phát sinh dữ liệu trong kỳ`
+        ]);
+
+        // 2. Daily Logs & Task Completion (30đ)
+        rows.push([
+          'II.1',
+          item.profile.staffName,
+          item.profile.bmDocCode,
+          'II. Báo cáo ngày & Công việc (30đ)',
+          'Kỷ luật thực hiện & hoàn thành công việc trong Nhật trình báo cáo chất lượng hàng ngày (statusPercent = 100%)',
+          'Chế độ Báo cáo ngày P.QLCL (KSX-QLCL-01)',
+          '30 điểm',
+          '100% đúng hạn',
+          `${ds.completedTasks}/${ds.totalTasks} việc (${ds.taskCompletionRate}%)`,
+          `${ds.taskCompletionRate}%`,
+          `${item.dailyScore30} / 30`,
+          ds.totalTasks === 0 ? 'Chờ dữ liệu' : ds.taskCompletionRate >= 90 && ds.overdueTasks === 0 ? 'Đạt' : 'Theo dõi',
+          `Tổng việc: ${ds.totalTasks} • Hoàn thành (100%): ${ds.completedTasks} • Quá hạn: ${ds.overdueTasks} • Số ngày có báo cáo: ${ds.distinctDays} ngày (QA/SQC: ${ds.sqcStat.rate}%, IQC: ${ds.iqcStat.rate}%, PQC: ${ds.pqcStat.rate}%, OQC: ${ds.oqcStat.rate}%, BH: ${ds.csStat.rate}%)`
+        ]);
+
+        // 3. Manager Evaluation (20đ)
+        rows.push([
+          'III.1',
+          item.profile.staffName,
+          item.profile.bmDocCode,
+          'III. Trưởng phòng đánh giá (20đ)',
+          '1. Tinh thần trách nhiệm, kỷ luật báo cáo & thái độ phối hợp liên phòng ban',
+          'Trưởng phòng QLCL (Nguyễn Xuân Thao) chấm điểm',
+          '10 điểm',
+          '>= 8.5 / 10',
+          `${item.mgrResp} / 10 điểm`,
+          `${Math.round(item.mgrResp * 10)}%`,
+          `${item.mgrResp} / 10`,
+          item.mgrResp >= 8 ? 'Đạt' : 'Theo dõi',
+          item.managerComment || 'Tuân thủ kỷ luật và phối hợp tốt trong công việc'
+        ]);
+        rows.push([
+          'III.2',
+          item.profile.staffName,
+          item.profile.bmDocCode,
+          'III. Trưởng phòng đánh giá (20đ)',
+          '2. Năng lực giải quyết vấn đề, sáng kiến cải tiến chất lượng & duy trì 5S',
+          'Trưởng phòng QLCL (Nguyễn Xuân Thao) chấm điểm',
+          '10 điểm',
+          '>= 8.5 / 10',
+          `${item.mgrInit} / 10 điểm`,
+          `${Math.round(item.mgrInit * 10)}%`,
+          `${item.mgrInit} / 10`,
+          item.mgrInit >= 8 ? 'Đạt' : 'Theo dõi',
+          item.managerComment || 'Thực hiện tốt nhiệm vụ chuyên môn và duy trì 5S'
+        ]);
+
+        // Total row for this staff member
+        rows.push([
+          'TỔNG KPI',
+          item.profile.staffName,
+          item.profile.bmDocCode,
+          'TỔNG CỘNG ĐIỂM KPI CÁ NHÂN (I + II + III)',
+          `TỔNG ĐIỂM KPI CÁ NHÂN: ${item.profile.staffName.toUpperCase()} (${item.profile.roleTitle})`,
+          `${item.profile.bmDocCode} / ${item.profile.mtcvCode}`,
+          '100 điểm',
+          '>= 80 điểm',
+          `${item.totalScore100} / 100 điểm`,
+          `${item.totalScore100}%`,
+          `${item.totalScore100} / 100`,
+          item.rating,
+          `Nghiệp vụ /bm: ${item.roleScore50}/50đ + Báo cáo ngày: ${item.dailyScore30}/30đ + Trưởng phòng chấm: ${item.managerScore20}/20đ => Xếp loại: ${item.rating.toUpperCase()}`
+        ]);
+
+        return {
+          title: `PHIẾU KPI #${sIdx + 1}: ${item.profile.staffName.toUpperCase()} — ${item.profile.roleTitle.toUpperCase()} [${item.profile.bmDocCode} | TỔNG ĐIỂM: ${item.totalScore100}/100 (${item.rating.toUpperCase()})]`,
+          headers: staffDetailHeaders,
+          rows
+        };
+      });
+
+      XLSXStyle.utils.book_append_sheet(
+        wb,
+        buildStyledSheet(
+          'CHI TIẾT PHIẾU ĐÁNH GIÁ KPI CÁ NHÂN 8 NHÂN SỰ PHÒNG QLCL (THEO /bm)',
+          `Xuất lúc: ${exportTimestamp} | Đầy đủ 8 Phiếu đánh giá KPI cá nhân (Nguyễn Xuân Thao, Trần Thế Quảng, Nguyễn Văn Diệm, Hoàng Văn Phấn, Hà Khắc Việt, Lành Xuân Hải, Liễu Tùng Lâm, Đoàn Anh Hùng)`,
+          staffDetailSections,
+          [9, 20, 13, 28, 42, 34, 14, 15, 22, 15, 15, 14, 54]
+        ),
+        '3_Chi_Tiet_KPI_8_Nhan_Su'
+      );
+
+      // =======================================================================
+      // SHEET 4: BẢNG ĐỐI SOÁT DỮ LIỆU GỐC TRUYỀN TỪ 10 PHÂN HỆ SANG KPI
+      // =======================================================================
+      const moduleOverviewRows: (string | number)[][] = moduleTransferCards.map((card, idx) => [
+        idx + 1,
+        card.name,
+        card.metric.targetTabLabel,
+        card.countText,
+        card.metric.actualText,
+        card.hasData ? 'Đạt' : 'Chờ dữ liệu',
+        card.metric.evidenceText
       ]);
-    });
 
-    const csvContent =
-      '\uFEFF' +
-      rows
-        .map(r => r.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
-        .join('\n');
+      const sourceRecordRows: (string | number)[][] = [];
+      moduleTransferCards.forEach(card => {
+        card.metric.sourceRecords.slice(0, 15).forEach(r => {
+          sourceRecordRows.push([
+            sourceRecordRows.length + 1,
+            card.name,
+            r.id,
+            r.date,
+            r.title,
+            r.actor,
+            r.resultText
+          ]);
+        });
+      });
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `DK_QMS_Bao_Cao_KPI_${periodInfo.key}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setShowExportMenu(false);
+      XLSXStyle.utils.book_append_sheet(
+        wb,
+        buildStyledSheet(
+          'BẢNG ĐỐI SOÁT NGUỒN DỮ LIỆU TỰ ĐỘNG TỪ 10 PHÂN HỆ NGHIỆP VỤ',
+          `Xuất lúc: ${exportTimestamp} | Minh chứng dữ liệu gốc cấu thành các chỉ số KPI tự động trong kỳ ${periodInfo.label}`,
+          [
+            {
+              title: `I. TỔNG HỢP TRẠNG THÁI TRUYỀN DỮ LIỆU TỰ ĐỘNG TỪ 10 PHÂN HỆ TRONG KỲ ${periodInfo.label.toUpperCase()}`,
+              headers: [
+                'STT',
+                'Phân hệ nguồn dữ liệu',
+                'Tên phân hệ trên App',
+                'Số lượng bản ghi kỳ',
+                'Chỉ số KPI tính tự động',
+                'Trạng thái dữ liệu',
+                'Chi tiết dẫn chứng tổng hợp từ phân hệ'
+              ],
+              rows: moduleOverviewRows
+            },
+            {
+              title: 'II. TRÍCH LỤC CÁC BẢN GHI GỐC TIÊU BIỂU CẤU THÀNH CHỈ SỐ KPI TRONG KỲ',
+              headers: [
+                'STT',
+                'Phân hệ nguồn',
+                'Mã bản ghi / Số hiệu',
+                'Ngày ghi nhận',
+                'Nội dung chi tiết bản ghi gốc',
+                'Người thực hiện / Phụ trách',
+                'Kết quả / Trạng thái'
+              ],
+              rows:
+                sourceRecordRows.length > 0
+                  ? sourceRecordRows
+                  : [['1', 'Toàn hệ thống', '--', periodInfo.label, 'Chưa phát sinh bản ghi trong kỳ này', '--', 'Chờ dữ liệu']]
+            }
+          ],
+          [7, 24, 28, 20, 52, 24, 48]
+        ),
+        '4_Doi_Soat_10_Phan_He'
+      );
+
+      XLSXStyle.writeFile(wb, `DK_QMS_Bao_Cao_KPI_Phong_QLCL_${periodInfo.key}.xlsx`);
+      setShowExportMenu(false);
+    } catch (err) {
+      console.error('Lỗi xuất file Excel KPI:', err);
+      setShowExportMenu(false);
+    }
   };
 
   const handlePrintKpiReport = () => {
@@ -2530,7 +3241,7 @@ export default function KPIDashboard({
                     className="w-full px-3.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 flex items-center gap-2 cursor-pointer"
                   >
                     <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                    Xuất Excel (.CSV UTF-8)
+                    Xuất Excel (.xlsx 4 Sheet)
                   </button>
                   <button
                     type="button"
