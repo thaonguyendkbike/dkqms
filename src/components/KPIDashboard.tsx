@@ -60,6 +60,7 @@ interface KPIDashboardProps {
   equipments?: any[];
   maintenanceLogs?: any[];
   equipmentIncidents?: any[];
+  fabricationJobs?: any[];
   qmsBmRecords?: any[];
   dailyLogs?: any[];
   weeklyPlans?: any[];
@@ -267,6 +268,7 @@ export default function KPIDashboard({
   equipments = [],
   maintenanceLogs = [],
   equipmentIncidents = [],
+  fabricationJobs = [],
   qmsBmRecords = [],
   dailyLogs = [],
   weeklyPlans = [],
@@ -580,6 +582,13 @@ export default function KPIDashboard({
       }
     });
 
+    // 12. Fabrication & Specialized Repair Jobs (NV-KTTĐ-05) in period
+    const curFabJobs = (fabricationJobs || []).filter((j: any) => {
+      const refDate = j?.completedDate || j?.dueDate || j?.requestDate;
+      if (!refDate) return true;
+      return isRecordInDateRange(refDate, start, end);
+    });
+
     return {
       curIqc,
       curPqc,
@@ -593,7 +602,8 @@ export default function KPIDashboard({
       curPtspIssues,
       curPtspChecks,
       curLogs,
-      curPlanTasks
+      curPlanTasks,
+      curFabJobs
     };
   }, [
     periodInfo,
@@ -609,7 +619,8 @@ export default function KPIDashboard({
     ptspModels,
     dailyLogs,
     weeklyPlans,
-    monthlyPlans
+    monthlyPlans,
+    fabricationJobs
   ]);
 
   const autoMetricsMap = useMemo<Record<string, ComputedAutoMetric>>(() => {
@@ -815,20 +826,26 @@ export default function KPIDashboard({
     const totalEquip = (equipments || []).length;
     const validEquip = (equipments || []).filter(eq => {
       const st = String(eq?.status || '').toLowerCase();
+      const calSt = String(eq?.calibrationStatus || '').toLowerCase();
+      const isSuspended = calSt.includes('đình chỉ') || calSt.includes('quá hạn');
       const isOperational = st === 'running' || st === 'hoạt động tốt' || st === 'đạt' || st === 'active';
-      const nextDate = parseFlexibleDate(eq?.nextMaintenanceDate || eq?.nextCalibrationDate);
+      const nextDate = parseFlexibleDate(eq?.nextCalibrationDate || eq?.nextMaintenanceDate);
       const isOverdue = nextDate ? nextDate.getTime() < todayStartMs : false;
-      return isOperational && !isOverdue;
+      return isOperational && !isSuspended && !isOverdue;
     }).length;
     const equipCalRate = totalEquip > 0 ? Number(((validEquip / totalEquip) * 100).toFixed(1)) : 0;
-    const equipRows: DrilldownRecordRow[] = (equipments || []).map(eq => ({
-      id: eq.id || '--',
-      date: formatDateStrVi(eq.nextMaintenanceDate || eq.lastMaintenanceDate),
-      title: `${eq.name || '--'} (${eq.category || '--'}) • Vị trí: ${eq.location || '--'}`,
-      actor: eq.responsiblePerson || 'Đoàn Anh Hùng',
-      resultText: `${eq.status === 'Running' ? 'Hoạt động tốt' : eq.status} (${eq.healthRate ?? 100}%)`,
-      isPass: eq.status === 'Running'
-    }));
+    const equipRows: DrilldownRecordRow[] = (equipments || []).map(eq => {
+      const calSt = eq?.calibrationStatus ? ` • ${eq.calibrationStatus}` : '';
+      const isSuspendedOrBad = String(eq?.calibrationStatus || '').toLowerCase().includes('đình chỉ') || eq.status !== 'Running';
+      return {
+        id: eq.id || '--',
+        date: formatDateStrVi(eq.nextCalibrationDate || eq.nextMaintenanceDate || eq.lastMaintenanceDate),
+        title: `${eq.name || '--'} (${eq.category || '--'})${eq.measureRange ? ` • Dải đo: ${eq.measureRange}` : ''} • Vị trí: ${eq.location || '--'}`,
+        actor: eq.responsiblePerson || 'Đoàn Anh Hùng',
+        resultText: `${eq.status === 'Running' ? 'Hoạt động tốt' : eq.status}${calSt} (${eq.healthRate ?? 100}%)`,
+        isPass: !isSuspendedOrBad
+      };
+    });
 
     // 10. Daily Logs
     const logsTotal = curLogs.length;
@@ -1092,11 +1109,11 @@ export default function KPIDashboard({
         numericValue: equipCalRate,
         evidenceText:
           totalEquip > 0
-            ? `Dữ liệu ${label}: ${validEquip}/${totalEquip} thiết bị đo lường & CCDC hoạt động tốt, đúng hạn bảo dưỡng/hiệu chuẩn (${equipCalRate}%)`
+            ? `Dữ liệu ${label}: ${validEquip}/${totalEquip} thiết bị đo lường & CCDC đạt chuẩn tem BM-KTTD-02, đúng hạn hiệu chuẩn/bảo dưỡng (${equipCalRate}%)`
             : `Chưa khai báo danh mục thiết bị đo kiểm (dk_equipments)`,
         hasData: totalEquip > 0,
         targetTab: 'machinery_maintenance',
-        targetTabLabel: 'Bảo dưỡng & Thiết bị dây chuyền',
+        targetTabLabel: 'Thiết bị',
         sourceRecords: equipRows
       }
     };
@@ -1193,9 +1210,9 @@ export default function KPIDashboard({
       {
         id: 'mod-equip',
         name: '9. Thiết bị & CCDC',
-        countText: `${(equipments || []).length} thiết bị`,
+        countText: `${(equipments || []).length} TB • ${(fabricationJobs || []).length} đồ gá`,
         subText: `Chuẩn HC: ${autoMetricsMap.EQUIPMENT_CALIBRATION_RATE.actualText}`,
-        hasData: (equipments || []).length > 0,
+        hasData: (equipments || []).length > 0 || (fabricationJobs || []).length > 0,
         metric: autoMetricsMap.EQUIPMENT_CALIBRATION_RATE
       },
       {
@@ -1207,7 +1224,7 @@ export default function KPIDashboard({
         metric: autoMetricsMap.DAILY_TASK_COMPLETION_RATE
       }
     ];
-  }, [periodDataset, autoMetricsMap, suppliers, capas, ptspModels, equipments]);
+  }, [periodDataset, autoMetricsMap, suppliers, capas, ptspModels, equipments, fabricationJobs]);
 
   // ============================================================================
   // COMPUTE RESOLVED DEPARTMENT KPIS & SCORES FOR SELECTED PERIOD
@@ -1886,6 +1903,68 @@ export default function KPIDashboard({
         };
       }
 
+      // 11. EQUIPMENT_CALIBRATION_RATE + FABRICATION JOBS (Đoàn Anh Hùng — BM-KTTD-H02: CCDC/TB Đo lường & Gia công đồ gá/mẫu)
+      if (metricKey === 'EQUIPMENT_CALIBRATION_RATE') {
+        const am = autoMetricsMap.EQUIPMENT_CALIBRATION_RATE;
+        const fabJobs = periodDataset.curFabJobs || [];
+        const myFabJobs = fabJobs.filter((j: any) => !j?.assignee || personMatchesField(j.assignee, profile));
+        const activeFabPool = myFabJobs.length > 0 ? myFabJobs : fabJobs;
+
+        const eqTotal = (equipments || []).length;
+        const eqValid = (equipments || []).filter(eq => {
+          const st = String(eq?.status || '').toLowerCase();
+          const calSt = String(eq?.calibrationStatus || '').toLowerCase();
+          const isSuspended = calSt.includes('đình chỉ') || calSt.includes('quá hạn');
+          const isOp = st === 'running' || st === 'hoạt động tốt' || st === 'đạt' || st === 'active';
+          const nextDate = parseFlexibleDate(eq?.nextCalibrationDate || eq?.nextMaintenanceDate);
+          const isOverdue = nextDate ? nextDate.getTime() < todayStartMs : false;
+          return isOp && !isSuspended && !isOverdue;
+        }).length;
+
+        const fabTotal = activeFabPool.length;
+        const fabPassed = activeFabPool.filter((j: any) => {
+          if (j?.status === 'Hoàn thành & Bàn giao') {
+            const due = parseFlexibleDate(j?.dueDate);
+            const comp = parseFlexibleDate(j?.completedDate);
+            if (due && comp) return comp.getTime() <= due.getTime() + 86400000;
+            return true;
+          }
+          // Pending / in-progress but still before dueDate counts as on-track unless overdue
+          const due = parseFlexibleDate(j?.dueDate);
+          if (due && due.getTime() < todayStartMs) return false;
+          return j?.status === 'Đang thực hiện';
+        }).length;
+        const fabDoneCount = activeFabPool.filter((j: any) => j?.status === 'Hoàn thành & Bàn giao').length;
+
+        if (eqTotal > 0 || fabTotal > 0) {
+          const combinedRate = Number((((eqValid + fabPassed) / (eqTotal + fabTotal)) * 100).toFixed(1));
+          const fabRows: DrilldownRecordRow[] = activeFabPool.map((j: any) => ({
+            id: j.id || '--',
+            date: formatDateStrVi(j.completedDate || j.dueDate || j.requestDate),
+            title: `[${j.jobType || 'Đồ gá'}] ${j.title || '--'}${j.modelName ? ` • Xe: ${j.modelName}` : ''} (${j.requestDept || '--'})`,
+            actor: j.assignee || profile.staffName,
+            resultText: j.status || 'Chờ thực hiện',
+            isPass: j.status === 'Hoàn thành & Bàn giao'
+          }));
+
+          return {
+            actualText:
+              fabTotal > 0
+                ? `${combinedRate}% (${eqValid}/${eqTotal} TB • ${fabDoneCount}/${fabTotal} Đồ gá)`
+                : am.actualText,
+            numericValue: fabTotal > 0 ? combinedRate : am.numericValue,
+            hasData: true,
+            evidence:
+              fabTotal > 0
+                ? `Hiệu chuẩn TB/CCDC (BM-KTTD-02): ${eqValid}/${eqTotal} đạt chuẩn • Gia công đồ gá/mẫu/sửa chữa (NV-KTTĐ-05): ${fabDoneCount}/${fabTotal} hoàn thành (${combinedRate}%)`
+                : am.evidenceText,
+            targetTab: 'machinery_maintenance',
+            targetTabLabel: 'Thiết bị',
+            rows: [...fabRows, ...(am.sourceRecords || [])]
+          };
+        }
+      }
+
       // Default fallback to autoMetricsMap
       const am = autoMetricsMap[metricKey];
       if (am) {
@@ -2138,6 +2217,7 @@ export default function KPIDashboard({
     deptSummary,
     resolvedDeptKpis,
     qmsBmRecords,
+    equipments,
     todayStartMs
   ]);
 

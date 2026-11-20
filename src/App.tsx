@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useMemo, memo, useCallback, FormEvent, useEffect, useRef, Fragment } from 'react';
+import { useState, useMemo, memo, useCallback, FormEvent, useEffect, useRef, Fragment, Dispatch, SetStateAction } from 'react';
 import { safeStorage, safeStorage as localStorage, sanitizeFirestorePayload, onSafeStorageReady } from './safeStorage';
 import { calculateAQLSample } from './utils/aqlUtils';
 import { exportIqcRecordToExcel, getAqlGroupName } from './utils/iqcLineItems';
@@ -92,7 +92,7 @@ import {
   INITIAL_EQUIPMENT_INCIDENTS,
   INITIAL_DEALERS
 } from './initialData';
-import { Task, KPI, Supplier, CAPA, PTSPProject, PTSPTask, MarketDefect, ECOChange, COPQMetric, CustomForm, QualityStaff, DKBikeModel, PlanTarget, WeeklyPlan, MonthlyPlan, EquipmentItem, MaintenanceLog, EquipmentIncident, SupplierProductionAudit, Dealer, ImprovementAction, PartEvaluation, ReportNote, QmsBmSyncRecord, PtspModelWorkspaceRecord } from './types';
+import { Task, KPI, Supplier, CAPA, PTSPProject, PTSPTask, MarketDefect, ECOChange, COPQMetric, CustomForm, QualityStaff, DKBikeModel, PlanTarget, WeeklyPlan, MonthlyPlan, EquipmentItem, MaintenanceLog, EquipmentIncident, FabricationRepairJob, SupplierProductionAudit, Dealer, ImprovementAction, PartEvaluation, ReportNote, QmsBmSyncRecord, PtspModelWorkspaceRecord } from './types';
 import { DAILY_LOG_DATA, DailyLogRecord } from './dailyLogsData';
 import { INITIAL_PTSP_TASKS } from './ptspTasksData';
 import {
@@ -2498,9 +2498,10 @@ export function App() {
       dk_custom_forms: 'Biểu mẫu động tùy chỉnh',
       dk_models: 'Danh mục dòng xe / model',
       dk_dealers: 'Danh mục đại lý ủy nhiệm',
-      dk_equipments: 'Danh mục thiết bị đo lường',
-      dk_maintenance_logs: 'Nhật ký bảo trì thiết bị',
+      dk_equipments: 'Danh mục thiết bị & CCDC đo lường',
+      dk_maintenance_logs: 'Nhật ký hiệu chuẩn & bảo dưỡng thiết bị',
       dk_equipment_incidents: 'Nhật ký sự cố thiết bị',
+      dk_fabrication_jobs: 'Gia công đồ gá, mẫu & sửa chữa chuyên sâu',
       dk_qc_detailed_tasks: 'Nhiệm vụ kiểm tra chi tiết',
       dk_supplier_production_audits: 'Đánh giá năng lực nhà cung cấp'
     };
@@ -2607,6 +2608,7 @@ export function App() {
         else if (key === 'dk_equipments') setEquipments(serverRecords);
         else if (key === 'dk_maintenance_logs') setMaintenanceLogs(serverRecords);
         else if (key === 'dk_equipment_incidents') setEquipmentIncidents(serverRecords);
+        else if (key === 'dk_fabrication_jobs') setFabricationJobs(serverRecords);
         else if (key === 'dk_qc_detailed_tasks') setQcDetailedTasks(serverRecords);
 
       } else if (method === 'local') {
@@ -2700,6 +2702,7 @@ export function App() {
         else if (key === 'dk_equipments') setEquipments(mergedList);
         else if (key === 'dk_maintenance_logs') setMaintenanceLogs(mergedList);
         else if (key === 'dk_equipment_incidents') setEquipmentIncidents(mergedList);
+        else if (key === 'dk_fabrication_jobs') setFabricationJobs(mergedList);
         else if (key === 'dk_qc_detailed_tasks') setQcDetailedTasks(mergedList);
 
         pendingSyncBuffer.current[key] = mergedList;
@@ -3288,6 +3291,10 @@ export function App() {
       'dk_suppliers': 'Danh sách Nhà cung cấp',
       'dk_dealers': 'Danh sách Đại lý',
       'dk_models': 'Danh mục Dòng xe / Model',
+      'dk_equipments': 'Danh mục Thiết bị & CCDC (BM-KTTD-02)',
+      'dk_maintenance_logs': 'Nhật ký Hiệu chuẩn & Bảo dưỡng thiết bị',
+      'dk_equipment_incidents': 'Sự cố & Đình chỉ Thiết bị',
+      'dk_fabrication_jobs': 'Gia công Đồ gá, Mẫu & Sửa chữa (NV-KTTĐ-05)',
       'dk_staff': 'Nhân sự Ban QMS',
     };
 
@@ -3489,7 +3496,7 @@ export function App() {
           'dk_tasks', 'dk_kpis', 'dk_suppliers', 'dk_capas', 'dk_projects', 'dk_ptsp_tasks',
           'dk_defects', 'dk_ecos', 'dk_copqs', 'dk_fmea', 'dk_custom_forms', 'dk_staff',
           'dk_models', 'dk_dealers', 'dk_daily_logs', 'dk_equipments', 'dk_maintenance_logs',
-          'dk_equipment_incidents', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
+          'dk_equipment_incidents', 'dk_fabrication_jobs', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
           'dk_oqc_handover_list', 'dk_oqc_color_changes', 'dk_oqc_part_codes', 'dk_supplier_production_audits',
           'dk_weekly_plans', 'dk_monthly_plans', 'dk_weekly_assemblies_all', 'dk_monthly_assemblies_all',
           'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
@@ -3790,7 +3797,7 @@ export function App() {
         'dk_capas', 'dk_ecos', 'dk_daily_logs', 'dk_iqc_records',
         'dk_pqc_records', 'dk_oqc_records', 'dk_staff', 'dk_dealers',
         'dk_defects', 'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records', 'dk_fmea', 'dk_improvement_actions', 'dk_oqc_handover_list',
-        'dk_oqc_color_changes', 'dk_copqs', 'dk_ptsp_models'
+        'dk_oqc_color_changes', 'dk_copqs', 'dk_ptsp_models', 'dk_equipments', 'dk_maintenance_logs', 'dk_equipment_incidents', 'dk_fabrication_jobs'
       ];
       localKeys.forEach(k => {
         // dk_oqc_records và dk_part_evaluations ưu tiên đọc từ safeStorage (memoryStore/IndexedDB)
@@ -3827,6 +3834,10 @@ export function App() {
             else if (k === 'dk_improvement_actions') setImprovementActions(sanitizedParsed);
             else if (k === 'dk_copqs') setCopqs(sanitizedParsed);
             else if (k === 'dk_ptsp_models') setPtspModels(sanitizedParsed);
+            else if (k === 'dk_equipments') setEquipments(ensureUniqueIds(sanitizedParsed, 'EQP'));
+            else if (k === 'dk_maintenance_logs') setMaintenanceLogs(ensureUniqueIds(sanitizedParsed, 'MNL'));
+            else if (k === 'dk_equipment_incidents') setEquipmentIncidents(ensureUniqueIds(sanitizedParsed, 'EQI'));
+            else if (k === 'dk_fabrication_jobs') setFabricationJobs(ensureUniqueIds(sanitizedParsed, 'GC'));
           } catch (e) { }
         }
       });
@@ -3918,7 +3929,7 @@ export function App() {
           'dk_tasks', 'dk_kpis', 'dk_suppliers', 'dk_capas', 'dk_projects', 'dk_ptsp_tasks',
           'dk_defects', 'dk_ecos', 'dk_copqs', 'dk_fmea', 'dk_custom_forms', 'dk_staff',
           'dk_models', 'dk_dealers', 'dk_daily_logs', 'dk_equipments', 'dk_maintenance_logs',
-          'dk_equipment_incidents', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
+          'dk_equipment_incidents', 'dk_fabrication_jobs', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
           'dk_oqc_handover_list', 'dk_oqc_color_changes', 'dk_oqc_part_codes', 'dk_supplier_production_audits',
           'dk_weekly_plans', 'dk_monthly_plans', 'dk_weekly_assemblies_all', 'dk_monthly_assemblies_all',
           'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
@@ -4034,7 +4045,7 @@ export function App() {
         'dk_tasks', 'dk_kpis', 'dk_suppliers', 'dk_capas', 'dk_projects', 'dk_ptsp_tasks',
         'dk_defects', 'dk_ecos', 'dk_copqs', 'dk_fmea', 'dk_custom_forms', 'dk_staff',
         'dk_models', 'dk_dealers', 'dk_daily_logs', 'dk_equipments', 'dk_maintenance_logs',
-        'dk_equipment_incidents', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
+        'dk_equipment_incidents', 'dk_fabrication_jobs', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
         'dk_oqc_handover_list', 'dk_oqc_color_changes', 'dk_oqc_part_codes', 'dk_supplier_production_audits',
         'dk_weekly_plans', 'dk_monthly_plans', 'dk_weekly_assemblies_all', 'dk_monthly_assemblies_all',
         'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
@@ -4293,9 +4304,26 @@ export function App() {
         }
       }
       if (serverData.dk_dealers !== undefined && Array.isArray(serverData.dk_dealers)) setDealers(serverData.dk_dealers);
-      if (serverData.dk_equipments !== undefined) setEquipments(ensureUniqueIds(serverData.dk_equipments, 'EQP'));
-      if (serverData.dk_maintenance_logs !== undefined) setMaintenanceLogs(ensureUniqueIds(serverData.dk_maintenance_logs, 'MNL'));
-      if (serverData.dk_equipment_incidents !== undefined) setEquipmentIncidents(ensureUniqueIds(serverData.dk_equipment_incidents, 'EQI'));
+      if (serverData.dk_equipments !== undefined && localStorage.getItem('dk_equipments_is_dirty') !== 'true') {
+        const cleaned = ensureUniqueIds(serverData.dk_equipments, 'EQP');
+        setEquipments(cleaned);
+        safeStorage.setItem('dk_equipments', JSON.stringify(cleaned));
+      }
+      if (serverData.dk_maintenance_logs !== undefined && localStorage.getItem('dk_maintenance_logs_is_dirty') !== 'true') {
+        const cleaned = ensureUniqueIds(serverData.dk_maintenance_logs, 'MNL');
+        setMaintenanceLogs(cleaned);
+        safeStorage.setItem('dk_maintenance_logs', JSON.stringify(cleaned));
+      }
+      if (serverData.dk_equipment_incidents !== undefined && localStorage.getItem('dk_equipment_incidents_is_dirty') !== 'true') {
+        const cleaned = ensureUniqueIds(serverData.dk_equipment_incidents, 'EQI');
+        setEquipmentIncidents(cleaned);
+        safeStorage.setItem('dk_equipment_incidents', JSON.stringify(cleaned));
+      }
+      if (serverData.dk_fabrication_jobs !== undefined && Array.isArray(serverData.dk_fabrication_jobs) && localStorage.getItem('dk_fabrication_jobs_is_dirty') !== 'true') {
+        const cleaned = ensureUniqueIds(serverData.dk_fabrication_jobs, 'GC');
+        setFabricationJobs(cleaned);
+        safeStorage.setItem('dk_fabrication_jobs', JSON.stringify(cleaned));
+      }
       if (serverData.dk_qc_detailed_tasks !== undefined) setQcDetailedTasks(serverData.dk_qc_detailed_tasks);
       if (serverData.dk_oqc_color_changes !== undefined && Array.isArray(serverData.dk_oqc_color_changes)) {
         setOqcColorChanges(serverData.dk_oqc_color_changes);
@@ -4820,6 +4848,10 @@ export function App() {
         'dk_ptsp_models',
         'dk_kpis',
         'dk_staff_kpi_evaluations',
+        'dk_equipments',
+        'dk_maintenance_logs',
+        'dk_equipment_incidents',
+        'dk_fabrication_jobs',
         'dk_weekly_assemblies_all',
         'dk_monthly_assemblies_all',
         'dk_weekly_supplies_all',
@@ -4899,6 +4931,22 @@ export function App() {
             if (list.length > 0) {
               setKpis(list);
             }
+          } else if (key === 'dk_equipments') {
+            const cleaned = ensureUniqueIds(list, 'EQP');
+            setEquipments(cleaned);
+            safeStorage.setItem('dk_equipments', JSON.stringify(cleaned));
+          } else if (key === 'dk_maintenance_logs') {
+            const cleaned = ensureUniqueIds(list, 'MNL');
+            setMaintenanceLogs(cleaned);
+            safeStorage.setItem('dk_maintenance_logs', JSON.stringify(cleaned));
+          } else if (key === 'dk_equipment_incidents') {
+            const cleaned = ensureUniqueIds(list, 'EQI');
+            setEquipmentIncidents(cleaned);
+            safeStorage.setItem('dk_equipment_incidents', JSON.stringify(cleaned));
+          } else if (key === 'dk_fabrication_jobs') {
+            const cleaned = ensureUniqueIds(list, 'GC');
+            setFabricationJobs(cleaned);
+            safeStorage.setItem('dk_fabrication_jobs', JSON.stringify(cleaned));
           }
         }, (err) => {
           console.warn(`[Doc onSnapshot Warning] for ${key}:`, err);
@@ -5683,6 +5731,34 @@ export function App() {
     const raw = getSavedState('dk_equipment_incidents', INITIAL_EQUIPMENT_INCIDENTS);
     return ensureUniqueIds(raw, 'EQI');
   });
+  const [fabricationJobs, setFabricationJobs] = useState<FabricationRepairJob[]>(() => {
+    const raw = getSavedState('dk_fabrication_jobs', []);
+    return ensureUniqueIds(Array.isArray(raw) ? raw : [], 'GC');
+  });
+
+  const createPersistedListUpdater = <T,>(
+    key: string,
+    setter: Dispatch<SetStateAction<T[]>>
+  ): Dispatch<SetStateAction<T[]>> => {
+    return (valueOrUpdater) => {
+      setter((prev) => {
+        const next = typeof valueOrUpdater === 'function'
+          ? (valueOrUpdater as (p: T[]) => T[])(prev)
+          : valueOrUpdater;
+        const serialized = JSON.stringify(next);
+        safeStorage.setItem(key, serialized);
+        try { localStorage.setItem(key, serialized); } catch (e) { }
+        try { localStorage.setItem(`${key}_is_dirty`, 'true'); } catch (e) { }
+        if (localDirtyKeys.current) localDirtyKeys.current.add(key);
+        return next;
+      });
+    };
+  };
+
+  const updateEquipments = createPersistedListUpdater('dk_equipments', setEquipments);
+  const updateMaintenanceLogs = createPersistedListUpdater('dk_maintenance_logs', setMaintenanceLogs);
+  const updateEquipmentIncidents = createPersistedListUpdater('dk_equipment_incidents', setEquipmentIncidents);
+  const updateFabricationJobs = createPersistedListUpdater('dk_fabrication_jobs', setFabricationJobs);
 
   const getLoggedInMember = () => {
     if (!firebaseUser || !firebaseUser.email) return null;
@@ -7570,6 +7646,7 @@ export function App() {
         setEquipments([]);
         setMaintenanceLogs([]);
         setEquipmentIncidents([]);
+        setFabricationJobs([]);
         alert("Đã xóa sạch dữ liệu mẫu thành công! Bạn có thể tự do cập nhật hệ thống dữ liệu thực tế mới.");
       }
     });
@@ -8297,21 +8374,31 @@ export function App() {
 
   useEffect(() => {
     if (localStorage.getItem('dk_equipments_is_dirty') === 'true') {
+      safeStorage.setItem('dk_equipments', JSON.stringify(equipments));
       syncToServer('dk_equipments', equipments);
     }
   }, [equipments]);
 
   useEffect(() => {
     if (localStorage.getItem('dk_maintenance_logs_is_dirty') === 'true') {
+      safeStorage.setItem('dk_maintenance_logs', JSON.stringify(maintenanceLogs));
       syncToServer('dk_maintenance_logs', maintenanceLogs);
     }
   }, [maintenanceLogs]);
 
   useEffect(() => {
     if (localStorage.getItem('dk_equipment_incidents_is_dirty') === 'true') {
+      safeStorage.setItem('dk_equipment_incidents', JSON.stringify(equipmentIncidents));
       syncToServer('dk_equipment_incidents', equipmentIncidents);
     }
   }, [equipmentIncidents]);
+
+  useEffect(() => {
+    if (localStorage.getItem('dk_fabrication_jobs_is_dirty') === 'true') {
+      safeStorage.setItem('dk_fabrication_jobs', JSON.stringify(fabricationJobs));
+      syncToServer('dk_fabrication_jobs', fabricationJobs);
+    }
+  }, [fabricationJobs]);
 
   useEffect(() => {
     safeStorage.setItem('dk_iqc_records', JSON.stringify(iqcRecords));
@@ -13706,7 +13793,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
               id="nav_machinery_maintenance"
             >
               <Wrench className={`w-5 h-5 shrink-0 ${activeTab === 'machinery_maintenance' ? 'text-white' : 'text-amber-500'}`} />
-              <span className="flex-1">Bảo dưỡng & Thiết bị dây chuyền</span>
+              <span className="flex-1">Thiết bị</span>
               {equipmentIncidents.filter(i => i.status !== 'Resolved').length > 0 && (
                 <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full leading-none animate-pulse">
                   {equipmentIncidents.filter(i => i.status !== 'Resolved').length}
@@ -13792,6 +13879,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 equipments={equipments}
                 maintenanceLogs={maintenanceLogs}
                 equipmentIncidents={equipmentIncidents}
+                fabricationJobs={fabricationJobs}
                 qmsBmRecords={qmsBmRecords}
                 dailyLogs={dailyLogs}
                 weeklyPlans={weeklyPlans}
@@ -20677,11 +20765,14 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             <div className="space-y-6" id="view_machinery_maintenance_content">
               <MachineryMaintenance
                 equipments={equipments}
-                setEquipments={setEquipments}
+                setEquipments={updateEquipments}
                 maintenanceLogs={maintenanceLogs}
-                setMaintenanceLogs={setMaintenanceLogs}
+                setMaintenanceLogs={updateMaintenanceLogs}
                 equipmentIncidents={equipmentIncidents}
-                setEquipmentIncidents={setEquipmentIncidents}
+                setEquipmentIncidents={updateEquipmentIncidents}
+                fabricationJobs={fabricationJobs}
+                setFabricationJobs={updateFabricationJobs}
+                models={models}
                 currentUser={currentUser}
                 isUserAuthorized={isUserAuthorized}
                 guardAction={guardAction}

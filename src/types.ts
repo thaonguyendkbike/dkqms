@@ -658,8 +658,10 @@ export interface MonthlyPlan {
 // ==========================================
 export interface EquipmentItem {
   id: string;
+  serialNo?: string;
   name: string;
   category: string;
+  assetGroup?: 'measuring' | 'jig_fixture' | 'oqc_test' | 'production_line';
   status: 'Running' | 'Stopped' | 'Maintenance' | 'Under Repair' | 'Offline';
   healthRate: number;
   location: string;
@@ -669,8 +671,15 @@ export interface EquipmentItem {
   responsiblePerson: string;
   manufacturer: string;
   specifications: string;
+  measureRange?: string;
+  calibrationStatus?: 'Đã dán tem ĐẠT' | 'Sắp đến hạn HC' | 'Quá hạn HC' | 'Chưa hiệu chuẩn' | 'Đình chỉ sử dụng';
+  lastCalibrationDate?: string;
+  nextCalibrationDate?: string;
+  calibrationProvider?: string;
+  suspensionReason?: string;
   manufactureYear?: number;
   imageUrl?: string;
+  updatedAt?: string;
 }
 
 export interface MaintenanceLog {
@@ -684,6 +693,8 @@ export interface MaintenanceLog {
   replacedParts: string;
   cost: number;
   nextCalibrationDate?: string;
+  calibrationCertificateNo?: string;
+  calibrationResult?: 'ĐẠT' | 'KHÔNG ĐẠT - ĐÌNH CHỈ';
   status: 'Thành công' | 'Chờ phê duyệt' | 'Tạm dừng';
 }
 
@@ -702,6 +713,25 @@ export interface EquipmentIncident {
   repairAction?: string;
   technician?: string;
   repairCost?: number;
+}
+
+export interface FabricationRepairJob {
+  id: string; // GC-XXXX
+  jobType: 'Chế tạo đồ gá' | 'Sửa chữa đồ gá' | 'Gia công linh kiện mẫu' | 'Sửa chữa chuyên sâu' | 'Tinh chỉnh xe lỗi xưởng';
+  title: string;
+  modelName?: string;
+  requestDept: 'Phòng QLCL' | 'R&D / PTSP' | 'Xưởng Lắp ráp' | 'Bảo hành / Thị trường';
+  requester?: string;
+  assignee: string; // Mặc định: Đoàn Anh Hùng
+  requestDate: string;
+  dueDate: string;
+  completedDate?: string;
+  priority: 'Khẩn cấp' | 'Cao' | 'Trung bình';
+  status: 'Chờ thực hiện' | 'Đang thực hiện' | 'Hoàn thành & Bàn giao' | 'Tạm dừng';
+  technicalNote?: string;
+  resultNote?: string;
+  images?: string[];
+  updatedAt?: string;
 }
 
 export interface SupplierProductionAudit {
