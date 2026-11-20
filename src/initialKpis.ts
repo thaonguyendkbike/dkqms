@@ -10,16 +10,16 @@ export interface KpiPeriodOverride {
 export interface DetailedKPI {
   id: string;
   category:
-    | 'Sản lượng'
-    | 'Nhân sự'
-    | 'Chi phí bộ phận'
-    | '6S, Cải tiến'
-    | 'Báo cáo kế hoạch'
-    | 'Chất lượng NCC'
-    | 'IQC - Chất lượng đầu vào'
-    | 'PQC - Chất lượng quá trình'
-    | 'OQC - Chất lượng đầu ra'
-    | 'Hệ thống & Hồ sơ';
+  | 'Sản lượng'
+  | 'Nhân sự'
+  | 'Chi phí bộ phận'
+  | '6S, Cải tiến'
+  | 'Báo cáo kế hoạch'
+  | 'Chất lượng NCC'
+  | 'IQC - Chất lượng đầu vào'
+  | 'PQC - Chất lượng quá trình'
+  | 'OQC - Chất lượng đầu ra'
+  | 'Hệ thống & Hồ sơ';
   type: 'Mục tiêu hoạt động chung' | 'Mục tiêu hoạt động chuyên môn';
   groupWeight: number; // Trọng số nhóm (ví dụ 15%, 10%, 25%...)
   weight?: number;     // Trọng số riêng của chỉ tiêu (tổng 16 chỉ tiêu = 100%)
