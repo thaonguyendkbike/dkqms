@@ -1,0 +1,409 @@
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  onSnapshot,
+  setDoc,
+  writeBatch
+} from 'firebase/firestore';
+import { db } from '../firebase';
+import { INITIAL_OQC_PART_CODES, OqcPartCodeItem } from '../oqcPartCodesData';
+import { safeStorage, sanitizeFirestorePayload } from '../safeStorage';
+import {
+  BomModelLineItem,
+  BomModelRecord,
+  BomPartMasterItem,
+  EcountParsedBomRow,
+  OqcModelSummary
+} from '../types/bomCatalog';
+
+const BOM_MODELS_COLLECTION = 'dk_bom_models';
+const BOM_PARTS_COLLECTION = 'dk_bom_parts';
+const CACHE_MODELS_KEY = 'qms_bom_models_cache_v1';
+const CACHE_PARTS_KEY = 'qms_bom_parts_cache_v1';
+
+/**
+ * Chuẩn hóa chuỗi (Mã linh kiện hoặc Tên Model) thành Document ID hợp lệ trên Firestore.
+ */
+export function toSafeDocId(raw: string): string {
+  const cleaned = String(raw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\/\\.#$\[\]\s]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (!cleaned || cleaned === '.' || cleaned === '..') {
+    return `ID_${Date.now()}`;
+  }
+  return cleaned.slice(0, 120);
+}
+
+export function normalizeModelKey(modelName: string): string {
+  return String(modelName || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+export function inferPartImageMode(specGroup?: string): 'single' | 'multi' {
+  const norm = String(specGroup || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd');
+  if (norm.includes('nhua')) {
+    return 'single';
+  }
+  return 'multi';
+}
+
+function groupPartCodesByModel(items: OqcPartCodeItem[]): OqcModelSummary[] {
+  const map = new Map<string, OqcModelSummary>();
+  items.forEach((item) => {
+    const modelName = String(item?.model || '').trim();
+    if (!modelName) return;
+    const modelKey = toSafeDocId(modelName);
+    if (!map.has(modelKey)) {
+      map.set(modelKey, {
+        modelKey,
+        modelName,
+        colors: []
+      });
+    }
+    const entry = map.get(modelKey)!;
+    const partCode = String(item.partCode || '').trim();
+    const color = String(item.color || '').trim();
+    if (partCode || color) {
+      entry.colors.push({
+        partCode,
+        color,
+        nameWithColor: String(item.nameWithColor || `${modelName} - ${color}`).trim()
+      });
+    }
+  });
+
+  return Array.from(map.values()).sort((a, b) =>
+    a.modelName.localeCompare(b.modelName, 'vi')
+  );
+}
+
+/**
+ * Đọc danh sách Model & Màu sắc từ Bảng mã xe (OQC).
+ * Ưu tiên đọc live trên Firestore (`dk_db_sync/dk_oqc_part_codes`) để khách `/lk` luôn nhận dữ liệu mới nhất,
+ * fallback sang `safeStorage` và `INITIAL_OQC_PART_CODES`.
+ */
+export async function loadOqcModelGroups(): Promise<OqcModelSummary[]> {
+  let localList: OqcPartCodeItem[] = INITIAL_OQC_PART_CODES;
+  try {
+    const saved = safeStorage.getItem('dk_oqc_part_codes');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        localList = parsed;
+      }
+    }
+  } catch {
+    // fallback to INITIAL_OQC_PART_CODES
+  }
+
+  try {
+    const snap = await getDoc(doc(db, 'dk_db_sync', 'dk_oqc_part_codes'));
+    if (snap.exists()) {
+      const payload = snap.data();
+      const cloudList = Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload)
+          ? payload
+          : null;
+      if (cloudList && cloudList.length > 0) {
+        return groupPartCodesByModel(cloudList);
+      }
+    }
+  } catch (err) {
+    console.warn('[BOM Catalog] Không đọc được dk_oqc_part_codes từ Cloud, dùng dữ liệu cục bộ:', err);
+  }
+
+  return groupPartCodesByModel(localList);
+}
+
+export function readCachedBomCatalog(): {
+  models: BomModelRecord[];
+  parts: BomPartMasterItem[];
+} {
+  let models: BomModelRecord[] = [];
+  let parts: BomPartMasterItem[] = [];
+  try {
+    const mRaw = safeStorage.getItem(CACHE_MODELS_KEY);
+    if (mRaw) {
+      const parsed = JSON.parse(mRaw);
+      if (Array.isArray(parsed)) models = parsed;
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const pRaw = safeStorage.getItem(CACHE_PARTS_KEY);
+    if (pRaw) {
+      const parsed = JSON.parse(pRaw);
+      if (Array.isArray(parsed)) parts = parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return { models, parts };
+}
+
+/**
+ * Lắng nghe realtime cả 2 subcollection `dk_bom_models` và `dk_bom_parts` dưới `dk_db_sync`.
+ */
+export function subscribeBomCatalog(
+  onModels: (models: BomModelRecord[]) => void,
+  onParts: (parts: BomPartMasterItem[]) => void,
+  onError?: (err: Error) => void
+): () => void {
+  const modelsRef = collection(db, 'dk_db_sync', BOM_MODELS_COLLECTION, 'records');
+  const partsRef = collection(db, 'dk_db_sync', BOM_PARTS_COLLECTION, 'records');
+
+  const unsubModels = onSnapshot(
+    modelsRef,
+    (snapshot) => {
+      const list: BomModelRecord[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data) {
+          list.push({
+            id: docSnap.id,
+            modelName: String(data.modelName || docSnap.id),
+            imageUrl: data.imageUrl || undefined,
+            imagePath: data.imagePath || undefined,
+            items: Array.isArray(data.items) ? data.items : [],
+            updatedAt: String(data.updatedAt || ''),
+            updatedBy: data.updatedBy || undefined
+          });
+        }
+      });
+      safeStorage.setItem(CACHE_MODELS_KEY, JSON.stringify(list));
+      onModels(list);
+    },
+    (err) => {
+      console.error('[BOM Models Listener Error]:', err);
+      onError?.(err);
+    }
+  );
+
+  const unsubParts = onSnapshot(
+    partsRef,
+    (snapshot) => {
+      const list: BomPartMasterItem[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data) {
+          const partCode = String(data.partCode || docSnap.id).trim().toUpperCase();
+          list.push({
+            id: docSnap.id,
+            partCode,
+            partName: String(data.partName || partCode),
+            specGroup: String(data.specGroup || ''),
+            unit: String(data.unit || 'Cái'),
+            techSpecs: data.techSpecs || '',
+            supplierName: data.supplierName || '',
+            status: data.status || 'Đang dùng',
+            imageMode: data.imageMode || inferPartImageMode(data.specGroup),
+            images: Array.isArray(data.images) ? data.images : [],
+            note: data.note || '',
+            updatedAt: String(data.updatedAt || ''),
+            updatedBy: data.updatedBy || undefined
+          });
+        }
+      });
+      list.sort((a, b) => a.partCode.localeCompare(b.partCode));
+      safeStorage.setItem(CACHE_PARTS_KEY, JSON.stringify(list));
+      onParts(list);
+    },
+    (err) => {
+      console.error('[BOM Parts Listener Error]:', err);
+      onError?.(err);
+    }
+  );
+
+  return () => {
+    unsubModels();
+    unsubParts();
+  };
+}
+
+export async function saveBomModelRecord(record: BomModelRecord): Promise<void> {
+  const docId = record.id || toSafeDocId(record.modelName);
+  const ref = doc(db, 'dk_db_sync', BOM_MODELS_COLLECTION, 'records', docId);
+  await setDoc(ref, sanitizeFirestorePayload({ ...record, id: docId }));
+}
+
+export async function saveBomPartRecord(part: BomPartMasterItem): Promise<void> {
+  const code = part.partCode.trim().toUpperCase();
+  const docId = part.id || toSafeDocId(code);
+  const ref = doc(db, 'dk_db_sync', BOM_PARTS_COLLECTION, 'records', docId);
+  await setDoc(
+    ref,
+    sanitizeFirestorePayload({
+      ...part,
+      id: docId,
+      partCode: code
+    })
+  );
+}
+
+export async function deleteBomPartRecord(partId: string): Promise<void> {
+  const ref = doc(db, 'dk_db_sync', BOM_PARTS_COLLECTION, 'records', partId);
+  await deleteDoc(ref);
+}
+
+async function commitWriteBatches(
+  operations: Array<{ ref: ReturnType<typeof doc>; data: any }>
+): Promise<void> {
+  const BATCH_LIMIT = 400;
+  for (let i = 0; i < operations.length; i += BATCH_LIMIT) {
+    const chunk = operations.slice(i, i + BATCH_LIMIT);
+    const batch = writeBatch(db);
+    chunk.forEach((op) => {
+      batch.set(op.ref, sanitizeFirestorePayload(op.data));
+    });
+    await batch.commit();
+  }
+}
+
+/**
+ * Import hàng loạt định mức BOM từ Excel Ecount cho 1 Model:
+ * - Mã đã tồn tại trong Kho Linh kiện -> giữ nguyên 100% ảnh, thông số kỹ thuật, trạng thái, NCC đã nhập trước đó.
+ * - Mã chưa có -> tạo mới bản ghi trong Kho Linh kiện.
+ */
+export async function bulkImportModelBom(params: {
+  modelKey: string;
+  modelName: string;
+  existingModel?: BomModelRecord;
+  rows: EcountParsedBomRow[];
+  existingPartsMap: Map<string, BomPartMasterItem>;
+  replaceExistingLines: boolean;
+  updatedBy: string;
+}): Promise<{ newPartsCount: number; linkedExistingCount: number; totalLines: number }> {
+  const {
+    modelKey,
+    modelName,
+    existingModel,
+    rows,
+    existingPartsMap,
+    replaceExistingLines,
+    updatedBy
+  } = params;
+
+  const nowIso = new Date().toISOString();
+  const ops: Array<{ ref: ReturnType<typeof doc>; data: any }> = [];
+  let newPartsCount = 0;
+  let linkedExistingCount = 0;
+
+  rows.forEach((row) => {
+    const code = row.partCode.trim().toUpperCase();
+    const existingPart = existingPartsMap.get(code);
+    if (existingPart) {
+      linkedExistingCount++;
+      return;
+    }
+    newPartsCount++;
+    const docId = toSafeDocId(code);
+    const newPart: BomPartMasterItem = {
+      id: docId,
+      partCode: code,
+      partName: row.partName || code,
+      specGroup: row.specGroup || '',
+      unit: row.unit || 'Cái',
+      techSpecs: '',
+      supplierName: '',
+      status: 'Đang dùng',
+      imageMode: inferPartImageMode(row.specGroup),
+      images: [],
+      note: row.note || '',
+      updatedAt: nowIso,
+      updatedBy
+    };
+    ops.push({
+      ref: doc(db, 'dk_db_sync', BOM_PARTS_COLLECTION, 'records', docId),
+      data: newPart
+    });
+  });
+
+  const importedLines: BomModelLineItem[] = rows.map((row, idx) => ({
+    lineNo: idx + 1,
+    partCode: row.partCode.trim().toUpperCase(),
+    qty: row.qty,
+    unit: row.unit || 'Cái',
+    note: row.note || ''
+  }));
+
+  let finalLines: BomModelLineItem[] = importedLines;
+  if (!replaceExistingLines && existingModel?.items?.length) {
+    const lineMap = new Map<string, BomModelLineItem>();
+    existingModel.items.forEach((item) => {
+      lineMap.set(item.partCode.trim().toUpperCase(), { ...item });
+    });
+    importedLines.forEach((item) => {
+      lineMap.set(item.partCode, item);
+    });
+    finalLines = Array.from(lineMap.values()).map((item, idx) => ({
+      ...item,
+      lineNo: idx + 1
+    }));
+  }
+
+  const modelRecord: BomModelRecord = {
+    id: modelKey,
+    modelName,
+    imageUrl: existingModel?.imageUrl,
+    imagePath: existingModel?.imagePath,
+    items: finalLines,
+    updatedAt: nowIso,
+    updatedBy
+  };
+
+  ops.push({
+    ref: doc(db, 'dk_db_sync', BOM_MODELS_COLLECTION, 'records', modelKey),
+    data: modelRecord
+  });
+
+  await commitWriteBatches(ops);
+  return {
+    newPartsCount,
+    linkedExistingCount,
+    totalLines: finalLines.length
+  };
+}
+
+/**
+ * Khôi phục dữ liệu Backup JSON cho phân hệ /lk.
+ */
+export async function restoreBomBackupPayload(payload: {
+  models: BomModelRecord[];
+  parts: BomPartMasterItem[];
+}): Promise<{ modelsCount: number; partsCount: number }> {
+  const ops: Array<{ ref: ReturnType<typeof doc>; data: any }> = [];
+
+  (payload.parts || []).forEach((part) => {
+    if (!part?.partCode) return;
+    const code = part.partCode.trim().toUpperCase();
+    const docId = part.id || toSafeDocId(code);
+    ops.push({
+      ref: doc(db, 'dk_db_sync', BOM_PARTS_COLLECTION, 'records', docId),
+      data: { ...part, id: docId, partCode: code }
+    });
+  });
+
+  (payload.models || []).forEach((model) => {
+    if (!model?.modelName) return;
+    const docId = model.id || toSafeDocId(model.modelName);
+    ops.push({
+      ref: doc(db, 'dk_db_sync', BOM_MODELS_COLLECTION, 'records', docId),
+      data: { ...model, id: docId }
+    });
+  });
+
+  await commitWriteBatches(ops);
+  return {
+    modelsCount: (payload.models || []).length,
+    partsCount: (payload.parts || []).length
+  };
+}

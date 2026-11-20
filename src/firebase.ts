@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
 import { initializeFirestore, memoryLocalCache, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Cleanup any legacy firestore cache targets stored in localStorage to free up space
@@ -72,6 +73,7 @@ export const db = initializeFirestore(app, {
   localCache: memoryLocalCache()
 }, 'ai-studio-24f3ad28-43fa-4e4b-b0ee-f6e3fbdfeee3'); /* CRITICAL: The app will break without this line */
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 

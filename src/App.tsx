@@ -122,6 +122,7 @@ import QMSWorkflowTab from './components/QMSWorkflowTab';
 import QualityPlanning, { getInitialQmsPlanningTasks } from './components/QualityPlanning';
 import OqcTvDashboard from './components/OqcTvDashboard';
 import QmsFormsCenter from './components/QmsFormsCenter';
+import PartsBomCenter from './components/PartsBomCenter';
 import { PartEvaluationsTab } from './components/PartEvaluationsTab';
 import CopqSpreadsheetEntry, { ACCOUNTING_OPTIONS, exportCopqListToExcel, suggestAccountingCode } from './components/CopqSpreadsheetEntry';
 import PtspWorkspace, { DEFAULT_PTSP_MODELS } from './components/PtspWorkspace';
@@ -5070,6 +5071,9 @@ export function App() {
   const [bmUnlocked, setBmUnlocked] = useState<boolean>(() => safeStorage.getItem('dk_qms_bm_unlocked_v1') === 'true');
   const [bmPasswordInput, setBmPasswordInput] = useState<string>('');
   const [bmPasswordError, setBmPasswordError] = useState<string>('');
+  const [lkUnlocked, setLkUnlocked] = useState<boolean>(() => safeStorage.getItem('qms_lk_unlocked_v1') === 'true');
+  const [lkPasswordInput, setLkPasswordInput] = useState<string>('');
+  const [lkPasswordError, setLkPasswordError] = useState<string>('');
   const [qmsBmRecords, setQmsBmRecords] = useState<QmsBmSyncRecord[]>(() => {
     const existing = getSavedState<QmsBmSyncRecord[]>('dk_qms_bm_records', []);
     if (existing.length > 0) return existing;
@@ -8662,6 +8666,9 @@ export function App() {
         const pathname = (window.location.pathname || '').toLowerCase();
         const p = new URLSearchParams(window.location.search);
         const view = (p.get('view') || p.get('tab') || window.location.hash || '').toLowerCase();
+        if (pathname === '/lk' || pathname === '/lk/' || pathname.startsWith('/lk') || p.get('lk') === '1' || p.get('lk') === 'true' || view === 'lk' || view.includes('linh-kien') || view.includes('parts-bom')) {
+          return 'parts_bom';
+        }
         if (pathname === '/bm' || pathname === '/bm/' || pathname.startsWith('/bm') || p.get('bm') === '1' || p.get('bm') === 'true' || view.includes('bm') || view.includes('bieu-mau') || view.includes('forms')) {
           return 'qms_forms';
         }
@@ -8678,6 +8685,9 @@ export function App() {
     if (typeof window !== 'undefined') {
       const pathname = (window.location.pathname || '').toLowerCase();
       const p = new URLSearchParams(window.location.search);
+      if (pathname === '/lk' || pathname === '/lk/' || pathname.startsWith('/lk') || p.get('lk') === '1' || p.get('lk') === 'true') {
+        return false;
+      }
       if (pathname === '/bm' || pathname === '/bm/' || pathname.startsWith('/bm') || p.get('bm') === '1' || p.get('bm') === 'true') {
         return false;
       }
@@ -8689,13 +8699,19 @@ export function App() {
     return true;
   });
 
-  // Tự động điều hướng Deep Link khi truy cập trực tiếp bằng URL (ví dụ dkqms.cloud/tv hoặc dkqms.cloud/bm)
+  // Tự động điều hướng Deep Link khi truy cập trực tiếp bằng URL (ví dụ dkqms.cloud/tv, dkqms.cloud/bm hoặc dkqms.cloud/lk)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleUrlChange = () => {
       const pathname = (window.location.pathname || '').toLowerCase();
       const p = new URLSearchParams(window.location.search);
       const view = (p.get('view') || p.get('tab') || window.location.hash || '').toLowerCase();
+      const isLk = pathname === '/lk' || pathname === '/lk/' || pathname.startsWith('/lk') || p.get('lk') === '1' || p.get('lk') === 'true' || view === 'lk' || view.includes('linh-kien') || view.includes('parts-bom');
+      if (isLk) {
+        setActiveTab('parts_bom');
+        setShowSidebar(false);
+        return;
+      }
       const isBm = pathname === '/bm' || pathname === '/bm/' || pathname.startsWith('/bm') || p.get('bm') === '1' || p.get('bm') === 'true' || view.includes('bm') || view.includes('bieu-mau') || view.includes('forms');
       if (isBm) {
         setActiveTab('qms_forms');
@@ -12945,6 +12961,104 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
       });
   };
 
+  const isStandaloneLkUrl = typeof window !== 'undefined' && (
+    window.location.pathname === '/lk' ||
+    window.location.pathname === '/lk/' ||
+    window.location.pathname.startsWith('/lk') ||
+    new URLSearchParams(window.location.search).get('lk') === '1' ||
+    new URLSearchParams(window.location.search).get('lk') === 'true'
+  );
+
+  if (!firebaseUser && isStandaloneLkUrl) {
+    if (lkUnlocked) {
+      return (
+        <div className="w-full h-full min-h-screen overflow-y-auto overflow-x-hidden bg-slate-50">
+          <PartsBomCenter
+            readOnly={true}
+            isLoggedIn={false}
+            onRequestLogin={() => {
+              if (typeof window !== 'undefined') {
+                window.location.href = '/?tab=parts-bom';
+              }
+            }}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 min-h-screen w-full flex items-center justify-center p-4 font-sans text-slate-100">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (lkPasswordInput.trim() === '12356789') {
+              safeStorage.setItem('qms_lk_unlocked_v1', 'true');
+              setLkPasswordError('');
+              setLkUnlocked(true);
+            } else {
+              setLkPasswordError('Mật khẩu chưa đúng. Vui lòng thử lại.');
+            }
+          }}
+          className="w-full max-w-md bg-slate-900/95 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-5 backdrop-blur-md"
+        >
+          <div className="text-center space-y-2">
+            <div className="mx-auto w-14 h-14 bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 rounded-2xl flex items-center justify-center">
+              <Cpu className="w-8 h-8" />
+            </div>
+            <h1 className="text-lg md:text-xl font-black text-white uppercase">
+              Danh Mục Linh Kiện &amp; BOM Xe (/lk)
+            </h1>
+            <p className="text-xs text-slate-400">
+              Công ty TNHH Xe điện DK Việt Nhật — DKBike (Xe cho cả gia đình)<br />
+              Phòng Quản lý chất lượng (QLCL / DK QMS)
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-slate-300">
+              Nhập mật khẩu tra cứu (chỉ cần nhập lần đầu):
+            </label>
+            <input
+              type="password"
+              autoFocus
+              value={lkPasswordInput}
+              onChange={(e) => {
+                setLkPasswordInput(e.target.value);
+                if (lkPasswordError) setLkPasswordError('');
+              }}
+              placeholder="Nhập mật khẩu..."
+              className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-hidden focus:border-indigo-500"
+            />
+            {lkPasswordError && (
+              <p className="text-xs text-rose-400 font-semibold">{lkPasswordError}</p>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-extrabold shadow-lg transition cursor-pointer"
+          >
+            Mở khóa tra cứu /lk
+          </button>
+
+          <div className="text-center pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.location.href = '/?tab=parts-bom';
+                }
+              }}
+              className="text-xs text-slate-400 hover:text-indigo-300 underline cursor-pointer"
+            >
+              Hoặc đăng nhập bằng tài khoản Google nội bộ (QLCL)
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
   const isStandaloneBmUrl = typeof window !== 'undefined' && (
     window.location.pathname === '/bm' ||
     window.location.pathname === '/bm/' ||
@@ -13323,6 +13437,34 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
     );
   }
 
+  // ROUTE DÀNH RIÊNG CHO DANH MỤC LINH KIỆN & BOM THEO MODEL: dkqms.cloud/lk
+  const isLkRoute = typeof window !== 'undefined' && (
+    window.location.pathname === '/lk' ||
+    window.location.pathname === '/lk/' ||
+    window.location.pathname.startsWith('/lk') ||
+    new URLSearchParams(window.location.search).get('lk') === '1' ||
+    new URLSearchParams(window.location.search).get('lk') === 'true' ||
+    activeTab === 'parts_bom'
+  );
+
+  if (isLkRoute) {
+    return (
+      <div className="w-full h-full min-h-screen overflow-y-auto overflow-x-hidden bg-slate-50">
+        <PartsBomCenter
+          readOnly={!isUserAuthorized()}
+          isLoggedIn={true}
+          currentUserName={getLoggedInMember()?.name || firebaseUser?.displayName || firebaseUser?.email || 'QLCL DKBike'}
+          onBackToApp={() => {
+            if (typeof window !== 'undefined' && window.location.pathname.includes('/lk')) {
+              window.history.pushState({}, '', '/');
+            }
+            setActiveTab('dashboard');
+          }}
+        />
+      </div>
+    );
+  }
+
   // ROUTE DÀNH RIÊNG CHO TRUNG TÂM BIỂU MẪU: dkqms.cloud/bm
   const isBmRoute = typeof window !== 'undefined' && (
     window.location.pathname === '/bm' ||
@@ -13624,6 +13766,25 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
               <div className="flex-1 flex items-center justify-between">
                 <span>Biểu mẫu QLCL (/bm)</span>
                 <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${activeTab === 'qms_forms' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'}`}>11 BM</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.history.pushState({}, '', '/lk');
+                }
+                setActiveTab('parts_bom');
+              }}
+              className={`w-full flex items-center gap-3 p-3 rounded-lg text-base md:text-[15px] font-medium transition-all text-left cursor-pointer ${activeTab === 'parts_bom' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
+                }`}
+              id="nav_parts_bom"
+              title="Danh mục Linh kiện & BOM theo Model (dkqms.cloud/lk)"
+            >
+              <Cpu className={`w-5 h-5 shrink-0 ${activeTab === 'parts_bom' ? 'text-white' : 'text-indigo-600'}`} />
+              <div className="flex-1 flex items-center justify-between">
+                <span>Linh kiện &amp; BOM (/lk)</span>
+                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${activeTab === 'parts_bom' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'}`}>/lk</span>
               </div>
             </button>
 
@@ -19587,8 +19748,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       type="button"
                       onClick={() => setShowCopqEntry((v) => !v)}
                       className={`px-3.5 py-2 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shadow-2xs ${showCopqEntry
-                          ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
-                          : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+                        ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                        : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
                         }`}
                     >
                       <Plus className="w-4 h-4" />
@@ -19598,8 +19759,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       type="button"
                       onClick={() => setShowCopqDashboard((v) => !v)}
                       className={`px-3.5 py-2 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shadow-2xs ${showCopqDashboard
-                          ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
-                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                        ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
+                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                         }`}
                     >
                       <BarChart className="w-4 h-4" />
