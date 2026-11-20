@@ -14,22 +14,15 @@ export {
   type StaffKpiPeriodEvaluation
 } from '../initialKpis';
 import { safeStorage } from '../safeStorage';
-import { parseFlexibleDate, getLocalYmd } from '../utils/dateUtils';
+import { parseFlexibleDate, getLocalYmd, formatDateStrVi } from '../utils/dateUtils';
 import {
-  Award,
-  TrendingUp,
   CheckCircle2,
-  XCircle,
   Plus,
   Search,
   Building2,
-  Calendar,
-  ShieldCheck,
   FileSpreadsheet,
   Download,
   UserCheck,
-  FileText,
-  AlertTriangle,
   RefreshCw,
   Zap,
   Target,
@@ -42,15 +35,20 @@ import {
   BookOpen,
   Check,
   X,
-  Sliders
+  ExternalLink,
+  Database,
+  Clock,
+  Layers
 } from 'lucide-react';
 
 interface KPIDashboardProps {
   onUpdateOverallKPI?: (score: number) => void;
   onViewDetail?: (data: any) => void;
+  onNavigateToTab?: (tabId: string) => void;
   iqcRecords?: any[];
   pqcRecords?: any[];
   oqcRecords?: any[];
+  oqcHandoverList?: any[];
   suppliers?: any[];
   supplierProductionAudits?: any[];
   capas?: any[];
@@ -59,6 +57,9 @@ interface KPIDashboardProps {
   partEvaluations?: any[];
   ptspModels?: any[];
   equipments?: any[];
+  maintenanceLogs?: any[];
+  equipmentIncidents?: any[];
+  qmsBmRecords?: any[];
   dailyLogs?: any[];
   weeklyPlans?: any[];
   monthlyPlans?: any[];
@@ -71,12 +72,24 @@ interface KPIDashboardProps {
   onSyncStaffEvaluations?: (updatedEvals: Record<string, StaffKpiPeriodEvaluation>) => void;
 }
 
+export interface DrilldownRecordRow {
+  id: string;
+  date: string;
+  title: string;
+  actor: string;
+  resultText: string;
+  isPass: boolean;
+}
+
 export interface ComputedAutoMetric {
   key: string;
   actualText: string;
   numericValue: number;
   evidenceText: string;
   hasData: boolean;
+  targetTab: string;
+  targetTabLabel: string;
+  sourceRecords: DrilldownRecordRow[];
 }
 
 function normalizePersonKey(name: string): string {
@@ -85,7 +98,24 @@ function normalizePersonKey(name: string): string {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd');
+    .replace(/đ/g, 'd')
+    .replace(/\s+/g, ' ');
+}
+
+function personMatchesField(rawField: any, profile: StaffBmKpiProfile): boolean {
+  if (!rawField) return false;
+  const tokens = String(rawField)
+    .split(/[,;/|&+]+/)
+    .map(t => normalizePersonKey(t))
+    .filter(Boolean);
+  if (tokens.length === 0) return false;
+  const targetKeys = [
+    normalizePersonKey(profile.staffName),
+    ...profile.aliases.map(a => normalizePersonKey(a))
+  ];
+  return tokens.some(tok =>
+    targetKeys.some(tk => tok === tk || (tk.length >= 4 && tok.endsWith(' ' + tk)) || tok.includes(tk))
+  );
 }
 
 function isRecordInDateRange(rawDate: any, start: Date, end: Date): boolean {
@@ -96,9 +126,53 @@ function isRecordInDateRange(rawDate: any, start: Date, end: Date): boolean {
   return t >= start.getTime() && t <= end.getTime();
 }
 
+function isDailyLogCompleted(l: any): boolean {
+  if (!l) return false;
+  const pctStr = String(l.statusPercent || '').trim();
+  const pctNum = parseInt(pctStr.replace('%', ''), 10);
+  if (pctStr === '100%' || (!Number.isNaN(pctNum) && pctNum >= 100)) return true;
+  if (l.target && l.result && String(l.result).trim() !== '' && String(l.result).trim() === String(l.target).trim()) {
+    return true;
+  }
+  const st = String(l.status || '').trim().toLowerCase();
+  return st === 'hoàn thành' || st === 'completed' || st === 'đã đóng' || st === 'đã xử lý' || st === 'closed';
+}
+
+function isDailyLogOverdue(l: any, todayStartMs: number): boolean {
+  if (!l || isDailyLogCompleted(l)) return false;
+  const d = parseFlexibleDate(l.deadline || l.dueDate || l.targetDate);
+  if (!d) return false;
+  return d.getTime() < todayStartMs;
+}
+
 function isCapaClosedStatus(c: any): boolean {
   const raw = String(c?.status || c?.Status || 'Mở').trim().toLowerCase();
   return raw === 'đóng' || raw === 'đã đóng' || raw === 'closed' || raw === 'hoàn thành' || raw === 'đã xử lý';
+}
+
+function isIqcLotPassed(r: any): boolean {
+  const res = String(r?.result || r?.status || '').trim().toLowerCase();
+  return res === 'đạt' || res === 'thông quan' || res === 'pass' || res === 'ok';
+}
+
+function isPqcRecordPassed(r: any): boolean {
+  const st = String(r?.status || '').trim();
+  return st === 'Đạt hoàn toàn' || st === 'Đã cải tiến' || st === 'Đạt';
+}
+
+function isOqcRecordPassed(r: any): boolean {
+  const st = String(r?.status || r?.result || '').trim().toLowerCase();
+  return st === 'đạt' || st === 'pass' || st === 'ok' || st === 'thông quan';
+}
+
+function isSqcAuditResolved(a: any): boolean {
+  const st = String(a?.status || '').trim().toLowerCase();
+  return st === 'approved' || st === 'updated' || st === 'đã xử lý' || st === 'đóng' || st === 'hoàn thành' || st === 'đạt';
+}
+
+function isMarketDefectResolved(d: any): boolean {
+  const st = String(d?.status || '').trim().toLowerCase();
+  return st === 'đã xử lý' || st === 'hoàn thành' || st === 'đã đóng' || st === 'đóng' || st === 'resolved';
 }
 
 function computeAttainmentAndStatus(
@@ -123,7 +197,6 @@ function computeAttainmentAndStatus(
     return { attainmentPct: pct, status: 'Không đạt' };
   }
 
-  // higher_is_better
   if (numericVal >= tVal) {
     return { attainmentPct: 100, status: 'Đạt' };
   }
@@ -145,9 +218,11 @@ function parseNumericFromActualString(str: string): number | null {
 export default function KPIDashboard({
   onUpdateOverallKPI,
   onViewDetail,
+  onNavigateToTab,
   iqcRecords = [],
   pqcRecords = [],
   oqcRecords = [],
+  oqcHandoverList: propsHandoverList,
   suppliers = [],
   supplierProductionAudits = [],
   capas = [],
@@ -156,10 +231,12 @@ export default function KPIDashboard({
   partEvaluations = [],
   ptspModels = [],
   equipments = [],
+  maintenanceLogs = [],
+  equipmentIncidents = [],
+  qmsBmRecords = [],
   dailyLogs = [],
   weeklyPlans = [],
   monthlyPlans = [],
-  staffList = [],
   kpis: propsKpis,
   setKpis: propsSetKpis,
   staffKpiEvaluations: propsStaffEvals,
@@ -168,6 +245,8 @@ export default function KPIDashboard({
   onSyncStaffEvaluations
 }: KPIDashboardProps) {
   const now = new Date();
+  const todayStartMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+
   const [activeSubTab, setActiveSubTab] = useState<'dept_kpi' | 'staff_kpi'>('dept_kpi');
 
   // Dynamic Period Selection (Month / Quarter / Year)
@@ -181,6 +260,29 @@ export default function KPIDashboard({
   const [sourceFilter, setSourceFilter] = useState<'ALL' | 'auto' | 'manual'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showExportMenu, setShowExportMenu] = useState<boolean>(false);
+
+  // Drill-down modal state for inspecting source records transferred from other modules
+  const [drilldownModal, setDrilldownModal] = useState<{
+    title: string;
+    subtitle: string;
+    targetTab: string;
+    targetTabLabel: string;
+    summaryBadge: string;
+    rows: DrilldownRecordRow[];
+  } | null>(null);
+
+  // Load handover list from props or safeStorage
+  const oqcHandoverList = useMemo(() => {
+    if (Array.isArray(propsHandoverList) && propsHandoverList.length > 0) return propsHandoverList;
+    try {
+      const saved = safeStorage.getItem('dk_oqc_handover_list');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  }, [propsHandoverList]);
 
   // Local fallbacks if parent doesn't pass state
   const [localKpis, setLocalKpis] = useState<DetailedKPI[]>(() => {
@@ -219,7 +321,6 @@ export default function KPIDashboard({
 
   const staffEvals = propsStaffEvals || localStaffEvals;
 
-  // Auto-upgrade legacy 31 hardcoded KPIs in storage to the new 16 standardized KPIs on first mount
   useEffect(() => {
     if (propsKpis && propsKpis.length > 0 && !propsKpis.some((x: any) => x.id === 'KPI-COM-01')) {
       persistKpis(DEFAULT_DETAILED_KPIS);
@@ -263,6 +364,8 @@ export default function KPIDashboard({
         label: `Tháng ${mm}/${selectedYear}`,
         start,
         end,
+        months: [selectedMonth],
+        year: selectedYear,
         rangeText: `01/${mm}/${selectedYear} – ${String(end.getDate()).padStart(2, '0')}/${mm}/${selectedYear}`
       };
     }
@@ -278,6 +381,8 @@ export default function KPIDashboard({
         label: `Quý ${selectedQuarter}/${selectedYear}`,
         start,
         end,
+        months: [startMonth + 1, startMonth + 2, startMonth + 3],
+        year: selectedYear,
         rangeText: `01/${sm}/${selectedYear} – ${String(end.getDate()).padStart(2, '0')}/${em}/${selectedYear}`
       };
     }
@@ -288,6 +393,8 @@ export default function KPIDashboard({
       label: `Năm ${selectedYear}`,
       start,
       end,
+      months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      year: selectedYear,
       rangeText: `01/01/${selectedYear} – 31/12/${selectedYear}`
     };
   }, [periodMode, selectedYear, selectedMonth, selectedQuarter]);
@@ -295,323 +402,778 @@ export default function KPIDashboard({
   // ============================================================================
   // AUTOMATIC METRIC ENGINE FROM LIVE APP DATA FOR THE SELECTED PERIOD
   // ============================================================================
-  const autoMetricsMap = useMemo<Record<string, ComputedAutoMetric>>(() => {
-    const { start, end, label } = periodInfo;
+  const periodDataset = useMemo(() => {
+    const { start, end, months, year } = periodInfo;
 
     // 1. IQC Records in period
-    const curIqc = (iqcRecords || []).filter(r => isRecordInDateRange(r?.date || r?.checkDate || r?.createdAt, start, end));
-    const iqcTotalLots = curIqc.length;
-    const iqcPassedLots = curIqc.filter(
-      r => r?.result === 'Đạt' || r?.status === 'Đạt' || r?.status === 'Thông quan' || r?.status === 'Pass'
-    ).length;
-    const iqcRate = iqcTotalLots > 0 ? Number(((iqcPassedLots / iqcTotalLots) * 100).toFixed(1)) : 100;
+    const curIqc = (iqcRecords || []).filter(r =>
+      isRecordInDateRange(r?.date || r?.checkDate || r?.createdAt, start, end)
+    );
 
     // 2. PQC Records in period
-    const curPqc = (pqcRecords || []).filter(r => isRecordInDateRange(r?.date || r?.checkDate || r?.createdAt, start, end));
-    const pqcTotal = curPqc.length;
-    const pqcPassed = curPqc.filter(
-      r => r?.status === 'Đạt hoàn toàn' || r?.status === 'Đã cải tiến' || r?.status === 'Đạt'
-    ).length;
-    const pqcRate = pqcTotal > 0 ? Number(((pqcPassed / pqcTotal) * 100).toFixed(1)) : 100;
+    const curPqc = (pqcRecords || []).filter(r =>
+      isRecordInDateRange(r?.date || r?.checkDate || r?.createdAt, start, end)
+    );
 
-    // 3. OQC Records in period
-    const curOqc = (oqcRecords || []).filter(r => isRecordInDateRange(r?.date || r?.checkDate || r?.createdAt, start, end));
-    const oqcTotal = curOqc.length;
-    const oqcPassed = curOqc.filter(r => r?.status === 'Đạt').length;
-    const oqcFailed = curOqc.filter(r => r?.status === 'Lỗi').length;
-    const oqcFpyRate = oqcTotal > 0 ? Number(((oqcPassed / oqcTotal) * 100).toFixed(2)) : 100;
+    // 3. OQC Records & OQC Handover List in period
+    const curOqc = (oqcRecords || []).filter(r => {
+      if (r?.date || r?.checkDate || r?.createdAt) {
+        return isRecordInDateRange(r.date || r.checkDate || r.createdAt, start, end);
+      }
+      if (r?.month && r?.year) {
+        return Number(r.year) === year && months.includes(Number(r.month));
+      }
+      return false;
+    });
 
-    // 4. Suppliers & SQC Audits in period
+    const curHandover = (oqcHandoverList || []).filter(h =>
+      isRecordInDateRange(h?.handoverDate || h?.scannedAt || h?.date || h?.createdAt, start, end)
+    );
+
+    // 4. SQC Audits in period
     const curSqc = (supplierProductionAudits || []).filter(a =>
       isRecordInDateRange(a?.requestDate || a?.date || a?.createdAt, start, end)
     );
-    const sqcTotal = curSqc.length;
-    const sqcResolved = curSqc.filter(a => {
-      const st = String(a?.status || '').toLowerCase();
-      return st === 'đã xử lý' || st === 'đóng' || st === 'hoàn thành' || st === 'đã đóng';
-    }).length;
-    const totalSuppliers = (suppliers || []).length;
-    const evaluatedSuppliers = (suppliers || []).filter(
-      s => s?.Rank || s?.rank || s?.Score || s?.score || s?.Status === 'Đạt' || s?.EvaluationResult
-    ).length;
-    const sqcRate =
-      sqcTotal > 0
-        ? Number(((sqcResolved / sqcTotal) * 100).toFixed(1))
-        : totalSuppliers > 0
-        ? Number(((evaluatedSuppliers / totalSuppliers) * 100).toFixed(1))
-        : 100;
 
-    // 5. CAPAs in period
+    // 5. CAPAs in period (matching targetDate/dueDate/createdDate in period, or open CAPAs if none dated in period)
     const curCapas = (capas || []).filter(c => {
       const dStr = c?.createdDate || c?.date || c?.createdAt || c?.targetDate || c?.dueDate || c?.DueDate;
-      return dStr ? isRecordInDateRange(dStr, start, end) : true;
+      return dStr ? isRecordInDateRange(dStr, start, end) : false;
     });
-    const capaTotal = curCapas.length;
-    const capaClosed = curCapas.filter(isCapaClosedStatus).length;
-    const capaRate = capaTotal > 0 ? Number(((capaClosed / capaTotal) * 100).toFixed(1)) : 100;
 
-    // 6. Market Defects / Warranty in period
+    // 6. Market Defects in period
     const curDefects = (defects || []).filter(d =>
       isRecordInDateRange(d?.defectDate || d?.sourceDate || d?.saleDate || d?.date || d?.createdAt, start, end)
     );
-    const mktTotal = curDefects.length;
-    const mktResolved = curDefects.filter(d => {
-      const st = String(d?.status || '').toLowerCase();
-      return st === 'đã xử lý' || st === 'hoàn thành' || st === 'đã đóng' || st === 'đóng';
-    }).length;
-    const mktResolvedRate = mktTotal > 0 ? Number(((mktResolved / mktTotal) * 100).toFixed(1)) : 100;
-    const mktDefectRateOnOqc =
-      oqcTotal > 0
-        ? Number(((mktTotal / oqcTotal) * 100).toFixed(2))
-        : mktTotal === 0
-        ? 0
-        : Number((mktTotal * 0.1).toFixed(2));
 
-    // 7. COPQ in period
-    const curCopqs = (copqs || []).filter(c =>
-      isRecordInDateRange(c?.date || c?.createdAt || c?.incidentDate, start, end)
-    );
-    const copqTotalCost = curCopqs.reduce(
-      (sum, c) => sum + Number(c?.cost || c?.amount || c?.totalCost || c?.lossAmount || 0),
-      0
-    );
-    const copqTotalCount = curCopqs.length;
-    const copqClosedCount = curCopqs.filter(c => {
-      const st = String(c?.status || '').toLowerCase();
-      return st === 'đã xử lý' || st === 'đóng' || st === 'đã đóng' || st === 'hoàn thành' || st === 'đã bồi hoàn';
-    }).length;
-    const copqClosedRate = copqTotalCount > 0 ? Number(((copqClosedCount / copqTotalCount) * 100).toFixed(1)) : 100;
+    // 7. COPQ in period (matches c.month & c.year OR c.date)
+    const curCopqs = (copqs || []).filter(c => {
+      if (c?.month && c?.year) {
+        return Number(c.year) === year && months.includes(Number(c.month));
+      }
+      return isRecordInDateRange(c?.date || c?.createdAt || c?.incidentDate, start, end);
+    });
 
-    // 8. Part Evaluations (BM-KTTD-01) & PTSP Issues in period
+    // 8. Part Evaluations (BM-KTTD-01) in period
     const curPartEvals = (partEvaluations || []).filter(p =>
       isRecordInDateRange(p?.receivedDate || p?.testDate || p?.date || p?.createdAt, start, end)
     );
-    const partEvalTotal = curPartEvals.length;
-    const partEvalDone = curPartEvals.filter(p => {
-      const st = String(p?.result || p?.conclusion || p?.status || '').toLowerCase();
-      return st.includes('đạt') || st.includes('hoàn thành') || st.includes('không đạt') || st.includes('đóng') || Boolean(p?.conclusion);
-    }).length;
-    const partEvalRate = partEvalTotal > 0 ? Number(((partEvalDone / partEvalTotal) * 100).toFixed(1)) : 100;
 
-    // 9. Equipments & Calibration (BM-KTTD-02)
-    const totalEquip = (equipments || []).length;
-    const todayYmd = getLocalYmd(new Date());
-    const validEquip = (equipments || []).filter(eq => {
-      const st = String(eq?.status || '').toLowerCase();
-      const isBroken = st.includes('hỏng') || st.includes('ngừng') || st.includes('quá hạn');
-      const nextCal = eq?.nextCalibrationDate || eq?.calibrationDueDate;
-      const isOverdueCal = nextCal && String(nextCal) < todayYmd;
-      return !isBroken && !isOverdueCal;
-    }).length;
-    const equipCalRate = totalEquip > 0 ? Number(((validEquip / totalEquip) * 100).toFixed(1)) : 100;
-
-    // 10. Daily Logs in period
-    const curLogs = (dailyLogs || []).filter(l => isRecordInDateRange(l?.date || l?.createdAt, start, end));
-    const logsTotal = curLogs.length;
-    const logsCompleted = curLogs.filter(l => {
-      const st = String(l?.status || '').toLowerCase();
-      return st === 'hoàn thành' || st === 'đã đóng' || st === 'đã xử lý' || st === 'closed';
-    }).length;
-    const dailyTaskCompletionRate = logsTotal > 0 ? Number(((logsCompleted / logsTotal) * 100).toFixed(1)) : 100;
-
-    const distinctReportDays = new Set(
-      curLogs.map(l => {
-        const d = parseFlexibleDate(l?.date || l?.createdAt);
-        return d ? getLocalYmd(d) : '';
-      }).filter(Boolean)
-    ).size;
-    // Estimate expected working days elapsed in the selected period
-    const effectiveEnd = end.getTime() > Date.now() ? new Date() : end;
-    let workingDaysElapsed = 0;
-    if (effectiveEnd.getTime() >= start.getTime()) {
-      const cursor = new Date(start);
-      while (cursor.getTime() <= effectiveEnd.getTime()) {
-        if (cursor.getDay() !== 0) workingDaysElapsed++; // exclude Sundays
-        cursor.setDate(cursor.getDate() + 1);
-      }
-    }
-    const dailyReportDaysRate =
-      workingDaysElapsed > 0
-        ? Math.min(100, Number(((distinctReportDays / Math.max(1, Math.min(workingDaysElapsed, distinctReportDays || workingDaysElapsed))) * 100).toFixed(1)))
-        : 100;
-
-    // 11. Quality Planning Completion (Weekly / Monthly Timelines)
-    let planTotal = 0;
-    let planDone = 0;
-    try {
-      const monthlyAllRaw = safeStorage.getItem('dk_monthly_timelines_all');
-      if (monthlyAllRaw) {
-        const monthlyDict = JSON.parse(monthlyAllRaw);
-        if (monthlyDict && typeof monthlyDict === 'object') {
-          Object.entries(monthlyDict).forEach(([k, arr]) => {
-            if (k.startsWith(periodInfo.key) && Array.isArray(arr)) {
-              arr.forEach((item: any) => {
-                planTotal++;
-                const st = String(item?.status || '').toLowerCase();
-                if (st === 'hoàn thành' || Number(item?.progress || 0) >= 100) planDone++;
-              });
-            }
+    // 9. PTSP Models & Issues / SampleChecks / RoadTests
+    const curPtspIssues: any[] = [];
+    const curPtspChecks: any[] = [];
+    (ptspModels || []).forEach(m => {
+      (m?.issues || []).forEach((iss: any) => {
+        if (
+          !iss?.createdAt ||
+          isRecordInDateRange(iss.createdAt || iss.dueDate, start, end)
+        ) {
+          curPtspIssues.push({ ...iss, modelCode: m.code, modelName: m.modelName });
+        }
+      });
+      (m?.sampleChecks || []).forEach((chk: any) => {
+        if (chk?.status && chk.status !== 'Chưa KT') {
+          curPtspChecks.push({ ...chk, modelCode: m.code, modelName: m.modelName, kind: 'Đánh giá mẫu' });
+        }
+      });
+      (m?.roadTests || []).forEach((rt: any) => {
+        if (rt?.result && rt.result !== 'Chưa đo') {
+          curPtspChecks.push({
+            id: rt.id,
+            item: rt.item,
+            standard: rt.standard,
+            status: rt.result,
+            modelCode: m.code,
+            modelName: m.modelName,
+            kind: 'Chạy thử đường trường'
           });
         }
+      });
+    });
+
+    // 10. Daily Logs in period
+    const curLogs = (dailyLogs || []).filter(l => {
+      if (l?.date || l?.createdAt) {
+        const matched = isRecordInDateRange(l.date || l.createdAt, start, end);
+        if (matched) return true;
       }
+      return false;
+    });
+
+    // 11. Quality Planning Tasks in period (from dk_weekly_timelines_all, dk_monthly_timelines_all, weeklyPlans, monthlyPlans)
+    const curPlanTasks: any[] = [];
+    const seenPlanIds = new Set<string>();
+    const addPlanTask = (item: any, sourceLabel: string) => {
+      if (!item) return;
+      const title = String(item.title || item.content || item.task || item.partName || item.modelName || '').trim();
+      if (!title) return;
+      const uid = `${sourceLabel}|${item.id || ''}|${title}|${item.assignee || item.pic || ''}|${item.deadline || ''}`;
+      if (seenPlanIds.has(uid)) return;
+      seenPlanIds.add(uid);
+      curPlanTasks.push({ ...item, _title: title, _source: sourceLabel });
+    };
+
+    try {
+      const monthKeys = months.map(m => `${year}-${String(m).padStart(2, '0')}`);
+      ['dk_monthly_timelines_all', 'dk_weekly_timelines_all'].forEach(storageKey => {
+        const raw = safeStorage.getItem(storageKey);
+        if (!raw) return;
+        const dict = JSON.parse(raw);
+        if (!dict || typeof dict !== 'object') return;
+        Object.entries(dict).forEach(([k, arr]) => {
+          if (!Array.isArray(arr)) return;
+          const keyMatchesMonth = monthKeys.some(mk => k.startsWith(mk));
+          arr.forEach((it: any) => {
+            const inRangeByDeadline = it?.deadline && isRecordInDateRange(it.deadline, start, end);
+            const inRangeByMeta =
+              it?.year && it?.month && Number(it.year) === year && months.includes(Number(it.month));
+            if (keyMatchesMonth || inRangeByDeadline || inRangeByMeta) {
+              addPlanTask(it, storageKey.includes('monthly') ? 'KH Tháng' : 'KH Tuần');
+            }
+          });
+        });
+      });
     } catch (e) {}
-    if (planTotal === 0 && Array.isArray(weeklyPlans) && weeklyPlans.length > 0) {
-      const curWp = weeklyPlans.filter(w => isRecordInDateRange(w?.startDate || w?.endDate || w?.date, start, end));
-      planTotal = curWp.length;
-      planDone = curWp.filter(w => String(w?.status || '').toLowerCase() === 'hoàn thành').length;
-    }
-    const planCompletionRate =
-      planTotal > 0 ? Number(((planDone / planTotal) * 100).toFixed(1)) : dailyTaskCompletionRate;
+
+    (weeklyPlans || []).forEach(wp => {
+      if (Number(wp?.year) === year && months.includes(Number(wp?.month))) {
+        (wp?.targets || []).forEach((t: any) => addPlanTask(t, `KH Tuần ${wp.week}/${wp.month}`));
+      }
+    });
+    (monthlyPlans || []).forEach(mp => {
+      if (Number(mp?.year) === year && months.includes(Number(mp?.month))) {
+        (mp?.targets || []).forEach((t: any) => addPlanTask(t, `KH Tháng ${mp.month}/${mp.year}`));
+      }
+    });
 
     return {
-      COPQ_TOTAL: {
-        key: 'COPQ_TOTAL',
-        actualText: `${copqTotalCost.toLocaleString('vi-VN')} VNĐ`,
-        numericValue: copqTotalCost,
-        evidenceText: `Dữ liệu ${label}: ${copqTotalCount} hồ sơ COPQ, tổng chi phí ${copqTotalCost.toLocaleString('vi-VN')} VNĐ`,
-        hasData: copqTotalCount > 0
-      },
-      COPQ_CLOSED_RATE: {
-        key: 'COPQ_CLOSED_RATE',
-        actualText: `${copqClosedRate}%`,
-        numericValue: copqClosedRate,
-        evidenceText:
-          copqTotalCount > 0
-            ? `Dữ liệu ${label}: Đã đóng ${copqClosedCount}/${copqTotalCount} hồ sơ COPQ (${copqClosedRate}%)`
-            : `Dữ liệu ${label}: 0 hồ sơ COPQ tồn đọng (Đạt 100%)`,
-        hasData: copqTotalCount > 0
-      },
-      PLAN_COMPLETION_RATE: {
-        key: 'PLAN_COMPLETION_RATE',
-        actualText: `${planCompletionRate}%`,
-        numericValue: planCompletionRate,
-        evidenceText:
-          planTotal > 0
-            ? `Dữ liệu ${label}: Hoàn thành ${planDone}/${planTotal} hạng mục Kế hoạch chất lượng (${planCompletionRate}%)`
-            : `Dữ liệu ${label}: Tính theo tiến độ hoàn thành công việc trong kỳ (${planCompletionRate}%)`,
-        hasData: planTotal > 0 || logsTotal > 0
-      },
-      DAILY_REPORT_DAYS_RATE: {
-        key: 'DAILY_REPORT_DAYS_RATE',
-        actualText: `${logsTotal > 0 ? dailyReportDaysRate : 100}%`,
-        numericValue: logsTotal > 0 ? dailyReportDaysRate : 100,
-        evidenceText: `Dữ liệu ${label}: Ghi nhận ${logsTotal} tác vụ báo cáo ngày trên ${distinctReportDays} ngày làm việc & duy trì 12 BM / 19 Tài liệu trong /bm`,
-        hasData: logsTotal > 0
-      },
-      DAILY_TASK_COMPLETION_RATE: {
-        key: 'DAILY_TASK_COMPLETION_RATE',
-        actualText: `${dailyTaskCompletionRate}%`,
-        numericValue: dailyTaskCompletionRate,
-        evidenceText:
-          logsTotal > 0
-            ? `Dữ liệu ${label}: Hoàn thành ${logsCompleted}/${logsTotal} đầu việc trong Nhật trình báo cáo ngày (${dailyTaskCompletionRate}%)`
-            : `Dữ liệu ${label}: Chưa phát sinh đầu việc tồn đọng trong kỳ`,
-        hasData: logsTotal > 0
-      },
-      SQC_SUPPLIER_EVAL_RATE: {
-        key: 'SQC_SUPPLIER_EVAL_RATE',
-        actualText: `${sqcRate}%`,
-        numericValue: sqcRate,
-        evidenceText:
-          sqcTotal > 0
-            ? `Dữ liệu ${label}: Đã xử lý ${sqcResolved}/${sqcTotal} hồ sơ SQC NCC (${sqcRate}%) • Quản lý ${totalSuppliers} NCC`
-            : `Dữ liệu ${label}: Quản lý ${evaluatedSuppliers}/${totalSuppliers} NCC trong danh mục (${sqcRate}%)`,
-        hasData: sqcTotal > 0 || totalSuppliers > 0
-      },
-      IQC_PASS_RATE: {
-        key: 'IQC_PASS_RATE',
-        actualText: `${iqcRate}%`,
-        numericValue: iqcRate,
-        evidenceText:
-          iqcTotalLots > 0
-            ? `Dữ liệu ${label}: ${iqcPassedLots}/${iqcTotalLots} lô vật tư đầu vào IQC đạt chuẩn (${iqcRate}%)`
-            : `Dữ liệu ${label}: Chưa phát sinh lô lỗi IQC trong kỳ`,
-        hasData: iqcTotalLots > 0
-      },
-      PART_EVAL_PTSP_RATE: {
-        key: 'PART_EVAL_PTSP_RATE',
-        actualText: `${partEvalRate}%`,
-        numericValue: partEvalRate,
-        evidenceText:
-          partEvalTotal > 0
-            ? `Dữ liệu ${label}: Hoàn thành kết luận ${partEvalDone}/${partEvalTotal} phiếu thẩm định linh kiện BM-KTTD-01 (${partEvalRate}%)`
-            : `Dữ liệu ${label}: Không có phiếu thẩm định linh kiện quá hạn (100%)`,
-        hasData: partEvalTotal > 0
-      },
-      PQC_PASS_RATE: {
-        key: 'PQC_PASS_RATE',
-        actualText: `${pqcRate}%`,
-        numericValue: pqcRate,
-        evidenceText:
-          pqcTotal > 0
-            ? `Dữ liệu ${label}: ${pqcPassed}/${pqcTotal} lượt kiểm tra công đoạn PQC đạt chuẩn (${pqcRate}%)`
-            : `Dữ liệu ${label}: Chưa ghi nhận lỗi công đoạn PQC trong kỳ`,
-        hasData: pqcTotal > 0
-      },
-      OQC_FPY_RATE: {
-        key: 'OQC_FPY_RATE',
-        actualText: `${oqcFpyRate}%`,
-        numericValue: oqcFpyRate,
-        evidenceText:
-          oqcTotal > 0
-            ? `Dữ liệu ${label}: ${oqcPassed.toLocaleString('vi-VN')}/${oqcTotal.toLocaleString('vi-VN')} xe xuất xưởng OQC đạt chuẩn FPY (${oqcFailed} xe lỗi)`
-            : `Dữ liệu ${label}: Chưa phát sinh bản ghi OQC trong kỳ`,
-        hasData: oqcTotal > 0
-      },
-      CAPA_CLOSURE_RATE: {
-        key: 'CAPA_CLOSURE_RATE',
-        actualText: `${capaRate}%`,
-        numericValue: capaRate,
-        evidenceText:
-          capaTotal > 0
-            ? `Dữ liệu ${label}: Đã đóng ${capaClosed}/${capaTotal} hồ sơ CAPA (${capaRate}%)`
-            : `Dữ liệu ${label}: 0 hồ sơ CAPA tồn đọng quá hạn (100%)`,
-        hasData: capaTotal > 0
-      },
-      MARKET_DEFECT_RATE: {
-        key: 'MARKET_DEFECT_RATE',
-        actualText: `${mktDefectRateOnOqc}%`,
-        numericValue: mktDefectRateOnOqc,
-        evidenceText: `Dữ liệu ${label}: ${mktTotal} phản ánh lỗi thị trường / ${oqcTotal.toLocaleString('vi-VN')} xe kiểm OQC (${mktDefectRateOnOqc}%)`,
-        hasData: mktTotal > 0 || oqcTotal > 0
-      },
-      MARKET_DEFECT_RESOLVED_RATE: {
-        key: 'MARKET_DEFECT_RESOLVED_RATE',
-        actualText: `${mktResolvedRate}%`,
-        numericValue: mktResolvedRate,
-        evidenceText:
-          mktTotal > 0
-            ? `Dữ liệu ${label}: Đã xử lý ${mktResolved}/${mktTotal} phản hồi lỗi thị trường & bảo hành (${mktResolvedRate}%)`
-            : `Dữ liệu ${label}: Không có phản hồi lỗi thị trường tồn đọng (100%)`,
-        hasData: mktTotal > 0
-      },
-      EQUIPMENT_CALIBRATION_RATE: {
-        key: 'EQUIPMENT_CALIBRATION_RATE',
-        actualText: `${equipCalRate}%`,
-        numericValue: equipCalRate,
-        evidenceText:
-          totalEquip > 0
-            ? `Dữ liệu ${label}: ${validEquip}/${totalEquip} thiết bị đo kiểm hoạt động tốt & còn hạn hiệu chuẩn (${equipCalRate}%)`
-            : `Dữ liệu ${label}: 100% thiết bị đo kiểm trong sổ cái BM-KTTD-02 đạt chuẩn`,
-        hasData: totalEquip > 0
-      }
+      curIqc,
+      curPqc,
+      curOqc,
+      curHandover,
+      curSqc,
+      curCapas,
+      curDefects,
+      curCopqs,
+      curPartEvals,
+      curPtspIssues,
+      curPtspChecks,
+      curLogs,
+      curPlanTasks
     };
   }, [
     periodInfo,
     iqcRecords,
     pqcRecords,
     oqcRecords,
-    suppliers,
+    oqcHandoverList,
     supplierProductionAudits,
     capas,
     defects,
     copqs,
     partEvaluations,
     ptspModels,
-    equipments,
     dailyLogs,
-    weeklyPlans
+    weeklyPlans,
+    monthlyPlans
   ]);
+
+  const autoMetricsMap = useMemo<Record<string, ComputedAutoMetric>>(() => {
+    const { label, start, end } = periodInfo;
+    const {
+      curIqc,
+      curPqc,
+      curOqc,
+      curHandover,
+      curSqc,
+      curCapas,
+      curDefects,
+      curCopqs,
+      curPartEvals,
+      curPtspIssues,
+      curPtspChecks,
+      curLogs,
+      curPlanTasks
+    } = periodDataset;
+
+    // 1. IQC
+    const iqcTotalLots = curIqc.length;
+    const iqcPassedLots = curIqc.filter(isIqcLotPassed).length;
+    const iqcTotalSampleQty = curIqc.reduce((s, r) => s + Number(r?.checkedQty || 0), 0);
+    const iqcTotalFailQty = curIqc.reduce((s, r) => s + Number(r?.failedQty || 0), 0);
+    const iqcRate = iqcTotalLots > 0 ? Number(((iqcPassedLots / iqcTotalLots) * 100).toFixed(1)) : 0;
+    const iqcRows: DrilldownRecordRow[] = curIqc.slice(0, 60).map(r => ({
+      id: r.id || r.ecountVoucherNo || '--',
+      date: formatDateStrVi(r.date),
+      title: `${r.supplierName || 'NCC'} • ${r.itemSummary || r.content || '--'} (Mẫu: ${r.checkedQty || 0}, Lỗi: ${r.failedQty || 0})`,
+      actor: r.checkedBy || 'Tổ IQC',
+      resultText: r.result || r.status || 'Đạt',
+      isPass: isIqcLotPassed(r)
+    }));
+
+    // 2. PQC
+    const pqcTotal = curPqc.length;
+    const pqcPassed = curPqc.filter(isPqcRecordPassed).length;
+    const pqcRate = pqcTotal > 0 ? Number(((pqcPassed / pqcTotal) * 100).toFixed(1)) : 0;
+    const pqcRows: DrilldownRecordRow[] = curPqc.slice(0, 60).map(r => ({
+      id: r.id || r.lsx || '--',
+      date: formatDateStrVi(r.date),
+      title: `Model ${r.model || '--'} (LSX: ${r.lsx || '--'}) • ${r.findings || 'Kiểm tra công đoạn'}`,
+      actor: r.checkedBy || 'Tổ PQC',
+      resultText: r.status || '--',
+      isPass: isPqcRecordPassed(r)
+    }));
+
+    // 3. OQC
+    const oqcTotal = curOqc.length;
+    const oqcPassed = curOqc.filter(isOqcRecordPassed).length;
+    const oqcFailed = curOqc.filter(r => !isOqcRecordPassed(r)).length;
+    const oqcFpyRate = oqcTotal > 0 ? Number(((oqcPassed / oqcTotal) * 100).toFixed(2)) : 0;
+    const oqcRows: DrilldownRecordRow[] = curOqc.slice(0, 60).map(r => ({
+      id: r.serialNo || r.chassisNo || r.id || '--',
+      date: formatDateStrVi(r.date),
+      title: `${r.model || '--'} (${r.color || '--'}) • ${r.defectDetail || 'Kiểm tra xuất xưởng KCS'}`,
+      actor: r.checkedBy || 'Tổ OQC',
+      resultText: r.status || '--',
+      isPass: isOqcRecordPassed(r)
+    }));
+
+    // 4. Suppliers & SQC
+    const sqcTotal = curSqc.length;
+    const sqcResolved = curSqc.filter(isSqcAuditResolved).length;
+    const totalSuppliers = (suppliers || []).length;
+    const ratedSuppliers = (suppliers || []).filter(s => {
+      const rating = String(s?.qualityRating || s?.QualityRating || '').toUpperCase();
+      const st = String(s?.status || s?.Status || '').toLowerCase();
+      return ['A', 'B', 'C', 'D'].includes(rating) || st === 'active' || st === 'đạt';
+    }).length;
+    const sqcHasData = sqcTotal > 0 || totalSuppliers > 0;
+    const sqcRate =
+      sqcTotal > 0
+        ? Number(((sqcResolved / sqcTotal) * 100).toFixed(1))
+        : totalSuppliers > 0
+        ? Number(((ratedSuppliers / totalSuppliers) * 100).toFixed(1))
+        : 0;
+    const sqcRows: DrilldownRecordRow[] =
+      sqcTotal > 0
+        ? curSqc.map(a => ({
+            id: a.id || '--',
+            date: formatDateStrVi(a.requestDate),
+            title: `${a.supplierName || '--'} • ${a.componentName || '--'}: ${a.targetSpecification || ''}`,
+            actor: a.checkedBy || 'QA/SQC',
+            resultText:
+              a.status === 'approved'
+                ? 'Đạt yêu cầu'
+                : a.status === 'updated'
+                ? 'NCC đã phản hồi'
+                : a.status === 'rejected'
+                ? 'Sai lệch KT'
+                : String(a.status || 'Chờ phản hồi'),
+            isPass: isSqcAuditResolved(a)
+          }))
+        : (suppliers || []).slice(0, 50).map(s => ({
+            id: s.id || s.SupplierID || '--',
+            date: formatDateStrVi(s.lastAuditDate || s.LastAuditDate) || label,
+            title: `${s.name || s.SupplierName || '--'} • Linh kiện: ${s.componentType || s.ComponentType || '--'} (PPM: ${s.ppm ?? s.PPM ?? 0})`,
+            actor: 'Phòng QLCL',
+            resultText: `Hạng ${s.qualityRating || s.QualityRating || 'A'} (${s.status || s.Status || 'Active'})`,
+            isPass: true
+          }));
+
+    // 5. CAPA
+    const activeCapaPool = curCapas.length > 0 ? curCapas : (capas || []);
+    const capaTotal = activeCapaPool.length;
+    const capaClosed = activeCapaPool.filter(isCapaClosedStatus).length;
+    const capaOverdue = activeCapaPool.filter(c => {
+      if (isCapaClosedStatus(c)) return false;
+      const due = parseFlexibleDate(c?.targetDate || c?.dueDate || c?.DueDate);
+      return due ? due.getTime() < todayStartMs : false;
+    }).length;
+    const capaRate =
+      capaTotal > 0
+        ? Number((((capaClosed + Math.max(0, capaTotal - capaClosed - capaOverdue) * 0.8) / capaTotal) * 100).toFixed(1))
+        : 0;
+    const capaRows: DrilldownRecordRow[] = activeCapaPool.slice(0, 60).map(c => ({
+      id: c.id || c.CAPAID || '--',
+      date: formatDateStrVi(c.targetDate || c.dueDate || c.DueDate),
+      title: `${c.title || c.issue || c.Issue || '--'} (${c.modelName || c.supplierName || c.source || 'Nội bộ'})`,
+      actor: c.assignee || c.owner || c.Owner || 'QLCL',
+      resultText: c.status || c.Status || 'Mở',
+      isPass: isCapaClosedStatus(c)
+    }));
+
+    // 6. Market Defects
+    const mktTotal = curDefects.length;
+    const mktResolved = curDefects.filter(isMarketDefectResolved).length;
+    const mktResolvedRate = mktTotal > 0 ? Number(((mktResolved / mktTotal) * 100).toFixed(1)) : 0;
+    const mktDefectRateOnOqc =
+      oqcTotal > 0
+        ? Number(((mktTotal / oqcTotal) * 100).toFixed(2))
+        : mktTotal > 0
+        ? Number((mktTotal * 0.1).toFixed(2))
+        : 0;
+    const mktRows: DrilldownRecordRow[] = curDefects.slice(0, 60).map(d => ({
+      id: d.id || '--',
+      date: formatDateStrVi(d.defectDate || d.sourceDate || d.saleDate),
+      title: `${d.model || 'Xe'} • ${d.dealer || d.customerName || 'Đại lý'}: ${d.description || d.type || '--'}`,
+      actor: d.assignee || 'BP KTTĐ / Bảo hành',
+      resultText: d.status || 'Chưa xử lý',
+      isPass: isMarketDefectResolved(d)
+    }));
+
+    // 7. COPQ
+    const copqTotalCount = curCopqs.length;
+    const copqTotalCost = curCopqs.reduce(
+      (sum, c) => sum + Number(c?.totalAmount ?? c?.amount ?? c?.cost ?? c?.totalCost ?? 0),
+      0
+    );
+    const copqClosedCount = curCopqs.filter(c => {
+      const st = String(c?.status || '').toLowerCase();
+      if (st) {
+        return st === 'đã xử lý' || st === 'đóng' || st === 'đã đóng' || st === 'hoàn thành' || st === 'đã bồi hoàn';
+      }
+      return Boolean(c?.accountingCode || c?.notes || c?.costOrigin || c?.amount !== undefined);
+    }).length;
+    const copqClosedRate = copqTotalCount > 0 ? Number(((copqClosedCount / copqTotalCount) * 100).toFixed(1)) : 0;
+    const copqRows: DrilldownRecordRow[] = curCopqs.map(c => ({
+      id: c.id || c.accountingCode || '--',
+      date: c.month && c.year ? `T${String(c.month).padStart(2, '0')}/${c.year}` : label,
+      title: `${c.category || 'COPQ'} • ${c.title || c.description || c.details || '--'} (${c.model || 'Chung'})`,
+      actor: c.costOrigin || 'Phòng QLCL',
+      resultText: `${Number(c.totalAmount ?? c.amount ?? 0).toLocaleString('vi-VN')} VNĐ`,
+      isPass: true
+    }));
+
+    // 8. Part Evaluations (BM-KTTD-01) & PTSP
+    const partEvalTotal = curPartEvals.length;
+    const partEvalQty = curPartEvals.reduce((s, p) => s + Math.max(1, Number(p?.quantity) || 1), 0);
+    const partEvalDone = curPartEvals.filter(p =>
+      Boolean(p?.resolution || p?.rootCauseCategory || p?.findingNote)
+    ).length;
+
+    const ptspIssueTotal = curPtspIssues.length;
+    const ptspIssueDone = curPtspIssues.filter(i => i?.status === 'Đã chốt' || i?.status === 'Đang xử lý').length;
+    const combinedEvalTotal = partEvalTotal + ptspIssueTotal;
+    const combinedEvalDone = partEvalDone + ptspIssueDone;
+    const partEvalPtspRate =
+      combinedEvalTotal > 0 ? Number(((combinedEvalDone / combinedEvalTotal) * 100).toFixed(1)) : 0;
+
+    const partEvalRows: DrilldownRecordRow[] = [
+      ...curPartEvals.map(p => ({
+        id: p.id || '--',
+        date: formatDateStrVi(p.receivedDate),
+        title: `[BM-KTTD-01] ${p.partName || '--'} (SL: ${p.quantity || 1}) • Nguyên nhân: ${p.rootCauseCategory || '--'}`,
+        actor: p.inspector || 'BP KTTĐ',
+        resultText: p.resolution || 'Đã giám định',
+        isPass: true
+      })),
+      ...curPtspIssues.map(iss => ({
+        id: iss.id || '--',
+        date: formatDateStrVi(iss.createdAt || iss.dueDate),
+        title: `[PTSP ${iss.modelName || iss.modelCode}] ${iss.partOrArea}: ${iss.description}`,
+        actor: iss.ownerDept || 'PTSP',
+        resultText: iss.status || 'Mở',
+        isPass: iss.status === 'Đã chốt'
+      }))
+    ];
+
+    // 9. Equipments & Calibration (BM-KTTD-02)
+    const totalEquip = (equipments || []).length;
+    const validEquip = (equipments || []).filter(eq => {
+      const st = String(eq?.status || '').toLowerCase();
+      const isOperational = st === 'running' || st === 'hoạt động tốt' || st === 'đạt' || st === 'active';
+      const nextDate = parseFlexibleDate(eq?.nextMaintenanceDate || eq?.nextCalibrationDate);
+      const isOverdue = nextDate ? nextDate.getTime() < todayStartMs : false;
+      return isOperational && !isOverdue;
+    }).length;
+    const equipCalRate = totalEquip > 0 ? Number(((validEquip / totalEquip) * 100).toFixed(1)) : 0;
+    const equipRows: DrilldownRecordRow[] = (equipments || []).map(eq => ({
+      id: eq.id || '--',
+      date: formatDateStrVi(eq.nextMaintenanceDate || eq.lastMaintenanceDate),
+      title: `${eq.name || '--'} (${eq.category || '--'}) • Vị trí: ${eq.location || '--'}`,
+      actor: eq.responsiblePerson || 'Đoàn Anh Hùng',
+      resultText: `${eq.status === 'Running' ? 'Hoạt động tốt' : eq.status} (${eq.healthRate ?? 100}%)`,
+      isPass: eq.status === 'Running'
+    }));
+
+    // 10. Daily Logs
+    const logsTotal = curLogs.length;
+    const logsCompleted = curLogs.filter(isDailyLogCompleted).length;
+    const logsOverdue = curLogs.filter(l => isDailyLogOverdue(l, todayStartMs)).length;
+    const dailyTaskCompletionRate = logsTotal > 0 ? Number(((logsCompleted / logsTotal) * 100).toFixed(1)) : 0;
+    const distinctReportDays = new Set(
+      curLogs
+        .map(l => {
+          const d = parseFlexibleDate(l?.date || l?.createdAt);
+          return d ? getLocalYmd(d) : '';
+        })
+        .filter(Boolean)
+    ).size;
+
+    const effectiveEnd = end.getTime() > Date.now() ? new Date() : end;
+    let workingDaysElapsed = 0;
+    if (effectiveEnd.getTime() >= start.getTime()) {
+      const cursor = new Date(start);
+      while (cursor.getTime() <= effectiveEnd.getTime()) {
+        if (cursor.getDay() !== 0) workingDaysElapsed++;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+    const dailyReportDaysRate =
+      logsTotal > 0
+        ? Math.min(
+            100,
+            Number(
+              ((distinctReportDays / Math.max(1, Math.min(workingDaysElapsed || 1, distinctReportDays))) * 100).toFixed(1)
+            )
+          )
+        : 0;
+
+    const dailyLogRows: DrilldownRecordRow[] = curLogs.slice(0, 60).map(l => ({
+      id: l.id || `STT-${l.stt}`,
+      date: formatDateStrVi(l.date),
+      title: `[${l.category || 'QLCL'}] ${l.content || '--'} (Mục tiêu: ${l.target || '--'} ${l.unit || ''})`,
+      actor: l.assignee || '--',
+      resultText: `${l.statusPercent || '0%'} ${l.result ? `(${l.result})` : ''}`,
+      isPass: isDailyLogCompleted(l)
+    }));
+
+    // 11. Quality Planning Completion
+    const planTotal = curPlanTasks.length;
+    const planDone = curPlanTasks.filter(item => {
+      const st = String(item?.status || '').trim().toLowerCase();
+      return (
+        st === 'completed' ||
+        st === 'hoàn thành' ||
+        st === 'đạt' ||
+        Number(item?.progress || 0) >= 100 ||
+        item?.achieved === true
+      );
+    }).length;
+    const planHasData = planTotal > 0 || logsTotal > 0;
+    const planCompletionRate =
+      planTotal > 0
+        ? Number(((planDone / planTotal) * 100).toFixed(1))
+        : logsTotal > 0
+        ? dailyTaskCompletionRate
+        : 0;
+    const planRows: DrilldownRecordRow[] =
+      planTotal > 0
+        ? curPlanTasks.map((pt, idx) => {
+            const st = String(pt?.status || '').trim().toLowerCase();
+            const done =
+              st === 'completed' ||
+              st === 'hoàn thành' ||
+              st === 'đạt' ||
+              Number(pt?.progress || 0) >= 100 ||
+              pt?.achieved === true;
+            return {
+              id: pt.id || `KH-${idx + 1}`,
+              date: formatDateStrVi(pt.deadline) || label,
+              title: `[${pt._source || pt.section || 'Kế hoạch'}] ${pt._title}`,
+              actor: pt.assignee || pt.pic || 'Phòng QLCL',
+              resultText: done ? 'Hoàn thành' : pt.status || 'Đang thực hiện',
+              isPass: done
+            };
+          })
+        : dailyLogRows;
+
+    return {
+      COPQ_TOTAL: {
+        key: 'COPQ_TOTAL',
+        actualText: copqTotalCount > 0 ? `${copqTotalCost.toLocaleString('vi-VN')} VNĐ` : 'Chưa có dữ liệu (0)',
+        numericValue: copqTotalCost,
+        evidenceText:
+          copqTotalCount > 0
+            ? `Dữ liệu ${label}: ${copqTotalCount} khoản COPQ • Tổng chi phí ${copqTotalCost.toLocaleString('vi-VN')} VNĐ`
+            : `Chưa phát sinh bản ghi COPQ trong ${label}`,
+        hasData: copqTotalCount > 0,
+        targetTab: 'copq',
+        targetTabLabel: 'Chi phí Chất lượng (COPQ)',
+        sourceRecords: copqRows
+      },
+      COPQ_CLOSED_RATE: {
+        key: 'COPQ_CLOSED_RATE',
+        actualText: copqTotalCount > 0 ? `${copqClosedRate}%` : 'Chưa có dữ liệu (0)',
+        numericValue: copqClosedRate,
+        evidenceText:
+          copqTotalCount > 0
+            ? `Dữ liệu ${label}: Đã hạch toán & xử lý ${copqClosedCount}/${copqTotalCount} khoản COPQ (${copqClosedRate}%)`
+            : `Chưa phát sinh hồ sơ COPQ trong ${label}`,
+        hasData: copqTotalCount > 0,
+        targetTab: 'copq',
+        targetTabLabel: 'Chi phí Chất lượng (COPQ)',
+        sourceRecords: copqRows
+      },
+      PLAN_COMPLETION_RATE: {
+        key: 'PLAN_COMPLETION_RATE',
+        actualText: planHasData ? `${planCompletionRate}%` : 'Chưa có dữ liệu (0)',
+        numericValue: planCompletionRate,
+        evidenceText:
+          planTotal > 0
+            ? `Dữ liệu ${label}: Hoàn thành ${planDone}/${planTotal} hạng mục Kế hoạch chất lượng (${planCompletionRate}%)`
+            : logsTotal > 0
+            ? `Dữ liệu ${label}: Tính theo tiến độ công việc Báo cáo ngày ${logsCompleted}/${logsTotal} việc (${planCompletionRate}%)`
+            : `Chưa có hạng mục Kế hoạch chất lượng trong ${label}`,
+        hasData: planHasData,
+        targetTab: 'quality_planning',
+        targetTabLabel: 'Lập kế hoạch Chất lượng Tổng thể',
+        sourceRecords: planRows
+      },
+      DAILY_REPORT_DAYS_RATE: {
+        key: 'DAILY_REPORT_DAYS_RATE',
+        actualText: logsTotal > 0 ? `${dailyReportDaysRate}%` : 'Chưa có dữ liệu (0)',
+        numericValue: dailyReportDaysRate,
+        evidenceText:
+          logsTotal > 0
+            ? `Dữ liệu ${label}: Ghi nhận ${logsTotal} đầu việc trên ${distinctReportDays} ngày làm việc • Duy trì 11 BM & 20 Tài liệu trong /bm`
+            : `Chưa có bản ghi Nhật trình báo cáo ngày trong ${label}`,
+        hasData: logsTotal > 0,
+        targetTab: 'daily_logs',
+        targetTabLabel: 'Báo cáo ngày QLCL',
+        sourceRecords: dailyLogRows
+      },
+      DAILY_TASK_COMPLETION_RATE: {
+        key: 'DAILY_TASK_COMPLETION_RATE',
+        actualText: logsTotal > 0 ? `${dailyTaskCompletionRate}%` : 'Chưa có dữ liệu (0)',
+        numericValue: dailyTaskCompletionRate,
+        evidenceText:
+          logsTotal > 0
+            ? `Dữ liệu ${label}: Hoàn thành (100%) ${logsCompleted}/${logsTotal} đầu việc Báo cáo ngày (${dailyTaskCompletionRate}%) • Quá hạn: ${logsOverdue}`
+            : `Chưa có đầu việc Báo cáo ngày trong ${label}`,
+        hasData: logsTotal > 0,
+        targetTab: 'daily_logs',
+        targetTabLabel: 'Báo cáo ngày QLCL',
+        sourceRecords: dailyLogRows
+      },
+      SQC_SUPPLIER_EVAL_RATE: {
+        key: 'SQC_SUPPLIER_EVAL_RATE',
+        actualText: sqcHasData ? `${sqcRate}%` : 'Chưa có dữ liệu (0)',
+        numericValue: sqcRate,
+        evidenceText:
+          sqcTotal > 0
+            ? `Dữ liệu ${label}: Đã duyệt/xử lý ${sqcResolved}/${sqcTotal} hồ sơ giám sát SQC (${sqcRate}%) • Quản lý ${totalSuppliers} NCC`
+            : totalSuppliers > 0
+            ? `Dữ liệu ${label}: Đánh giá & phân hạng ${ratedSuppliers}/${totalSuppliers} Nhà cung cấp trong danh mục (${sqcRate}%)`
+            : `Chưa có dữ liệu đánh giá NCC / SQC trong ${label}`,
+        hasData: sqcHasData,
+        targetTab: 'suppliers',
+        targetTabLabel: 'Nhà cung cấp & SQC',
+        sourceRecords: sqcRows
+      },
+      IQC_PASS_RATE: {
+        key: 'IQC_PASS_RATE',
+        actualText: iqcTotalLots > 0 ? `${iqcRate}%` : 'Chưa có dữ liệu (0)',
+        numericValue: iqcRate,
+        evidenceText:
+          iqcTotalLots > 0
+            ? `Dữ liệu ${label}: ${iqcPassedLots}/${iqcTotalLots} lô IQC đạt (${iqcRate}%) • Tổng mẫu kiểm: ${iqcTotalSampleQty.toLocaleString('vi-VN')} (Lỗi: ${iqcTotalFailQty.toLocaleString('vi-VN')})`
+            : `Chưa phát sinh phiếu kiểm tra đầu vào IQC trong ${label}`,
+        hasData: iqcTotalLots > 0,
+        targetTab: 'quality_inspection_records',
+        targetTabLabel: 'Nhập liệu IQC - PQC - OQC',
+        sourceRecords: iqcRows
+      },
+      PART_EVAL_PTSP_RATE: {
+        key: 'PART_EVAL_PTSP_RATE',
+        actualText: combinedEvalTotal > 0 ? `${partEvalPtspRate}%` : 'Chưa có dữ liệu (0)',
+        numericValue: partEvalPtspRate,
+        evidenceText:
+          combinedEvalTotal > 0
+            ? `Dữ liệu ${label}: ${partEvalDone}/${partEvalTotal} phiếu giám định BM-KTTD-01 (${partEvalQty} LK) & ${ptspIssueDone}/${ptspIssueTotal} vấn đề PTSP đã xử lý (${partEvalPtspRate}%)`
+            : `Chưa phát sinh phiếu thẩm định linh kiện BM-KTTD-01 hoặc vấn đề PTSP trong ${label}`,
+        hasData: combinedEvalTotal > 0,
+        targetTab: 'ptsp',
+        targetTabLabel: 'Phát triển SP (PTSP) & Thẩm định',
+        sourceRecords: partEvalRows
+      },
+      PQC_PASS_RATE: {
+        key: 'PQC_PASS_RATE',
+        actualText: pqcTotal > 0 ? `${pqcRate}%` : 'Chưa có dữ liệu (0)',
+        numericValue: pqcRate,
+        evidenceText:
+          pqcTotal > 0
+            ? `Dữ liệu ${label}: ${pqcPassed}/${pqcTotal} lượt kiểm tra công đoạn PQC đạt / đã cải tiến (${pqcRate}%)`
+            : `Chưa phát sinh bản ghi kiểm tra công đoạn PQC trong ${label}`,
+        hasData: pqcTotal > 0,
+        targetTab: 'quality_inspection_records',
+        targetTabLabel: 'Nhập liệu IQC - PQC - OQC',
+        sourceRecords: pqcRows
+      },
+      OQC_FPY_RATE: {
+        key: 'OQC_FPY_RATE',
+        actualText: oqcTotal > 0 ? `${oqcFpyRate}%` : 'Chưa có dữ liệu (0)',
+        numericValue: oqcFpyRate,
+        evidenceText:
+          oqcTotal > 0
+            ? `Dữ liệu ${label}: ${oqcPassed.toLocaleString('vi-VN')}/${oqcTotal.toLocaleString('vi-VN')} xe OQC đạt chuẩn FPY (${oqcFailed} xe lỗi) • Đã quét mã bàn giao Kho: ${curHandover.length} xe`
+            : `Chưa phát sinh bản ghi nghiệm thu OQC trong ${label}`,
+        hasData: oqcTotal > 0,
+        targetTab: 'quality_inspection_records',
+        targetTabLabel: 'Nhập liệu IQC - PQC - OQC',
+        sourceRecords: oqcRows
+      },
+      CAPA_CLOSURE_RATE: {
+        key: 'CAPA_CLOSURE_RATE',
+        actualText: capaTotal > 0 ? `${capaRate}%` : 'Chưa có dữ liệu (0)',
+        numericValue: capaRate,
+        evidenceText:
+          capaTotal > 0
+            ? `Dữ liệu ${label}: Đã đóng ${capaClosed}/${capaTotal} hồ sơ CAPA • Quá hạn: ${capaOverdue} hồ sơ (Tỷ lệ kiểm soát: ${capaRate}%)`
+            : `Chưa có hồ sơ CAPA trong ${label}`,
+        hasData: capaTotal > 0,
+        targetTab: 'tasks',
+        targetTabLabel: 'Hồ sơ khắc phục CAPA',
+        sourceRecords: capaRows
+      },
+      MARKET_DEFECT_RATE: {
+        key: 'MARKET_DEFECT_RATE',
+        actualText: mktTotal > 0 || oqcTotal > 0 ? `${mktDefectRateOnOqc}%` : 'Chưa có dữ liệu (0)',
+        numericValue: mktDefectRateOnOqc,
+        evidenceText:
+          mktTotal > 0 || oqcTotal > 0
+            ? `Dữ liệu ${label}: ${mktTotal} vụ phản ánh thị trường / ${oqcTotal.toLocaleString('vi-VN')} xe xuất xưởng OQC (${mktDefectRateOnOqc}%)`
+            : `Chưa có dữ liệu đối chiếu lỗi thị trường & sản lượng OQC trong ${label}`,
+        hasData: mktTotal > 0 || oqcTotal > 0,
+        targetTab: 'defects',
+        targetTabLabel: 'Phản ánh Thị trường',
+        sourceRecords: mktRows
+      },
+      MARKET_DEFECT_RESOLVED_RATE: {
+        key: 'MARKET_DEFECT_RESOLVED_RATE',
+        actualText: mktTotal > 0 ? `${mktResolvedRate}%` : 'Chưa có dữ liệu (0)',
+        numericValue: mktResolvedRate,
+        evidenceText:
+          mktTotal > 0
+            ? `Dữ liệu ${label}: Đã xử lý dứt điểm ${mktResolved}/${mktTotal} phản ánh chất lượng thị trường & bảo hành (${mktResolvedRate}%)`
+            : `Chưa phát sinh phản ánh lỗi thị trường trong ${label}`,
+        hasData: mktTotal > 0,
+        targetTab: 'defects',
+        targetTabLabel: 'Phản ánh Thị trường',
+        sourceRecords: mktRows
+      },
+      EQUIPMENT_CALIBRATION_RATE: {
+        key: 'EQUIPMENT_CALIBRATION_RATE',
+        actualText: totalEquip > 0 ? `${equipCalRate}%` : 'Chưa có dữ liệu (0)',
+        numericValue: equipCalRate,
+        evidenceText:
+          totalEquip > 0
+            ? `Dữ liệu ${label}: ${validEquip}/${totalEquip} thiết bị đo lường & CCDC hoạt động tốt, đúng hạn bảo dưỡng/hiệu chuẩn (${equipCalRate}%)`
+            : `Chưa khai báo danh mục thiết bị đo kiểm (dk_equipments)`,
+        hasData: totalEquip > 0,
+        targetTab: 'machinery_maintenance',
+        targetTabLabel: 'Bảo dưỡng & Thiết bị dây chuyền',
+        sourceRecords: equipRows
+      }
+    };
+  }, [periodInfo, periodDataset, suppliers, capas, equipments, todayStartMs]);
+
+  // ============================================================================
+  // 10-MODULE LIVE DATA TRANSFER STRIP SUMMARY
+  // ============================================================================
+  const moduleTransferCards = useMemo(() => {
+    const {
+      curIqc,
+      curPqc,
+      curOqc,
+      curHandover,
+      curSqc,
+      curDefects,
+      curCopqs,
+      curPartEvals,
+      curPtspIssues,
+      curPtspChecks,
+      curLogs,
+      curPlanTasks
+    } = periodDataset;
+
+    return [
+      {
+        id: 'mod-iqc',
+        name: '1. IQC Đầu vào',
+        countText: `${curIqc.length} lô kiểm`,
+        subText: autoMetricsMap.IQC_PASS_RATE.hasData
+          ? `Đạt: ${autoMetricsMap.IQC_PASS_RATE.actualText}`
+          : 'Chờ dữ liệu kỳ',
+        hasData: curIqc.length > 0,
+        metric: autoMetricsMap.IQC_PASS_RATE
+      },
+      {
+        id: 'mod-pqc',
+        name: '2. PQC Công đoạn',
+        countText: `${curPqc.length} lượt tuần tra`,
+        subText: autoMetricsMap.PQC_PASS_RATE.hasData
+          ? `Đạt: ${autoMetricsMap.PQC_PASS_RATE.actualText}`
+          : 'Chờ dữ liệu kỳ',
+        hasData: curPqc.length > 0,
+        metric: autoMetricsMap.PQC_PASS_RATE
+      },
+      {
+        id: 'mod-oqc',
+        name: '3. OQC & Bàn giao Kho',
+        countText: `${curOqc.length.toLocaleString('vi-VN')} xe KCS`,
+        subText: `FPY: ${autoMetricsMap.OQC_FPY_RATE.hasData ? autoMetricsMap.OQC_FPY_RATE.actualText : '--'} • Scan Kho: ${curHandover.length}`,
+        hasData: curOqc.length > 0 || curHandover.length > 0,
+        metric: autoMetricsMap.OQC_FPY_RATE
+      },
+      {
+        id: 'mod-sqc',
+        name: '4. SQC & Nhà cung cấp',
+        countText: `${curSqc.length} hồ sơ SQC`,
+        subText: `${(suppliers || []).length} NCC đang quản lý`,
+        hasData: curSqc.length > 0 || (suppliers || []).length > 0,
+        metric: autoMetricsMap.SQC_SUPPLIER_EVAL_RATE
+      },
+      {
+        id: 'mod-capa',
+        name: '5. Hồ sơ CAPA (8D)',
+        countText: `${(capas || []).length} hồ sơ`,
+        subText: `Kiểm soát: ${autoMetricsMap.CAPA_CLOSURE_RATE.actualText}`,
+        hasData: (capas || []).length > 0,
+        metric: autoMetricsMap.CAPA_CLOSURE_RATE
+      },
+      {
+        id: 'mod-market',
+        name: '6. Lỗi Thị trường / ĐL',
+        countText: `${curDefects.length} phản ánh`,
+        subText: curDefects.length > 0 ? `Xử lý: ${autoMetricsMap.MARKET_DEFECT_RESOLVED_RATE.actualText}` : '0 phản ánh kỳ này',
+        hasData: curDefects.length > 0,
+        metric: autoMetricsMap.MARKET_DEFECT_RESOLVED_RATE
+      },
+      {
+        id: 'mod-kttd',
+        name: '7. Giám định BM-KTTD-01',
+        countText: `${curPartEvals.length} biên bản`,
+        subText: `${curPartEvals.reduce((s, p) => s + Math.max(1, Number(p?.quantity) || 1), 0)} linh kiện bảo hành`,
+        hasData: curPartEvals.length > 0,
+        metric: autoMetricsMap.PART_EVAL_PTSP_RATE
+      },
+      {
+        id: 'mod-ptsp',
+        name: '8. PTSP & Thử nghiệm mẫu',
+        countText: `${(ptspModels || []).length} model`,
+        subText: `${curPtspIssues.length} vấn đề • ${curPtspChecks.length} hạng mục thử`,
+        hasData: curPtspIssues.length > 0 || curPtspChecks.length > 0,
+        metric: autoMetricsMap.PART_EVAL_PTSP_RATE
+      },
+      {
+        id: 'mod-equip',
+        name: '9. Thiết bị & CCDC',
+        countText: `${(equipments || []).length} thiết bị`,
+        subText: `Chuẩn HC: ${autoMetricsMap.EQUIPMENT_CALIBRATION_RATE.actualText}`,
+        hasData: (equipments || []).length > 0,
+        metric: autoMetricsMap.EQUIPMENT_CALIBRATION_RATE
+      },
+      {
+        id: 'mod-daily-copq',
+        name: '10. Báo cáo ngày & COPQ',
+        countText: `${curLogs.length} việc • ${curPlanTasks.length} KH`,
+        subText: `Hoàn thành: ${curLogs.length > 0 ? autoMetricsMap.DAILY_TASK_COMPLETION_RATE.actualText : '--'} • ${curCopqs.length} COPQ`,
+        hasData: curLogs.length > 0 || curPlanTasks.length > 0 || curCopqs.length > 0,
+        metric: autoMetricsMap.DAILY_TASK_COMPLETION_RATE
+      }
+    ];
+  }, [periodDataset, autoMetricsMap, suppliers, capas, ptspModels, equipments]);
 
   // ============================================================================
   // COMPUTE RESOLVED DEPARTMENT KPIS & SCORES FOR SELECTED PERIOD
@@ -624,16 +1186,19 @@ export default function KPIDashboard({
       const override = k.periodOverrides?.[pKey];
       const autoMetric = k.autoMetricKey ? autoMetricsMap[k.autoMetricKey] : undefined;
 
-      // Determine effective actual text & numeric value
       let effectiveActual = k.actual;
       let evidenceText = k.details || '';
       let isOverridden = false;
+      let isWaitingData = false;
 
       if (override?.actual !== undefined && override.actual !== '') {
         effectiveActual = override.actual;
         isOverridden = true;
       } else if (k.sourceType !== 'manual' && autoMetric) {
         effectiveActual = autoMetric.actualText;
+        if (!autoMetric.hasData) {
+          isWaitingData = true;
+        }
       }
 
       if (autoMetric) {
@@ -643,11 +1208,13 @@ export default function KPIDashboard({
         evidenceText = `${evidenceText ? evidenceText + ' • ' : ''}Ghi chú kỳ: ${override.note}`;
       }
 
-      // Compute attainment % & status
       let attainmentPct = 100;
       let computedStatus: DetailedKPI['status'] = k.status || 'Đạt';
 
-      if (override?.scorePercent !== undefined) {
+      if (isWaitingData && !isOverridden && override?.scorePercent === undefined) {
+        attainmentPct = 0;
+        computedStatus = 'Chờ dữ liệu';
+      } else if (override?.scorePercent !== undefined) {
         attainmentPct = Math.max(0, Math.min(100, Number(override.scorePercent)));
         computedStatus =
           override.status ||
@@ -671,11 +1238,14 @@ export default function KPIDashboard({
               ? 80
               : computedStatus === 'Đang cải tiến'
               ? 60
+              : computedStatus === 'Chờ dữ liệu'
+              ? 0
               : 30;
         }
       }
 
-      const achievedPoints = Number(((weight * attainmentPct) / 100).toFixed(2));
+      const achievedPoints =
+        computedStatus === 'Chờ dữ liệu' ? 0 : Number(((weight * attainmentPct) / 100).toFixed(2));
 
       return {
         ...k,
@@ -687,30 +1257,50 @@ export default function KPIDashboard({
         achievedPoints,
         evidenceText,
         isOverridden,
-        overrideNote: override?.note || ''
+        isWaitingData: computedStatus === 'Chờ dữ liệu',
+        overrideNote: override?.note || '',
+        autoMetric
       };
     });
   }, [kpis, periodInfo.key, autoMetricsMap]);
 
-  // Summary Department Scores (Common 35% + Professional 65% = 100%)
+  // Summary Department Scores (Excludes 'Chờ dữ liệu' from active weight denominator so score is 100% real!)
   const deptSummary = useMemo(() => {
     const commonList = resolvedDeptKpis.filter(k => k.type === 'Mục tiêu hoạt động chung');
     const proList = resolvedDeptKpis.filter(k => k.type === 'Mục tiêu hoạt động chuyên môn');
 
-    const commonMax = commonList.reduce((s, k) => s + k.weight, 0) || 35;
-    const commonAchieved = Number(commonList.reduce((s, k) => s + k.achievedPoints, 0).toFixed(1));
+    const commonNominalMax = commonList.reduce((s, k) => s + k.weight, 0) || 35;
+    const commonActiveList = commonList.filter(k => !k.isWaitingData);
+    const commonActiveMax = commonActiveList.reduce((s, k) => s + k.weight, 0);
+    const commonRawAchieved = commonActiveList.reduce((s, k) => s + k.achievedPoints, 0);
+    const commonAchieved =
+      commonActiveMax > 0
+        ? Number(((commonRawAchieved / commonActiveMax) * commonNominalMax).toFixed(1))
+        : Number(commonRawAchieved.toFixed(1));
     const commonPassedCount = commonList.filter(k => k.effectiveStatus === 'Đạt').length;
 
-    const proMax = proList.reduce((s, k) => s + k.weight, 0) || 65;
-    const proAchieved = Number(proList.reduce((s, k) => s + k.achievedPoints, 0).toFixed(1));
+    const proNominalMax = proList.reduce((s, k) => s + k.weight, 0) || 65;
+    const proActiveList = proList.filter(k => !k.isWaitingData);
+    const proActiveMax = proActiveList.reduce((s, k) => s + k.weight, 0);
+    const proRawAchieved = proActiveList.reduce((s, k) => s + k.achievedPoints, 0);
+    const proAchieved =
+      proActiveMax > 0
+        ? Number(((proRawAchieved / proActiveMax) * proNominalMax).toFixed(1))
+        : Number(proRawAchieved.toFixed(1));
     const proPassedCount = proList.filter(k => k.effectiveStatus === 'Đạt').length;
 
-    const totalMax = commonMax + proMax || 100;
-    const rawTotalScore = commonAchieved + proAchieved;
-    const normalizedScore = Number(((rawTotalScore / totalMax) * 100).toFixed(1));
+    const activeIndicatorsCount = commonActiveList.length + proActiveList.length;
+    const waitingIndicatorsCount = resolvedDeptKpis.length - activeIndicatorsCount;
+
+    const totalActiveMax = commonActiveMax + proActiveMax;
+    const totalRawAchieved = commonRawAchieved + proRawAchieved;
+    const normalizedScore =
+      totalActiveMax > 0 ? Number(((totalRawAchieved / totalActiveMax) * 100).toFixed(1)) : 0;
 
     const rating =
-      normalizedScore >= 90
+      activeIndicatorsCount === 0
+        ? 'Chờ dữ liệu'
+        : normalizedScore >= 90
         ? 'Xuất sắc'
         : normalizedScore >= 80
         ? 'Tốt'
@@ -721,18 +1311,20 @@ export default function KPIDashboard({
         : 'Cần cải tiến';
 
     return {
-      commonMax,
+      commonMax: commonNominalMax,
       commonAchieved,
       commonPassedCount,
       commonTotalCount: commonList.length,
-      proMax,
+      proMax: proNominalMax,
       proAchieved,
       proPassedCount,
       proTotalCount: proList.length,
-      totalMax,
+      totalMax: commonNominalMax + proNominalMax,
       normalizedScore,
       rating,
       passedCount: commonPassedCount + proPassedCount,
+      activeIndicatorsCount,
+      waitingIndicatorsCount,
       totalCount: resolvedDeptKpis.length
     };
   }, [resolvedDeptKpis]);
@@ -744,206 +1336,756 @@ export default function KPIDashboard({
   }, [deptSummary.normalizedScore]);
 
   // ============================================================================
-  // TAB 2: INDIVIDUAL STAFF KPI ENGINE (50% /bm Role + 30% DailyLogs + 20% Manager)
+  // TAB 2: INDIVIDUAL STAFF KPI ENGINE (PERSON-SPECIFIC + RACI ROLE-SPECIFIC)
   // ============================================================================
   const staffEvaluationsComputed = useMemo(() => {
-    const { start, end, key: pKey } = periodInfo;
-    const curLogs = (dailyLogs || []).filter(l => isRecordInDateRange(l?.date || l?.createdAt, start, end));
+    const { key: pKey, label } = periodInfo;
+    const {
+      curIqc,
+      curPqc,
+      curOqc,
+      curHandover,
+      curSqc,
+      curCapas,
+      curDefects,
+      curPartEvals,
+      curPtspIssues,
+      curPtspChecks,
+      curLogs,
+      curPlanTasks
+    } = periodDataset;
+
+    // Helper: compute person-specific + role-specific metric for a staff member
+    const computePersonRoleMetric = (
+      profile: StaffBmKpiProfile,
+      metricKey: string
+    ): {
+      actualText: string;
+      numericValue: number;
+      hasData: boolean;
+      evidence: string;
+      targetTab: string;
+      targetTabLabel: string;
+      rows: DrilldownRecordRow[];
+    } => {
+      // Person's own daily logs
+      const personLogs = curLogs.filter(l => personMatchesField(l?.assignee, profile));
+
+      // 1. IQC_PASS_RATE (Hà Khắc Việt, Hoàng Văn Phấn, Đoàn Anh Hùng)
+      if (metricKey === 'IQC_PASS_RATE') {
+        const myIqc = curIqc.filter(r => personMatchesField(r?.checkedBy, profile));
+        const myIqcLogs = personLogs.filter(l => String(l?.category || '').toUpperCase().includes('IQC'));
+        const pool = myIqc.length > 0 ? myIqc : curIqc;
+        const tot = pool.length;
+        const passed = pool.filter(isIqcLotPassed).length;
+        if (tot > 0) {
+          const rate = Number(((passed / tot) * 100).toFixed(1));
+          const personalNote =
+            myIqc.length > 0
+              ? `Cá nhân trực tiếp đứng tên kiểm: ${myIqc.length} lô`
+              : `Phối hợp tổ IQC kiểm: ${tot} lô`;
+          return {
+            actualText: `${rate}% (${passed}/${tot} lô)`,
+            numericValue: rate,
+            hasData: true,
+            evidence: `${personalNote} • Đạt ${passed}/${tot} lô (${rate}%) • Báo cáo ngày IQC: ${myIqcLogs.length} việc`,
+            targetTab: 'quality_inspection_records',
+            targetTabLabel: 'Nhập liệu IQC - PQC - OQC',
+            rows: pool.slice(0, 50).map(r => ({
+              id: r.id || r.ecountVoucherNo || '--',
+              date: formatDateStrVi(r.date),
+              title: `${r.supplierName || 'NCC'} • ${r.itemSummary || r.content || '--'}`,
+              actor: r.checkedBy || profile.staffName,
+              resultText: r.result || 'Đạt',
+              isPass: isIqcLotPassed(r)
+            }))
+          };
+        }
+        if (myIqcLogs.length > 0) {
+          const done = myIqcLogs.filter(isDailyLogCompleted).length;
+          const rate = Number(((done / myIqcLogs.length) * 100).toFixed(1));
+          return {
+            actualText: `${rate}% (${done}/${myIqcLogs.length} việc)`,
+            numericValue: rate,
+            hasData: true,
+            evidence: `Thực hiện ${done}/${myIqcLogs.length} công việc kiểm tra IQC trong Báo cáo ngày (${rate}%)`,
+            targetTab: 'daily_logs',
+            targetTabLabel: 'Báo cáo ngày QLCL',
+            rows: myIqcLogs.map(l => ({
+              id: l.id || `STT-${l.stt}`,
+              date: formatDateStrVi(l.date),
+              title: l.content || '--',
+              actor: l.assignee || profile.staffName,
+              resultText: l.statusPercent || '0%',
+              isPass: isDailyLogCompleted(l)
+            }))
+          };
+        }
+        return {
+          actualText: 'Chưa có dữ liệu (0)',
+          numericValue: 0,
+          hasData: false,
+          evidence: `Chưa phát sinh phiếu kiểm tra IQC trong ${label}`,
+          targetTab: 'quality_inspection_records',
+          targetTabLabel: 'Nhập liệu IQC - PQC - OQC',
+          rows: []
+        };
+      }
+
+      // 2. PQC_PASS_RATE (Hoàng Văn Phấn, Liễu Tùng Lâm, Hà Khắc Việt)
+      if (metricKey === 'PQC_PASS_RATE') {
+        const myPqc = curPqc.filter(r => personMatchesField(r?.checkedBy, profile));
+        const myPqcLogs = personLogs.filter(l => String(l?.category || '').toUpperCase().includes('PQC'));
+        const pool = myPqc.length > 0 ? myPqc : curPqc;
+        const tot = pool.length;
+        const passed = pool.filter(isPqcRecordPassed).length;
+        if (tot > 0) {
+          const rate = Number(((passed / tot) * 100).toFixed(1));
+          const personalNote =
+            myPqc.length > 0
+              ? `Cá nhân trực tiếp tuần tra: ${myPqc.length} lượt`
+              : `Tổ QC tuần tra dây chuyền: ${tot} lượt`;
+          return {
+            actualText: `${rate}% (${passed}/${tot} lượt)`,
+            numericValue: rate,
+            hasData: true,
+            evidence: `${personalNote} • Đạt/đã cải tiến ${passed}/${tot} lượt (${rate}%) • Báo cáo ngày PQC: ${myPqcLogs.length} việc`,
+            targetTab: 'quality_inspection_records',
+            targetTabLabel: 'Nhập liệu IQC - PQC - OQC',
+            rows: pool.slice(0, 50).map(r => ({
+              id: r.id || r.lsx || '--',
+              date: formatDateStrVi(r.date),
+              title: `Model ${r.model || '--'} (LSX: ${r.lsx || '--'}) • ${r.findings || ''}`,
+              actor: r.checkedBy || profile.staffName,
+              resultText: r.status || '--',
+              isPass: isPqcRecordPassed(r)
+            }))
+          };
+        }
+        if (myPqcLogs.length > 0) {
+          const done = myPqcLogs.filter(isDailyLogCompleted).length;
+          const rate = Number(((done / myPqcLogs.length) * 100).toFixed(1));
+          return {
+            actualText: `${rate}% (${done}/${myPqcLogs.length} việc)`,
+            numericValue: rate,
+            hasData: true,
+            evidence: `Thực hiện ${done}/${myPqcLogs.length} tác vụ tuần tra PQC trong Báo cáo ngày (${rate}%)`,
+            targetTab: 'daily_logs',
+            targetTabLabel: 'Báo cáo ngày QLCL',
+            rows: myPqcLogs.map(l => ({
+              id: l.id || `STT-${l.stt}`,
+              date: formatDateStrVi(l.date),
+              title: l.content || '--',
+              actor: l.assignee || profile.staffName,
+              resultText: l.statusPercent || '0%',
+              isPass: isDailyLogCompleted(l)
+            }))
+          };
+        }
+        return {
+          actualText: 'Chưa có dữ liệu (0)',
+          numericValue: 0,
+          hasData: false,
+          evidence: `Chưa phát sinh lượt tuần tra PQC trong ${label}`,
+          targetTab: 'quality_inspection_records',
+          targetTabLabel: 'Nhập liệu IQC - PQC - OQC',
+          rows: []
+        };
+      }
+
+      // 3. OQC_FPY_RATE (Liễu Tùng Lâm, Lành Xuân Hải, Hà Khắc Việt)
+      if (metricKey === 'OQC_FPY_RATE') {
+        const myOqc = curOqc.filter(r => personMatchesField(r?.checkedBy, profile));
+        const pool = myOqc.length > 0 ? myOqc : curOqc;
+        const tot = pool.length;
+        const passed = pool.filter(isOqcRecordPassed).length;
+        const failed = tot - passed;
+        if (tot > 0) {
+          const rate = Number(((passed / tot) * 100).toFixed(2));
+          const personalNote =
+            myOqc.length > 0
+              ? `Trực tiếp đứng tên kiểm: ${myOqc.length.toLocaleString('vi-VN')} xe`
+              : `Chốt OQC/KCS nghiệm thu: ${tot.toLocaleString('vi-VN')} xe`;
+          return {
+            actualText: `${rate}% (${tot.toLocaleString('vi-VN')} xe)`,
+            numericValue: rate,
+            hasData: true,
+            evidence: `${personalNote} • Đạt chuẩn FPY: ${passed.toLocaleString('vi-VN')} xe (Phát hiện chặn lại ${failed} xe lỗi)`,
+            targetTab: 'quality_inspection_records',
+            targetTabLabel: 'Nhập liệu IQC - PQC - OQC',
+            rows: pool.slice(0, 50).map(r => ({
+              id: r.serialNo || r.chassisNo || r.id || '--',
+              date: formatDateStrVi(r.date),
+              title: `${r.model || '--'} (${r.color || '--'}) • ${r.defectDetail || 'Đạt chuẩn KCS'}`,
+              actor: r.checkedBy || profile.staffName,
+              resultText: r.status || 'Đạt',
+              isPass: isOqcRecordPassed(r)
+            }))
+          };
+        }
+        return {
+          actualText: 'Chưa có dữ liệu (0)',
+          numericValue: 0,
+          hasData: false,
+          evidence: `Chưa phát sinh bản ghi nghiệm thu xe thành phẩm OQC trong ${label}`,
+          targetTab: 'quality_inspection_records',
+          targetTabLabel: 'Nhập liệu IQC - PQC - OQC',
+          rows: []
+        };
+      }
+
+      // 4. OQC_DIGITIZATION_RATE (Lành Xuân Hải — NV-QC-07 Số hóa nhập liệu lỗi OQC)
+      if (metricKey === 'OQC_DIGITIZATION_RATE') {
+        const totOqc = curOqc.length;
+        const myOqcLogs = personLogs.filter(l => String(l?.category || '').toUpperCase().includes('OQC'));
+        if (totOqc > 0 || myOqcLogs.length > 0) {
+          const failedOqc = curOqc.filter(r => !isOqcRecordPassed(r));
+          const documentedFailed = failedOqc.filter(r => Boolean(r?.defectDetail || r?.rootCause)).length;
+          const docRate =
+            failedOqc.length > 0
+              ? Number(((documentedFailed / failedOqc.length) * 100).toFixed(1))
+              : 100;
+          return {
+            actualText: `${docRate}% (${totOqc.toLocaleString('vi-VN')} xe)`,
+            numericValue: docRate,
+            hasData: true,
+            evidence: `Đã số hóa nhập phần mềm ${totOqc.toLocaleString('vi-VN')} bản ghi OQC • Ghi nhận chi tiết mã lỗi ${documentedFailed}/${failedOqc.length} xe lỗi (${docRate}%)`,
+            targetTab: 'quality_inspection_records',
+            targetTabLabel: 'Nhập liệu IQC - PQC - OQC',
+            rows: (failedOqc.length > 0 ? failedOqc : curOqc).slice(0, 50).map(r => ({
+              id: r.serialNo || r.chassisNo || r.id || '--',
+              date: formatDateStrVi(r.date),
+              title: `${r.model || '--'} • Chi tiết lỗi: ${r.defectDetail || 'Đạt chuẩn'} (Nguyên nhân: ${r.rootCause || '--'})`,
+              actor: r.checkedBy || 'Lành Xuân Hải',
+              resultText: r.status || 'Đạt',
+              isPass: Boolean(r.defectDetail || r.rootCause || isOqcRecordPassed(r))
+            }))
+          };
+        }
+        return {
+          actualText: 'Chưa có dữ liệu (0)',
+          numericValue: 0,
+          hasData: false,
+          evidence: `Chưa có bản ghi nhập liệu OQC trong ${label}`,
+          targetTab: 'quality_inspection_records',
+          targetTabLabel: 'Nhập liệu IQC - PQC - OQC',
+          rows: []
+        };
+      }
+
+      // 5. OQC_HANDOVER_SCAN_RATE (Lành Xuân Hải — Quét mã Barcode bàn giao Kho thành phẩm)
+      if (metricKey === 'OQC_HANDOVER_SCAN_RATE') {
+        const handoverCount = curHandover.length;
+        const passedOqcCount = curOqc.filter(isOqcRecordPassed).length;
+        if (handoverCount > 0 || passedOqcCount > 0) {
+          const validScanCount = curHandover.filter(h => h?.status !== 'Lỗi').length;
+          const rate =
+            handoverCount > 0
+              ? Number(((validScanCount / handoverCount) * 100).toFixed(1))
+              : 100;
+          return {
+            actualText:
+              handoverCount > 0
+                ? `${handoverCount.toLocaleString('vi-VN')} xe Scan (${rate}%)`
+                : `${passedOqcCount.toLocaleString('vi-VN')} xe PASS`,
+            numericValue: rate,
+            hasData: true,
+            evidence:
+              handoverCount > 0
+                ? `Đã quét mã Barcode bàn giao Kho thành phẩm ${handoverCount.toLocaleString('vi-VN')} xe PASS (${rate}% hợp lệ, 0 xe lỗi lọt kho)`
+                : `Đã xác nhận ${passedOqcCount.toLocaleString('vi-VN')} xe PASS đủ điều kiện bàn giao Kho thành phẩm`,
+            targetTab: 'quality_inspection_records',
+            targetTabLabel: 'Nhập liệu OQC & Bàn giao Kho',
+            rows: (handoverCount > 0 ? curHandover : curOqc.filter(isOqcRecordPassed)).slice(0, 50).map((h: any) => ({
+              id: h.chassisNo || h.serialNo || h.id || '--',
+              date: formatDateStrVi(h.handoverDate || h.scannedAt || h.date),
+              title: `${h.model || '--'} (${h.color || '--'}) • Số máy: ${h.engineNo || '--'}`,
+              actor: h.scannedBy || h.checkedBy || 'Lành Xuân Hải',
+              resultText: 'PASS - Đã bàn giao Kho',
+              isPass: true
+            }))
+          };
+        }
+        return {
+          actualText: 'Chưa có dữ liệu (0)',
+          numericValue: 0,
+          hasData: false,
+          evidence: `Chưa phát sinh lượt quét mã bàn giao Kho trong ${label}`,
+          targetTab: 'quality_inspection_records',
+          targetTabLabel: 'Nhập liệu OQC & Bàn giao Kho',
+          rows: []
+        };
+      }
+
+      // 6. OQC_TRACEABILITY_RATE (Liễu Tùng Lâm — Truy xuất hồ sơ lỗi OQC & chặn lỗi lọt thị trường)
+      if (metricKey === 'OQC_TRACEABILITY_RATE') {
+        const totOqc = curOqc.length;
+        const failedOqc = curOqc.filter(r => !isOqcRecordPassed(r));
+        const tracedFailed = failedOqc.filter(r => Boolean(r?.defectDetail || r?.rootCause)).length;
+        if (totOqc > 0) {
+          const traceRate =
+            failedOqc.length > 0 ? Number(((tracedFailed / failedOqc.length) * 100).toFixed(1)) : 100;
+          return {
+            actualText: `${traceRate}% (${tracedFailed}/${failedOqc.length} xe lỗi)`,
+            numericValue: traceRate,
+            hasData: true,
+            evidence: `Đã lập hồ sơ truy xuất & cách ly ${tracedFailed}/${failedOqc.length} xe lỗi tại trạm OQC (${traceRate}%) • Tổng kiểm: ${totOqc.toLocaleString('vi-VN')} xe`,
+            targetTab: 'quality_inspection_records',
+            targetTabLabel: 'Nhập liệu IQC - PQC - OQC',
+            rows: (failedOqc.length > 0 ? failedOqc : curOqc).slice(0, 50).map(r => ({
+              id: r.serialNo || r.chassisNo || r.id || '--',
+              date: formatDateStrVi(r.date),
+              title: `${r.model || '--'} • Lỗi: ${r.defectDetail || 'Không lỗi'} • Nguồn: ${r.rootCause || '--'}`,
+              actor: r.checkedBy || 'Liễu Tùng Lâm',
+              resultText: r.status || 'Đạt',
+              isPass: Boolean(r.defectDetail || r.rootCause || isOqcRecordPassed(r))
+            }))
+          };
+        }
+        return {
+          actualText: 'Chưa có dữ liệu (0)',
+          numericValue: 0,
+          hasData: false,
+          evidence: `Chưa có bản ghi truy xuất OQC trong ${label}`,
+          targetTab: 'quality_inspection_records',
+          targetTabLabel: 'Nhập liệu IQC - PQC - OQC',
+          rows: []
+        };
+      }
+
+      // 7. PART_EVAL_BM_KTTD_01 (Nguyễn Văn Diệm & Đoàn Anh Hùng — Giám định kỹ thuật bảo hành BM-KTTD-01)
+      if (metricKey === 'PART_EVAL_BM_KTTD_01') {
+        const myEvals = curPartEvals.filter(p => personMatchesField(p?.inspector, profile));
+        const myWarrantyDefects = curDefects.filter(d => personMatchesField(d?.assignee, profile));
+        const evalPool = myEvals.length > 0 ? myEvals : curPartEvals;
+        const defectPool = myWarrantyDefects.length > 0 ? myWarrantyDefects : curDefects;
+
+        const totalItems = evalPool.length + defectPool.length;
+        if (totalItems > 0) {
+          const doneEvals = evalPool.filter(p => Boolean(p?.resolution || p?.rootCauseCategory)).length;
+          const doneDefects = defectPool.filter(isMarketDefectResolved).length;
+          const rate = Number((((doneEvals + doneDefects) / totalItems) * 100).toFixed(1));
+          const evalQty = evalPool.reduce((s, p) => s + Math.max(1, Number(p?.quantity) || 1), 0);
+          return {
+            actualText: `${rate}% (${evalPool.length} phiếu / ${evalQty} LK)`,
+            numericValue: rate,
+            hasData: true,
+            evidence: `Giám định ${doneEvals}/${evalPool.length} biên bản BM-KTTD-01 (${evalQty} linh kiện) & xử lý ${doneDefects}/${defectPool.length} hồ sơ bảo hành đại lý (${rate}%)`,
+            targetTab: 'defects',
+            targetTabLabel: 'Giám định Bảo hành & Thị trường',
+            rows: [
+              ...evalPool.map(p => ({
+                id: p.id || '--',
+                date: formatDateStrVi(p.receivedDate),
+                title: `[BM-KTTD-01] ${p.partName || '--'} (SL: ${p.quantity || 1}) • Nguyên nhân: ${p.rootCauseCategory || '--'}`,
+                actor: p.inspector || profile.staffName,
+                resultText: p.resolution || 'Đã giám định',
+                isPass: true
+              })),
+              ...defectPool.slice(0, 30).map(d => ({
+                id: d.id || '--',
+                date: formatDateStrVi(d.defectDate || d.sourceDate),
+                title: `[Bảo hành] ${d.model || 'Xe'} (${d.dealer || 'Đại lý'}): ${d.description || d.type || '--'}`,
+                actor: d.assignee || profile.staffName,
+                resultText: d.status || 'Chưa xử lý',
+                isPass: isMarketDefectResolved(d)
+              }))
+            ]
+          };
+        }
+        return {
+          actualText: 'Chưa có dữ liệu (0)',
+          numericValue: 0,
+          hasData: false,
+          evidence: `Chưa phát sinh phiếu giám định BM-KTTD-01 hoặc hồ sơ bảo hành trong ${label}`,
+          targetTab: 'defects',
+          targetTabLabel: 'Giám định Bảo hành & Thị trường',
+          rows: []
+        };
+      }
+
+      // 8. PTSP_SAMPLE_AND_ROAD_TEST (Nguyễn Văn Diệm, Hà Khắc Việt, Hoàng Văn Phấn — Thử nghiệm xe mẫu R&D/PTSP)
+      if (metricKey === 'PTSP_SAMPLE_AND_ROAD_TEST') {
+        const myPtspLogs = personLogs.filter(l => {
+          const cat = String(l?.category || '').toUpperCase();
+          const txt = String(l?.content || '').toUpperCase();
+          return (
+            cat.includes('PHÁT TRIỂN') ||
+            cat.includes('PTSP') ||
+            txt.includes('MẪU') ||
+            txt.includes('ĐĂNG KIỂM') ||
+            txt.includes('THỬ NGHIỆM')
+          );
+        });
+        const totalChecks = curPtspChecks.length + curPtspIssues.length + myPtspLogs.length;
+        if (totalChecks > 0) {
+          const passedChecks = curPtspChecks.filter(c => c.status === 'Đạt' || c.status === 'Không đạt').length;
+          const resolvedIssues = curPtspIssues.filter(i => i.status === 'Đã chốt' || i.status === 'Đang xử lý').length;
+          const doneLogs = myPtspLogs.filter(isDailyLogCompleted).length;
+          const rate = Number((((passedChecks + resolvedIssues + doneLogs) / totalChecks) * 100).toFixed(1));
+          return {
+            actualText: `${rate}% (${totalChecks} hạng mục)`,
+            numericValue: rate,
+            hasData: true,
+            evidence: `Thực hiện ${curPtspChecks.length} hạng mục đo kiểm/chạy thử mẫu PTSP, xử lý ${resolvedIssues}/${curPtspIssues.length} vấn đề model mới & ${doneLogs}/${myPtspLogs.length} việc thử nghiệm (${rate}%)`,
+            targetTab: 'ptsp',
+            targetTabLabel: 'Phát triển SP (PTSP)',
+            rows: [
+              ...myPtspLogs.map(l => ({
+                id: l.id || `STT-${l.stt}`,
+                date: formatDateStrVi(l.date),
+                title: `[Báo cáo ngày] ${l.content || '--'}`,
+                actor: l.assignee || profile.staffName,
+                resultText: l.statusPercent || '0%',
+                isPass: isDailyLogCompleted(l)
+              })),
+              ...curPtspIssues.map(iss => ({
+                id: iss.id || '--',
+                date: formatDateStrVi(iss.createdAt || iss.dueDate),
+                title: `[PTSP ${iss.modelName}] ${iss.partOrArea}: ${iss.description}`,
+                actor: iss.ownerDept || profile.staffName,
+                resultText: iss.status || 'Mở',
+                isPass: iss.status === 'Đã chốt'
+              })),
+              ...curPtspChecks.slice(0, 30).map(chk => ({
+                id: chk.id || '--',
+                date: label,
+                title: `[${chk.kind} - ${chk.modelName}] ${chk.item}: ${chk.standard || ''}`,
+                actor: profile.staffName,
+                resultText: chk.status || 'Đạt',
+                isPass: true
+              }))
+            ]
+          };
+        }
+        return {
+          actualText: 'Chưa có dữ liệu (0)',
+          numericValue: 0,
+          hasData: false,
+          evidence: `Chưa phát sinh hạng mục thử nghiệm mẫu PTSP trong ${label}`,
+          targetTab: 'ptsp',
+          targetTabLabel: 'Phát triển SP (PTSP)',
+          rows: []
+        };
+      }
+
+      // 9. QA_SOP_AUDIT_TRAINING (Trần Thế Quảng — Soạn thảo SOP/biểu mẫu /bm, Internal Audit & Đào tạo)
+      if (metricKey === 'QA_SOP_AUDIT_TRAINING') {
+        const myQaLogs = personLogs;
+        const myPlanTasks = curPlanTasks.filter(pt => personMatchesField(pt?.assignee || pt?.pic, profile));
+        const bmCount = (qmsBmRecords || []).length;
+        const totalItems = myQaLogs.length + myPlanTasks.length;
+        if (totalItems > 0 || bmCount > 0) {
+          const doneLogs = myQaLogs.filter(isDailyLogCompleted).length;
+          const donePlans = myPlanTasks.filter(pt => {
+            const st = String(pt?.status || '').toLowerCase();
+            return st === 'completed' || st === 'hoàn thành' || Number(pt?.progress || 0) >= 100;
+          }).length;
+          const rate =
+            totalItems > 0 ? Number((((doneLogs + donePlans) / totalItems) * 100).toFixed(1)) : 100;
+          return {
+            actualText: `${rate}% (11 BM & 20 TL /bm)`,
+            numericValue: rate,
+            hasData: true,
+            evidence: `Kiểm soát lưu hành 11 Biểu mẫu & 20 Tài liệu SOP trong /bm (${bmCount} bản ghi đồng bộ) • Hoàn thành ${doneLogs + donePlans}/${totalItems} đầu việc QA/Đào tạo`,
+            targetTab: 'qms_forms',
+            targetTabLabel: 'Biểu mẫu & Hồ sơ Quy trình (/bm)',
+            rows: [
+              ...myQaLogs.map(l => ({
+                id: l.id || `STT-${l.stt}`,
+                date: formatDateStrVi(l.date),
+                title: `[${l.category}] ${l.content}`,
+                actor: l.assignee || 'Trần Thế Quảng',
+                resultText: l.statusPercent || '0%',
+                isPass: isDailyLogCompleted(l)
+              })),
+              ...myPlanTasks.map((pt, idx) => ({
+                id: pt.id || `KH-${idx + 1}`,
+                date: formatDateStrVi(pt.deadline) || label,
+                title: `[${pt._source}] ${pt._title}`,
+                actor: pt.assignee || 'Trần Thế Quảng',
+                resultText: pt.status || 'Đang thực hiện',
+                isPass: String(pt.status || '').toLowerCase() === 'completed'
+              }))
+            ]
+          };
+        }
+        return {
+          actualText: 'Chưa có dữ liệu (0)',
+          numericValue: 0,
+          hasData: false,
+          evidence: `Chưa phát sinh bản ghi công việc QA / Đào tạo trong ${label}`,
+          targetTab: 'qms_forms',
+          targetTabLabel: 'Biểu mẫu & Hồ sơ Quy trình (/bm)',
+          rows: []
+        };
+      }
+
+      // 10. DEPT_OVERALL_KPI (Nguyễn Xuân Thao)
+      if (metricKey === 'DEPT_OVERALL_KPI') {
+        const hasAny = deptSummary.activeIndicatorsCount > 0;
+        return {
+          actualText: hasAny ? `${deptSummary.normalizedScore}%` : 'Chưa có dữ liệu (0)',
+          numericValue: deptSummary.normalizedScore,
+          hasData: hasAny,
+          evidence: hasAny
+            ? `Điểm tổng KPI toàn Phòng QLCL kỳ ${label}: ${deptSummary.normalizedScore}/100 điểm (${deptSummary.passedCount}/${deptSummary.activeIndicatorsCount} chỉ tiêu có dữ liệu Đạt)`
+            : `Chưa có chỉ tiêu nào phát sinh dữ liệu trong ${label}`,
+          targetTab: 'kpi_dashboard',
+          targetTabLabel: 'KPI Phòng QLCL',
+          rows: resolvedDeptKpis
+            .filter(k => !k.isWaitingData)
+            .map(k => ({
+              id: k.id,
+              date: label,
+              title: `${k.indicator} (Mục tiêu: ${k.effectiveTarget})`,
+              actor: 'Phòng QLCL',
+              resultText: `${k.effectiveActual} (${k.achievedPoints}/${k.weight}đ)`,
+              isPass: k.effectiveStatus === 'Đạt'
+            }))
+        };
+      }
+
+      // Default fallback to autoMetricsMap
+      const am = autoMetricsMap[metricKey];
+      if (am) {
+        return {
+          actualText: am.actualText,
+          numericValue: am.numericValue,
+          hasData: am.hasData,
+          evidence: am.evidenceText,
+          targetTab: am.targetTab,
+          targetTabLabel: am.targetTabLabel,
+          rows: am.sourceRecords
+        };
+      }
+
+      return {
+        actualText: 'Chưa có dữ liệu (0)',
+        numericValue: 0,
+        hasData: false,
+        evidence: `Chưa có dữ liệu trong ${label}`,
+        targetTab: 'daily_logs',
+        targetTabLabel: 'Báo cáo ngày QLCL',
+        rows: []
+      };
+    };
 
     // Chỉ đánh giá đúng 8 nhân sự thuộc Phòng QLCL theo 8 Bản giao nhiệm vụ trong /bm
     const mergedProfiles: StaffBmKpiProfile[] = [...STAFF_BM_KPI_PROFILES];
 
-    return mergedProfiles.map(profile => {
-      const staffKey = normalizePersonKey(profile.staffName);
-      const evalRecordKey = `${pKey}__${staffKey}`;
-      const savedEval = staffEvals[evalRecordKey];
+    return mergedProfiles
+      .map(profile => {
+        const staffKey = normalizePersonKey(profile.staffName);
+        const evalRecordKey = `${pKey}__${staffKey}`;
+        const savedEval = staffEvals[evalRecordKey];
 
-      // 1. Compute Group 1: Operational Metrics from /bm (Max 50 points)
-      const resolvedRoleMetrics = profile.metrics.map(m => {
-        const ov = savedEval?.metricOverrides?.[m.id];
-        const weight = ov?.weight !== undefined ? Number(ov.weight) : m.weight;
-        const targetText = ov?.targetText || m.target;
+        // 1. Compute Group 1: Operational Metrics from /bm (Max 50 points)
+        const resolvedRoleMetrics = profile.metrics.map(m => {
+          const ov = savedEval?.metricOverrides?.[m.id];
+          const weight = ov?.weight !== undefined ? Number(ov.weight) : m.weight;
+          const targetText = ov?.targetText || m.target;
 
-        let autoVal = 100;
-        let autoActualText = '100%';
-        let evidence = m.bmReference;
+          const computed = computePersonRoleMetric(profile, m.autoMetricKey);
+          const hasManualOverride =
+            (ov?.actualText !== undefined && ov.actualText !== '') || ov?.scorePercent !== undefined;
 
-        if (m.autoMetricKey === 'DEPT_OVERALL_KPI') {
-          autoVal = deptSummary.normalizedScore;
-          autoActualText = `${deptSummary.normalizedScore}%`;
-          evidence = `Điểm tổng KPI Phòng QLCL kỳ ${periodInfo.label}: ${deptSummary.normalizedScore}/100`;
-        } else if (autoMetricsMap[m.autoMetricKey]) {
-          const am = autoMetricsMap[m.autoMetricKey];
-          autoVal = am.numericValue;
-          autoActualText = am.actualText;
-          evidence = am.evidenceText;
-        }
+          const effectiveActualText =
+            ov?.actualText !== undefined && ov.actualText !== '' ? ov.actualText : computed.actualText;
+          const isWaitingData = !computed.hasData && !hasManualOverride;
 
-        const effectiveActualText = ov?.actualText !== undefined && ov.actualText !== '' ? ov.actualText : autoActualText;
-        let scorePercent = 100;
-
-        if (ov?.scorePercent !== undefined) {
-          scorePercent = Math.max(0, Math.min(100, Number(ov.scorePercent)));
-        } else if (ov?.actualText !== undefined && ov.actualText !== '') {
-          const parsed = parseNumericFromActualString(ov.actualText);
-          if (parsed !== null) {
-            scorePercent = computeAttainmentAndStatus(parsed, m.targetValue, m.direction).attainmentPct;
+          let scorePercent = 0;
+          if (ov?.scorePercent !== undefined) {
+            scorePercent = Math.max(0, Math.min(100, Number(ov.scorePercent)));
+          } else if (ov?.actualText !== undefined && ov.actualText !== '') {
+            const parsed = parseNumericFromActualString(ov.actualText);
+            scorePercent =
+              parsed !== null
+                ? computeAttainmentAndStatus(parsed, m.targetValue, m.direction).attainmentPct
+                : 100;
+          } else if (computed.hasData) {
+            scorePercent = computeAttainmentAndStatus(
+              computed.numericValue,
+              m.targetValue,
+              m.direction
+            ).attainmentPct;
           }
-        } else {
-          scorePercent = computeAttainmentAndStatus(autoVal, m.targetValue, m.direction).attainmentPct;
-        }
 
-        const points = Number(((weight * scorePercent) / 100).toFixed(2));
+          const points = isWaitingData ? 0 : Number(((weight * scorePercent) / 100).toFixed(2));
 
-        return {
-          ...m,
-          name: ov?.name || m.name,
-          weight,
-          targetText,
-          actualText: effectiveActualText,
-          scorePercent,
-          points,
-          evidence,
-          note: ov?.note || ''
-        };
-      });
-
-      const customRoleMetrics = (savedEval?.customMetrics || []).map(cm => {
-        const pct = Math.max(0, Math.min(100, Number(cm.scorePercent ?? 100)));
-        const pts = Number(((Number(cm.weight || 0) * pct) / 100).toFixed(2));
-        return {
-          id: cm.id,
-          name: cm.name,
-          bmReference: cm.bmReference || 'Chỉ tiêu bổ sung theo kỳ',
-          weight: Number(cm.weight || 0),
-          targetText: cm.targetText,
-          actualText: cm.actualText,
-          scorePercent: pct,
-          points: pts,
-          evidence: 'Chỉ tiêu bổ sung trực tiếp bởi Trưởng phòng QLCL',
-          note: '',
-          isCustom: true
-        };
-      });
-
-      const allRoleMetrics = [...resolvedRoleMetrics, ...customRoleMetrics];
-      const totalRoleWeight = allRoleMetrics.reduce((s, x) => s + x.weight, 0) || 50;
-      const rawRolePoints = allRoleMetrics.reduce((s, x) => s + x.points, 0);
-      // Normalize Group 1 to 50 points max
-      const roleScore50 = Number(((rawRolePoints / totalRoleWeight) * 50).toFixed(1));
-
-      // 2. Compute Group 2: Daily Logs & Task Completion in Period (Max 30 points)
-      const engineerLogs = curLogs.filter(log => {
-        if (!log?.assignee) return false;
-        const assignees = String(log.assignee)
-          .split(',')
-          .map(x => normalizePersonKey(x));
-        return (
-          assignees.includes(staffKey) ||
-          profile.aliases.some(al => assignees.includes(normalizePersonKey(al)))
-        );
-      });
-
-      const totalTasks = engineerLogs.length;
-      const isLogDone = (l: any) => {
-        const st = String(l?.status || '').toLowerCase();
-        return st === 'hoàn thành' || st === 'đã đóng' || st === 'đã xử lý' || st === 'closed';
-      };
-      const completedTasks = engineerLogs.filter(isLogDone).length;
-      const todayYmd = getLocalYmd(new Date());
-      const overdueTasks = engineerLogs.filter(l => {
-        if (isLogDone(l)) return false;
-        const due = l?.dueDate || l?.targetDate;
-        return due && String(due) < todayYmd;
-      }).length;
-
-      const filterByStage = (keywords: string[]) =>
-        engineerLogs.filter(l => {
-          const cat = String(l?.category || '').toUpperCase();
-          const content = String(l?.content || '').toUpperCase();
-          return keywords.some(kw => cat.includes(kw) || content.includes(kw));
+          return {
+            ...m,
+            name: ov?.name || m.name,
+            weight,
+            targetText,
+            actualText: effectiveActualText,
+            scorePercent,
+            points,
+            isWaitingData,
+            evidence: computed.evidence,
+            targetTab: computed.targetTab,
+            targetTabLabel: computed.targetTabLabel,
+            sourceRows: computed.rows,
+            note: ov?.note || ''
+          };
         });
 
-      const sqcLogs = filterByStage(['SQC', 'NCC', 'NHÀ CUNG CẤP']);
-      const iqcLogs = filterByStage(['IQC', 'ĐẦU VÀO']);
-      const pqcLogs = filterByStage(['PQC', 'LẮP RÁP', 'CHUYỀN']);
-      const oqcLogs = filterByStage(['OQC', 'KCS', 'THÀNH PHẨM', 'XUẤT XƯỞNG']);
-      const csLogs = filterByStage(['CS', 'BẢO HÀNH', 'THỊ TRƯỜNG', 'ĐẠI LÝ']);
+        const customRoleMetrics = (savedEval?.customMetrics || []).map(cm => {
+          const pct = Math.max(0, Math.min(100, Number(cm.scorePercent ?? 100)));
+          const pts = Number(((Number(cm.weight || 0) * pct) / 100).toFixed(2));
+          return {
+            id: cm.id,
+            name: cm.name,
+            bmReference: cm.bmReference || 'Chỉ tiêu bổ sung theo kỳ',
+            weight: Number(cm.weight || 0),
+            targetText: cm.targetText,
+            actualText: cm.actualText,
+            scorePercent: pct,
+            points: pts,
+            isWaitingData: false,
+            evidence: 'Chỉ tiêu bổ sung trực tiếp bởi Trưởng phòng QLCL',
+            targetTab: 'kpi_dashboard',
+            targetTabLabel: 'KPI Nhân sự',
+            sourceRows: [] as DrilldownRecordRow[],
+            note: '',
+            isCustom: true
+          };
+        });
 
-      const calcStage = (arr: any[]) => {
-        const tot = arr.length;
-        const comp = arr.filter(isLogDone).length;
-        return { total: tot, completed: comp, rate: tot > 0 ? Math.round((comp / tot) * 100) : 0 };
-      };
+        const allRoleMetrics = [...resolvedRoleMetrics, ...customRoleMetrics];
+        const activeRoleMetrics = allRoleMetrics.filter(x => !x.isWaitingData);
+        const activeRoleWeight = activeRoleMetrics.reduce((s, x) => s + x.weight, 0);
+        const rawRolePoints = activeRoleMetrics.reduce((s, x) => s + x.points, 0);
+        const roleScore50 =
+          activeRoleWeight > 0 ? Number(((rawRolePoints / activeRoleWeight) * 50).toFixed(1)) : 0;
 
-      const sqcStat = calcStage(sqcLogs);
-      const iqcStat = calcStage(iqcLogs);
-      const pqcStat = calcStage(pqcLogs);
-      const oqcStat = calcStage(oqcLogs);
-      const csStat = calcStage(csLogs);
+        // 2. Compute Group 2: Daily Logs & Task Completion in Period (Max 30 points)
+        const engineerLogs = curLogs.filter(log => personMatchesField(log?.assignee, profile));
+        const engineerPlans = curPlanTasks.filter(pt =>
+          personMatchesField(pt?.assignee || pt?.pic, profile)
+        );
 
-      const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100;
-      const distinctDays = new Set(
-        engineerLogs
-          .map(l => {
-            const d = parseFlexibleDate(l?.date || l?.createdAt);
-            return d ? getLocalYmd(d) : '';
-          })
-          .filter(Boolean)
-      ).size;
+        const totalTasks = engineerLogs.length;
+        const completedTasks = engineerLogs.filter(isDailyLogCompleted).length;
+        const overdueTasks = engineerLogs.filter(l => isDailyLogOverdue(l, todayStartMs)).length;
 
-      // 30 points breakdown: 20 pts completion rate + 10 pts timeliness (minus 2 pts per overdue task)
-      const baseCompletionPts = totalTasks > 0 ? (taskCompletionRate / 100) * 20 : 18;
-      const timelinessPts = Math.max(0, 10 - overdueTasks * 2);
-      const dailyScore30 = Number(Math.min(30, baseCompletionPts + timelinessPts).toFixed(1));
+        const filterByStage = (keywords: string[]) =>
+          engineerLogs.filter(l => {
+            const cat = String(l?.category || '').toUpperCase();
+            const content = String(l?.content || '').toUpperCase();
+            return keywords.some(kw => cat.includes(kw) || content.includes(kw));
+          });
 
-      // 3. Compute Group 3: Manager Evaluation (Max 20 points = 10 responsibility + 10 initiative/5S)
-      const mgrResp = savedEval?.managerResponsibilityScore !== undefined ? Number(savedEval.managerResponsibilityScore) : 9;
-      const mgrInit = savedEval?.managerInitiativeScore !== undefined ? Number(savedEval.managerInitiativeScore) : 9;
-      const managerScore20 = Number(Math.min(20, Math.max(0, mgrResp + mgrInit)).toFixed(1));
-      const managerComment = savedEval?.managerComment || '';
+        const calcStage = (arr: any[]) => {
+          const tot = arr.length;
+          const comp = arr.filter(isDailyLogCompleted).length;
+          return { total: tot, completed: comp, rate: tot > 0 ? Math.round((comp / tot) * 100) : 0 };
+        };
 
-      const totalScore100 = Number((roleScore50 + dailyScore30 + managerScore20).toFixed(1));
-      const rating =
-        totalScore100 >= 90
-          ? 'Xuất sắc'
-          : totalScore100 >= 80
-          ? 'Tốt'
-          : totalScore100 >= 70
-          ? 'Khá'
-          : totalScore100 >= 60
-          ? 'Trung bình'
-          : 'Cần cải tiến';
+        const sqcStat = calcStage(filterByStage(['SQC', 'NCC', 'NHÀ CUNG CẤP', 'QA']));
+        const iqcStat = calcStage(filterByStage(['IQC', 'ĐẦU VÀO']));
+        const pqcStat = calcStage(filterByStage(['PQC', 'LẮP RÁP', 'CHUYỀN']));
+        const oqcStat = calcStage(filterByStage(['OQC', 'KCS', 'THÀNH PHẨM', 'XUẤT XƯỞNG']));
+        const csStat = calcStage(filterByStage(['CS', 'BẢO HÀNH', 'THỊ TRƯỜNG', 'ĐẠI LÝ', 'KHÁCH HÀNG']));
 
-      return {
-        profile,
-        staffKey,
-        evalRecordKey,
-        allRoleMetrics,
-        roleScore50,
-        dailyScore30,
-        managerScore20,
-        mgrResp,
-        mgrInit,
-        managerComment,
-        totalScore100,
-        rating,
-        hasManagerSaved: Boolean(savedEval),
-        dailyStats: {
-          totalTasks,
-          completedTasks,
-          overdueTasks,
-          taskCompletionRate,
-          distinctDays,
-          sqcStat,
-          iqcStat,
-          pqcStat,
-          oqcStat,
-          csStat
+        const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+        const distinctDays = new Set(
+          engineerLogs
+            .map(l => {
+              const d = parseFlexibleDate(l?.date || l?.createdAt);
+              return d ? getLocalYmd(d) : '';
+            })
+            .filter(Boolean)
+        ).size;
+
+        // If the staff member has daily logs in period, score out of 30 (20 pts completion + 10 pts timeliness)
+        let dailyScore30 = 0;
+        if (totalTasks > 0) {
+          const baseCompletionPts = (taskCompletionRate / 100) * 20;
+          const timelinessPts = Math.max(0, 10 - overdueTasks * 2);
+          dailyScore30 = Number(Math.min(30, baseCompletionPts + timelinessPts).toFixed(1));
+        } else if (engineerPlans.length > 0) {
+          const donePlans = engineerPlans.filter(
+            pt => String(pt?.status || '').toLowerCase() === 'completed'
+          ).length;
+          const planRate = Math.round((donePlans / engineerPlans.length) * 100);
+          dailyScore30 = Number(((planRate / 100) * 30).toFixed(1));
         }
-      };
-    }).sort((a, b) => b.totalScore100 - a.totalScore100);
-  }, [periodInfo, dailyLogs, staffList, staffEvals, autoMetricsMap, deptSummary.normalizedScore]);
+
+        const dailySourceRows: DrilldownRecordRow[] = engineerLogs.map(l => ({
+          id: l.id || `STT-${l.stt}`,
+          date: formatDateStrVi(l.date),
+          title: `[${l.category || 'QLCL'}] ${l.content || '--'} (Hạn: ${formatDateStrVi(l.deadline)})`,
+          actor: l.assignee || profile.staffName,
+          resultText: `${l.statusPercent || '0%'} ${l.result ? `• KQ: ${l.result}` : ''}`,
+          isPass: isDailyLogCompleted(l)
+        }));
+
+        // 3. Compute Group 3: Manager Evaluation (Max 20 points = 10 responsibility + 10 initiative/5S)
+        const mgrResp =
+          savedEval?.managerResponsibilityScore !== undefined
+            ? Number(savedEval.managerResponsibilityScore)
+            : 9;
+        const mgrInit =
+          savedEval?.managerInitiativeScore !== undefined ? Number(savedEval.managerInitiativeScore) : 9;
+        const managerScore20 = Number(Math.min(20, Math.max(0, mgrResp + mgrInit)).toFixed(1));
+        const managerComment = savedEval?.managerComment || '';
+
+        const totalScore100 = Number((roleScore50 + dailyScore30 + managerScore20).toFixed(1));
+        const rating =
+          activeRoleMetrics.length === 0 && totalTasks === 0
+            ? 'Chờ dữ liệu'
+            : totalScore100 >= 90
+            ? 'Xuất sắc'
+            : totalScore100 >= 80
+            ? 'Tốt'
+            : totalScore100 >= 70
+            ? 'Khá'
+            : totalScore100 >= 60
+            ? 'Trung bình'
+            : 'Cần cải tiến';
+
+        return {
+          profile,
+          staffKey,
+          evalRecordKey,
+          allRoleMetrics,
+          activeRoleMetricsCount: activeRoleMetrics.length,
+          roleScore50,
+          dailyScore30,
+          managerScore20,
+          mgrResp,
+          mgrInit,
+          managerComment,
+          totalScore100,
+          rating,
+          hasManagerSaved: Boolean(savedEval),
+          dailySourceRows,
+          dailyStats: {
+            totalTasks,
+            completedTasks,
+            overdueTasks,
+            taskCompletionRate,
+            distinctDays,
+            sqcStat,
+            iqcStat,
+            pqcStat,
+            oqcStat,
+            csStat
+          }
+        };
+      })
+      .sort((a, b) => b.totalScore100 - a.totalScore100);
+  }, [
+    periodInfo,
+    periodDataset,
+    staffEvals,
+    autoMetricsMap,
+    deptSummary,
+    resolvedDeptKpis,
+    qmsBmRecords,
+    todayStartMs
+  ]);
 
   const staffSummary = useMemo(() => {
     if (staffEvaluationsComputed.length === 0) {
@@ -983,7 +2125,6 @@ export default function KPIDashboard({
   const [newKpiTarget, setNewKpiTarget] = useState<string>('>= 95%');
   const [newKpiActual, setNewKpiActual] = useState<string>('100%');
 
-  // Selected Staff for Individual Evaluation Sheet Drawer/Modal
   const [selectedStaffKey, setSelectedStaffKey] = useState<string>(() =>
     normalizePersonKey(STAFF_BM_KPI_PROFILES[0].staffName)
   );
@@ -1009,8 +2150,10 @@ export default function KPIDashboard({
     setEditDefinitionInput(kpiItem.definition);
     setEditWeightInput(Number(kpiItem.weight || 5));
     setEditTargetInput(kpiItem.effectiveTarget || kpiItem.target);
-    setEditActualInput(kpiItem.effectiveActual || kpiItem.actual);
-    setEditStatusInput(kpiItem.effectiveStatus || kpiItem.status || 'Đạt');
+    setEditActualInput(kpiItem.isWaitingData ? '' : kpiItem.effectiveActual || kpiItem.actual);
+    setEditStatusInput(
+      kpiItem.effectiveStatus === 'Chờ dữ liệu' ? 'Đạt' : kpiItem.effectiveStatus || kpiItem.status || 'Đạt'
+    );
     setEditNoteInput(kpiItem.overrideNote || '');
   };
 
@@ -1072,7 +2215,8 @@ export default function KPIDashboard({
       unit: newKpiUnit.trim() || '%',
       target: newKpiTarget.trim() || '100%',
       targetValue: parseNumericFromActualString(newKpiTarget) ?? 100,
-      direction: newKpiTarget.includes('<=') || newKpiTarget.includes('<') ? 'lower_is_better' : 'higher_is_better',
+      direction:
+        newKpiTarget.includes('<=') || newKpiTarget.includes('<') ? 'lower_is_better' : 'higher_is_better',
       sourceType: 'manual',
       actual: newKpiActual.trim() || '100%',
       status: 'Đạt',
@@ -1094,7 +2238,6 @@ export default function KPIDashboard({
     persistKpis(DEFAULT_DETAILED_KPIS);
   };
 
-  // Staff Evaluation Updates
   const updateStaffEvaluation = (
     staffKey: string,
     updater: (prev: StaffKpiPeriodEvaluation) => StaffKpiPeriodEvaluation
@@ -1151,7 +2294,7 @@ export default function KPIDashboard({
   };
 
   // ============================================================================
-  // EXPORT EXCEL (CSV UTF-8 BOM) & PRINT / PDF FUNCTIONS (CORPORATE BRANDED)
+  // EXPORT EXCEL (CSV UTF-8 BOM) & PRINT / PDF FUNCTIONS
   // ============================================================================
   const handleExportExcel = () => {
     const rows: string[][] = [
@@ -1162,7 +2305,20 @@ export default function KPIDashboard({
       [`Tổng điểm KPI Phòng QLCL: ${deptSummary.normalizedScore}/100 điểm — Xếp loại: ${deptSummary.rating}`],
       [],
       ['PHẦN I & II: BẢNG CHỈ TIÊU KPI PHÒNG QLCL (35% MỤC TIÊU CHUNG + 65% MỤC TIÊU CHUYÊN MÔN)'],
-      ['Mã KPI', 'Phân nhóm', 'Nhóm mục tiêu', 'Tên chỉ tiêu KPI', 'Nguồn đo', 'Trọng số (%)', 'Chỉ tiêu (Target)', 'Thực tế đạt', 'Tỷ lệ hoàn thành (%)', 'Điểm quy đổi', 'Đánh giá', 'Dẫn chứng dữ liệu / Ghi chú']
+      [
+        'Mã KPI',
+        'Phân nhóm',
+        'Nhóm mục tiêu',
+        'Tên chỉ tiêu KPI',
+        'Nguồn đo',
+        'Trọng số (%)',
+        'Chỉ tiêu (Target)',
+        'Thực tế đạt',
+        'Tỷ lệ hoàn thành (%)',
+        'Điểm quy đổi',
+        'Đánh giá',
+        'Dẫn chứng dữ liệu / Ghi chú'
+      ]
     ];
 
     resolvedDeptKpis.forEach(k => {
@@ -1175,7 +2331,7 @@ export default function KPIDashboard({
         String(k.weight),
         k.effectiveTarget,
         k.effectiveActual,
-        `${k.attainmentPct}%`,
+        k.isWaitingData ? 'Chờ dữ liệu' : `${k.attainmentPct}%`,
         String(k.achievedPoints),
         k.effectiveStatus,
         k.evidenceText || ''
@@ -1183,7 +2339,7 @@ export default function KPIDashboard({
     });
 
     rows.push([]);
-    rows.push(['PHẦN III: BẢNG TỔNG HỢP ĐÁNH GIÁ KPI NHÂN SỰ PHÒNG QLCL (THEO BẢN GIAO NHIỆM VỤ /bm & BÁO CÁO NGÀY)']);
+    rows.push(['PHẦN III: BẢNG TỔNG HỢP ĐÁNH GIÁ KPI 8 NHÂN SỰ PHÒNG QLCL (THEO BẢN GIAO NHIỆM VỤ /bm & BÁO CÁO NGÀY)']);
     rows.push([
       'STT',
       'Họ và tên nhân sự',
@@ -1235,7 +2391,6 @@ export default function KPIDashboard({
     window.print();
   };
 
-  // Filtered Department KPIs for Display
   const filteredDeptKpis = useMemo(() => {
     return resolvedDeptKpis.filter(k => {
       if (typeFilter !== 'ALL' && k.type !== typeFilter) return false;
@@ -1281,7 +2436,8 @@ export default function KPIDashboard({
               HỆ THỐNG ĐÁNH GIÁ CHỈ TIÊU & KPI PHÒNG QUẢN LÝ CHẤT LƯỢNG
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Tự động kết nối dữ liệu thực tế từ IQC, PQC, OQC, SQC, CAPA, Thị trường, COPQ, Thiết bị đo & Nhật trình ngày • Chuẩn hóa theo 5 Bản MTCV RACI & 8 Bản giao nhiệm vụ trong <code className="font-bold text-indigo-600">/bm</code>
+              Tự động truyền số liệu thời gian thực từ 10 phân hệ nghiệp vụ • Bấm vào bất kỳ chỉ số tự động nào để đối soát danh sách bản ghi gốc • Chuẩn hóa theo 8 Bản giao nhiệm vụ trong{' '}
+              <code className="font-bold text-indigo-600">/bm</code>
             </p>
           </div>
 
@@ -1356,7 +2512,6 @@ export default function KPIDashboard({
               ))}
             </select>
 
-            {/* Export Dropdown */}
             <div className="relative">
               <button
                 type="button"
@@ -1395,7 +2550,6 @@ export default function KPIDashboard({
             4 TOP SUMMARY CARDS (MATCHING REPORTS HUB CARD STYLE)
         ===================================================================== */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-4">
-          {/* Card 1: Overall Dept KPI */}
           <div className="rounded-2xl border-2 border-slate-300 bg-white p-4 shadow-sm flex flex-col justify-between">
             <div className="flex items-start justify-between gap-2">
               <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
@@ -1403,7 +2557,9 @@ export default function KPIDashboard({
               </span>
               <span
                 className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                  deptSummary.normalizedScore >= 90
+                  deptSummary.rating === 'Chờ dữ liệu'
+                    ? 'bg-slate-200 text-slate-700'
+                    : deptSummary.normalizedScore >= 90
                     ? 'bg-emerald-100 text-emerald-800'
                     : deptSummary.normalizedScore >= 80
                     ? 'bg-indigo-100 text-indigo-800'
@@ -1429,12 +2585,11 @@ export default function KPIDashboard({
                 />
               </div>
               <p className="text-[11px] font-medium text-slate-500 mt-1.5">
-                Kỳ: <strong className="text-slate-700">{periodInfo.rangeText}</strong>
+                Tính trên <strong className="text-slate-800">{deptSummary.activeIndicatorsCount}/{deptSummary.totalCount} chỉ tiêu</strong> có dữ liệu ({deptSummary.waitingIndicatorsCount} chờ dữ liệu)
               </p>
             </div>
           </div>
 
-          {/* Card 2: Common Goals 35% */}
           <div className="rounded-2xl border-2 border-slate-300 bg-white p-4 shadow-sm flex flex-col justify-between">
             <div className="flex items-start justify-between gap-2">
               <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
@@ -1455,7 +2610,6 @@ export default function KPIDashboard({
             </p>
           </div>
 
-          {/* Card 3: Professional Goals 65% */}
           <div className="rounded-2xl border-2 border-slate-300 bg-white p-4 shadow-sm flex flex-col justify-between">
             <div className="flex items-start justify-between gap-2">
               <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
@@ -1476,11 +2630,10 @@ export default function KPIDashboard({
             </p>
           </div>
 
-          {/* Card 4: Personnel KPI Average */}
           <div className="rounded-2xl border-2 border-slate-300 bg-white p-4 shadow-sm flex flex-col justify-between">
             <div className="flex items-start justify-between gap-2">
               <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
-                HIỆU NĂNG KPI NHÂN SỰ (/bm)
+                HIỆU NĂNG 8 NHÂN SỰ QLCL (/bm)
               </span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800">
                 {staffSummary.goodOrAboveCount}/{staffSummary.totalStaff} đạt Tốt trở lên
@@ -1499,9 +2652,62 @@ export default function KPIDashboard({
         </div>
 
         {/* =====================================================================
+            10-MODULE LIVE DATA TRANSFER STRIP (BẢNG ĐỐI SOÁT NGUỒN DỮ LIỆU TỰ ĐỘNG)
+        ===================================================================== */}
+        <div className="mt-4 pt-4 border-t border-slate-200">
+          <div className="flex items-center justify-between gap-2 mb-2.5">
+            <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5 text-indigo-600" />
+              ĐỐI SOÁT DỮ LIỆU TỰ ĐỘNG TRUYỀN VỀ TỪ 10 PHÂN HỆ TRONG KỲ {periodInfo.label.toUpperCase()} (BẤM ĐỂ XEM BẢN GHI GỐC):
+            </div>
+            <span className="text-[11px] font-bold text-slate-500">
+              {moduleTransferCards.filter(m => m.hasData).length}/10 phân hệ có phát sinh bản ghi
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-10 gap-2">
+            {moduleTransferCards.map(card => (
+              <button
+                key={card.id}
+                type="button"
+                onClick={() =>
+                  setDrilldownModal({
+                    title: `Đối soát dữ liệu nguồn: ${card.name}`,
+                    subtitle: card.metric.evidenceText,
+                    targetTab: card.metric.targetTab,
+                    targetTabLabel: card.metric.targetTabLabel,
+                    summaryBadge: card.countText,
+                    rows: card.metric.sourceRecords
+                  })
+                }
+                className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                  card.hasData
+                    ? 'bg-slate-50/90 hover:bg-indigo-50/80 border-slate-300 hover:border-indigo-400'
+                    : 'bg-slate-50/40 border-dashed border-slate-200 opacity-75 hover:opacity-100'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[10px] font-extrabold text-slate-700 truncate">{card.name}</span>
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      card.hasData ? 'bg-emerald-500' : 'bg-slate-300'
+                    }`}
+                  />
+                </div>
+                <div className="font-mono font-black text-xs text-slate-900 mt-1 truncate">
+                  {card.countText}
+                </div>
+                <div className="text-[10px] font-semibold text-indigo-700 truncate mt-0.5">
+                  {card.subText}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* =====================================================================
             2 MAIN SUB-TABS SWITCHER
         ===================================================================== */}
-        <div className="flex flex-wrap items-center gap-2 mt-5 pt-4 border-t border-slate-200">
+        <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-slate-200">
           <button
             type="button"
             onClick={() => setActiveSubTab('dept_kpi')}
@@ -1532,7 +2738,7 @@ export default function KPIDashboard({
             }`}
           >
             <Users className="w-4 h-4" />
-            2. KPI Nhân sự (Theo Bản giao nhiệm vụ /bm & Báo cáo ngày)
+            2. KPI Nhân sự (8 Nhân sự QLCL theo Bản giao nhiệm vụ /bm)
             <span
               className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
                 activeSubTab === 'staff_kpi' ? 'bg-indigo-800 text-white' : 'bg-slate-200 text-slate-700'
@@ -1549,7 +2755,6 @@ export default function KPIDashboard({
       ========================================================================= */}
       {activeSubTab === 'dept_kpi' && (
         <div className="space-y-6">
-          {/* Toolbar */}
           <div className="bg-white border-2 border-slate-300 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -1647,316 +2852,250 @@ export default function KPIDashboard({
             </div>
           </div>
 
-          {/* SECTION I: MỤC TIÊU HOẠT ĐỘNG CHUNG (35%) */}
-          {commonKpisFiltered.length > 0 && (
-            <div className="bg-white border-2 border-slate-300 rounded-2xl shadow-sm overflow-hidden">
-              <div className="bg-sky-50/70 border-b border-slate-200 px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h3 className="text-sm font-black uppercase text-slate-900 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-sky-600" />
-                    PHẦN I: MỤC TIÊU HOẠT ĐỘNG CHUNG (TỔNG TRỌNG SỐ CHUẨN: 35%)
-                  </h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Kiểm soát Chi phí chất lượng COPQ & Ngân sách (15%) • Kế hoạch chất lượng & Hồ sơ QMS /bm (10%) • Kỷ luật báo cáo ngày & 5S (10%)
-                  </p>
-                </div>
-                <div className="px-3 py-1 rounded-xl bg-white border border-sky-200 text-xs font-black text-sky-800">
-                  Điểm đạt: {deptSummary.commonAchieved} / {deptSummary.commonMax} điểm
-                </div>
-              </div>
+          {/* Helper renderer for Department KPI Tables */}
+          {[
+            {
+              key: 'common',
+              title: 'PHẦN I: MỤC TIÊU HOẠT ĐỘNG CHUNG (TỔNG TRỌNG SỐ CHUẨN: 35%)',
+              subtitle:
+                'Kiểm soát Chi phí chất lượng COPQ & Ngân sách (15%) • Kế hoạch chất lượng & Hồ sơ QMS /bm (10%) • Kỷ luật báo cáo ngày & 5S (10%)',
+              headerBg: 'bg-sky-50/70',
+              dotColor: 'bg-sky-600',
+              badgeBorder: 'border-sky-200 text-sky-800',
+              achieved: deptSummary.commonAchieved,
+              max: deptSummary.commonMax,
+              list: commonKpisFiltered
+            },
+            {
+              key: 'pro',
+              title: 'PHẦN II: MỤC TIÊU HOẠT ĐỘNG CHUYÊN MÔN QLCL (TỔNG TRỌNG SỐ CHUẨN: 65%)',
+              subtitle:
+                'Chất lượng NCC & IQC (15%) • Kiểm soát lắp ráp PQC & Nghiệm thu OQC/KCS (25%) • Thị trường & Bảo hành (15%) • Thiết bị đo lường (10%)',
+              headerBg: 'bg-emerald-50/70',
+              dotColor: 'bg-emerald-600',
+              badgeBorder: 'border-emerald-200 text-emerald-800',
+              achieved: deptSummary.proAchieved,
+              max: deptSummary.proMax,
+              list: proKpisFiltered
+            }
+          ].map(
+            sec =>
+              sec.list.length > 0 && (
+                <div
+                  key={sec.key}
+                  className="bg-white border-2 border-slate-300 rounded-2xl shadow-sm overflow-hidden"
+                >
+                  <div
+                    className={`${sec.headerBg} border-b border-slate-200 px-5 py-3.5 flex flex-wrap items-center justify-between gap-2`}
+                  >
+                    <div>
+                      <h3 className="text-sm font-black uppercase text-slate-900 flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${sec.dotColor}`} />
+                        {sec.title}
+                      </h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{sec.subtitle}</p>
+                    </div>
+                    <div
+                      className={`px-3 py-1 rounded-xl bg-white border ${sec.badgeBorder} text-xs font-black`}
+                    >
+                      Điểm quy đổi nhóm: {sec.achieved} / {sec.max} điểm
+                    </div>
+                  </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs min-w-[950px]">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold text-[10px] uppercase tracking-wider">
-                      <th className="py-3 px-4 w-28">Mã / Nhóm</th>
-                      <th className="py-3 px-4">Chỉ tiêu KPI & Dẫn chứng dữ liệu kỳ ({periodInfo.label})</th>
-                      <th className="py-3 px-3 text-center w-28">Nguồn đo</th>
-                      <th className="py-3 px-3 text-center w-20">Trọng số</th>
-                      <th className="py-3 px-3 text-center w-28">Chỉ tiêu</th>
-                      <th className="py-3 px-3 text-center w-32">Thực tế đạt</th>
-                      <th className="py-3 px-3 text-center w-28">Điểm KPI</th>
-                      <th className="py-3 px-3 text-center w-28">Đánh giá</th>
-                      <th className="py-3 px-4 text-right w-24">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
-                    {commonKpisFiltered.map(item => (
-                      <tr key={item.id} className="hover:bg-slate-50/80 transition">
-                        <td className="py-3.5 px-4 align-top">
-                          <div className="font-mono font-black text-indigo-700 text-xs">{item.id}</div>
-                          <div className="text-[10px] font-bold text-slate-500 mt-0.5">{item.category}</div>
-                        </td>
-                        <td className="py-3.5 px-4 align-top">
-                          <div className="font-extrabold text-slate-900 text-xs md:text-[13px] leading-snug">
-                            {item.indicator}
-                          </div>
-                          <div className="text-[11px] text-slate-500 font-normal mt-0.5 leading-relaxed">
-                            {item.definition}
-                          </div>
-                          {item.evidenceText && (
-                            <div className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-bold">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                              <span>{item.evidenceText}</span>
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-3 text-center align-top">
-                          {item.sourceType === 'manual' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800">
-                              <Pencil className="w-3 h-3" /> Nhập tay
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 text-indigo-800">
-                              <Zap className="w-3 h-3" /> Tự động
-                            </span>
-                          )}
-                          {item.isOverridden && (
-                            <div className="text-[9px] font-bold text-amber-600 mt-1">Đã chỉnh tay kỳ này</div>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-3 text-center align-top font-mono font-black text-slate-800">
-                          {item.weight}%
-                        </td>
-                        <td className="py-3.5 px-3 text-center align-top font-mono font-bold text-slate-600">
-                          {item.effectiveTarget}
-                        </td>
-                        <td className="py-3.5 px-3 text-center align-top">
-                          <button
-                            type="button"
-                            onClick={() => openEditDeptKpiModal(item)}
-                            title="Bấm để cập nhật số liệu thực tế hoặc ghi chú kỳ này"
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-indigo-50 border border-slate-300 hover:border-indigo-400 font-mono font-black text-slate-900 text-xs transition cursor-pointer"
-                          >
-                            {item.effectiveActual}
-                          </button>
-                        </td>
-                        <td className="py-3.5 px-3 text-center align-top">
-                          <div className="font-mono font-black text-indigo-700">
-                            {item.achievedPoints} / {item.weight}
-                          </div>
-                          <div className="w-16 mx-auto h-1.5 bg-slate-200 rounded-full overflow-hidden mt-1">
-                            <div
-                              className={`h-full rounded-full ${
-                                item.attainmentPct >= 95
-                                  ? 'bg-emerald-500'
-                                  : item.attainmentPct >= 80
-                                  ? 'bg-amber-500'
-                                  : 'bg-rose-500'
-                              }`}
-                              style={{ width: `${item.attainmentPct}%` }}
-                            />
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-3 text-center align-top">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
-                              item.effectiveStatus === 'Đạt'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : item.effectiveStatus === 'Theo dõi'
-                                ? 'bg-amber-100 text-amber-800'
-                                : item.effectiveStatus === 'Đang cải tiến'
-                                ? 'bg-sky-100 text-sky-800'
-                                : 'bg-rose-100 text-rose-800'
-                            }`}
-                          >
-                            {item.effectiveStatus}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-right align-top">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => openEditDeptKpiModal(item)}
-                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-700 transition cursor-pointer"
-                              title="Chỉnh sửa chỉ tiêu / Nhập kết quả kỳ"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            {onViewDetail && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs min-w-[980px]">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold text-[10px] uppercase tracking-wider">
+                          <th className="py-3 px-4 w-28">Mã / Nhóm</th>
+                          <th className="py-3 px-4">
+                            Chỉ tiêu KPI & Dẫn chứng dữ liệu truyền về ({periodInfo.label})
+                          </th>
+                          <th className="py-3 px-3 text-center w-28">Nguồn đo</th>
+                          <th className="py-3 px-3 text-center w-20">Trọng số</th>
+                          <th className="py-3 px-3 text-center w-28">Chỉ tiêu</th>
+                          <th className="py-3 px-3 text-center w-36">Thực tế đạt</th>
+                          <th className="py-3 px-3 text-center w-28">Điểm KPI</th>
+                          <th className="py-3 px-3 text-center w-28">Đánh giá</th>
+                          <th className="py-3 px-4 text-right w-28">Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
+                        {sec.list.map(item => (
+                          <tr key={item.id} className="hover:bg-slate-50/80 transition">
+                            <td className="py-3.5 px-4 align-top">
+                              <div className="font-mono font-black text-indigo-700 text-xs">{item.id}</div>
+                              <div className="text-[10px] font-bold text-slate-500 mt-0.5">
+                                {item.category}
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 align-top">
+                              <div className="font-extrabold text-slate-900 text-xs md:text-[13px] leading-snug">
+                                {item.indicator}
+                              </div>
+                              <div className="text-[11px] text-slate-500 font-normal mt-0.5 leading-relaxed">
+                                {item.definition}
+                              </div>
+                              {item.evidenceText && (
+                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (item.autoMetric) {
+                                        setDrilldownModal({
+                                          title: `${item.id}: ${item.indicator}`,
+                                          subtitle: item.evidenceText,
+                                          targetTab: item.autoMetric.targetTab,
+                                          targetTabLabel: item.autoMetric.targetTabLabel,
+                                          summaryBadge: item.effectiveActual,
+                                          rows: item.autoMetric.sourceRecords
+                                        });
+                                      } else {
+                                        openEditDeptKpiModal(item);
+                                      }
+                                    }}
+                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                                      item.isWaitingData
+                                        ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                        : 'bg-indigo-50/90 hover:bg-indigo-100 text-indigo-900 border border-indigo-200/80'
+                                    }`}
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                    <span>{item.evidenceText}</span>
+                                    {item.autoMetric && (
+                                      <span className="underline text-indigo-700 ml-1">
+                                        (Đối soát {item.autoMetric.sourceRecords.length} bản ghi)
+                                      </span>
+                                    )}
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-3 text-center align-top">
+                              {item.sourceType === 'manual' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800">
+                                  <Pencil className="w-3 h-3" /> Nhập tay
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 text-indigo-800">
+                                  <Zap className="w-3 h-3" /> Tự động
+                                </span>
+                              )}
+                              {item.isOverridden && (
+                                <div className="text-[9px] font-bold text-amber-600 mt-1">
+                                  Đã ghi đè kỳ này
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-3 text-center align-top font-mono font-black text-slate-800">
+                              {item.weight}%
+                            </td>
+                            <td className="py-3.5 px-3 text-center align-top font-mono font-bold text-slate-600">
+                              {item.effectiveTarget}
+                            </td>
+                            <td className="py-3.5 px-3 text-center align-top">
                               <button
                                 type="button"
-                                onClick={() => onViewDetail(item)}
-                                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition cursor-pointer"
-                                title="Xem chi tiết"
+                                onClick={() => openEditDeptKpiModal(item)}
+                                title="Bấm để cập nhật số liệu thực tế hoặc ghi chú kỳ này"
+                                className={`px-2.5 py-1 rounded-lg border font-mono font-black text-xs transition cursor-pointer ${
+                                  item.isWaitingData
+                                    ? 'bg-slate-50 border-dashed border-slate-300 text-slate-400 hover:border-indigo-400 hover:text-indigo-700'
+                                    : 'bg-slate-100 hover:bg-indigo-50 border-slate-300 hover:border-indigo-400 text-slate-900'
+                                }`}
                               >
-                                <Eye className="w-3.5 h-3.5" />
+                                {item.effectiveActual}
                               </button>
-                            )}
-                            {!item.id.startsWith('KPI-COM-0') && !item.id.startsWith('KPI-PRO-0') && (
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteDeptKpi(item.id)}
-                                className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition cursor-pointer"
-                                title="Xóa chỉ tiêu tùy chỉnh"
+                            </td>
+                            <td className="py-3.5 px-3 text-center align-top">
+                              {item.isWaitingData ? (
+                                <span className="text-[11px] font-bold text-slate-400 italic">
+                                  Không tính mẫu
+                                </span>
+                              ) : (
+                                <>
+                                  <div className="font-mono font-black text-indigo-700">
+                                    {item.achievedPoints} / {item.weight}
+                                  </div>
+                                  <div className="w-16 mx-auto h-1.5 bg-slate-200 rounded-full overflow-hidden mt-1">
+                                    <div
+                                      className={`h-full rounded-full ${
+                                        item.attainmentPct >= 95
+                                          ? 'bg-emerald-500'
+                                          : item.attainmentPct >= 80
+                                          ? 'bg-amber-500'
+                                          : 'bg-rose-500'
+                                      }`}
+                                      style={{ width: `${item.attainmentPct}%` }}
+                                    />
+                                  </div>
+                                </>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-3 text-center align-top">
+                              <span
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                                  item.effectiveStatus === 'Đạt'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : item.effectiveStatus === 'Theo dõi'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : item.effectiveStatus === 'Đang cải tiến'
+                                    ? 'bg-sky-100 text-sky-800'
+                                    : item.effectiveStatus === 'Chờ dữ liệu'
+                                    ? 'bg-slate-200 text-slate-600'
+                                    : 'bg-rose-100 text-rose-800'
+                                }`}
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* SECTION II: MỤC TIÊU HOẠT ĐỘNG CHUYÊN MÔN (65%) */}
-          {proKpisFiltered.length > 0 && (
-            <div className="bg-white border-2 border-slate-300 rounded-2xl shadow-sm overflow-hidden">
-              <div className="bg-emerald-50/70 border-b border-slate-200 px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h3 className="text-sm font-black uppercase text-slate-900 flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
-                    PHẦN II: MỤC TIÊU HOẠT ĐỘNG CHUYÊN MÔN QLCL (TỔNG TRỌNG SỐ CHUẨN: 65%)
-                  </h3>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Chất lượng NCC & IQC (15%) • Kiểm soát lắp ráp PQC & Nghiệm thu OQC/KCS (25%) • Thị trường & Bảo hành (15%) • Thiết bị đo lường (10%)
-                  </p>
+                                {item.effectiveStatus}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 text-right align-top">
+                              <div className="flex items-center justify-end gap-1">
+                                {item.autoMetric && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setDrilldownModal({
+                                        title: `${item.id}: ${item.indicator}`,
+                                        subtitle: item.evidenceText,
+                                        targetTab: item.autoMetric!.targetTab,
+                                        targetTabLabel: item.autoMetric!.targetTabLabel,
+                                        summaryBadge: item.effectiveActual,
+                                        rows: item.autoMetric!.sourceRecords
+                                      })
+                                    }
+                                    className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition cursor-pointer"
+                                    title="Đối soát danh sách bản ghi gốc"
+                                  >
+                                    <Layers className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => openEditDeptKpiModal(item)}
+                                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-700 transition cursor-pointer"
+                                  title="Chỉnh sửa chỉ tiêu / Nhập kết quả kỳ"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                {!item.id.startsWith('KPI-COM-0') && !item.id.startsWith('KPI-PRO-0') && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteDeptKpi(item.id)}
+                                    className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition cursor-pointer"
+                                    title="Xóa chỉ tiêu tùy chỉnh"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-                <div className="px-3 py-1 rounded-xl bg-white border border-emerald-200 text-xs font-black text-emerald-800">
-                  Điểm đạt: {deptSummary.proAchieved} / {deptSummary.proMax} điểm
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs min-w-[950px]">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold text-[10px] uppercase tracking-wider">
-                      <th className="py-3 px-4 w-28">Mã / Nhóm</th>
-                      <th className="py-3 px-4">Chỉ tiêu KPI Chuyên môn & Dẫn chứng dữ liệu kỳ ({periodInfo.label})</th>
-                      <th className="py-3 px-3 text-center w-28">Nguồn đo</th>
-                      <th className="py-3 px-3 text-center w-20">Trọng số</th>
-                      <th className="py-3 px-3 text-center w-28">Chỉ tiêu</th>
-                      <th className="py-3 px-3 text-center w-32">Thực tế đạt</th>
-                      <th className="py-3 px-3 text-center w-28">Điểm KPI</th>
-                      <th className="py-3 px-3 text-center w-28">Đánh giá</th>
-                      <th className="py-3 px-4 text-right w-24">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
-                    {proKpisFiltered.map(item => (
-                      <tr key={item.id} className="hover:bg-slate-50/80 transition">
-                        <td className="py-3.5 px-4 align-top">
-                          <div className="font-mono font-black text-emerald-700 text-xs">{item.id}</div>
-                          <div className="text-[10px] font-bold text-slate-500 mt-0.5">{item.category}</div>
-                        </td>
-                        <td className="py-3.5 px-4 align-top">
-                          <div className="font-extrabold text-slate-900 text-xs md:text-[13px] leading-snug">
-                            {item.indicator}
-                          </div>
-                          <div className="text-[11px] text-slate-500 font-normal mt-0.5 leading-relaxed">
-                            {item.definition}
-                          </div>
-                          {item.evidenceText && (
-                            <div className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50/80 border border-emerald-200/80 text-emerald-900 text-[11px] font-bold">
-                              <Zap className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                              <span>{item.evidenceText}</span>
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-3 text-center align-top">
-                          {item.sourceType === 'manual' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800">
-                              <Pencil className="w-3 h-3" /> Nhập tay
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">
-                              <Zap className="w-3 h-3" /> Tự động
-                            </span>
-                          )}
-                          {item.isOverridden && (
-                            <div className="text-[9px] font-bold text-amber-600 mt-1">Đã chỉnh tay kỳ này</div>
-                          )}
-                        </td>
-                        <td className="py-3.5 px-3 text-center align-top font-mono font-black text-slate-800">
-                          {item.weight}%
-                        </td>
-                        <td className="py-3.5 px-3 text-center align-top font-mono font-bold text-slate-600">
-                          {item.effectiveTarget}
-                        </td>
-                        <td className="py-3.5 px-3 text-center align-top">
-                          <button
-                            type="button"
-                            onClick={() => openEditDeptKpiModal(item)}
-                            title="Bấm để cập nhật số liệu thực tế hoặc ghi chú kỳ này"
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-emerald-50 border border-slate-300 hover:border-emerald-400 font-mono font-black text-slate-900 text-xs transition cursor-pointer"
-                          >
-                            {item.effectiveActual}
-                          </button>
-                        </td>
-                        <td className="py-3.5 px-3 text-center align-top">
-                          <div className="font-mono font-black text-emerald-700">
-                            {item.achievedPoints} / {item.weight}
-                          </div>
-                          <div className="w-16 mx-auto h-1.5 bg-slate-200 rounded-full overflow-hidden mt-1">
-                            <div
-                              className={`h-full rounded-full ${
-                                item.attainmentPct >= 95
-                                  ? 'bg-emerald-500'
-                                  : item.attainmentPct >= 80
-                                  ? 'bg-amber-500'
-                                  : 'bg-rose-500'
-                              }`}
-                              style={{ width: `${item.attainmentPct}%` }}
-                            />
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-3 text-center align-top">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
-                              item.effectiveStatus === 'Đạt'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : item.effectiveStatus === 'Theo dõi'
-                                ? 'bg-amber-100 text-amber-800'
-                                : item.effectiveStatus === 'Đang cải tiến'
-                                ? 'bg-sky-100 text-sky-800'
-                                : 'bg-rose-100 text-rose-800'
-                            }`}
-                          >
-                            {item.effectiveStatus}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-right align-top">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => openEditDeptKpiModal(item)}
-                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-700 transition cursor-pointer"
-                              title="Chỉnh sửa chỉ tiêu / Nhập kết quả kỳ"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            {onViewDetail && (
-                              <button
-                                type="button"
-                                onClick={() => onViewDetail(item)}
-                                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition cursor-pointer"
-                                title="Xem chi tiết"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                            {!item.id.startsWith('KPI-COM-0') && !item.id.startsWith('KPI-PRO-0') && (
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteDeptKpi(item.id)}
-                                className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition cursor-pointer"
-                                title="Xóa chỉ tiêu tùy chỉnh"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+              )
           )}
         </div>
       )}
@@ -1966,30 +3105,29 @@ export default function KPIDashboard({
       ========================================================================= */}
       {activeSubTab === 'staff_kpi' && (
         <div className="space-y-6">
-          {/* Master Ranking & Summary Table for All 8 Personnel */}
           <div className="bg-white border-2 border-slate-300 rounded-2xl p-5 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b border-slate-200 pb-3.5 mb-4">
               <div>
                 <h3 className="text-sm md:text-base font-black uppercase text-slate-900 flex items-center gap-2">
                   <UserCheck className="w-4 h-4 text-indigo-600" />
-                  BẢNG XẾP HẠNG & ĐÁNH GIÁ TỔNG HỢP KPI NHÂN SỰ PHÒNG QLCL — KỲ {periodInfo.label.toUpperCase()}
+                  BẢNG XẾP HẠNG & ĐÁNH GIÁ TỔNG HỢP KPI 8 NHÂN SỰ PHÒNG QLCL — KỲ {periodInfo.label.toUpperCase()}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Tổng điểm 100 = <strong>50đ Chỉ tiêu Nghiệp vụ theo Bản giao nhiệm vụ (<code className="text-indigo-600">/bm</code>)</strong> + <strong>30đ Kỷ luật Báo cáo ngày & Công việc</strong> + <strong>20đ Trưởng phòng Đánh giá</strong>. Bấm vào từng nhân sự để xem và chấm Phiếu KPI chi tiết.
+                  Tổng điểm 100 = <strong>50đ Chỉ tiêu Nghiệp vụ theo Bản giao nhiệm vụ (<code className="text-indigo-600">/bm</code>)</strong> + <strong>30đ Kỷ luật Báo cáo ngày & Công việc (<code className="text-sky-700">statusPercent = 100%</code>)</strong> + <strong>20đ Trưởng phòng Đánh giá</strong>.
                 </p>
               </div>
               <div className="flex items-center gap-2 text-xs font-bold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
                 <BookOpen className="w-4 h-4 text-indigo-600" />
-                <span>Căn cứ: 5 MTCV RACI & 8 Bản giao nhiệm vụ (/bm)</span>
+                <span>Chuẩn hóa theo 8 Bản giao nhiệm vụ BG-NV-01..08 (/bm)</span>
               </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[1020px]">
+              <table className="w-full text-left text-xs min-w-[1040px]">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold text-[10px] uppercase tracking-wider">
                     <th className="py-3 px-3 text-center w-12">Hạng</th>
-                    <th className="py-3 px-3">Nhân sự & Chức danh (/bm)</th>
+                    <th className="py-3 px-3">Nhân sự & Chức danh thực tế (/bm)</th>
                     <th className="py-3 px-3 text-center">Mã Văn bản /bm</th>
                     <th className="py-3 px-3 text-center bg-indigo-50/40 text-indigo-900">
                       1. Nghiệp vụ /bm (50đ)
@@ -1997,7 +3135,7 @@ export default function KPIDashboard({
                     <th className="py-3 px-3 text-center bg-sky-50/40 text-sky-900">
                       2. Báo cáo ngày (30đ)
                     </th>
-                    <th className="py-3 px-3 text-center">Hiệu năng Khâu (SQC/IQC/PQC/OQC)</th>
+                    <th className="py-3 px-3 text-center">Hiệu năng Khâu (SQC/IQC/PQC/OQC/BH)</th>
                     <th className="py-3 px-3 text-center bg-amber-50/40 text-amber-900">
                       3. Trưởng phòng (20đ)
                     </th>
@@ -2050,44 +3188,49 @@ export default function KPIDashboard({
                           </span>
                           <div className="text-[10px] text-slate-400 mt-0.5">{item.profile.mtcvCode}</div>
                         </td>
-                        <td className="py-3 px-3 text-center bg-indigo-50/20 font-mono font-black text-indigo-700">
-                          {item.roleScore50} / 50
+                        <td className="py-3 px-3 text-center bg-indigo-50/20">
+                          <div className="font-mono font-black text-indigo-700">{item.roleScore50} / 50</div>
+                          <div className="text-[10px] text-slate-500">
+                            {item.activeRoleMetricsCount}/{item.allRoleMetrics.length} chỉ tiêu có dữ liệu
+                          </div>
                         </td>
                         <td className="py-3 px-3 text-center bg-sky-50/20">
                           <div className="font-mono font-black text-sky-700">{item.dailyScore30} / 30</div>
                           <div className="text-[10px] text-slate-500">
-                            {ds.completedTasks}/{ds.totalTasks} việc ({ds.taskCompletionRate}%)
+                            {ds.totalTasks > 0
+                              ? `${ds.completedTasks}/${ds.totalTasks} việc (${ds.taskCompletionRate}%)`
+                              : '0 việc kỳ này'}
                           </div>
                         </td>
                         <td className="py-3 px-3 text-center">
                           <div className="flex flex-wrap items-center justify-center gap-1">
                             {ds.sqcStat.total > 0 && (
                               <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[10px] font-bold">
-                                SQC: {ds.sqcStat.rate}%
+                                QA/SQC: {ds.sqcStat.rate}% ({ds.sqcStat.completed}/{ds.sqcStat.total})
                               </span>
                             )}
                             {ds.iqcStat.total > 0 && (
                               <span className="px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 text-[10px] font-bold">
-                                IQC: {ds.iqcStat.rate}%
+                                IQC: {ds.iqcStat.rate}% ({ds.iqcStat.completed}/{ds.iqcStat.total})
                               </span>
                             )}
                             {ds.pqcStat.total > 0 && (
                               <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-[10px] font-bold">
-                                PQC: {ds.pqcStat.rate}%
+                                PQC: {ds.pqcStat.rate}% ({ds.pqcStat.completed}/{ds.pqcStat.total})
                               </span>
                             )}
                             {ds.oqcStat.total > 0 && (
                               <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold">
-                                OQC: {ds.oqcStat.rate}%
+                                OQC: {ds.oqcStat.rate}% ({ds.oqcStat.completed}/{ds.oqcStat.total})
                               </span>
                             )}
                             {ds.csStat.total > 0 && (
                               <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-bold">
-                                BH: {ds.csStat.rate}%
+                                BH: {ds.csStat.rate}% ({ds.csStat.completed}/{ds.csStat.total})
                               </span>
                             )}
                             {ds.totalTasks === 0 && (
-                              <span className="text-[10px] text-slate-400 italic">Theo chỉ tiêu /bm</span>
+                              <span className="text-[10px] text-slate-400 italic">Chưa có báo cáo ngày</span>
                             )}
                           </div>
                         </td>
@@ -2111,6 +3254,8 @@ export default function KPIDashboard({
                                 ? 'bg-sky-100 text-sky-800'
                                 : item.rating === 'Trung bình'
                                 ? 'bg-amber-100 text-amber-800'
+                                : item.rating === 'Chờ dữ liệu'
+                                ? 'bg-slate-200 text-slate-600'
                                 : 'bg-rose-100 text-rose-800'
                             }`}
                           >
@@ -2141,10 +3286,9 @@ export default function KPIDashboard({
             </div>
           </div>
 
-          {/* Individual Staff KPI Evaluation Sheet (Phiếu Đánh giá KPI Cá nhân theo /bm) */}
+          {/* Individual Staff KPI Evaluation Sheet */}
           {selectedStaffComputed && (
             <div className="bg-white border-2 border-indigo-300 rounded-2xl p-5 shadow-sm space-y-5">
-              {/* Sheet Header */}
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-200 pb-4">
                 <div>
                   <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -2155,7 +3299,7 @@ export default function KPIDashboard({
                       Văn bản /bm: {selectedStaffComputed.profile.bmDocCode}
                     </span>
                     <span className="px-2.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 font-mono text-[11px] font-bold text-emerald-800">
-                      Ma trận RACI: {selectedStaffComputed.profile.mtcvCode}
+                      Mã chức năng: {selectedStaffComputed.profile.mtcvCode}
                     </span>
                   </div>
                   <h3 className="text-base md:text-lg font-black text-slate-900">
@@ -2199,7 +3343,7 @@ export default function KPIDashboard({
                       I. CHỈ TIÊU NGHIỆP VỤ CHUYÊN MÔN THEO BẢN GIAO NHIỆM VỤ /bm (TRỌNG SỐ: 50 ĐIỂM)
                     </h4>
                     <p className="text-[11px] text-slate-500">
-                      Tự động lấy số liệu từ các phân hệ chuyên môn trong App. Anh Thao có thể chỉnh sửa trực tiếp kết quả thực tế, % hoàn thành hoặc thêm chỉ tiêu riêng cho nhân sự.
+                      Tự động lấy số liệu từ các phân hệ chuyên môn trong App theo tên người thực hiện & vai trò RACI. Bấm vào dòng dẫn chứng để đối soát bản ghi gốc.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -2218,15 +3362,15 @@ export default function KPIDashboard({
                 </div>
 
                 <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                  <table className="w-full text-left text-xs min-w-[820px]">
+                  <table className="w-full text-left text-xs min-w-[860px]">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold text-[10px] uppercase">
-                        <th className="py-2.5 px-3">Chỉ tiêu Nghiệp vụ & Căn cứ (/bm)</th>
-                        <th className="py-2.5 px-3 text-center w-24">Trọng số</th>
-                        <th className="py-2.5 px-3 text-center w-28">Chỉ tiêu</th>
-                        <th className="py-2.5 px-3 text-center w-36">Thực tế đạt (App / Sửa)</th>
-                        <th className="py-2.5 px-3 text-center w-32">% Hoàn thành</th>
-                        <th className="py-2.5 px-3 text-center w-24">Điểm đạt</th>
+                        <th className="py-2.5 px-3">Chỉ tiêu Nghiệp vụ & Dẫn chứng bản ghi gốc (/bm)</th>
+                        <th className="py-2.5 px-3 text-center w-20">Trọng số</th>
+                        <th className="py-2.5 px-3 text-center w-24">Chỉ tiêu</th>
+                        <th className="py-2.5 px-3 text-center w-40">Thực tế đạt (App / Sửa)</th>
+                        <th className="py-2.5 px-3 text-center w-28">% Hoàn thành</th>
+                        <th className="py-2.5 px-3 text-center w-28">Điểm đạt</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
@@ -2235,7 +3379,28 @@ export default function KPIDashboard({
                           <td className="py-3 px-3">
                             <div className="font-extrabold text-slate-900">{m.name}</div>
                             <div className="text-[11px] text-indigo-600 font-bold mt-0.5">{m.bmReference}</div>
-                            <div className="text-[11px] text-slate-500 font-normal mt-0.5">{m.evidence}</div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDrilldownModal({
+                                  title: `${selectedStaffComputed.profile.staffName} • ${m.name}`,
+                                  subtitle: m.evidence,
+                                  targetTab: m.targetTab || 'daily_logs',
+                                  targetTabLabel: m.targetTabLabel || 'Phân hệ gốc',
+                                  summaryBadge: m.actualText,
+                                  rows: m.sourceRows || []
+                                })
+                              }
+                              className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 text-[11px] font-bold text-slate-700 hover:text-indigo-700 transition cursor-pointer"
+                            >
+                              <Layers className="w-3 h-3 text-indigo-600 shrink-0" />
+                              <span>{m.evidence}</span>
+                              {m.sourceRows?.length > 0 && (
+                                <span className="underline text-indigo-600 ml-1">
+                                  (Xem {m.sourceRows.length} bản ghi)
+                                </span>
+                              )}
+                            </button>
                           </td>
                           <td className="py-3 px-3 text-center font-mono font-black text-slate-800">
                             {m.weight}đ
@@ -2267,7 +3432,7 @@ export default function KPIDashboard({
                                   }));
                                 }
                               }}
-                              className="w-28 px-2 py-1 text-center bg-white border border-slate-300 rounded-lg font-mono font-bold text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                              className="w-36 px-2 py-1 text-center bg-white border border-slate-300 rounded-lg font-mono font-bold text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
                             />
                           </td>
                           <td className="py-3 px-3 text-center">
@@ -2305,23 +3470,29 @@ export default function KPIDashboard({
                             </div>
                           </td>
                           <td className="py-3 px-3 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <span className="font-mono font-black text-indigo-700">
-                                {m.points} / {m.weight}
+                            {m.isWaitingData ? (
+                              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-bold">
+                                Chờ dữ liệu
                               </span>
-                              {m.isCustom && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleDeleteCustomStaffMetric(selectedStaffComputed.staffKey, m.id)
-                                  }
-                                  className="p-1 text-rose-500 hover:bg-rose-50 rounded cursor-pointer"
-                                  title="Xóa chỉ tiêu riêng này"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
+                            ) : (
+                              <div className="flex items-center justify-center gap-1.5">
+                                <span className="font-mono font-black text-indigo-700">
+                                  {m.points} / {m.weight}
+                                </span>
+                                {m.isCustom && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleDeleteCustomStaffMetric(selectedStaffComputed.staffKey, m.id)
+                                    }
+                                    className="p-1 text-rose-500 hover:bg-rose-50 rounded cursor-pointer"
+                                    title="Xóa chỉ tiêu riêng này"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -2332,7 +3503,6 @@ export default function KPIDashboard({
 
               {/* Group 2 & Group 3 Side-by-Side */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                {/* Group 2: 30% Daily Logs & Task Completion */}
                 <div className="bg-sky-50/50 border border-sky-200 rounded-xl p-4 flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-2">
@@ -2340,12 +3510,30 @@ export default function KPIDashboard({
                         <span className="w-2 h-2 rounded-full bg-sky-600" />
                         II. ĐIỂM BÁO CÁO NGÀY & CÔNG VIỆC (TỰ ĐỘNG: 30 ĐIỂM)
                       </h4>
-                      <span className="px-2.5 py-0.5 rounded-lg bg-white border border-sky-200 font-mono text-xs font-black text-sky-800">
-                        {selectedStaffComputed.dailyScore30} / 30 điểm
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDrilldownModal({
+                              title: `Nhật trình Báo cáo ngày • ${selectedStaffComputed.profile.staffName}`,
+                              subtitle: `Tổng hợp công việc trong kỳ ${periodInfo.label}: Hoàn thành ${selectedStaffComputed.dailyStats.completedTasks}/${selectedStaffComputed.dailyStats.totalTasks} việc (${selectedStaffComputed.dailyStats.taskCompletionRate}%)`,
+                              targetTab: 'daily_logs',
+                              targetTabLabel: 'Báo cáo ngày QLCL',
+                              summaryBadge: `${selectedStaffComputed.dailyScore30}/30đ`,
+                              rows: selectedStaffComputed.dailySourceRows
+                            })
+                          }
+                          className="px-2 py-0.5 rounded bg-sky-100 hover:bg-sky-200 text-sky-800 text-[10px] font-extrabold cursor-pointer"
+                        >
+                          Đối soát {selectedStaffComputed.dailyStats.totalTasks} việc
+                        </button>
+                        <span className="px-2.5 py-0.5 rounded-lg bg-white border border-sky-200 font-mono text-xs font-black text-sky-800">
+                          {selectedStaffComputed.dailyScore30} / 30 điểm
+                        </span>
+                      </div>
                     </div>
                     <p className="text-[11px] text-slate-600 mb-3">
-                      Tự động tổng hợp từ Nhật trình báo cáo chất lượng hàng ngày (<code className="text-sky-700">dk_daily_logs</code>) trong kỳ {periodInfo.label}:
+                      Tự động đọc trường <code className="text-sky-700">statusPercent = 100%</code> và hạn hoàn thành <code className="text-sky-700">deadline</code> từ Nhật trình báo cáo chất lượng hàng ngày trong kỳ {periodInfo.label}:
                     </p>
 
                     <div className="grid grid-cols-3 gap-2.5 mb-3">
@@ -2356,7 +3544,7 @@ export default function KPIDashboard({
                         </div>
                       </div>
                       <div className="bg-white p-2.5 rounded-lg border border-sky-100 text-center">
-                        <div className="text-[10px] font-bold text-slate-400 uppercase">Đã hoàn thành</div>
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">Hoàn thành (100%)</div>
                         <div className="text-base font-black text-emerald-600 mt-0.5">
                           {selectedStaffComputed.dailyStats.completedTasks} ({selectedStaffComputed.dailyStats.taskCompletionRate}%)
                         </div>
@@ -2374,7 +3562,7 @@ export default function KPIDashboard({
                     <div className="font-bold text-slate-700 mb-1">Phân rã tỷ lệ hoàn thành theo khâu chuyên môn:</div>
                     <div className="grid grid-cols-5 gap-1.5 text-center font-mono text-[10px]">
                       <div className="p-1.5 rounded bg-slate-50">
-                        <div className="text-slate-400">SQC</div>
+                        <div className="text-slate-400">QA/SQC</div>
                         <div className="font-black text-indigo-700">
                           {selectedStaffComputed.dailyStats.sqcStat.total > 0
                             ? `${selectedStaffComputed.dailyStats.sqcStat.rate}%`
@@ -2417,7 +3605,6 @@ export default function KPIDashboard({
                   </div>
                 </div>
 
-                {/* Group 3: 20% Department Head Evaluation */}
                 <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="text-xs font-black uppercase text-amber-950 flex items-center gap-1.5">
@@ -2509,6 +3696,116 @@ export default function KPIDashboard({
       )}
 
       {/* =========================================================================
+          MODAL: ĐỐI SOÁT BẢN GHI GỐC CẤU THÀNH CHỈ SỐ KPI TỰ ĐỘNG
+      ========================================================================= */}
+      {drilldownModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-200 bg-slate-50 rounded-t-2xl">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-black uppercase">
+                    ĐỐI SOÁT DỮ LIỆU GỐC • {periodInfo.label}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-xs font-black">
+                    Kết quả: {drilldownModal.summaryBadge}
+                  </span>
+                </div>
+                <h3 className="text-sm md:text-base font-black text-slate-900 mt-1">
+                  {drilldownModal.title}
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5">{drilldownModal.subtitle}</p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {onNavigateToTab && drilldownModal.targetTab && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = drilldownModal.targetTab;
+                      setDrilldownModal(null);
+                      onNavigateToTab(target);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Mở {drilldownModal.targetTabLabel}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setDrilldownModal(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-5 overflow-y-auto flex-1">
+              {drilldownModal.rows.length === 0 ? (
+                <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                  <Clock className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                  <div className="text-sm font-extrabold text-slate-700">
+                    Chưa có bản ghi nào phát sinh trong kỳ {periodInfo.label}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Khi anh cập nhật dữ liệu tại phân hệ <strong>{drilldownModal.targetTabLabel}</strong>, chỉ số KPI kỳ này sẽ tự động tính toán tức thì.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs min-w-[680px]">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-extrabold text-[10px] uppercase">
+                        <th className="py-2.5 px-3 w-28">Mã / Số hiệu</th>
+                        <th className="py-2.5 px-3 w-24">Ngày</th>
+                        <th className="py-2.5 px-3">Nội dung chi tiết bản ghi gốc</th>
+                        <th className="py-2.5 px-3 w-36">Người thực hiện</th>
+                        <th className="py-2.5 px-3 text-center w-36">Kết quả / Trạng thái</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
+                      {drilldownModal.rows.map((row, idx) => (
+                        <tr key={`${row.id}-${idx}`} className="hover:bg-slate-50">
+                          <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">{row.id}</td>
+                          <td className="py-2.5 px-3 font-mono text-slate-500">{row.date}</td>
+                          <td className="py-2.5 px-3 text-slate-900">{row.title}</td>
+                          <td className="py-2.5 px-3 text-slate-600">{row.actor}</td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                                row.isPass
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-rose-100 text-rose-800'
+                              }`}
+                            >
+                              {row.resultText}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 rounded-b-2xl flex items-center justify-between text-xs text-slate-500">
+              <span>Hiển thị tối đa 60 bản ghi tiêu biểu trong kỳ {periodInfo.label}</span>
+              <button
+                type="button"
+                onClick={() => setDrilldownModal(null)}
+                className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-bold cursor-pointer"
+              >
+                Đóng bảng đối soát
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
           MODAL: CHỈNH SỬA CHỈ TIÊU KPI PHÒNG / CẬP NHẬT SỐ LIỆU KỲ
       ========================================================================= */}
       {editingDeptKpi && (
@@ -2582,6 +3879,7 @@ export default function KPIDashboard({
                     type="text"
                     value={editActualInput}
                     onChange={e => setEditActualInput(e.target.value)}
+                    placeholder="VD: 98.5%"
                     className="w-full px-3 py-2 border-2 border-indigo-400 rounded-lg font-mono font-black text-indigo-900 bg-indigo-50/40"
                   />
                 </div>

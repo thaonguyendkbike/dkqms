@@ -1,7 +1,7 @@
 export interface KpiPeriodOverride {
   actual?: string;
   target?: string;
-  status?: 'Đạt' | 'Không đạt' | 'Đang cải tiến' | 'Theo dõi';
+  status?: 'Đạt' | 'Không đạt' | 'Đang cải tiến' | 'Theo dõi' | 'Chờ dữ liệu';
   note?: string;
   scorePercent?: number; // 0..100
   updatedAt?: string;
@@ -32,7 +32,7 @@ export interface DetailedKPI {
   sourceType?: 'auto' | 'manual' | 'hybrid';
   autoMetricKey?: string;
   actual: string;      // Giá trị mặc định / nhập tay
-  status: 'Đạt' | 'Không đạt' | 'Đang cải tiến' | 'Theo dõi';
+  status: 'Đạt' | 'Không đạt' | 'Đang cải tiến' | 'Theo dõi' | 'Chờ dữ liệu';
   details?: string;    // Ghi chú / dẫn chứng
   month?: number;
   year?: number;
@@ -490,13 +490,13 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         target: '>= 95%',
         targetValue: 95,
         direction: 'higher_is_better',
-        autoMetricKey: 'DAILY_REPORT_DAYS_RATE'
+        autoMetricKey: 'QA_SOP_AUDIT_TRAINING'
       }
     ]
   },
   {
     staffName: 'Nguyễn Văn Diệm',
-    aliases: ['nguyễn văn diệm', 'nguyễn văn điểm', 'nguyen van diem'],
+    aliases: ['nguyễn văn diệm', 'nguyễn văn điểm', 'nguyen van diem', 'diệm', 'điểm'],
     roleTitle: 'Kỹ Thuật Viên Tư Vấn Kỹ Thuật (Bộ Phận Kỹ Thuật Thẩm Định)',
     bmDocCode: 'BG-NV-03',
     mtcvCode: 'CN-KTTĐ-01 / CN-KTTĐ-02',
@@ -511,7 +511,7 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         target: '>= 95%',
         targetValue: 95,
         direction: 'higher_is_better',
-        autoMetricKey: 'MARKET_DEFECT_RESOLVED_RATE'
+        autoMetricKey: 'PART_EVAL_BM_KTTD_01'
       },
       {
         id: 'BM-KTTD-D02',
@@ -519,10 +519,10 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         bmReference: 'BG-NV-03 [NV-KTTĐ-03, Phối hợp NV-QA-05, NV-QA-06 | SOP: QT-QA-02]',
         weight: 15,
         unit: '%',
-        target: '<= 1.0%',
-        targetValue: 1.0,
-        direction: 'lower_is_better',
-        autoMetricKey: 'MARKET_DEFECT_RATE'
+        target: '>= 95%',
+        targetValue: 95,
+        direction: 'higher_is_better',
+        autoMetricKey: 'MARKET_DEFECT_RESOLVED_RATE'
       },
       {
         id: 'BM-KTTD-D03',
@@ -533,13 +533,13 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         target: '>= 95%',
         targetValue: 95,
         direction: 'higher_is_better',
-        autoMetricKey: 'PART_EVAL_PTSP_RATE'
+        autoMetricKey: 'PTSP_SAMPLE_AND_ROAD_TEST'
       }
     ]
   },
   {
     staffName: 'Hoàng Văn Phấn',
-    aliases: ['hoàng văn phấn', 'hoàng văn phan', 'hoang van phan'],
+    aliases: ['hoàng văn phấn', 'hoàng văn phan', 'hoang van phan', 'phấn', 'phan'],
     roleTitle: 'Nhân Viên Kiểm Soát Chất Lượng (IQC & IPQC)',
     bmDocCode: 'BG-NV-04',
     mtcvCode: 'CN-QC-01 / CN-QC-02',
@@ -576,13 +576,13 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         target: '>= 95%',
         targetValue: 95,
         direction: 'higher_is_better',
-        autoMetricKey: 'PART_EVAL_PTSP_RATE'
+        autoMetricKey: 'PTSP_SAMPLE_AND_ROAD_TEST'
       }
     ]
   },
   {
     staffName: 'Hà Khắc Việt',
-    aliases: ['hà khắc việt', 'ha khac viet'],
+    aliases: ['hà khắc việt', 'ha khac viet', 'việt'],
     roleTitle: 'Tổ Trưởng Kiểm Soát Chất Lượng (Tổ Trưởng QC)',
     bmDocCode: 'BG-NV-05',
     mtcvCode: 'CN-QC-01 / CN-QC-02 / CN-QLCL-01',
@@ -619,13 +619,13 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         target: '>= 95%',
         targetValue: 95,
         direction: 'higher_is_better',
-        autoMetricKey: 'PART_EVAL_PTSP_RATE'
+        autoMetricKey: 'PTSP_SAMPLE_AND_ROAD_TEST'
       }
     ]
   },
   {
     staffName: 'Lành Xuân Hải',
-    aliases: ['lành xuân hải', 'lãnh xuân hải', 'lanh xuan hai'],
+    aliases: ['lành xuân hải', 'lãnh xuân hải', 'lanh xuan hai', 'hải'],
     roleTitle: 'Nhân Viên Kiểm Soát Xuất Xưởng (Nhân Viên OQC - KCS)',
     bmDocCode: 'BG-NV-06',
     mtcvCode: 'CN-QC-01 / CN-QC-02',
@@ -651,7 +651,7 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         target: '>= 95%',
         targetValue: 95,
         direction: 'higher_is_better',
-        autoMetricKey: 'DAILY_TASK_COMPLETION_RATE'
+        autoMetricKey: 'OQC_DIGITIZATION_RATE'
       },
       {
         id: 'BM-OQC-H03',
@@ -659,16 +659,16 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         bmReference: 'BG-NV-06 [NV-QC-07 / Nghiệp vụ Bàn giao Kho]',
         weight: 15,
         unit: '%',
-        target: '<= 1.0%',
-        targetValue: 1.0,
-        direction: 'lower_is_better',
-        autoMetricKey: 'MARKET_DEFECT_RATE'
+        target: '>= 98%',
+        targetValue: 98,
+        direction: 'higher_is_better',
+        autoMetricKey: 'OQC_HANDOVER_SCAN_RATE'
       }
     ]
   },
   {
     staffName: 'Liễu Tùng Lâm',
-    aliases: ['liễu tùng lâm', 'lieu tung lam'],
+    aliases: ['liễu tùng lâm', 'lieu tung lam', 'lâm', 'tùng'],
     roleTitle: 'Trưởng Nhóm Nghiệm Thu Xuất Xưởng (Trưởng Nhóm OQC)',
     bmDocCode: 'BG-NV-07',
     mtcvCode: 'CN-QC-01 / CN-QC-02 / CN-QLCL-01',
@@ -691,10 +691,10 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         bmReference: 'BG-NV-07 [NV-QC-06, NV-QC-07 | SOP: QT-QC-02, QT-LPB-03]',
         weight: 15,
         unit: '%',
-        target: '<= 1.0%',
-        targetValue: 1.0,
-        direction: 'lower_is_better',
-        autoMetricKey: 'MARKET_DEFECT_RATE'
+        target: '>= 98%',
+        targetValue: 98,
+        direction: 'higher_is_better',
+        autoMetricKey: 'OQC_TRACEABILITY_RATE'
       },
       {
         id: 'BM-OQC-L03',
@@ -711,7 +711,7 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
   },
   {
     staffName: 'Đoàn Anh Hùng',
-    aliases: ['đoàn anh hùng', 'doan anh hung'],
+    aliases: ['đoàn anh hùng', 'doan anh hung', 'hùng'],
     roleTitle: 'Nhân Viên Kỹ Thuật Chất Lượng',
     bmDocCode: 'BG-NV-08',
     mtcvCode: 'CN-KTTĐ-01 / CN-KTTĐ-02 / CN-QC-01',
@@ -726,7 +726,7 @@ export const STAFF_BM_KPI_PROFILES: StaffBmKpiProfile[] = [
         target: '>= 95%',
         targetValue: 95,
         direction: 'higher_is_better',
-        autoMetricKey: 'MARKET_DEFECT_RESOLVED_RATE'
+        autoMetricKey: 'PART_EVAL_BM_KTTD_01'
       },
       {
         id: 'BM-KTTD-H02',

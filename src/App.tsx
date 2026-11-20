@@ -13777,9 +13777,11 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             <div className="space-y-6">
               <KPIDashboard
                 onViewDetail={(data) => setViewDetailModal({ type: 'kpi', data })}
+                onNavigateToTab={(tabId) => setActiveTab(tabId as any)}
                 iqcRecords={iqcRecords}
                 pqcRecords={pqcRecords}
                 oqcRecords={oqcRecords}
+                oqcHandoverList={oqcHandoverList}
                 suppliers={suppliers}
                 supplierProductionAudits={supplierProductionAudits}
                 capas={capas}
@@ -13788,6 +13790,9 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 partEvaluations={partEvaluations}
                 ptspModels={ptspModels}
                 equipments={equipments}
+                maintenanceLogs={maintenanceLogs}
+                equipmentIncidents={equipmentIncidents}
+                qmsBmRecords={qmsBmRecords}
                 dailyLogs={dailyLogs}
                 weeklyPlans={weeklyPlans}
                 monthlyPlans={monthlyPlans}
