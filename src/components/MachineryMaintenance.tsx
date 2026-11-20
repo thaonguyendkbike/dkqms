@@ -1142,221 +1142,179 @@ export default function MachineryMaintenance({
   );
 
   return (
-    <div className="space-y-6" id="machinery_maintenance_module">
-      {/* HEADER SECTION */}
-      <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-4 p-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl shadow-xl border border-indigo-850/40">
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="bg-amber-400 text-slate-950 font-black text-[10px] uppercase px-2.5 py-0.5 rounded tracking-wider font-mono">
-              THIẾT BỊ • BM-KTTD-02 • QT-KTTD-02
-            </span>
-            <span className="text-indigo-200 text-xs font-semibold">
-              Gắn với BG-NV-08 (Đoàn Anh Hùng) & Quản lý Chất lượng DKBike
-            </span>
+    <div className="space-y-4" id="machinery_maintenance_module">
+      {/* HEADER SECTION — GỌN GÀNG, ĐƠN GIẢN, ÍT MÀU MÈ */}
+      <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2.5 rounded-xl bg-slate-100 text-slate-700 shrink-0">
+            <Wrench className="w-5 h-5" />
           </div>
-          <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2.5">
-            <Wrench className="w-6 h-6 text-amber-400" />
-            Quản Lý Thiết Bị, CCDC Đo Lường & Kỹ Thuật Bảo Dưỡng
-          </h2>
-          <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
-            Kiểm soát danh mục Công cụ dụng cụ (CCDC) & Thiết bị đo lường Phòng QLCL theo sổ cái BM-KTTD-02, theo dõi tem hiệu chuẩn & quyền tạm đình chỉ thiết bị lỗi (IV.3), quản lý gia công đồ gá / linh kiện mẫu / sửa chữa chuyên sâu (NV-KTTĐ-05) và nhật ký vận hành dây chuyền.
-          </p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
+                Thiết bị
+              </h2>
+              <span className="text-[11px] font-mono font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
+                BM-KTTD-02
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 truncate">
+              CCDC, Thiết bị đo QLCL, Đồ gá & Bảo dưỡng thiết bị
+            </p>
+          </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 text-xs shrink-0">
+        <div className="flex flex-wrap items-center gap-2 text-xs shrink-0">
           <button
             type="button"
             onClick={() => {
               setNewEq(createInitialNewEq());
               setShowAddEqModal(true);
             }}
-            className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold flex items-center gap-1.5 shadow-md cursor-pointer text-white transition active:scale-95"
+            className="px-3 py-2 bg-slate-900 hover:bg-slate-800 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer text-white transition"
           >
-            <Plus className="w-4 h-4" /> Thêm Thiết Bị / CCDC
+            <Plus className="w-3.5 h-3.5" /> Thêm thiết bị
           </button>
           <button
             type="button"
             onClick={() => setShowAddLogModal(true)}
-            className="px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-600 rounded-xl font-bold flex items-center gap-1.5 shadow-md cursor-pointer text-white transition active:scale-95"
+            className="px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer text-slate-700 transition"
           >
-            <CheckCircle className="w-4 h-4" /> Nghiệm Thu HC / Bảo Dưỡng
+            <CheckCircle className="w-3.5 h-3.5 text-slate-600" /> Hiệu chuẩn
           </button>
           <button
             type="button"
             onClick={openCreateFabModal}
-            className="px-3.5 py-2.5 bg-violet-700 hover:bg-violet-600 rounded-xl font-bold flex items-center gap-1.5 shadow-md cursor-pointer text-white transition active:scale-95"
+            className="px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer text-slate-700 transition"
           >
-            <Hammer className="w-4 h-4" /> Phiếu Đồ Gá / Sửa Chữa
+            <Hammer className="w-3.5 h-3.5 text-slate-600" /> Đồ gá
           </button>
           <button
             type="button"
             onClick={() => setShowAddIncModal(true)}
-            className="px-3.5 py-2.5 bg-rose-600 hover:bg-rose-500 rounded-xl font-bold flex items-center gap-1.5 shadow-md cursor-pointer text-white transition active:scale-95"
+            className="px-3 py-2 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer text-rose-700 transition"
           >
-            <AlertTriangle className="w-4 h-4" /> Báo Sự Cố
+            <AlertTriangle className="w-3.5 h-3.5" /> Báo sự cố
           </button>
           <button
             type="button"
             onClick={handleExportBmKttd02Excel}
-            className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl font-bold flex items-center gap-1.5 shadow-md cursor-pointer text-amber-300 transition active:scale-95"
-            title="Xuất Sổ theo dõi hiệu chuẩn thiết bị BM-KTTD-02 định dạng Excel chuẩn DKBike"
+            className="px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer text-slate-700 transition"
+            title="Xuất Sổ theo dõi hiệu chuẩn thiết bị BM-KTTD-02 (.xlsx)"
           >
-            <FileSpreadsheet className="w-4 h-4" /> Xuất Sổ BM-KTTD-02
+            <FileSpreadsheet className="w-3.5 h-3.5 text-slate-600" /> Xuất Excel
           </button>
         </div>
       </div>
 
-      {/* METRIC STATISTICS GRID (4 CARDS) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="eq_statistics_bento">
-        {/* Card 1 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] text-slate-500 uppercase font-black tracking-wider">
-              Tổng Thiết Bị & CCDC Quản Lý
+      {/* METRIC STATISTICS GRID (4 CARDS GỌN) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" id="eq_statistics_bento">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+          <div className="space-y-0.5 min-w-0">
+            <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wide">
+              Tổng thiết bị
             </p>
-            <h3 className="text-2xl font-black text-slate-900">
-              {equipments.length} <span className="text-xs font-bold text-slate-500">thiết bị</span>
-            </h3>
-            <p className="text-xs text-slate-600 font-medium">
-              Đo lường QLCL: <span className="font-black text-cyan-700">{equipmentStats.measuringCount}</span> • Đồ gá:{' '}
-              <span className="font-black text-violet-700">{equipmentStats.jigCount}</span> • Máy SX/KCS:{' '}
-              <span className="font-black text-slate-800">{equipmentStats.lineOrOqcCount}</span>
+            <h3 className="text-xl font-black text-slate-900">{equipments.length}</h3>
+            <p className="text-[11px] text-slate-500 truncate">
+              Đo: {equipmentStats.measuringCount} • Đồ gá: {equipmentStats.jigCount} • SX: {equipmentStats.lineOrOqcCount}
             </p>
           </div>
-          <div className="p-3.5 bg-indigo-50 text-indigo-600 rounded-2xl">
-            <Settings className="w-6 h-6" />
-          </div>
+          <Settings className="w-5 h-5 text-slate-400 shrink-0" />
         </div>
 
-        {/* Card 2 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] text-slate-500 uppercase font-black tracking-wider">
-              Tem Hiệu Chuẩn (BM-KTTD-02)
+        <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+          <div className="space-y-0.5 min-w-0">
+            <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wide">
+              Tem hiệu chuẩn
             </p>
-            <h3 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+            <h3 className="text-xl font-black text-slate-900 flex items-center gap-1.5">
               {equipmentStats.calComplianceRate}%
-              <span
-                className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                  equipmentStats.calComplianceRate >= 100
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-amber-100 text-amber-800'
-                }`}
-              >
-                {equipmentStats.compliantCount}/{equipments.length} ĐẠT
+              <span className="text-[11px] font-bold text-slate-500">
+                ({equipmentStats.compliantCount}/{equipments.length})
               </span>
             </h3>
-            <p className="text-xs text-slate-600 font-medium">
-              Sắp/quá hạn HC: <span className="font-black text-amber-700">{equipmentStats.dueSoonOrOverdueCount}</span> • Đình chỉ:{' '}
-              <span className="font-black text-rose-700">{equipmentStats.suspendedCount}</span>
+            <p className="text-[11px] text-slate-500 truncate">
+              Hạn/Quá hạn: {equipmentStats.dueSoonOrOverdueCount} • Đình chỉ: {equipmentStats.suspendedCount}
             </p>
           </div>
-          <div
-            className={`p-3.5 rounded-2xl ${
-              equipmentStats.suspendedCount > 0 || equipmentStats.dueSoonOrOverdueCount > 0
-                ? 'bg-amber-50 text-amber-600'
-                : 'bg-emerald-50 text-emerald-600'
-            }`}
-          >
-            <Award className="w-6 h-6" />
-          </div>
+          <Award className="w-5 h-5 text-slate-400 shrink-0" />
         </div>
 
-        {/* Card 3 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] text-slate-500 uppercase font-black tracking-wider">
-              Gia Công Đồ Gá & Sửa Chữa (NV-05)
+        <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+          <div className="space-y-0.5 min-w-0">
+            <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wide">
+              Đồ gá & Sửa chữa
             </p>
-            <h3 className="text-2xl font-black text-slate-900">
-              {fabricationJobs.length}{' '}
-              <span className="text-xs font-bold text-slate-500">phiếu việc</span>
-            </h3>
-            <p className="text-xs text-slate-600 font-medium">
-              Đang thực hiện: <span className="font-black text-violet-700">{equipmentStats.activeFabCount}</span> • Hoàn thành:{' '}
-              <span className="font-black text-emerald-700">
-                {equipmentStats.onTimeFabCount}/{equipmentStats.doneFabCount} đúng hạn
-              </span>
+            <h3 className="text-xl font-black text-slate-900">{fabricationJobs.length}</h3>
+            <p className="text-[11px] text-slate-500 truncate">
+              Đang làm: {equipmentStats.activeFabCount} • Xong: {equipmentStats.doneFabCount}
             </p>
           </div>
-          <div className="p-3.5 bg-violet-50 text-violet-600 rounded-2xl">
-            <Hammer className="w-6 h-6" />
-          </div>
+          <Hammer className="w-5 h-5 text-slate-400 shrink-0" />
         </div>
 
-        {/* Card 4 */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-[11px] text-slate-500 uppercase font-black tracking-wider">
-              Sự Cố & Chi Phí Bảo Trì
+        <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
+          <div className="space-y-0.5 min-w-0">
+            <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wide">
+              Sự cố & Chi phí
             </p>
-            <h3 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+            <h3 className="text-xl font-black text-slate-900">
               {(equipmentStats.totalCosts / 1000000).toFixed(1)}{' '}
-              <span className="text-xs font-bold text-slate-500">Triệu VNĐ</span>
+              <span className="text-xs font-semibold text-slate-500">Tr</span>
             </h3>
-            <p className="text-xs text-slate-600 font-medium">
-              Sự cố mở:{' '}
-              <span className={`font-black ${equipmentStats.activeBreakdownsCount > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
-                {equipmentStats.activeBreakdownsCount}
-              </span>{' '}
-              • Dừng máy: <span className="font-bold text-slate-800">{equipmentStats.totalDowntime}p</span>
+            <p className="text-[11px] text-slate-500 truncate">
+              Sự cố mở: {equipmentStats.activeBreakdownsCount} • Dừng: {equipmentStats.totalDowntime}p
             </p>
           </div>
-          <div
-            className={`p-3.5 rounded-2xl ${
-              equipmentStats.activeBreakdownsCount > 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'
-            }`}
-          >
-            <DollarSign className="w-6 h-6" />
-          </div>
+          <DollarSign className="w-5 h-5 text-slate-400 shrink-0" />
         </div>
       </div>
 
-      {/* 4 SUB-TABS NAVIGATION */}
-      <div className="flex flex-wrap gap-1.5 border border-slate-200 bg-white p-1.5 rounded-xl shadow-xs">
+      {/* 4 SUB-TABS NAVIGATION — ĐỒNG NHẤT, GỌN */}
+      <div className="flex flex-wrap gap-1 border border-slate-200 bg-slate-50 p-1 rounded-xl">
         <button
           type="button"
           onClick={() => setSubTab('overview')}
-          className={`px-4 py-2.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
             subTab === 'overview'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-700 hover:text-indigo-600 hover:bg-slate-50'
+              ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+              : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Database className="w-4 h-4" /> Danh Mục Thiết Bị & CCDC BM-KTTD-02 ({filteredEquipments.length})
+          <Database className="w-3.5 h-3.5" /> Danh mục ({filteredEquipments.length})
         </button>
         <button
           type="button"
           onClick={() => setSubTab('maintenance')}
-          className={`px-4 py-2.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
             subTab === 'maintenance'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-700 hover:text-indigo-600 hover:bg-slate-50'
+              ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+              : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Calendar className="w-4 h-4" /> Nhật Ký Hiệu Chuẩn & Bảo Dưỡng ({filteredLogs.length})
+          <Calendar className="w-3.5 h-3.5" /> Hiệu chuẩn & Bảo trì ({filteredLogs.length})
         </button>
         <button
           type="button"
           onClick={() => setSubTab('fabrication')}
-          className={`px-4 py-2.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
             subTab === 'fabrication'
-              ? 'bg-violet-600 text-white shadow-sm'
-              : 'text-slate-700 hover:text-violet-700 hover:bg-violet-50'
+              ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+              : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Hammer className="w-4 h-4" /> Gia Công Đồ Gá, Mẫu & Sửa Chữa Chuyên Sâu ({filteredFabJobs.length})
+          <Hammer className="w-3.5 h-3.5" /> Đồ gá & Sửa chữa ({filteredFabJobs.length})
         </button>
         <button
           type="button"
           onClick={() => setSubTab('incidents')}
-          className={`px-4 py-2.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
             subTab === 'incidents'
-              ? 'bg-rose-600 text-white shadow-sm'
-              : 'text-slate-700 hover:text-rose-600 hover:bg-rose-50'
+              ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+              : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <AlertTriangle className="w-4 h-4" /> Sự Cố, Đình Chỉ & Phục Hồi (
+          <AlertTriangle className="w-3.5 h-3.5" /> Sự cố & Đình chỉ (
           {filteredIncidents.length + suspendedEquipments.length})
         </button>
       </div>
@@ -1382,61 +1340,61 @@ export default function MachineryMaintenance({
               <select
                 value={eqFilterGroup}
                 onChange={e => setEqFilterGroup(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 cursor-pointer focus:border-indigo-500 focus:outline-none"
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 cursor-pointer focus:border-slate-400 focus:outline-none"
               >
-                <option value="All">🛠️ Tất cả nhóm thiết bị / CCDC</option>
-                <option value="measuring">📏 Thiết bị đo lường & CCDC QLCL</option>
-                <option value="jig_fixture">🔩 Đồ gá & Dưỡng kiểm chuyên dụng</option>
-                <option value="oqc_test">⚡ Thiết bị Kiểm định KCS / OQC / PTSP</option>
-                <option value="production_line">🏭 Máy móc Dây chuyền SX & Phụ trợ</option>
+                <option value="All">Nhóm: Tất cả</option>
+                <option value="measuring">Thiết bị đo lường QLCL</option>
+                <option value="jig_fixture">Đồ gá & Dưỡng kiểm</option>
+                <option value="oqc_test">Thiết bị KCS / OQC</option>
+                <option value="production_line">Máy dây chuyền SX</option>
               </select>
 
               <select
                 value={eqFilterStatus}
                 onChange={e => setEqFilterStatus(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 cursor-pointer focus:border-indigo-500 focus:outline-none"
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 cursor-pointer focus:border-slate-400 focus:outline-none"
               >
-                <option value="All">⚙️ Tất cả trạng thái vận hành</option>
-                <option value="Running">🟢 Running (Đang hoạt động)</option>
-                <option value="Stopped">🟡 Stopped / Đình chỉ sử dụng</option>
-                <option value="Maintenance">🔵 Maintenance (Đang bảo trì/HC)</option>
-                <option value="Under Repair">🔴 Under Repair (Đang sửa sự cố)</option>
-                <option value="Offline">⚪ Offline (Dự phòng)</option>
+                <option value="All">Trạng thái: Tất cả</option>
+                <option value="Running">Running (Hoạt động)</option>
+                <option value="Stopped">Stopped / Đình chỉ</option>
+                <option value="Maintenance">Maintenance (Bảo trì/HC)</option>
+                <option value="Under Repair">Under Repair (Đang sửa)</option>
+                <option value="Offline">Offline (Dự phòng)</option>
               </select>
 
               <select
                 value={eqFilterCal}
                 onChange={e => setEqFilterCal(e.target.value as any)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 cursor-pointer focus:border-indigo-500 focus:outline-none"
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 cursor-pointer focus:border-slate-400 focus:outline-none"
               >
-                <option value="All">🏷️ Mọi tình trạng Tem HC</option>
-                <option value="passed">✅ Đã dán tem ĐẠT</option>
-                <option value="due_soon">⏳ Sắp đến hạn / Quá hạn HC</option>
-                <option value="suspended">⛔ Đang bị đình chỉ (Quyền IV.3)</option>
+                <option value="All">Tem HC: Tất cả</option>
+                <option value="passed">Đã dán tem ĐẠT</option>
+                <option value="due_soon">Sắp hết hạn / Quá hạn</option>
+                <option value="suspended">Đang đình chỉ</option>
               </select>
 
               <div className="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50 gap-1 shrink-0 select-none">
                 <button
                   type="button"
                   onClick={() => setViewMode('list')}
-                  className={`px-3 py-1.5 rounded-md text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 cursor-pointer transition ${
                     viewMode === 'list'
-                      ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
-                      : 'text-slate-700 hover:text-indigo-600 hover:bg-white'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
                   }`}
                 >
-                  <List className="w-3.5 h-3.5" /> Dạng bảng
+                  <List className="w-3.5 h-3.5" /> Bảng
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode('grid')}
-                  className={`px-3 py-1.5 rounded-md text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 cursor-pointer transition ${
                     viewMode === 'grid'
-                      ? 'bg-indigo-600 text-white shadow-xs font-extrabold'
-                      : 'text-slate-700 hover:text-indigo-600 hover:bg-white'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-white'
                   }`}
                 >
-                  <LayoutGrid className="w-3.5 h-3.5" /> Dạng thẻ
+                  <LayoutGrid className="w-3.5 h-3.5" /> Thẻ
                 </button>
               </div>
             </div>
@@ -1930,9 +1888,9 @@ export default function MachineryMaintenance({
             <button
               type="button"
               onClick={() => setShowAddLogModal(true)}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-2 rounded-lg gap-1.5 cursor-pointer flex items-center transition"
+              className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-3.5 py-2 rounded-lg gap-1.5 cursor-pointer flex items-center transition"
             >
-              <Plus className="w-4 h-4" /> Ghi Nhận Hiệu Chuẩn / Bảo Dưỡng
+              <Plus className="w-3.5 h-3.5" /> Ghi nhận
             </button>
           </div>
 
@@ -2093,9 +2051,9 @@ export default function MachineryMaintenance({
             <button
               type="button"
               onClick={openCreateFabModal}
-              className="bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs px-4 py-2 rounded-lg gap-1.5 cursor-pointer flex items-center transition"
+              className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-3.5 py-2 rounded-lg gap-1.5 cursor-pointer flex items-center transition"
             >
-              <Plus className="w-4 h-4" /> Tạo Phiếu Đồ Gá / Sửa Chữa
+              <Plus className="w-3.5 h-3.5" /> Tạo phiếu
             </button>
           </div>
 
@@ -2337,9 +2295,9 @@ export default function MachineryMaintenance({
             <button
               type="button"
               onClick={() => setShowAddIncModal(true)}
-              className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-4 py-2 rounded-lg gap-1.5 cursor-pointer flex items-center transition"
+              className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3.5 py-2 rounded-lg gap-1.5 cursor-pointer flex items-center transition"
             >
-              <Plus className="w-4 h-4" /> Ghi Nhận Sự Cố Mới
+              <Plus className="w-3.5 h-3.5" /> Báo sự cố
             </button>
           </div>
 
