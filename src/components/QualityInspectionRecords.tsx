@@ -17327,18 +17327,14 @@ return (
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Đính kèm ảnh chụp hiện trường sản xuất/dưỡng kiểm</label>
-              <select
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Link ảnh chụp hiện trường sản xuất / dưỡng kiểm (nếu có)</label>
+              <input
+                type="text"
+                placeholder="Dán đường dẫn ảnh thực tế hoặc quét QR chụp ảnh từ thiết bị..."
                 value={responseImageUrl}
                 onChange={e => setResponseImageUrl(e.target.value)}
-                className="w-full border border-slate-200 rounded-lg p-2 bg-slate-50 font-bold text-slate-700"
-              >
-                <option value="">-- Click chọn ảnh đo đạc thực tế tại xưởng --</option>
-                <option value="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=500&amp;q=80">Mẫu Linh kiện Kim loại dập sắc nét (Đạt chuẩn)</option>
-                <option value="https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=500&amp;q=80">Gia công sườn càng sắt bám chắc (Đạt chuẩn)</option>
-                <option value="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=500&amp;q=80">Quy trình cán săm lốp cao su nóng (Đạt chuẩn)</option>
-                <option value="https://images.unsplash.com/photo-1616401784845-180882ba9ba8?w=500&amp;q=80">Khung vỏ sườn có vết đốm sơn rỗ (Sai lệch dung sai)</option>
-              </select>
+                className="w-full border border-slate-200 rounded-lg p-2 bg-slate-50 font-mono text-xs text-slate-700"
+              />
               <p className="text-[9px] text-slate-400 mt-1">Trong thực tế ngoài hiện xưởng, NCC sẽ quét QR code chỉ thị và chụp ảnh trực tiếp từ camera điện thoại để đồng bộ.</p>
             </div>
 
@@ -17658,25 +17654,11 @@ return (
               {/* Collapsible/Toggle manual selection and URL input for advanced convenience */}
               <details className="text-[10px] font-bold text-slate-500 bg-slate-50 border border-slate-150 rounded-lg p-2">
                 <summary className="cursor-pointer select-none text-slate-600 hover:text-slate-800 transition-colors uppercase font-black tracking-wide flex items-center gap-1.5">
-                  ⚙ Nhập URL thủ công hoặc chọn ảnh mẫu
+                  ⚙ Nhập URL ảnh thủ công
                 </summary>
                 <div className="mt-2 space-y-2 pt-2 border-t border-slate-200">
                   <div>
-                    <span className="block text-[9px] text-slate-400 mb-1">Chọn nhanh ảnh mẫu thư viện:</span>
-                    <select
-                      value={editAuditImageUrl.startsWith("data:") ? "" : editAuditImageUrl}
-                      onChange={e => setEditAuditImageUrl(e.target.value)}
-                      className="w-full border border-slate-200 rounded-lg p-1.5 bg-white text-slate-600 font-medium"
-                    >
-                      <option value="">-- Click chọn ảnh đo đạc thực tế --</option>
-                      <option value="https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=500&amp;q=80">Mẫu Linh kiện Kim loại dập (Đạt chuẩn)</option>
-                      <option value="https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=500&amp;q=85">Gia công sườn càng sắt (Đạt chuẩn)</option>
-                      <option value="https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=500&amp;q=85">Quy trình cán săm lốp (Đạt chuẩn)</option>
-                      <option value="https://images.unsplash.com/photo-1616401784845-180882ba9ba8?w=500&amp;q=85">Khung vỏ sườn bám sạm (Sai lệch)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <span className="block text-[9px] text-slate-400 mb-1">Hoặc dán link URL ảnh bất kỳ:</span>
+                    <span className="block text-[9px] text-slate-400 mb-1">Dán link URL ảnh thực tế (nếu không tải trực tiếp từ máy):</span>
                     <input
                       type="text"
                       value={editAuditImageUrl}

@@ -868,50 +868,11 @@ export function isLogBeforeTargetMonth(logDate: string, logYearVal: number | und
   return m < targetM;
 }
 
-export const SAMPLE_VEHICLE_IMAGES = [
-  {
-    id: 'scooter-modern',
-    url: 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=600&q=80',
-    title: 'Xe Máy Điện Thể Thao (Sport)'
-  },
-  {
-    id: 'scooter-minimal',
-    url: 'https://images.unsplash.com/photo-1597843797221-722c1598db69?auto=format&fit=crop&w=600&q=80',
-    title: 'Xe Điện Châu Âu Thanh Lịch'
-  },
-  {
-    id: 'ebike-road',
-    url: 'https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=600&q=80',
-    title: 'Xe Đạp Điện Trợ Lực Cao Cấp'
-  },
-  {
-    id: 'rd-blueprint',
-    url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
-    title: 'Phác Thảo 3D CAD & Khung Sườn'
-  },
-  {
-    id: 'electric-scooter',
-    url: 'https://images.unsplash.com/photo-1505156868547-9b49f4df4e04?auto=format&fit=crop&w=600&q=80',
-    title: 'Xe Điện Thông Minh Sạc Nhanh'
-  }
-];
+export const SAMPLE_VEHICLE_IMAGES: { id: string; url: string; title: string }[] = [];
 
 export const getProjectImageUrl = (p: any) => {
   if (p && p.imageUrl && p.imageUrl.trim().length > 0) return p.imageUrl;
-  // Fallback defaults based on ID/Name to make it colorful
-  const nameLower = (p && p.name ? p.name.toLowerCase() : '');
-  const idUpper = (p && p.id ? p.id.toUpperCase() : '');
-  if (idUpper.includes('VOLT') || nameLower.includes('volt')) {
-    return 'https://images.unsplash.com/photo-1568772585407-9361f9bf3a87?auto=format&fit=crop&w=600&q=80'; // volt sport blue
-  }
-  if (idUpper.includes('NOVA') || nameLower.includes('nova')) {
-    return 'https://images.unsplash.com/photo-1597843797221-722c1598db69?auto=format&fit=crop&w=600&q=80'; // nova yellow
-  }
-  if (idUpper.includes('GOGO') || nameLower.includes('gogo')) {
-    return 'https://images.unsplash.com/photo-1505156868547-9b49f4df4e04?auto=format&fit=crop&w=600&q=80'; // modern electric scooter
-  }
-  // CAD blueprint/engineering fallback
-  return 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80';
+  return '';
 };
 
 interface DashboardModelDefectTrackerProps {
@@ -5009,7 +4970,7 @@ export function App() {
   const [newCapaEffectiveness, setNewCapaEffectiveness] = useState<string>('Chưa đánh giá');
 
   const [projects, setProjects] = useState<PTSPProject[]>(() => getSavedState('dk_projects', INITIAL_PROJECTS));
-  const [ptspTasks, setPtspTasks] = useState<PTSPTask[]>(() => resequencePtspTasks(getSavedState('dk_ptsp_tasks', INITIAL_PTSP_TASKS)));
+  const [ptspTasks, setPtspTasks] = useState<PTSPTask[]>(() => resequencePtspTasks(getSavedState('dk_ptsp_tasks', [])));
   const [ptspModels, setPtspModels] = useState<PtspModelWorkspaceRecord[]>(() => getSavedState('dk_ptsp_models', DEFAULT_PTSP_MODELS));
   const [selectedPtspProject, setSelectedPtspProject] = useState<string>('PRJ-VOLTv2');
   const [editingPtspTask, setEditingPtspTask] = useState<PTSPTask | null>(null);
@@ -5487,30 +5448,7 @@ export function App() {
   }, [filteredMarketDefects]);
 
   const [ecos, setEcos] = useState<ECOChange[]>(() => getSavedState('dk_ecos', INITIAL_ECOS));
-  const INITIAL_IMPROVEMENT_ACTIONS: ImprovementAction[] = [
-    {
-      id: 'ACT-5001',
-      defectId: 'DEF-4001',
-      model: 'DK Gogo Smart',
-      content: 'Thay đổi chất liệu gioăng cao su chống nước cho cụm đầu đèn',
-      assignee: 'Nguyễn Xuân Thao',
-      targetDate: '15/07/2026',
-      status: 'Đang thực hiện',
-      ecoResult: '',
-      applyDate: ''
-    },
-    {
-      id: 'ACT-5002',
-      defectId: 'DEF-4002',
-      model: 'DK Roma SX',
-      content: 'Cải tiến độ bám và tăng cứng gá yên sau chống rung giật bavia',
-      assignee: 'Lê Hoàng Anh',
-      targetDate: '10/06/2026',
-      status: 'Đã hoàn thành',
-      ecoResult: 'Thiết kế gá yên sau gia cố thanh chịu lực kép, thay đổi mã linh kiện sang GY-RSX-2026-V2',
-      applyDate: '12/06/2026'
-    }
-  ];
+  const INITIAL_IMPROVEMENT_ACTIONS: ImprovementAction[] = [];
   const [improvementActions, setImprovementActions] = useState<ImprovementAction[]>(() =>
     getSavedState('dk_improvement_actions', INITIAL_IMPROVEMENT_ACTIONS)
   );
@@ -5685,7 +5623,7 @@ export function App() {
   const [newDealerAddress, setNewDealerAddress] = useState('');
 
   const [dailyLogs, setDailyLogs] = useState<DailyLogRecord[]>(() => {
-    const raw = getSavedState('dk_daily_logs', DAILY_LOG_DATA);
+    const raw = getSavedState('dk_daily_logs', []);
     return sanitizeDailyLogs(raw);
   });
 
@@ -8829,7 +8767,7 @@ export function App() {
   const [dashboardAiResult, setDashboardAiResult] = useState<string>('');
   const [isDashboardAiLoading, setIsDashboardAiLoading] = useState<boolean>(false);
   const [dashboardAiError, setDashboardAiError] = useState<string>('');
-  const [fttYieldRate, setFttYieldRate] = useState<number>(96.8);
+  const [fttYieldRate, setFttYieldRate] = useState<number>(0);
   const [isSimulatingFtt, setIsSimulatingFtt] = useState<boolean>(false);
   const [activeTickerIndex, setActiveTickerIndex] = useState<number>(0);
   const [activeParetoIndex, setActiveParetoIndex] = useState<number | null>(null);
@@ -9156,7 +9094,7 @@ export function App() {
   const [taskImages, setTaskImages] = useState<string[]>([]);
 
   // Computed metrics
-  const activeTasksForMetrics = tasks && tasks.length > 0 ? tasks : INITIAL_TASKS;
+  const activeTasksForMetrics = tasks;
   const totalTasks = activeTasksForMetrics.length;
   // Rule check helper: Result >= Target => Completed
   const completedTasks = activeTasksForMetrics.filter(t => t.result >= t.target).length;
@@ -10145,23 +10083,18 @@ Tập hợp số liệu gốc:
     alert('Thêm phân tích rủi ro FMEA & Tính điểm RPN thành công!');
   };
 
-  // 1. Mô phỏng KCS Đánh giá trực tiếp tại chuyền lắp ráp (FTT Rate Simulator)
+  // 1. Cập nhật tỷ lệ FTT thực tế từ nhật ký OQC/KCS
   const handleSimulateLiveFtt = () => {
     if (isSimulatingFtt) return;
     setIsSimulatingFtt(true);
-    let count = 0;
-    const interval = setInterval(() => {
-      // Nhảy số ngẫu nhiên để thể hiện trạng thái kiểm định đang thu thập dữ liệu (IoT mock)
-      setFttYieldRate(parseFloat((94 + Math.random() * 5).toFixed(1)));
-      count++;
-      if (count > 8) {
-        clearInterval(interval);
-        // Chốt số ngẫu nhiên đạt chuẩn chất lượng mới
-        const finalFtt = parseFloat((96.5 + Math.random() * 2.8).toFixed(1));
-        setFttYieldRate(finalFtt);
-        setIsSimulatingFtt(false);
-      }
-    }, 150);
+    const totalOqc = oqcRecords.length;
+    const passedOqc = oqcRecords.filter((r: any) => {
+      const st = String(r?.status || r?.result || '').trim().toLowerCase();
+      return st === 'đạt' || st === 'pass' || st === 'ok';
+    }).length;
+    const realFtt = totalOqc > 0 ? parseFloat(((passedOqc / totalOqc) * 100).toFixed(1)) : 0;
+    setFttYieldRate(realFtt);
+    setIsSimulatingFtt(false);
   };
 
   // 2. Tự động kích hoạt CAPA từ bảng Cảnh báo rủi ro (Automation)
@@ -16273,238 +16206,238 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             );
 
             return (
-            <>
-              <ReportsHub
-                initialPeriodType={
-                  activeTab === 'gmail'
-                    ? 'day'
-                    : activeTab === 'weekly_reports'
-                      ? 'week'
-                      : activeTab === 'monthly_reports'
-                        ? 'month'
-                        : 'overview'
-                }
-                overviewContent={overviewNode}
-                dataset={{
-                  dailyLogs,
-                  iqcRecords,
-                  pqcRecords,
-                  oqcRecords,
-                  defects,
-                  partEvaluations,
-                  capas,
-                  ecos,
-                  improvementActions,
-                  copqs,
-                  ptspProjects: [],
-                  ptspTasks,
-                  ptspModels,
-                  planningTasks,
-                  suppliers,
-                  supplierProductionAudits,
-                  reportNotes
-                }}
-                staff={staff}
-                oqcRecords={oqcRecords}
-                oqcColorChanges={oqcColorChanges}
-                senderName={currentUser?.name || 'Nguyễn Xuân Thao'}
-                senderEmail={currentUser?.email || 'thaonguyendkbike@gmail.com'}
-                authorName={currentUser?.name || currentUser?.email || 'QLCL'}
-                onSaveNote={handleSaveReportNote}
-                onDeleteNote={handleDeleteReportNote}
-                onUpdateDailyLog={(updatedLog) => {
-                  if (!isUserAuthorized()) {
-                    alert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
-                    return;
+              <>
+                <ReportsHub
+                  initialPeriodType={
+                    activeTab === 'gmail'
+                      ? 'day'
+                      : activeTab === 'weekly_reports'
+                        ? 'week'
+                        : activeTab === 'monthly_reports'
+                          ? 'month'
+                          : 'overview'
                   }
-                  const updated = sanitizeDailyLogs(
-                    dailyLogs.map((l) =>
-                      (updatedLog.id && l.id === updatedLog.id) || (!updatedLog.id && l.stt === updatedLog.stt)
-                        ? updatedLog
-                        : l
-                    )
-                  );
-                  setDailyLogs(updated);
-                  safeStorage.setItem('dk_daily_logs', JSON.stringify(updated));
-                  safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
-                  if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
-                  syncToServer('dk_daily_logs', updated);
-                }}
-                onUpdatePlanningTask={(updatedTask) => {
-                  if (!isUserAuthorized()) {
-                    alert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
-                    return;
-                  }
-                  const updated = planningTasks.map((t) => (t.id === updatedTask.id ? updatedTask : t));
-                  const serialized = JSON.stringify(updated);
-                  setPlanningTasks(updated);
-                  safeStorage.setItem('dk_qms_quality_planning_tasks', serialized);
-                  safeStorage.setItem('dk_qms_quality_planning_tasks_is_dirty', 'true');
-                  if (localDirtyKeys.current) localDirtyKeys.current.add('dk_qms_quality_planning_tasks');
-                  syncToServer('dk_qms_quality_planning_tasks', updated);
-                  try {
-                    window.dispatchEvent(
-                      new CustomEvent('dk_planning_reload_state', {
-                        detail: { key: 'dk_qms_quality_planning_tasks', value: serialized }
-                      })
+                  overviewContent={overviewNode}
+                  dataset={{
+                    dailyLogs,
+                    iqcRecords,
+                    pqcRecords,
+                    oqcRecords,
+                    defects,
+                    partEvaluations,
+                    capas,
+                    ecos,
+                    improvementActions,
+                    copqs,
+                    ptspProjects: [],
+                    ptspTasks,
+                    ptspModels,
+                    planningTasks,
+                    suppliers,
+                    supplierProductionAudits,
+                    reportNotes
+                  }}
+                  staff={staff}
+                  oqcRecords={oqcRecords}
+                  oqcColorChanges={oqcColorChanges}
+                  senderName={currentUser?.name || 'Nguyễn Xuân Thao'}
+                  senderEmail={currentUser?.email || 'thaonguyendkbike@gmail.com'}
+                  authorName={currentUser?.name || currentUser?.email || 'QLCL'}
+                  onSaveNote={handleSaveReportNote}
+                  onDeleteNote={handleDeleteReportNote}
+                  onUpdateDailyLog={(updatedLog) => {
+                    if (!isUserAuthorized()) {
+                      alert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
+                      return;
+                    }
+                    const updated = sanitizeDailyLogs(
+                      dailyLogs.map((l) =>
+                        (updatedLog.id && l.id === updatedLog.id) || (!updatedLog.id && l.stt === updatedLog.stt)
+                          ? updatedLog
+                          : l
+                      )
                     );
-                  } catch (e) { }
-                }}
-                onOpenAddWeekTask={() => setShowAddWeekTaskModal(true)}
-                onNavigateTab={(tab) => {
-                  setActiveTab(tab);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                onToast={triggerToast}
-              />
-              {showAddWeekTaskModal && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                  <div className="bg-white rounded-xl border shadow-lg max-w-lg w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-                    <div className="flex justify-between items-center border-b pb-2">
-                      <h3 className="font-bold text-slate-800 text-sm uppercase text-indigo-700 flex items-center gap-1.5">
-                        <Plus className="w-4 h-4 shadow-sm" /> LẬP KẾ HOẠCH BỔ SUNG QUẢN TRỊ CHẤT LƯỢNG
-                      </h3>
-                      <button
-                        onClick={() => setShowAddWeekTaskModal(false)}
-                        className="text-slate-400 hover:text-slate-600 font-extrabold text-sm"
-                      >
-                        ✕
-                      </button>
-                    </div>
-
-                    <form onSubmit={handleAddNewWeeklyTask} className="space-y-4 text-xs">
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhóm quy trình kiểm toán</label>
-                        <select
-                          value={newWeekTaskCategory}
-                          onChange={(e) => setNewWeekTaskCategory(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-700 font-bold cursor-pointer"
-                        >
-                          <option value="IQC">Kiểm soát linh kiện (IQC)</option>
-                          <option value="PQC">Kiểm soát quá trình sản xuất (PQC)</option>
-                          <option value="OQC">Kiểm tra chất lượng xuất xưởng (OQC)</option>
-                          <option value="SQC/QA">Nhà cung cấp & Cải tiến linh kiện (SQC/QA)</option>
-                          <option value="Phát triển sản phẩm">Phát triển sản phẩm mới (PTSP/R&D)</option>
-                          <option value="Huấn luyện / Đào tạo">Đào tạo nội bộ & Huấn luyện nghiệp vụ</option>
-                          <option value="Cải tiến hiện trường">Cải tiến hiện trường (6S/5S/Kaizen)</option>
-                          <option value="Khách hàng/Bảo hành">Khách hàng & Bảo hành (CS/Warranty)</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chi tiết việc QA/QC thực hiện bổ sung</label>
-                        <input
-                          type="text"
-                          value={newWeekTaskContent}
-                          onChange={(e) => setNewWeekTaskContent(e.target.value)}
-                          placeholder="Nội dung cụ thể (Ví dụ: Thí nghiệm sạc xả pin lô Nova mới...)"
-                          className="w-full bg-slate-50 border border-slate-200 rounded p-2 focus:bg-white focus:outline-none focus:border-indigo-600"
-                          required
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Định lượng chỉ tiêu lý thuyết</label>
-                          <input
-                            type="text"
-                            value={newWeekTaskTarget}
-                            onChange={(e) => setNewWeekTaskTarget(e.target.value)}
-                            placeholder="Số lượng (Ví dụ: 1)"
-                            className="w-full bg-slate-50 border border-slate-200 rounded p-2"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Đơn vị đo lường</label>
-                          <input
-                            type="text"
-                            value={newWeekTaskUnit}
-                            onChange={(e) => setNewWeekTaskUnit(e.target.value)}
-                            placeholder="Ví dụ: Xe, Model, Lượt..."
-                            className="w-full bg-slate-50 border border-slate-200 rounded p-2"
-                            required
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhân sự chủ trì</label>
-                          <select
-                            value={newWeekTaskAssignee}
-                            onChange={(e) => setNewWeekTaskAssignee(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-700 font-semibold"
-                          >
-                            <option value="Nguyễn Xuân Thao">Nguyễn Xuân Thao (Trưởng phòng)</option>
-                            <option value="Hà Khắc Việt">Hà Khắc Việt (OQC Lead)</option>
-                            <option value="Hoàng Văn Phấn">Hoàng Văn Phấn (PQC Supervisor)</option>
-                            <option value="Đoàn Anh Hùng">Đoàn Anh Hùng (IQC Specialist)</option>
-                            <option value="Trần Thế Quảng">Trần Thế Quảng (Nhân viên kỹ thuật)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chọn Tháng</label>
-                          <select
-                            value={newWeekTaskMonth}
-                            onChange={(e) => setNewWeekTaskMonth(Number(e.target.value))}
-                            className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-705 font-bold cursor-pointer"
-                          >
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
-                              <option key={m} value={m}>Tháng {m}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chọn Ngày</label>
-                          <select
-                            value={newWeekTaskDate}
-                            onChange={(e) => setNewWeekTaskDate(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-705 font-bold cursor-pointer"
-                          >
-                            {newWeekTaskMonthDates.map(d => {
-                              const parts = d.split('/');
-                              const isSun = (parts.length === 2 || parts.length === 3) && new Date(parts[2] ? parseInt(parts[2], 10) : 2026, parseInt(parts[1], 10) - 1, parseInt(parts[0], 10)).getDay() === 0;
-                              return (
-                                <option key={d} value={d}>
-                                  {d} {isSun ? '(CN ⚠️)' : ''}
-                                </option>
-                              );
-                            })}
-                          </select>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Diễn giải phương pháp / Giải pháp cụ thể</label>
-                        <textarea
-                          value={newWeekTaskNotes}
-                          onChange={(e) => setNewWeekTaskNotes(e.target.value)}
-                          placeholder="Phương pháp kiểm chuẩn đối chiếu bản vẽ gốc..."
-                          className="w-full bg-slate-50 border border-slate-200 rounded p-2 h-20 focus:bg-white focus:outline-none focus:border-indigo-600"
-                        />
-                      </div>
-
-                      <div className="flex justify-end gap-2 border-t pt-3.5">
+                    setDailyLogs(updated);
+                    safeStorage.setItem('dk_daily_logs', JSON.stringify(updated));
+                    safeStorage.setItem('dk_daily_logs_is_dirty', 'true');
+                    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
+                    syncToServer('dk_daily_logs', updated);
+                  }}
+                  onUpdatePlanningTask={(updatedTask) => {
+                    if (!isUserAuthorized()) {
+                      alert("⚠️ QUYỀN HẠN: Tài khoản của bạn chỉ được cấp quyền xem (Chỉ Xem).");
+                      return;
+                    }
+                    const updated = planningTasks.map((t) => (t.id === updatedTask.id ? updatedTask : t));
+                    const serialized = JSON.stringify(updated);
+                    setPlanningTasks(updated);
+                    safeStorage.setItem('dk_qms_quality_planning_tasks', serialized);
+                    safeStorage.setItem('dk_qms_quality_planning_tasks_is_dirty', 'true');
+                    if (localDirtyKeys.current) localDirtyKeys.current.add('dk_qms_quality_planning_tasks');
+                    syncToServer('dk_qms_quality_planning_tasks', updated);
+                    try {
+                      window.dispatchEvent(
+                        new CustomEvent('dk_planning_reload_state', {
+                          detail: { key: 'dk_qms_quality_planning_tasks', value: serialized }
+                        })
+                      );
+                    } catch (e) { }
+                  }}
+                  onOpenAddWeekTask={() => setShowAddWeekTaskModal(true)}
+                  onNavigateTab={(tab) => {
+                    setActiveTab(tab);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  onToast={triggerToast}
+                />
+                {showAddWeekTaskModal && (
+                  <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-xl border shadow-lg max-w-lg w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="flex justify-between items-center border-b pb-2">
+                        <h3 className="font-bold text-slate-800 text-sm uppercase text-indigo-700 flex items-center gap-1.5">
+                          <Plus className="w-4 h-4 shadow-sm" /> LẬP KẾ HOẠCH BỔ SUNG QUẢN TRỊ CHẤT LƯỢNG
+                        </h3>
                         <button
-                          type="button"
                           onClick={() => setShowAddWeekTaskModal(false)}
-                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded text-xs transition"
+                          className="text-slate-400 hover:text-slate-600 font-extrabold text-sm"
                         >
-                          Hủy bỏ
-                        </button>
-                        <button
-                          type="submit"
-                          className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2 rounded text-xs transition shadow"
-                        >
-                          Lưu vào kế hoạch
+                          ✕
                         </button>
                       </div>
-                    </form>
+
+                      <form onSubmit={handleAddNewWeeklyTask} className="space-y-4 text-xs">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhóm quy trình kiểm toán</label>
+                          <select
+                            value={newWeekTaskCategory}
+                            onChange={(e) => setNewWeekTaskCategory(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-700 font-bold cursor-pointer"
+                          >
+                            <option value="IQC">Kiểm soát linh kiện (IQC)</option>
+                            <option value="PQC">Kiểm soát quá trình sản xuất (PQC)</option>
+                            <option value="OQC">Kiểm tra chất lượng xuất xưởng (OQC)</option>
+                            <option value="SQC/QA">Nhà cung cấp & Cải tiến linh kiện (SQC/QA)</option>
+                            <option value="Phát triển sản phẩm">Phát triển sản phẩm mới (PTSP/R&D)</option>
+                            <option value="Huấn luyện / Đào tạo">Đào tạo nội bộ & Huấn luyện nghiệp vụ</option>
+                            <option value="Cải tiến hiện trường">Cải tiến hiện trường (6S/5S/Kaizen)</option>
+                            <option value="Khách hàng/Bảo hành">Khách hàng & Bảo hành (CS/Warranty)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chi tiết việc QA/QC thực hiện bổ sung</label>
+                          <input
+                            type="text"
+                            value={newWeekTaskContent}
+                            onChange={(e) => setNewWeekTaskContent(e.target.value)}
+                            placeholder="Nội dung cụ thể (Ví dụ: Thí nghiệm sạc xả pin lô Nova mới...)"
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-2 focus:bg-white focus:outline-none focus:border-indigo-600"
+                            required
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Định lượng chỉ tiêu lý thuyết</label>
+                            <input
+                              type="text"
+                              value={newWeekTaskTarget}
+                              onChange={(e) => setNewWeekTaskTarget(e.target.value)}
+                              placeholder="Số lượng (Ví dụ: 1)"
+                              className="w-full bg-slate-50 border border-slate-200 rounded p-2"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Đơn vị đo lường</label>
+                            <input
+                              type="text"
+                              value={newWeekTaskUnit}
+                              onChange={(e) => setNewWeekTaskUnit(e.target.value)}
+                              placeholder="Ví dụ: Xe, Model, Lượt..."
+                              className="w-full bg-slate-50 border border-slate-200 rounded p-2"
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Nhân sự chủ trì</label>
+                            <select
+                              value={newWeekTaskAssignee}
+                              onChange={(e) => setNewWeekTaskAssignee(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-700 font-semibold"
+                            >
+                              <option value="Nguyễn Xuân Thao">Nguyễn Xuân Thao (Trưởng phòng)</option>
+                              <option value="Hà Khắc Việt">Hà Khắc Việt (OQC Lead)</option>
+                              <option value="Hoàng Văn Phấn">Hoàng Văn Phấn (PQC Supervisor)</option>
+                              <option value="Đoàn Anh Hùng">Đoàn Anh Hùng (IQC Specialist)</option>
+                              <option value="Trần Thế Quảng">Trần Thế Quảng (Nhân viên kỹ thuật)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chọn Tháng</label>
+                            <select
+                              value={newWeekTaskMonth}
+                              onChange={(e) => setNewWeekTaskMonth(Number(e.target.value))}
+                              className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-705 font-bold cursor-pointer"
+                            >
+                              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => (
+                                <option key={m} value={m}>Tháng {m}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Chọn Ngày</label>
+                            <select
+                              value={newWeekTaskDate}
+                              onChange={(e) => setNewWeekTaskDate(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-705 font-bold cursor-pointer"
+                            >
+                              {newWeekTaskMonthDates.map(d => {
+                                const parts = d.split('/');
+                                const isSun = (parts.length === 2 || parts.length === 3) && new Date(parts[2] ? parseInt(parts[2], 10) : 2026, parseInt(parts[1], 10) - 1, parseInt(parts[0], 10)).getDay() === 0;
+                                return (
+                                  <option key={d} value={d}>
+                                    {d} {isSun ? '(CN ⚠️)' : ''}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Diễn giải phương pháp / Giải pháp cụ thể</label>
+                          <textarea
+                            value={newWeekTaskNotes}
+                            onChange={(e) => setNewWeekTaskNotes(e.target.value)}
+                            placeholder="Phương pháp kiểm chuẩn đối chiếu bản vẽ gốc..."
+                            className="w-full bg-slate-50 border border-slate-200 rounded p-2 h-20 focus:bg-white focus:outline-none focus:border-indigo-600"
+                          />
+                        </div>
+
+                        <div className="flex justify-end gap-2 border-t pt-3.5">
+                          <button
+                            type="button"
+                            onClick={() => setShowAddWeekTaskModal(false)}
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded text-xs transition"
+                          >
+                            Hủy bỏ
+                          </button>
+                          <button
+                            type="submit"
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2 rounded text-xs transition shadow"
+                          >
+                            Lưu vào kế hoạch
+                          </button>
+                        </div>
+                      </form>
+                    </div>
                   </div>
-                </div>
-              )}
-            </>
+                )}
+              </>
             );
           })()}
           {activeTab === 'quality_inspection_records' && (
@@ -18182,8 +18115,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   type="button"
                   onClick={() => setMarketFeedbackSubTab('feedback')}
                   className={`flex-1 py-2.5 px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${marketFeedbackSubTab === 'feedback'
-                      ? 'bg-blue-600 text-white shadow-sm border border-blue-700'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    ? 'bg-blue-600 text-white shadow-sm border border-blue-700'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                     }`}
                 >
                   <Car className="w-4 h-4 shrink-0" />
@@ -18193,8 +18126,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   type="button"
                   onClick={() => setMarketFeedbackSubTab('part_eval')}
                   className={`flex-1 py-2.5 px-3 text-center text-xs sm:text-sm font-extrabold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${marketFeedbackSubTab === 'part_eval'
-                      ? 'bg-blue-600 text-white shadow-sm border border-blue-700'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                    ? 'bg-blue-600 text-white shadow-sm border border-blue-700'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
                     }`}
                 >
                   <Wrench className="w-4 h-4 shrink-0" />
@@ -19653,11 +19586,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     <button
                       type="button"
                       onClick={() => setShowCopqEntry((v) => !v)}
-                      className={`px-3.5 py-2 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shadow-2xs ${
-                        showCopqEntry
+                      className={`px-3.5 py-2 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shadow-2xs ${showCopqEntry
                           ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                           : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
-                      }`}
+                        }`}
                     >
                       <Plus className="w-4 h-4" />
                       <span>{showCopqEntry ? 'Ẩn bảng nhập' : 'Nhập chi phí'}</span>
@@ -19665,11 +19597,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     <button
                       type="button"
                       onClick={() => setShowCopqDashboard((v) => !v)}
-                      className={`px-3.5 py-2 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shadow-2xs ${
-                        showCopqDashboard
+                      className={`px-3.5 py-2 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer shadow-2xs ${showCopqDashboard
                           ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
                           : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                      }`}
+                        }`}
                     >
                       <BarChart className="w-4 h-4" />
                       <span>{showCopqDashboard ? 'Ẩn Dashboard' : 'Hiện Dashboard'}</span>
@@ -19782,9 +19713,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 </span>
                                 <div className="w-full max-w-[22px] flex-1 flex items-end justify-center">
                                   <div
-                                    className={`w-full rounded-t-md transition-all ${
-                                      m.vnd > 0 ? 'bg-indigo-600 group-hover:bg-indigo-500 shadow-2xs' : 'bg-slate-100 h-1'
-                                    }`}
+                                    className={`w-full rounded-t-md transition-all ${m.vnd > 0 ? 'bg-indigo-600 group-hover:bg-indigo-500 shadow-2xs' : 'bg-slate-100 h-1'
+                                      }`}
                                     style={m.vnd > 0 ? { height: `${heightPct}%` } : undefined}
                                   />
                                 </div>
@@ -20182,10 +20112,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                             item.category === 'Vật tư tiêu hao' ? 'bg-orange-50 text-orange-700 border-orange-200' :
                                               item.category === 'Thiết bị & Dụng cụ đo' ? 'bg-cyan-50 text-cyan-700 border-cyan-200' :
                                                 item.category === 'Thiết bị dây chuyền SX' ? 'bg-teal-50 text-teal-700 border-teal-200' :
-                                                item.category === 'Thiết bị văn phòng & 5S' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                                  item.category === 'Đào tạo & Tài liệu' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
-                                                    item.category === 'Phát triển sản phẩm' ? 'bg-violet-50 text-violet-700 border-violet-200' :
-                                                    'bg-slate-50 text-slate-600 border-slate-200'
+                                                  item.category === 'Thiết bị văn phòng & 5S' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                    item.category === 'Đào tạo & Tài liệu' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                                      item.category === 'Phát triển sản phẩm' ? 'bg-violet-50 text-violet-700 border-violet-200' :
+                                                        'bg-slate-50 text-slate-600 border-slate-200'
                                     }`}>
                                     {item.category}
                                   </span>
@@ -23017,30 +22947,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         </div>
                       </div>
                     </div>
-
-                    {/* Predefined Beautiful Models */}
-                    <div className="space-y-1">
-                      <span className="block text-[8px] text-slate-400 font-bold uppercase">Thay nhanh bằng ảnh mẫu xe điện:</span>
-                      <div className="grid grid-cols-5 gap-1.5">
-                        {SAMPLE_VEHICLE_IMAGES.map((img) => (
-                          <button
-                            key={img.id}
-                            type="button"
-                            onClick={() => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, imageUrl: img.url } })}
-                            className={`h-11 rounded-lg border overflow-hidden relative transition-all ${globalEditModal.data.imageUrl === img.url
-                              ? 'border-[#0213b0] ring-2 ring-[#0213b0]/20 scale-95 shadow-sm'
-                              : 'border-slate-200 hover:border-slate-350 hover:scale-102'
-                              }`}
-                            title={img.title}
-                          >
-                            <img src={img.url} className="w-full h-full object-cover pointer-events-none" alt={img.title} referrerPolicy="no-referrer" />
-                            <div className="absolute inset-x-0 bottom-0 bg-slate-900/40 py-0.5 text-[7px] text-white text-center truncate font-extrabold font-sans">
-                              {img.title.split(' ').pop()}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
@@ -25725,30 +25631,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     </div>
                   </div>
                 </div>
-
-                {/* Predefined Beautiful Models */}
-                <div className="space-y-1">
-                  <span className="block text-[8px] text-slate-400 font-bold uppercase">Gợi ý ảnh xe R&D chất lượng từ Unsplash:</span>
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {SAMPLE_VEHICLE_IMAGES.map((img) => (
-                      <button
-                        key={img.id}
-                        type="button"
-                        onClick={() => setAddPtspImageUrl(img.url)}
-                        className={`h-11 rounded-lg border overflow-hidden relative transition-all ${addPtspImageUrl === img.url
-                          ? 'border-[#0213b0] ring-2 ring-[#0213b0]/20 scale-95 shadow-sm'
-                          : 'border-slate-200 hover:border-slate-350 hover:scale-102'
-                          }`}
-                        title={img.title}
-                      >
-                        <img src={img.url} className="w-full h-full object-cover pointer-events-none" alt={img.title} referrerPolicy="no-referrer" />
-                        <div className="absolute inset-x-0 bottom-0 bg-slate-900/40 py-0.5 text-[7px] text-white text-center truncate font-extrabold font-sans">
-                          {img.title.split(' ').pop()}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
 
               <div>
@@ -27028,21 +26910,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     >
                       <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" /> Tải file Excel mẫu (.xlsx)
                     </a>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const sampleText = `Mã phản ánh,Ngày nguồn,Nhân viên,Khu vực,Tỉnh/Thành phố,Tên khách hàng,Ngày tiếp nhận,Hình thức tiếp nhận,Model chuẩn hóa,Loại phản ánh gốc,Nhóm lỗi chuẩn hóa,Chi tiết phản ánh,Nguyên nhân,Phương án giải quyết,Người thực hiện,Ngày giải quyết,Tình trạng xử lý,Đánh giá KH,Mức độ,Cơ sở phân loại mức độ,Ghi chú dữ liệu
-PA-001,7/20/2026,Quỳnh,N2,Hải Dương,Hoàn Hợi,7/18/2026,Tin nhắn,D2,Chất lượng,Điện - điện tử,Xi nhan không hoạt động.,Chất lượng linh kiện,Gửi linh kiện bảo hành cho đại lý.,C. Thủy,7/18/2026,Đang xử lý,Chưa hài lòng,Cao,Ảnh hưởng tín hiệu an toàn khi lưu thông.,
-PA-002,7/20/2026,Quỳnh,N2,Hải Dương,Hoàn Hợi,7/16/2026,Không ghi nhận,ROMA SX V2,Chất lượng,Lỗi chức năng tổng thể,Xe phát sinh lỗi không xác định; đại lý phải tháo kiểm tra toàn xe và đổi xe cho khách.,"Chất lượng lắp ráp, linh kiện",Đổi xe.,,7/16/2026,Đã xử lý,Chưa hài lòng,Nghiêm trọng,Không xác định được lỗi và phải đổi toàn bộ xe.,
-PA-003,7/20/2026,Quỳnh,N2,Thái Bình,Chính Tuyết,7/18/2026,Tin nhắn,D2,Chất lượng,Đèn - Còi - Khóa,Đèn pha lúc sáng lúc không.,Chất lượng linh kiện,Gửi pha đèn mới cho đại lý thay thế.,Thùy,7/18/2026,Đang xử lý,Hài lòng,Trung bình,Không ảnh hưởng vận hành chính nhưng gây phiền toái.,`;
-                        setBulkImportRawText(sampleText);
-                        const parsed = parseBulkCustomerFeedbackText(sampleText);
-                        setBulkImportParsedPreview(parsed);
-                      }}
-                      className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Copy className="w-3.5 h-3.5" /> Dán thử dữ liệu mẫu (Sample data)
-                    </button>
                   </div>
                 </div>
 

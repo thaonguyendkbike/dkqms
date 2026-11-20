@@ -3798,7 +3798,7 @@ export default function QualityPlanning({
       const indexStr = parts[2];
       try {
         const saved = localStorage.getItem('dk_daily_logs');
-        const logsArray = saved ? JSON.parse(saved) : DAILY_LOG_DATA;
+        const logsArray = saved ? JSON.parse(saved) : [];
         if (Array.isArray(logsArray)) {
           const updated = logsArray.map((item: any, idx: number) => {
             if (String(idx) === indexStr || String(item.stt || idx) === indexStr) {
@@ -3996,7 +3996,7 @@ export default function QualityPlanning({
       const indexStr = parts[2];
       try {
         const saved = localStorage.getItem('dk_daily_logs');
-        const logsArray = saved ? JSON.parse(saved) : DAILY_LOG_DATA;
+        const logsArray = saved ? JSON.parse(saved) : [];
         if (Array.isArray(logsArray)) {
           const updated = logsArray.map((item: any, idx: number) => {
             if (String(idx) === indexStr || String(item.stt || idx) === indexStr) {
@@ -4125,7 +4125,7 @@ export default function QualityPlanning({
         const indexStr = parts[2];
         try {
           const saved = localStorage.getItem('dk_daily_logs');
-          const logsArray = saved ? JSON.parse(saved) : DAILY_LOG_DATA;
+          const logsArray = saved ? JSON.parse(saved) : [];
           if (Array.isArray(logsArray)) {
             const updated = logsArray.filter((item: any, idx: number) => String(idx) !== indexStr && String(item.stt || idx) !== indexStr);
             saveAndSync('dk_daily_logs', updated);
