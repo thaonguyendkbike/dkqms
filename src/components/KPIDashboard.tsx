@@ -3597,144 +3597,110 @@ export default function KPIDashboard({
                   className="bg-white border-2 border-slate-300 rounded-2xl shadow-sm overflow-hidden"
                 >
                   <div
-                    className={`${sec.headerBg} border-b border-slate-200 px-5 py-3.5 flex flex-wrap items-center justify-between gap-2`}
+                    className={`${sec.headerBg} border-b-2 border-slate-300 px-5 py-4 flex flex-wrap items-center justify-between gap-2`}
                   >
                     <div>
-                      <h3 className="text-sm font-black uppercase text-slate-900 flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full ${sec.dotColor}`} />
+                      <h3 className="text-base font-black uppercase text-slate-950 flex items-center gap-2">
+                        <span className={`w-3 h-3 rounded-full ${sec.dotColor}`} />
                         {sec.title}
                       </h3>
-                      <p className="text-[11px] text-slate-500 mt-0.5">{sec.subtitle}</p>
+                      <p className="text-xs md:text-[13px] font-semibold text-slate-700 mt-1">{sec.subtitle}</p>
                     </div>
                     <div
-                      className={`px-3 py-1 rounded-xl bg-white border ${sec.badgeBorder} text-xs font-black`}
+                      className={`px-3.5 py-1.5 rounded-xl bg-white border-2 ${sec.badgeBorder} text-xs md:text-sm font-black shadow-xs`}
                     >
                       Điểm quy đổi nhóm: {sec.achieved} / {sec.max} điểm
                     </div>
                   </div>
 
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs min-w-[980px]">
+                    <table className="w-full text-left text-sm min-w-[980px]">
                       <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold text-[10px] uppercase tracking-wider">
-                          <th className="py-3 px-4 w-28">Mã / Nhóm</th>
-                          <th className="py-3 px-4">
-                            Chỉ tiêu KPI & Dẫn chứng dữ liệu truyền về ({periodInfo.label})
+                        <tr className="bg-slate-100 border-b-2 border-slate-300 text-slate-800 font-black text-xs uppercase tracking-wider">
+                          <th className="py-3.5 px-4 w-32">Mã / Nhóm</th>
+                          <th className="py-3.5 px-4">
+                            Chỉ tiêu KPI & Phương pháp đánh giá ({periodInfo.label})
                           </th>
-                          <th className="py-3 px-3 text-center w-28">Nguồn đo</th>
-                          <th className="py-3 px-3 text-center w-20">Trọng số</th>
-                          <th className="py-3 px-3 text-center w-28">Chỉ tiêu</th>
-                          <th className="py-3 px-3 text-center w-36">Thực tế đạt</th>
-                          <th className="py-3 px-3 text-center w-28">Điểm KPI</th>
-                          <th className="py-3 px-3 text-center w-28">Đánh giá</th>
-                          <th className="py-3 px-4 text-right w-28">Thao tác</th>
+                          <th className="py-3.5 px-3 text-center w-28">Nguồn đo</th>
+                          <th className="py-3.5 px-3 text-center w-24">Trọng số</th>
+                          <th className="py-3.5 px-3 text-center w-32">Chỉ tiêu</th>
+                          <th className="py-3.5 px-3 text-center w-40">Thực tế đạt</th>
+                          <th className="py-3.5 px-3 text-center w-28">Điểm KPI</th>
+                          <th className="py-3.5 px-3 text-center w-32">Đánh giá</th>
+                          <th className="py-3.5 px-4 text-right w-28">Thao tác</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
+                      <tbody className="divide-y divide-slate-200 font-semibold text-slate-800">
                         {sec.list.map(item => (
-                          <tr key={item.id} className="hover:bg-slate-50/80 transition">
-                            <td className="py-3.5 px-4 align-top">
-                              <div className="font-mono font-black text-indigo-700 text-xs">{item.id}</div>
-                              <div className="text-[10px] font-bold text-slate-500 mt-0.5">
+                          <tr key={item.id} className="hover:bg-slate-50/90 transition">
+                            <td className="py-4 px-4 align-top">
+                              <div className="font-mono font-black text-indigo-800 text-sm">{item.id}</div>
+                              <div className="text-xs font-bold text-slate-700 mt-1">
                                 {item.category}
                               </div>
                             </td>
-                            <td className="py-3.5 px-4 align-top">
-                              <div className="font-extrabold text-slate-900 text-xs md:text-[13px] leading-snug">
+                            <td className="py-4 px-4 align-top">
+                              <div className="font-black text-slate-950 text-sm md:text-[15px] leading-snug">
                                 {item.indicator}
                               </div>
-                              <div className="text-[11px] text-slate-500 font-normal mt-0.5 leading-relaxed">
+                              <div className="text-xs md:text-[13px] text-slate-700 font-medium mt-1 leading-relaxed">
                                 {item.definition}
                               </div>
-                              {item.evidenceText && (
-                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (item.autoMetric) {
-                                        setDrilldownModal({
-                                          title: `${item.id}: ${item.indicator}`,
-                                          subtitle: item.evidenceText,
-                                          targetTab: item.autoMetric.targetTab,
-                                          targetTabLabel: item.autoMetric.targetTabLabel,
-                                          summaryBadge: item.effectiveActual,
-                                          rows: item.autoMetric.sourceRecords
-                                        });
-                                      } else {
-                                        openEditDeptKpiModal(item);
-                                      }
-                                    }}
-                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                                      item.isWaitingData
-                                        ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                        : 'bg-indigo-50/90 hover:bg-indigo-100 text-indigo-900 border border-indigo-200/80'
-                                    }`}
-                                  >
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                                    <span>{item.evidenceText}</span>
-                                    {item.autoMetric && (
-                                      <span className="underline text-indigo-700 ml-1">
-                                        (Đối soát {item.autoMetric.sourceRecords.length} bản ghi)
-                                      </span>
-                                    )}
-                                  </button>
-                                </div>
-                              )}
                             </td>
-                            <td className="py-3.5 px-3 text-center align-top">
+                            <td className="py-4 px-3 text-center align-top">
                               {item.sourceType === 'manual' ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800">
-                                  <Pencil className="w-3 h-3" /> Nhập tay
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300">
+                                  <Pencil className="w-3.5 h-3.5" /> Nhập tay
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 text-indigo-800">
-                                  <Zap className="w-3 h-3" /> Tự động
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-indigo-100 text-indigo-900 border border-indigo-300">
+                                  <Zap className="w-3.5 h-3.5" /> Tự động
                                 </span>
                               )}
                               {item.isOverridden && (
-                                <div className="text-[9px] font-bold text-amber-600 mt-1">
+                                <div className="text-[11px] font-extrabold text-amber-700 mt-1">
                                   Đã ghi đè kỳ này
                                 </div>
                               )}
                             </td>
-                            <td className="py-3.5 px-3 text-center align-top font-mono font-black text-slate-800">
+                            <td className="py-4 px-3 text-center align-top font-mono font-black text-sm text-slate-950">
                               {item.weight}%
                             </td>
-                            <td className="py-3.5 px-3 text-center align-top font-mono font-bold text-slate-600">
+                            <td className="py-4 px-3 text-center align-top font-mono font-extrabold text-sm text-slate-800">
                               {item.effectiveTarget}
                             </td>
-                            <td className="py-3.5 px-3 text-center align-top">
+                            <td className="py-4 px-3 text-center align-top">
                               <button
                                 type="button"
                                 onClick={() => openEditDeptKpiModal(item)}
                                 title="Bấm để cập nhật số liệu thực tế hoặc ghi chú kỳ này"
-                                className={`px-2.5 py-1 rounded-lg border font-mono font-black text-xs transition cursor-pointer ${
+                                className={`px-3 py-1.5 rounded-lg border-2 font-mono font-black text-sm transition cursor-pointer ${
                                   item.isWaitingData
-                                    ? 'bg-slate-50 border-dashed border-slate-300 text-slate-400 hover:border-indigo-400 hover:text-indigo-700'
-                                    : 'bg-slate-100 hover:bg-indigo-50 border-slate-300 hover:border-indigo-400 text-slate-900'
+                                    ? 'bg-slate-50 border-dashed border-slate-300 text-slate-500 hover:border-indigo-400 hover:text-indigo-800'
+                                    : 'bg-slate-100 hover:bg-indigo-50 border-slate-300 hover:border-indigo-500 text-slate-950 shadow-2xs'
                                 }`}
                               >
                                 {item.effectiveActual}
                               </button>
                             </td>
-                            <td className="py-3.5 px-3 text-center align-top">
+                            <td className="py-4 px-3 text-center align-top">
                               {item.isWaitingData ? (
-                                <span className="text-[11px] font-bold text-slate-400 italic">
+                                <span className="text-xs font-extrabold text-slate-500 italic">
                                   Không tính mẫu
                                 </span>
                               ) : (
                                 <>
-                                  <div className="font-mono font-black text-indigo-700">
+                                  <div className="font-mono font-black text-sm text-indigo-800">
                                     {item.achievedPoints} / {item.weight}
                                   </div>
-                                  <div className="w-16 mx-auto h-1.5 bg-slate-200 rounded-full overflow-hidden mt-1">
+                                  <div className="w-20 mx-auto h-2 bg-slate-200 rounded-full overflow-hidden mt-1.5">
                                     <div
                                       className={`h-full rounded-full ${
                                         item.attainmentPct >= 95
-                                          ? 'bg-emerald-500'
+                                          ? 'bg-emerald-600'
                                           : item.attainmentPct >= 80
                                           ? 'bg-amber-500'
-                                          : 'bg-rose-500'
+                                          : 'bg-rose-600'
                                       }`}
                                       style={{ width: `${item.attainmentPct}%` }}
                                     />
@@ -3742,25 +3708,25 @@ export default function KPIDashboard({
                                 </>
                               )}
                             </td>
-                            <td className="py-3.5 px-3 text-center align-top">
+                            <td className="py-4 px-3 text-center align-top">
                               <span
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                                className={`inline-block px-3 py-1 rounded-full text-xs font-black uppercase border ${
                                   item.effectiveStatus === 'Đạt'
-                                    ? 'bg-emerald-100 text-emerald-800'
+                                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
                                     : item.effectiveStatus === 'Theo dõi'
-                                    ? 'bg-amber-100 text-amber-800'
+                                    ? 'bg-amber-100 text-amber-900 border-amber-300'
                                     : item.effectiveStatus === 'Đang cải tiến'
-                                    ? 'bg-sky-100 text-sky-800'
+                                    ? 'bg-sky-100 text-sky-900 border-sky-300'
                                     : item.effectiveStatus === 'Chờ dữ liệu'
-                                    ? 'bg-slate-200 text-slate-600'
-                                    : 'bg-rose-100 text-rose-800'
+                                    ? 'bg-slate-200 text-slate-700 border-slate-300'
+                                    : 'bg-rose-100 text-rose-900 border-rose-300'
                                 }`}
                               >
                                 {item.effectiveStatus}
                               </span>
                             </td>
-                            <td className="py-3.5 px-4 text-right align-top">
-                              <div className="flex items-center justify-end gap-1">
+                            <td className="py-4 px-4 text-right align-top">
+                              <div className="flex items-center justify-end gap-1.5">
                                 {item.autoMetric && (
                                   <button
                                     type="button"
@@ -3774,28 +3740,28 @@ export default function KPIDashboard({
                                         rows: item.autoMetric!.sourceRecords
                                       })
                                     }
-                                    className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition cursor-pointer"
+                                    className="p-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-800 border border-indigo-300 transition cursor-pointer"
                                     title="Đối soát danh sách bản ghi gốc"
                                   >
-                                    <Layers className="w-3.5 h-3.5" />
+                                    <Layers className="w-4 h-4" />
                                   </button>
                                 )}
                                 <button
                                   type="button"
                                   onClick={() => openEditDeptKpiModal(item)}
-                                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-700 transition cursor-pointer"
+                                  className="p-2 rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-800 hover:text-indigo-800 border border-slate-300 transition cursor-pointer"
                                   title="Chỉnh sửa chỉ tiêu / Nhập kết quả kỳ"
                                 >
-                                  <Pencil className="w-3.5 h-3.5" />
+                                  <Pencil className="w-4 h-4" />
                                 </button>
                                 {!item.id.startsWith('KPI-COM-0') && !item.id.startsWith('KPI-PRO-0') && (
                                   <button
                                     type="button"
                                     onClick={() => handleDeleteDeptKpi(item.id)}
-                                    className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition cursor-pointer"
+                                    className="p-2 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-300 transition cursor-pointer"
                                     title="Xóa chỉ tiêu tùy chỉnh"
                                   >
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <Trash2 className="w-4 h-4" />
                                   </button>
                                 )}
                               </div>
@@ -3834,28 +3800,28 @@ export default function KPIDashboard({
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[1040px]">
+              <table className="w-full text-left text-sm min-w-[1060px]">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold text-[10px] uppercase tracking-wider">
-                    <th className="py-3 px-3 text-center w-12">Hạng</th>
-                    <th className="py-3 px-3">Nhân sự & Chức danh thực tế (/bm)</th>
-                    <th className="py-3 px-3 text-center">Mã Văn bản /bm</th>
-                    <th className="py-3 px-3 text-center bg-indigo-50/40 text-indigo-900">
+                  <tr className="bg-slate-100 border-b-2 border-slate-300 text-slate-800 font-black text-xs uppercase tracking-wider">
+                    <th className="py-3.5 px-3 text-center w-14">Hạng</th>
+                    <th className="py-3.5 px-3">Nhân sự & Chức danh thực tế (/bm)</th>
+                    <th className="py-3.5 px-3 text-center">Mã Văn bản /bm</th>
+                    <th className="py-3.5 px-3 text-center bg-indigo-50/60 text-indigo-950">
                       1. Nghiệp vụ /bm (50đ)
                     </th>
-                    <th className="py-3 px-3 text-center bg-sky-50/40 text-sky-900">
+                    <th className="py-3.5 px-3 text-center bg-sky-50/60 text-sky-950">
                       2. Báo cáo ngày (30đ)
                     </th>
-                    <th className="py-3 px-3 text-center">Hiệu năng Khâu (SQC/IQC/PQC/OQC/BH)</th>
-                    <th className="py-3 px-3 text-center bg-amber-50/40 text-amber-900">
+                    <th className="py-3.5 px-3 text-center">Hiệu năng Khâu (SQC/IQC/PQC/OQC/BH)</th>
+                    <th className="py-3.5 px-3 text-center bg-amber-50/60 text-amber-950">
                       3. Trưởng phòng (20đ)
                     </th>
-                    <th className="py-3 px-3 text-center font-black text-slate-900">Tổng KPI (/100)</th>
-                    <th className="py-3 px-3 text-center">Xếp loại</th>
-                    <th className="py-3 px-3 text-right">Phiếu KPI</th>
+                    <th className="py-3.5 px-3 text-center font-black text-slate-950">Tổng KPI (/100)</th>
+                    <th className="py-3.5 px-3 text-center">Xếp loại</th>
+                    <th className="py-3.5 px-3 text-right">Phiếu KPI</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
+                <tbody className="divide-y divide-slate-200 font-semibold text-slate-800">
                   {staffEvaluationsComputed.map((item, idx) => {
                     const isSelected = selectedStaffComputed?.staffKey === item.staffKey;
                     const ds = item.dailyStats;
@@ -3864,126 +3830,126 @@ export default function KPIDashboard({
                         key={item.staffKey}
                         onClick={() => setSelectedStaffKey(item.staffKey)}
                         className={`transition cursor-pointer ${
-                          isSelected ? 'bg-indigo-50/70' : 'hover:bg-slate-50'
+                          isSelected ? 'bg-indigo-50/80' : 'hover:bg-slate-50'
                         }`}
                       >
-                        <td className="py-3 px-3 text-center">
+                        <td className="py-3.5 px-3 text-center">
                           <span
-                            className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-black ${
+                            className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-black ${
                               idx === 0
                                 ? 'bg-amber-400 text-slate-950'
                                 : idx === 1
-                                ? 'bg-slate-300 text-slate-900'
+                                ? 'bg-slate-300 text-slate-950'
                                 : idx === 2
-                                ? 'bg-amber-700/20 text-amber-900'
-                                : 'bg-slate-100 text-slate-600'
+                                ? 'bg-amber-700/20 text-amber-950'
+                                : 'bg-slate-200 text-slate-800'
                             }`}
                           >
                             {idx + 1}
                           </span>
                         </td>
-                        <td className="py-3 px-3">
-                          <div className="font-extrabold text-slate-900 text-xs md:text-[13px] flex items-center gap-1.5">
+                        <td className="py-3.5 px-3">
+                          <div className="font-black text-slate-950 text-sm md:text-[15px] flex items-center gap-1.5">
                             {item.profile.staffName}
                             {isSelected && (
-                              <span className="px-1.5 py-0.5 rounded bg-indigo-600 text-white text-[9px] font-black uppercase">
+                              <span className="px-2 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-black uppercase">
                                 Đang mở phiếu
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-slate-500 font-normal">{item.profile.roleTitle}</div>
+                          <div className="text-xs text-slate-700 font-medium mt-0.5">{item.profile.roleTitle}</div>
                         </td>
-                        <td className="py-3 px-3 text-center">
-                          <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-300 font-mono text-[10px] font-extrabold text-slate-800">
+                        <td className="py-3.5 px-3 text-center">
+                          <span className="px-2.5 py-0.5 rounded-md bg-slate-100 border border-slate-300 font-mono text-xs font-black text-slate-900">
                             {item.profile.bmDocCode}
                           </span>
-                          <div className="text-[10px] text-slate-400 mt-0.5">{item.profile.mtcvCode}</div>
+                          <div className="text-[11px] font-semibold text-slate-600 mt-0.5">{item.profile.mtcvCode}</div>
                         </td>
-                        <td className="py-3 px-3 text-center bg-indigo-50/20">
-                          <div className="font-mono font-black text-indigo-700">{item.roleScore50} / 50</div>
-                          <div className="text-[10px] text-slate-500">
+                        <td className="py-3.5 px-3 text-center bg-indigo-50/30">
+                          <div className="font-mono font-black text-sm text-indigo-800">{item.roleScore50} / 50</div>
+                          <div className="text-[11px] font-semibold text-slate-600">
                             {item.activeRoleMetricsCount}/{item.allRoleMetrics.length} chỉ tiêu có dữ liệu
                           </div>
                         </td>
-                        <td className="py-3 px-3 text-center bg-sky-50/20">
-                          <div className="font-mono font-black text-sky-700">{item.dailyScore30} / 30</div>
-                          <div className="text-[10px] text-slate-500">
+                        <td className="py-3.5 px-3 text-center bg-sky-50/30">
+                          <div className="font-mono font-black text-sm text-sky-800">{item.dailyScore30} / 30</div>
+                          <div className="text-[11px] font-semibold text-slate-600">
                             {ds.totalTasks > 0
                               ? `${ds.completedTasks}/${ds.totalTasks} việc (${ds.taskCompletionRate}%)`
                               : '0 việc kỳ này'}
                           </div>
                         </td>
-                        <td className="py-3 px-3 text-center">
+                        <td className="py-3.5 px-3 text-center">
                           <div className="flex flex-wrap items-center justify-center gap-1">
                             {ds.sqcStat.total > 0 && (
-                              <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[10px] font-bold">
+                              <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-900 text-[11px] font-extrabold">
                                 QA/SQC: {ds.sqcStat.rate}% ({ds.sqcStat.completed}/{ds.sqcStat.total})
                               </span>
                             )}
                             {ds.iqcStat.total > 0 && (
-                              <span className="px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 text-[10px] font-bold">
+                              <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-900 text-[11px] font-extrabold">
                                 IQC: {ds.iqcStat.rate}% ({ds.iqcStat.completed}/{ds.iqcStat.total})
                               </span>
                             )}
                             {ds.pqcStat.total > 0 && (
-                              <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-[10px] font-bold">
+                              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 text-[11px] font-extrabold">
                                 PQC: {ds.pqcStat.rate}% ({ds.pqcStat.completed}/{ds.pqcStat.total})
                               </span>
                             )}
                             {ds.oqcStat.total > 0 && (
-                              <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+                              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[11px] font-extrabold">
                                 OQC: {ds.oqcStat.rate}% ({ds.oqcStat.completed}/{ds.oqcStat.total})
                               </span>
                             )}
                             {ds.csStat.total > 0 && (
-                              <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-bold">
+                              <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-900 text-[11px] font-extrabold">
                                 BH: {ds.csStat.rate}% ({ds.csStat.completed}/{ds.csStat.total})
                               </span>
                             )}
                             {ds.totalTasks === 0 && (
-                              <span className="text-[10px] text-slate-400 italic">Chưa có báo cáo ngày</span>
+                              <span className="text-xs font-semibold text-slate-500 italic">Chưa có báo cáo ngày</span>
                             )}
                           </div>
                         </td>
-                        <td className="py-3 px-3 text-center bg-amber-50/20">
-                          <div className="font-mono font-black text-amber-700">{item.managerScore20} / 20</div>
-                          <div className="text-[9px] text-slate-400">
+                        <td className="py-3.5 px-3 text-center bg-amber-50/30">
+                          <div className="font-mono font-black text-sm text-amber-800">{item.managerScore20} / 20</div>
+                          <div className="text-[11px] font-semibold text-slate-600">
                             {item.hasManagerSaved ? 'Đã chấm kỳ này' : 'Mặc định (18đ)'}
                           </div>
                         </td>
-                        <td className="py-3 px-3 text-center bg-slate-50 font-mono font-black text-sm text-indigo-800">
+                        <td className="py-3.5 px-3 text-center bg-slate-100/80 font-mono font-black text-base text-indigo-900">
                           {item.totalScore100}
                         </td>
-                        <td className="py-3 px-3 text-center">
+                        <td className="py-3.5 px-3 text-center">
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                            className={`inline-block px-3 py-1 rounded-full text-xs font-black uppercase border ${
                               item.rating === 'Xuất sắc'
-                                ? 'bg-emerald-100 text-emerald-800'
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
                                 : item.rating === 'Tốt'
-                                ? 'bg-indigo-100 text-indigo-800'
+                                ? 'bg-indigo-100 text-indigo-900 border-indigo-300'
                                 : item.rating === 'Khá'
-                                ? 'bg-sky-100 text-sky-800'
+                                ? 'bg-sky-100 text-sky-900 border-sky-300'
                                 : item.rating === 'Trung bình'
-                                ? 'bg-amber-100 text-amber-800'
+                                ? 'bg-amber-100 text-amber-900 border-amber-300'
                                 : item.rating === 'Chờ dữ liệu'
-                                ? 'bg-slate-200 text-slate-600'
-                                : 'bg-rose-100 text-rose-800'
+                                ? 'bg-slate-200 text-slate-700 border-slate-300'
+                                : 'bg-rose-100 text-rose-900 border-rose-300'
                             }`}
                           >
                             {item.rating}
                           </span>
                         </td>
-                        <td className="py-3 px-3 text-right">
+                        <td className="py-3.5 px-3 text-right">
                           <button
                             type="button"
                             onClick={e => {
                               e.stopPropagation();
                               setSelectedStaffKey(item.staffKey);
                             }}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition cursor-pointer ${
+                            className={`px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
                               isSelected
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-700'
+                                ? 'bg-indigo-600 text-white shadow-xs'
+                                : 'bg-slate-100 hover:bg-indigo-100 text-slate-800 hover:text-indigo-800 border border-slate-300'
                             }`}
                           >
                             Chấm / Xem Phiếu
@@ -4002,35 +3968,37 @@ export default function KPIDashboard({
             <div className="bg-white border-2 border-indigo-300 rounded-2xl p-5 shadow-sm space-y-5">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-200 pb-4">
                 <div>
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <span className="px-2.5 py-0.5 rounded-md bg-indigo-600 text-white text-[10px] font-black uppercase">
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    <span className="px-2.5 py-0.5 rounded-md bg-indigo-600 text-white text-xs font-black uppercase">
                       PHIẾU ĐÁNH GIÁ KPI CÁ NHÂN • KỲ {periodInfo.label.toUpperCase()}
                     </span>
-                    <span className="px-2.5 py-0.5 rounded-md bg-slate-100 border border-slate-300 font-mono text-[11px] font-extrabold text-slate-800">
+                    <span className="px-2.5 py-0.5 rounded-md bg-slate-100 border border-slate-300 font-mono text-xs font-black text-slate-900">
                       Văn bản /bm: {selectedStaffComputed.profile.bmDocCode}
                     </span>
-                    <span className="px-2.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 font-mono text-[11px] font-bold text-emerald-800">
+                    <span className="px-2.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-300 font-mono text-xs font-extrabold text-emerald-900">
                       Mã chức năng: {selectedStaffComputed.profile.mtcvCode}
                     </span>
                   </div>
-                  <h3 className="text-base md:text-lg font-black text-slate-900">
+                  <h3 className="text-lg md:text-xl font-black text-slate-950">
                     {selectedStaffComputed.profile.staffName} —{' '}
                     <span className="text-indigo-700">{selectedStaffComputed.profile.roleTitle}</span>
                   </h3>
-                  <p className="text-xs text-slate-600 mt-0.5">{selectedStaffComputed.profile.summary}</p>
+                  <p className="text-xs md:text-[13px] font-medium text-slate-700 mt-1 leading-relaxed">
+                    {selectedStaffComputed.profile.summary}
+                  </p>
                 </div>
 
-                <div className="flex items-center gap-3 bg-indigo-50/70 px-4 py-3 rounded-2xl border border-indigo-200 shrink-0">
+                <div className="flex items-center gap-3 bg-indigo-50/80 px-4 py-3 rounded-2xl border-2 border-indigo-200 shrink-0">
                   <div>
-                    <div className="text-[10px] font-extrabold uppercase text-indigo-600">
+                    <div className="text-xs font-black uppercase text-indigo-700">
                       TỔNG ĐIỂM KPI CÁ NHÂN
                     </div>
-                    <div className="text-2xl font-black text-indigo-900 font-mono">
+                    <div className="text-2xl font-black text-indigo-950 font-mono">
                       {selectedStaffComputed.totalScore100} <span className="text-xs font-bold">/ 100 điểm</span>
                     </div>
                   </div>
                   <span
-                    className={`px-3 py-1 rounded-xl text-xs font-black uppercase ${
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase ${
                       selectedStaffComputed.rating === 'Xuất sắc'
                         ? 'bg-emerald-600 text-white'
                         : selectedStaffComputed.rating === 'Tốt'
@@ -4049,75 +4017,58 @@ export default function KPIDashboard({
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                   <div>
-                    <h4 className="text-xs md:text-sm font-black uppercase text-slate-800 flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-indigo-600" />
+                    <h4 className="text-sm md:text-base font-black uppercase text-slate-950 flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
                       I. CHỈ TIÊU NGHIỆP VỤ CHUYÊN MÔN THEO BẢN GIAO NHIỆM VỤ /bm (TRỌNG SỐ: 50 ĐIỂM)
                     </h4>
-                    <p className="text-[11px] text-slate-500">
-                      Tự động lấy số liệu từ các phân hệ chuyên môn trong App theo tên người thực hiện & vai trò RACI. Bấm vào dòng dẫn chứng để đối soát bản ghi gốc.
+                    <p className="text-xs font-medium text-slate-700 mt-0.5">
+                      Tự động lấy số liệu từ các phân hệ chuyên môn trong App theo tên người thực hiện & vai trò RACI.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 rounded-lg bg-indigo-50 border border-indigo-200 font-mono text-xs font-black text-indigo-800">
+                    <span className="px-3.5 py-1.5 rounded-lg bg-indigo-50 border-2 border-indigo-200 font-mono text-xs md:text-sm font-black text-indigo-900">
                       Đạt: {selectedStaffComputed.roleScore50} / 50 điểm
                     </span>
                     <button
                       type="button"
                       onClick={() => setShowAddStaffMetricModal(true)}
-                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-extrabold flex items-center gap-1 cursor-pointer"
                     >
-                      <Plus className="w-3.5 h-3.5" />
+                      <Plus className="w-4 h-4" />
                       Thêm chỉ tiêu riêng
                     </button>
                   </div>
                 </div>
 
-                <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                  <table className="w-full text-left text-xs min-w-[860px]">
+                <div className="overflow-x-auto border-2 border-slate-300 rounded-xl">
+                  <table className="w-full text-left text-sm min-w-[880px]">
                     <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold text-[10px] uppercase">
-                        <th className="py-2.5 px-3">Chỉ tiêu Nghiệp vụ & Dẫn chứng bản ghi gốc (/bm)</th>
-                        <th className="py-2.5 px-3 text-center w-20">Trọng số</th>
-                        <th className="py-2.5 px-3 text-center w-24">Chỉ tiêu</th>
-                        <th className="py-2.5 px-3 text-center w-40">Thực tế đạt (App / Sửa)</th>
-                        <th className="py-2.5 px-3 text-center w-28">% Hoàn thành</th>
-                        <th className="py-2.5 px-3 text-center w-28">Điểm đạt</th>
+                      <tr className="bg-slate-100 border-b-2 border-slate-300 text-slate-800 font-black text-xs uppercase">
+                        <th className="py-3 px-4">Chỉ tiêu Nghiệp vụ & Căn cứ (/bm)</th>
+                        <th className="py-3 px-3 text-center w-24">Trọng số</th>
+                        <th className="py-3 px-3 text-center w-28">Chỉ tiêu</th>
+                        <th className="py-3 px-3 text-center w-44">Thực tế đạt (App / Sửa)</th>
+                        <th className="py-3 px-3 text-center w-32">% Hoàn thành</th>
+                        <th className="py-3 px-3 text-center w-28">Điểm đạt</th>
+                        <th className="py-3 px-4 text-right w-24">Thao tác</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
+                    <tbody className="divide-y divide-slate-200 font-semibold text-slate-800">
                       {selectedStaffComputed.allRoleMetrics.map((m: any) => (
-                        <tr key={m.id} className="hover:bg-slate-50/70">
-                          <td className="py-3 px-3">
-                            <div className="font-extrabold text-slate-900">{m.name}</div>
-                            <div className="text-[11px] text-indigo-600 font-bold mt-0.5">{m.bmReference}</div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDrilldownModal({
-                                  title: `${selectedStaffComputed.profile.staffName} • ${m.name}`,
-                                  subtitle: m.evidence,
-                                  targetTab: m.targetTab || 'daily_logs',
-                                  targetTabLabel: m.targetTabLabel || 'Phân hệ gốc',
-                                  summaryBadge: m.actualText,
-                                  rows: m.sourceRows || []
-                                })
-                              }
-                              className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-50 text-[11px] font-bold text-slate-700 hover:text-indigo-700 transition cursor-pointer"
-                            >
-                              <Layers className="w-3 h-3 text-indigo-600 shrink-0" />
-                              <span>{m.evidence}</span>
-                              {m.sourceRows?.length > 0 && (
-                                <span className="underline text-indigo-600 ml-1">
-                                  (Xem {m.sourceRows.length} bản ghi)
-                                </span>
-                              )}
-                            </button>
+                        <tr key={m.id} className="hover:bg-slate-50/90">
+                          <td className="py-3.5 px-4">
+                            <div className="font-black text-slate-950 text-sm md:text-[15px] leading-snug">
+                              {m.name}
+                            </div>
+                            <div className="text-xs text-indigo-800 font-extrabold mt-1">{m.bmReference}</div>
                           </td>
-                          <td className="py-3 px-3 text-center font-mono font-black text-slate-800">
+                          <td className="py-3.5 px-3 text-center font-mono font-black text-sm text-slate-950">
                             {m.weight}đ
                           </td>
-                          <td className="py-3 px-3 text-center font-mono text-slate-600">{m.targetText}</td>
-                          <td className="py-3 px-3 text-center">
+                          <td className="py-3.5 px-3 text-center font-mono font-extrabold text-sm text-slate-800">
+                            {m.targetText}
+                          </td>
+                          <td className="py-3.5 px-3 text-center">
                             <input
                               type="text"
                               value={m.actualText}
@@ -4143,10 +4094,10 @@ export default function KPIDashboard({
                                   }));
                                 }
                               }}
-                              className="w-36 px-2 py-1 text-center bg-white border border-slate-300 rounded-lg font-mono font-bold text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                              className="w-40 px-2.5 py-1.5 text-center bg-white border-2 border-slate-300 rounded-lg font-mono font-black text-sm text-slate-950 focus:outline-none focus:border-indigo-500"
                             />
                           </td>
-                          <td className="py-3 px-3 text-center">
+                          <td className="py-3.5 px-3 text-center">
                             <div className="flex items-center justify-center gap-1">
                               <input
                                 type="number"
@@ -4175,35 +4126,54 @@ export default function KPIDashboard({
                                     }));
                                   }
                                 }}
-                                className="w-16 px-2 py-1 text-center bg-white border border-slate-300 rounded-lg font-mono font-bold text-xs text-indigo-700 focus:outline-none focus:border-indigo-500"
+                                className="w-18 px-2 py-1.5 text-center bg-white border-2 border-slate-300 rounded-lg font-mono font-black text-sm text-indigo-800 focus:outline-none focus:border-indigo-500"
                               />
-                              <span className="text-xs font-bold text-slate-500">%</span>
+                              <span className="text-xs font-black text-slate-700">%</span>
                             </div>
                           </td>
-                          <td className="py-3 px-3 text-center">
+                          <td className="py-3.5 px-3 text-center">
                             {m.isWaitingData ? (
-                              <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-bold">
+                              <span className="px-2.5 py-1 rounded-full bg-slate-200 text-slate-700 text-xs font-black">
                                 Chờ dữ liệu
                               </span>
                             ) : (
-                              <div className="flex items-center justify-center gap-1.5">
-                                <span className="font-mono font-black text-indigo-700">
-                                  {m.points} / {m.weight}
-                                </span>
-                                {m.isCustom && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleDeleteCustomStaffMetric(selectedStaffComputed.staffKey, m.id)
-                                    }
-                                    className="p-1 text-rose-500 hover:bg-rose-50 rounded cursor-pointer"
-                                    title="Xóa chỉ tiêu riêng này"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
+                              <span className="font-mono font-black text-sm text-indigo-800">
+                                {m.points} / {m.weight}
+                              </span>
                             )}
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setDrilldownModal({
+                                    title: `${selectedStaffComputed.profile.staffName} • ${m.name}`,
+                                    subtitle: m.evidence,
+                                    targetTab: m.targetTab || 'daily_logs',
+                                    targetTabLabel: m.targetTabLabel || 'Phân hệ gốc',
+                                    summaryBadge: m.actualText,
+                                    rows: m.sourceRows || []
+                                  })
+                                }
+                                className="p-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-800 border border-indigo-300 transition cursor-pointer"
+                                title="Đối soát danh sách bản ghi gốc"
+                              >
+                                <Layers className="w-4 h-4" />
+                              </button>
+                              {m.isCustom && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDeleteCustomStaffMetric(selectedStaffComputed.staffKey, m.id)
+                                  }
+                                  className="p-2 text-rose-700 bg-rose-100 hover:bg-rose-200 border border-rose-300 rounded-lg cursor-pointer"
+                                  title="Xóa chỉ tiêu riêng này"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
