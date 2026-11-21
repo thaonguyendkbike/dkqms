@@ -43,6 +43,7 @@ import {
 import {
   bulkImportModelBom,
   deleteBomPartRecord,
+  deleteBomPartsBatch,
   inferPartImageMode,
   isColoredPlasticSpec,
   loadOqcModelGroups,
@@ -555,8 +556,12 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         updatedBy: currentUserName
       });
       setImportModalState(null);
+      const inheritNote =
+        res.inheritedImagesCount > 0
+          ? `, tự động kế thừa ảnh cho ${res.inheritedImagesCount} mã Phôi từ mã màu cũ`
+          : '';
       showToast(
-        `Đã import ${res.totalLines} dòng BOM cho ${importModalState.modelName} (${res.newPartsCount} mã mới, ${res.updatedExistingCount} mã cập nhật thông tin NCC/giá/tồn kho giữ nguyên ảnh).`,
+        `Đã import ${res.totalLines} dòng BOM cho ${importModalState.modelName} (${res.newPartsCount} mã mới, ${res.updatedExistingCount} mã cập nhật thông tin mới${inheritNote}).`,
         'success'
       );
     } catch (err: any) {
@@ -635,6 +640,48 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
     setPartModalOpen(true);
   };
 
+  const isStoragePathShared = (storagePath?: string, excludePartId?: string | null): boolean => {
+    if (!storagePath) return false;
+    return bomParts.some(
+      (p) =>
+        p.id !== excludePartId &&
+        Array.isArray(p.images) &&
+        p.images.some((img) => img.path === storagePath)
+    );
+  };
+
+  const orphanedLegacyColoredParts = useMemo(() => {
+    return bomParts.filter((p) => {
+      const code = p.partCode.trim().toUpperCase();
+      if (!isColoredPlasticSpec(p.specGroup)) return false;
+      if (code.length <= 6 || !/\d{4}$/.test(code)) return false;
+      const baseCode = code.slice(0, -4);
+      const baseExists = partsByCode.has(baseCode);
+      const usedCount = whereUsedMap.get(code)?.length || 0;
+      return baseExists && usedCount === 0;
+    });
+  }, [bomParts, partsByCode, whereUsedMap]);
+
+  const handleCleanupOrphanedLegacyParts = async () => {
+    if (readOnly || orphanedLegacyColoredParts.length === 0) return;
+    if (
+      !window.confirm(
+        `Dọn ${orphanedLegacyColoredParts.length} mã Nhựa màu cũ (có 4 số đuôi) đã được chuyển sang mã Phôi và không còn Model nào dùng?\n\n(Ảnh đã kế thừa trên mã Phôi sẽ được giữ nguyên an toàn 100%).`
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteBomPartsBatch(orphanedLegacyColoredParts.map((p) => p.id));
+      showToast(
+        `Đã dọn gọn ${orphanedLegacyColoredParts.length} mã Nhựa màu cũ dư thừa khỏi Kho Linh kiện.`,
+        'success'
+      );
+    } catch (err: any) {
+      showToast(`Lỗi dọn mã cũ: ${err?.message || err}`, 'error');
+    }
+  };
+
   const handlePartImagesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     const files: File[] = fileList ? Array.from(fileList as ArrayLike<File>) : [];
@@ -665,9 +712,11 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       }
 
       if (partForm.imageMode === 'single') {
-        // Xóa ảnh cũ nếu chế độ 1 ảnh (VD: nhựa/nhựa màu thay ảnh mới)
+        // Xóa ảnh cũ nếu chế độ 1 ảnh (chỉ xóa file Storage nếu không có mã khác dùng chung)
         for (const oldImg of partForm.images) {
-          if (oldImg.path) await deleteBomImageFromStorage(oldImg.path);
+          if (oldImg.path && !isStoragePathShared(oldImg.path, editingPartId)) {
+            await deleteBomImageFromStorage(oldImg.path);
+          }
         }
         setPartForm((prev) => ({ ...prev, images: uploadedItems }));
       } else {
@@ -689,7 +738,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       ...prev,
       images: prev.images.filter((i) => i.id !== imgId)
     }));
-    if (target?.path) {
+    if (target?.path && !isStoragePathShared(target.path, editingPartId)) {
       await deleteBomImageFromStorage(target.path);
     }
   };
@@ -792,7 +841,9 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
 
     try {
       for (const img of part.images || []) {
-        if (img.path) await deleteBomImageFromStorage(img.path);
+        if (img.path && !isStoragePathShared(img.path, part.id)) {
+          await deleteBomImageFromStorage(img.path);
+        }
       }
       await deleteBomPartRecord(part.id);
       setPartModalOpen(false);
@@ -1831,6 +1882,26 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                 </span>
               </div>
             </div>
+
+            {!readOnly && orphanedLegacyColoredParts.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="text-amber-900">
+                  <p className="font-extrabold">
+                    Phát hiện {orphanedLegacyColoredParts.length} mã &ldquo;Nhựa màu&rdquo; kiểu cũ (có 4 số đuôi) đã quy về mã Phôi và không còn Model nào dùng.
+                  </p>
+                  <p className="text-[11px] text-amber-800/90">
+                    Ảnh cũ đã được kế thừa sang mã Phôi; anh có thể dọn gọn các mã cũ dư thừa này để Kho sạch sẽ hơn.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCleanupOrphanedLegacyParts}
+                  className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold shrink-0 cursor-pointer"
+                >
+                  Dọn {orphanedLegacyColoredParts.length} mã cũ dư thừa
+                </button>
+              </div>
+            )}
 
             {filteredPartsMaster.length === 0 ? (
               <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-2 text-slate-500 text-sm">

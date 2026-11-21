@@ -520,6 +520,18 @@ export async function deleteBomPartRecord(partId: string): Promise<void> {
   await deleteDoc(ref);
 }
 
+export async function deleteBomPartsBatch(partIds: string[]): Promise<void> {
+  const BATCH_LIMIT = 400;
+  for (let i = 0; i < partIds.length; i += BATCH_LIMIT) {
+    const chunk = partIds.slice(i, i + BATCH_LIMIT);
+    const batch = writeBatch(db);
+    chunk.forEach((id) => {
+      batch.delete(doc(db, 'dk_db_sync', BOM_PARTS_COLLECTION, 'records', id));
+    });
+    await batch.commit();
+  }
+}
+
 async function commitWriteBatches(
   operations: Array<{ ref: ReturnType<typeof doc>; data: any }>
 ): Promise<void> {
@@ -542,10 +554,48 @@ function mapEcountStatusToQuality(raw?: string): BomPartMasterItem['status'] {
   return 'Đang dùng';
 }
 
+function findLegacyColoredPartsForBase(
+  baseCode: string,
+  rawCode: string | undefined,
+  existingPartsMap: Map<string, BomPartMasterItem>
+): BomPartMasterItem[] {
+  const matches: BomPartMasterItem[] = [];
+  const rawUpper = (rawCode || '').trim().toUpperCase();
+  existingPartsMap.forEach((p) => {
+    const pCode = p.partCode.trim().toUpperCase();
+    if (pCode === baseCode) return;
+    const matchesRaw = rawUpper && rawUpper !== baseCode && pCode === rawUpper;
+    const matches4DigitSuffix =
+      pCode.startsWith(baseCode) &&
+      pCode.length === baseCode.length + 4 &&
+      /^\d{4}$/.test(pCode.slice(baseCode.length));
+    if (matchesRaw || matches4DigitSuffix) {
+      matches.push(p);
+    }
+  });
+  return matches;
+}
+
+function mergeUniquePartImages(lists: BomPartMasterItem['images'][]): BomPartMasterItem['images'] {
+  const seenUrls = new Set<string>();
+  const result: BomPartMasterItem['images'] = [];
+  lists.forEach((imgs) => {
+    if (!Array.isArray(imgs)) return;
+    imgs.forEach((img) => {
+      if (!img?.url || seenUrls.has(img.url)) return;
+      seenUrls.add(img.url);
+      result.push(img);
+    });
+  });
+  return result;
+}
+
 /**
  * Import hàng loạt định mức BOM từ Excel/CSV Ecount cho 1 Model:
  * - Mã đã tồn tại trong Kho Linh kiện -> giữ nguyên 100% ảnh, thông số kỹ thuật, cảnh báo QLCL;
  *   đồng thời tự động cập nhật thêm Nhà cung cấp, Tồn kho, Giá mua, Giá bán, Từ khóa từ file mới nếu có.
+ * - Nếu là mã Nhựa màu đã quy về Phôi (bỏ 4 số cuối) mà trước đó từng up ảnh vào mã dài cũ:
+ *   tự động kế thừa toàn bộ ảnh & thông số kỹ thuật từ mã dài cũ sang mã Phôi!
  * - Mã chưa có -> tạo mới bản ghi trong Kho Linh kiện.
  */
 export async function bulkImportModelBom(params: {
@@ -560,6 +610,7 @@ export async function bulkImportModelBom(params: {
   newPartsCount: number;
   updatedExistingCount: number;
   linkedExistingCount: number;
+  inheritedImagesCount: number;
   totalLines: number;
 }> {
   const {
@@ -577,12 +628,32 @@ export async function bulkImportModelBom(params: {
   let newPartsCount = 0;
   let updatedExistingCount = 0;
   let linkedExistingCount = 0;
+  let inheritedImagesCount = 0;
 
   rows.forEach((row) => {
     const code = row.partCode.trim().toUpperCase();
     const existingPart = existingPartsMap.get(code);
+    const legacyMatches =
+      row.isNormalizedFromColor || isColoredPlasticSpec(row.specGroup)
+        ? findLegacyColoredPartsForBase(code, row.rawPartCode, existingPartsMap)
+        : [];
+
     if (existingPart) {
       linkedExistingCount++;
+
+      // Nếu mã Phôi hiện tại chưa có ảnh nhưng mã nhựa màu dài cũ có ảnh -> tự kế thừa sang
+      const inheritedImages =
+        (!existingPart.images || existingPart.images.length === 0) && legacyMatches.length > 0
+          ? mergeUniquePartImages(legacyMatches.map((m) => m.images))
+          : existingPart.images || [];
+      const didInheritImg =
+        (!existingPart.images || existingPart.images.length === 0) && inheritedImages.length > 0;
+      if (didInheritImg) inheritedImagesCount++;
+
+      const inheritedTechSpecs =
+        existingPart.techSpecs?.trim() ||
+        legacyMatches.find((m) => m.techSpecs?.trim())?.techSpecs ||
+        '';
 
       // Kiểm tra nếu có thông tin mới (NCC, Tồn kho, Giá mua, Giá bán, Từ khóa...) cần bổ sung/cập nhật
       const nextSupplier = row.supplierName?.trim() || existingPart.supplierName || '';
@@ -595,6 +666,8 @@ export async function bulkImportModelBom(params: {
       const nextNote = row.note?.trim() || existingPart.note || '';
 
       const hasChanges =
+        didInheritImg ||
+        inheritedTechSpecs !== (existingPart.techSpecs || '') ||
         nextSupplier !== (existingPart.supplierName || '') ||
         nextStockQty !== existingPart.stockQty ||
         nextPurchasePrice !== existingPart.purchasePrice ||
@@ -613,11 +686,13 @@ export async function bulkImportModelBom(params: {
           partCode: code,
           specGroup: nextSpecGroup,
           unit: nextUnit,
+          techSpecs: inheritedTechSpecs,
           supplierName: nextSupplier,
           stockQty: nextStockQty,
           purchasePrice: nextPurchasePrice,
           sellingPrice: nextSellingPrice,
           keywords: nextKeywords,
+          images: inheritedImages,
           note: nextNote,
           updatedAt: nowIso,
           updatedBy
@@ -631,6 +706,17 @@ export async function bulkImportModelBom(params: {
     }
 
     newPartsCount++;
+    const inheritedImages =
+      legacyMatches.length > 0 ? mergeUniquePartImages(legacyMatches.map((m) => m.images)) : [];
+    if (inheritedImages.length > 0) {
+      inheritedImagesCount++;
+    }
+    const inheritedTechSpecs = legacyMatches.find((m) => m.techSpecs?.trim())?.techSpecs || '';
+    const inheritedWarningStatus = legacyMatches.find(
+      (m) => m.status === 'Cảnh báo lỗi' || m.status === 'Đang ECO'
+    )?.status;
+    const inheritedNote = legacyMatches.find((m) => m.note?.trim())?.note || '';
+
     const docId = toSafeDocId(code);
     const newPart: BomPartMasterItem = {
       id: docId,
@@ -638,16 +724,16 @@ export async function bulkImportModelBom(params: {
       partName: row.partName || code,
       specGroup: row.specGroup || '',
       unit: row.unit || 'Cái',
-      techSpecs: '',
+      techSpecs: inheritedTechSpecs,
       supplierName: row.supplierName?.trim() || '',
       stockQty: row.stockQty,
       purchasePrice: row.purchasePrice,
       sellingPrice: row.sellingPrice,
       keywords: row.keywords?.trim() || '',
-      status: mapEcountStatusToQuality(row.ecountStatus),
+      status: inheritedWarningStatus || mapEcountStatusToQuality(row.ecountStatus),
       imageMode: inferPartImageMode(row.specGroup),
-      images: [],
-      note: row.note || '',
+      images: inheritedImages,
+      note: row.note || inheritedNote,
       updatedAt: nowIso,
       updatedBy
     };
@@ -700,6 +786,7 @@ export async function bulkImportModelBom(params: {
     newPartsCount,
     updatedExistingCount,
     linkedExistingCount,
+    inheritedImagesCount,
     totalLines: finalLines.length
   };
 }
