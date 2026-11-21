@@ -4909,6 +4909,10 @@ export function App() {
             const cleaned = ensureUniqueIds(list, 'GC');
             setFabricationJobs(cleaned);
             safeStorage.setItem('dk_fabrication_jobs', JSON.stringify(cleaned));
+          } else if (key === 'dk_oqc_part_codes') {
+            if (list.length > 0) {
+              window.dispatchEvent(new CustomEvent('dk_oqc_part_codes_updated', { detail: list }));
+            }
           }
         }, (err) => {
           console.warn(`[Doc onSnapshot Warning] for ${key}:`, err);

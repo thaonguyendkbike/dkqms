@@ -50,7 +50,6 @@ import {
   deleteBomPartsBatch,
   inferPartImageMode,
   isColoredPlasticSpec,
-  loadOqcModelGroups,
   normalizeColoredPlasticPart,
   readCachedBomCatalog,
   restoreBomBackupPayload,
@@ -58,6 +57,7 @@ import {
   saveBomModelsBatch,
   saveBomPartRecord,
   subscribeBomCatalog,
+  subscribeOqcModelGroups,
   toSafeDocId
 } from '../services/bomCatalogService';
 import {
@@ -248,13 +248,9 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
 
   useEffect(() => {
     let active = true;
-    loadOqcModelGroups()
-      .then((groups) => {
-        if (active) setOqcModels(groups);
-      })
-      .catch((err) => {
-        console.error('[Load OQC Models Error]:', err);
-      });
+    const unsubOqc = subscribeOqcModelGroups((groups) => {
+      if (active) setOqcModels(groups);
+    });
 
     const unsub = subscribeBomCatalog(
       (models) => {
@@ -276,6 +272,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
 
     return () => {
       active = false;
+      unsubOqc();
       unsub();
     };
   }, []);

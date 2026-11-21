@@ -3152,8 +3152,51 @@ export default function QualityInspectionRecords({
 
   const saveOqcPartCodes = (list: OqcPartCodeItem[]) => {
     setOqcPartCodes(list);
-    safeStorage.setItem('dk_oqc_part_codes', JSON.stringify(list));
+    const serialized = JSON.stringify(list);
+    safeStorage.setItem('dk_oqc_part_codes', serialized);
+    safeStorage.setItem('dk_oqc_part_codes_is_dirty', 'true');
+
+    // Đồng bộ 1 document duy nhất lên Cloud (tiết kiệm tối đa quota Firestore)
+    if (auth.currentUser && safeStorage.getItem('dk_firebase_quota_exceeded') !== 'true') {
+      const docRef = doc(db, 'dk_db_sync', 'dk_oqc_part_codes');
+      setDoc(
+        docRef,
+        sanitizeFirestorePayload({
+          data: list,
+          updatedBy: auth.currentUser?.email || 'QLCL',
+          updatedAt: new Date().toISOString()
+        })
+      )
+        .then(() => {
+          safeStorage.setItem('dk_oqc_part_codes_is_dirty', 'false');
+        })
+        .catch((err: any) => {
+          const msg = err?.message || String(err);
+          if (
+            err?.code === 'resource-exhausted' ||
+            msg.toLowerCase().includes('quota exceeded') ||
+            msg.toLowerCase().includes('resource has been exhausted')
+          ) {
+            safeStorage.setItem('dk_firebase_quota_exceeded', 'true');
+          }
+          console.warn('[OQC Part Codes Sync Notice]:', msg);
+        });
+    }
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleRemotePartCodes = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (Array.isArray(detail) && detail.length > 0) {
+        setOqcPartCodes(detail);
+      }
+    };
+    window.addEventListener('dk_oqc_part_codes_updated', handleRemotePartCodes);
+    return () => {
+      window.removeEventListener('dk_oqc_part_codes_updated', handleRemotePartCodes);
+    };
+  }, []);
 
   // O(1) Map lookup for Part Codes (replaces O(M) .find() across 35,794 records)
   const oqcPartCodesMap = useMemo(() => {

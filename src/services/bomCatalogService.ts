@@ -385,6 +385,53 @@ export async function loadOqcModelGroups(): Promise<OqcModelSummary[]> {
   return groupPartCodesByModel(localList);
 }
 
+/**
+ * Lắng nghe realtime danh sách Model & Màu sắc từ `dk_db_sync/dk_oqc_part_codes` (chỉ tốn 1 lượt đọc khi mở trang).
+ * Tự động cập nhật ngay khi Bảng mã xe ở App chính có thay đổi.
+ */
+export function subscribeOqcModelGroups(
+  onModels: (groups: OqcModelSummary[]) => void
+): () => void {
+  let localList: OqcPartCodeItem[] = INITIAL_OQC_PART_CODES;
+  try {
+    const saved = safeStorage.getItem('dk_oqc_part_codes');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        localList = parsed;
+      }
+    }
+  } catch {
+    // fallback
+  }
+
+  onModels(groupPartCodesByModel(localList));
+
+  const docRef = doc(db, 'dk_db_sync', 'dk_oqc_part_codes');
+  return onSnapshot(
+    docRef,
+    (snap) => {
+      if (!snap.exists()) return;
+      if (safeStorage.getItem('dk_oqc_part_codes_is_dirty') === 'true') {
+        return;
+      }
+      const payload = snap.data();
+      const cloudList = Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload)
+          ? payload
+          : null;
+      if (cloudList && cloudList.length > 0) {
+        safeStorage.setItem('dk_oqc_part_codes', JSON.stringify(cloudList));
+        onModels(groupPartCodesByModel(cloudList));
+      }
+    },
+    (err) => {
+      console.warn('[BOM Catalog] Lắng nghe Bảng mã xe tạm ngắt, dùng dữ liệu cục bộ:', err?.message || err);
+    }
+  );
+}
+
 export function readCachedBomCatalog(): {
   models: BomModelRecord[];
   parts: BomPartMasterItem[];
