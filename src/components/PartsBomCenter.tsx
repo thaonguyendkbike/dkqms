@@ -106,6 +106,90 @@ const STATUS_BADGE_MAP: Record<PartQualityStatus, string> = {
   'Ngừng dùng': 'bg-slate-100 text-slate-600 border-slate-300'
 };
 
+const PARTS_PER_PAGE = 20;
+
+interface PaginationBarProps {
+  currentPage: number;
+  totalItems: number;
+  pageSize?: number;
+  onPageChange: (page: number) => void;
+}
+
+const PaginationBar: React.FC<PaginationBarProps> = ({
+  currentPage,
+  totalItems,
+  pageSize = PARTS_PER_PAGE,
+  onPageChange
+}) => {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  if (totalItems <= pageSize) return null;
+
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+  const startItem = (safePage - 1) * pageSize + 1;
+  const endItem = Math.min(safePage * pageSize, totalItems);
+
+  // Tạo danh sách số trang hiển thị gọn (tối đa 5 nút quanh trang hiện tại)
+  const pages: (number | 'dots')[] = [];
+  for (let p = 1; p <= totalPages; p++) {
+    if (p === 1 || p === totalPages || Math.abs(p - safePage) <= 1) {
+      pages.push(p);
+    } else if (pages[pages.length - 1] !== 'dots') {
+      pages.push('dots');
+    }
+  }
+
+  return (
+    <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+      <span className="text-slate-600 font-semibold">
+        Hiển thị <strong className="text-slate-900">{startItem}–{endItem}</strong> / <strong className="text-slate-900">{totalItems}</strong> linh kiện (tối đa {pageSize}/trang)
+      </span>
+
+      <div className="flex items-center gap-1 flex-wrap">
+        <button
+          type="button"
+          disabled={safePage <= 1}
+          onClick={() => onPageChange(safePage - 1)}
+          className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-40 font-bold text-slate-700 inline-flex items-center gap-1 cursor-pointer"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+          Trước
+        </button>
+
+        {pages.map((item, idx) =>
+          item === 'dots' ? (
+            <span key={`dots-${idx}`} className="px-1.5 text-slate-400 font-bold">
+              ...
+            </span>
+          ) : (
+            <button
+              key={item}
+              type="button"
+              onClick={() => onPageChange(item)}
+              className={`min-w-[30px] px-2.5 py-1.5 rounded-lg border font-extrabold transition cursor-pointer ${
+                item === safePage
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                  : 'bg-white text-slate-700 border-slate-200 hover:bg-indigo-50'
+              }`}
+            >
+              {item}
+            </button>
+          )
+        )}
+
+        <button
+          type="button"
+          disabled={safePage >= totalPages}
+          onClick={() => onPageChange(safePage + 1)}
+          className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-40 font-bold text-slate-700 inline-flex items-center gap-1 cursor-pointer"
+        >
+          Sau
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 function formatPriceDisplay(val?: number, suffix: string = ''): string {
   if (val === undefined || val === null || !Number.isFinite(val)) return '—';
   return `${val.toLocaleString('vi-VN')}${suffix}`;
@@ -176,6 +260,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
   const [bomSearch, setBomSearch] = useState('');
   const [bomSpecFilter, setBomSpecFilter] = useState('ALL');
   const [bomStatusFilter, setBomStatusFilter] = useState<'ALL' | PartQualityStatus>('ALL');
+  const [bomPage, setBomPage] = useState(1);
 
   // Parts Master filters
   const [partSearch, setPartSearch] = useState('');
@@ -184,6 +269,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
   const [partSharedOnly, setPartSharedOnly] = useState(false);
   const [partMissingImgOnly, setPartMissingImgOnly] = useState(false);
   const [partViewMode, setPartViewMode] = useState<'grid' | 'list'>('grid');
+  const [partsPage, setPartsPage] = useState(1);
 
   // Modals
   const [colorModalModel, setColorModalModel] = useState<OqcModelSummary | null>(null);
@@ -482,6 +568,32 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       );
     });
   }, [bomParts, partSearch, partSpecFilter, partStatusFilter, partSharedOnly, partMissingImgOnly, whereUsedMap]);
+
+  useEffect(() => {
+    setBomPage(1);
+  }, [selectedModelKey, bomSearch, bomSpecFilter, bomStatusFilter]);
+
+  useEffect(() => {
+    setPartsPage(1);
+  }, [partSearch, partSpecFilter, partStatusFilter, partSharedOnly, partMissingImgOnly]);
+
+  const safeBomPage = Math.min(
+    Math.max(1, bomPage),
+    Math.max(1, Math.ceil(filteredModelBomLines.length / PARTS_PER_PAGE))
+  );
+  const paginatedBomLines = useMemo(() => {
+    const start = (safeBomPage - 1) * PARTS_PER_PAGE;
+    return filteredModelBomLines.slice(start, start + PARTS_PER_PAGE);
+  }, [filteredModelBomLines, safeBomPage]);
+
+  const safePartsPage = Math.min(
+    Math.max(1, partsPage),
+    Math.max(1, Math.ceil(filteredPartsMaster.length / PARTS_PER_PAGE))
+  );
+  const paginatedPartsMaster = useMemo(() => {
+    const start = (safePartsPage - 1) * PARTS_PER_PAGE;
+    return filteredPartsMaster.slice(start, start + PARTS_PER_PAGE);
+  }, [filteredPartsMaster, safePartsPage]);
 
   // ==================== HANDLERS ====================
 
@@ -2116,7 +2228,8 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
-                      {filteredModelBomLines.map((line, idx) => {
+                      {paginatedBomLines.map((line, idx) => {
+                        const globalIdx = (safeBomPage - 1) * PARTS_PER_PAGE + idx + 1;
                         const code = line.partCode.trim().toUpperCase();
                         const part = partsByCode.get(code);
                         const images = part?.images || [];
@@ -2130,7 +2243,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                             className="hover:bg-indigo-50/40 transition"
                           >
                             <td className="py-2.5 px-3 text-center font-bold text-slate-500">
-                              {idx + 1}
+                              {globalIdx}
                             </td>
                             <td className="py-2.5 px-3">
                               <div className="flex justify-center">
@@ -2308,6 +2421,11 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                   </table>
                 </div>
               )}
+              <PaginationBar
+                currentPage={safeBomPage}
+                totalItems={filteredModelBomLines.length}
+                onPageChange={setBomPage}
+              />
             </div>
           </div>
         )}
@@ -2508,8 +2626,9 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                 <p>Chưa có mã linh kiện nào khớp bộ lọc.</p>
               </div>
             ) : partViewMode === 'grid' ? (
+              <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
-                {filteredPartsMaster.map((part) => {
+                {paginatedPartsMaster.map((part) => {
                   const code = part.partCode.trim().toUpperCase();
                   const images = part.images || [];
                   const usedModels = whereUsedMap.get(code) || [];
@@ -2625,6 +2744,14 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                   );
                 })}
               </div>
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+                <PaginationBar
+                  currentPage={safePartsPage}
+                  totalItems={filteredPartsMaster.length}
+                  onPageChange={setPartsPage}
+                />
+              </div>
+              </div>
             ) : (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
                 <div className="overflow-x-auto">
@@ -2648,7 +2775,8 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
-                      {filteredPartsMaster.map((part, idx) => {
+                      {paginatedPartsMaster.map((part, idx) => {
+                        const globalIdx = (safePartsPage - 1) * PARTS_PER_PAGE + idx + 1;
                         const code = part.partCode.trim().toUpperCase();
                         const images = part.images || [];
                         const firstImg = images[0]?.url;
@@ -2657,7 +2785,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                         return (
                           <tr key={part.id} className="hover:bg-indigo-50/40 transition">
                             <td className="py-2.5 px-3 text-center font-bold text-slate-500">
-                              {idx + 1}
+                              {globalIdx}
                             </td>
                             <td className="py-2.5 px-3">
                               <div className="flex justify-center">
@@ -2804,6 +2932,11 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                     </tbody>
                   </table>
                 </div>
+                <PaginationBar
+                  currentPage={safePartsPage}
+                  totalItems={filteredPartsMaster.length}
+                  onPageChange={setPartsPage}
+                />
               </div>
             )}
           </div>
