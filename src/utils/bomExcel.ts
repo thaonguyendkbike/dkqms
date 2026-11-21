@@ -38,10 +38,21 @@ function parseNumericQty(raw: any): number {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
+function parseOptionalNumber(raw: any): number | undefined {
+  if (raw === '' || raw === null || raw === undefined) return undefined;
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : undefined;
+  const cleaned = String(raw).trim().replace(/,/g, '');
+  if (!cleaned) return undefined;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 /**
- * Phân tích file Excel BOM xuất từ Ecount theo đúng các cột:
- * STT | Mã mặt hàng | Tên mặt hàng | Thông số | Đơn vị | Số lượng | Ghi chú
- * Tự động chuẩn hóa linh kiện "Nhựa màu" về phôi không màu (bỏ 4 số cuối mã & bỏ tên màu sau tên linh kiện).
+ * Phân tích file Excel/CSV BOM xuất từ Ecount (hỗ trợ cả mẫu cũ lẫn mẫu mới nhiều cột):
+ * - Cột hỗ trợ: Mã mặt hàng, Tên mặt hàng, Thông số, Đơn vị, Ghi chú, Định mức tiêu thụ / Số lượng,
+ *   Số lượng tồn kho, Trạng thái, Tên khách hàng/nhà cung cấp, Giá mua, Giá bán, Từ khóa.
+ * - Tự động bỏ qua các cột: Giá nhập, Thành tiền nhập, Thành tiền bán.
+ * - Tự động chuẩn hóa linh kiện "Nhựa màu" về phôi không màu (bỏ 4 số cuối mã & bỏ tên màu sau tên linh kiện).
  */
 export async function parseEcountBomExcel(
   file: File,
@@ -57,8 +68,10 @@ export async function parseEcountBomExcel(
   const normalizeColoredPlastic = options?.normalizeColoredPlastic !== false;
   const extraColors = options?.extraColors || [];
 
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: 'array' });
+  const isCsv = file.name.toLowerCase().endsWith('.csv');
+  const workbook = isCsv
+    ? XLSX.read(await file.text(), { type: 'string' })
+    : XLSX.read(await file.arrayBuffer(), { type: 'array' });
   const firstSheetName = workbook.SheetNames[0];
   if (!firstSheetName) {
     throw new Error('File Excel không có sheet dữ liệu nào.');
@@ -79,22 +92,58 @@ export async function parseEcountBomExcel(
     specGroup: -1,
     unit: -1,
     qty: -1,
-    note: -1
+    note: -1,
+    stockQty: -1,
+    status: -1,
+    supplierName: -1,
+    purchasePrice: -1,
+    sellingPrice: -1,
+    keywords: -1
   };
 
   for (let r = 0; r < Math.min(20, rawMatrix.length); r++) {
     const row = rawMatrix[r] || [];
-    const candidate = { stt: -1, partCode: -1, partName: -1, specGroup: -1, unit: -1, qty: -1, note: -1 };
+    const candidate = {
+      stt: -1,
+      partCode: -1,
+      partName: -1,
+      specGroup: -1,
+      unit: -1,
+      qty: -1,
+      note: -1,
+      stockQty: -1,
+      status: -1,
+      supplierName: -1,
+      purchasePrice: -1,
+      sellingPrice: -1,
+      keywords: -1
+    };
     row.forEach((cell: any, cIdx: number) => {
       const h = normalizeHeader(cell);
       if (!h) return;
+
+      // Tự động bỏ qua tuyệt đối: Giá nhập, Thành tiền nhập, Thành tiền bán
+      if (
+        h === 'gia nhap' ||
+        h.includes('thanh tien nhap') ||
+        h.includes('thanh tien ban')
+      ) {
+        return;
+      }
+
       if (h === 'stt' || h === 'no' || h === 'no.') candidate.stt = cIdx;
       else if (h.includes('ma mat hang') || h.includes('ma linh kien') || h === 'ma hang' || h === 'item code' || h === 'part code') candidate.partCode = cIdx;
       else if (h.includes('ten mat hang') || h.includes('ten linh kien') || h === 'ten hang' || h === 'item name' || h === 'part name') candidate.partName = cIdx;
       else if (h === 'thong so' || h.includes('nhom') || h === 'spec') candidate.specGroup = cIdx;
       else if (h === 'don vi' || h === 'dvt' || h === 'unit') candidate.unit = cIdx;
-      else if (h === 'so luong' || h === 'sl' || h === 'qty' || h === 'dinh muc') candidate.qty = cIdx;
+      else if (h.includes('dinh muc tieu thu') || h === 'dinh muc' || h === 'so luong' || h === 'sl' || h === 'qty') candidate.qty = cIdx;
       else if (h === 'ghi chu' || h === 'note' || h === 'remark') candidate.note = cIdx;
+      else if (h.includes('ton kho') || h === 'so luong ton' || h === 'stock') candidate.stockQty = cIdx;
+      else if (h === 'trang thai' || h === 'status') candidate.status = cIdx;
+      else if (h.includes('nha cung cap') || h.includes('ten khach hang/nha cung cap') || h === 'ncc' || h === 'supplier') candidate.supplierName = cIdx;
+      else if (h === 'gia mua' || h === 'purchase price') candidate.purchasePrice = cIdx;
+      else if (h === 'gia ban' || h === 'selling price') candidate.sellingPrice = cIdx;
+      else if (h === 'tu khoa' || h === 'keyword' || h === 'keywords') candidate.keywords = cIdx;
     });
 
     if (candidate.partCode >= 0 && candidate.partName >= 0) {
@@ -111,9 +160,9 @@ export async function parseEcountBomExcel(
     const firstNonEmpty = rawMatrix.find(r => Array.isArray(r) && r.some(c => String(c ?? '').trim() !== ''));
     const looksLikeSttFirst = firstNonEmpty && /^\d+$/.test(String(firstNonEmpty[0] ?? '').trim());
     if (looksLikeSttFirst) {
-      colMap = { stt: 0, partCode: 1, partName: 2, specGroup: 3, unit: 4, qty: 5, note: -1 };
+      colMap = { ...colMap, stt: 0, partCode: 1, partName: 2, specGroup: 3, unit: 4, qty: 5 };
     } else {
-      colMap = { stt: -1, partCode: 0, partName: 1, specGroup: 2, unit: 3, qty: 4, note: -1 };
+      colMap = { ...colMap, stt: -1, partCode: 0, partName: 1, specGroup: 2, unit: 3, qty: 4 };
     }
   }
 
@@ -142,6 +191,12 @@ export async function parseEcountBomExcel(
     const unit = colMap.unit >= 0 ? String(row[colMap.unit] ?? '').trim() || 'Cái' : 'Cái';
     const qty = colMap.qty >= 0 ? parseNumericQty(row[colMap.qty]) : 1;
     const note = colMap.note >= 0 ? String(row[colMap.note] ?? '').trim() : '';
+    const stockQty = colMap.stockQty >= 0 ? parseOptionalNumber(row[colMap.stockQty]) : undefined;
+    const ecountStatus = colMap.status >= 0 ? String(row[colMap.status] ?? '').trim() : '';
+    const supplierName = colMap.supplierName >= 0 ? String(row[colMap.supplierName] ?? '').trim() : '';
+    const purchasePrice = colMap.purchasePrice >= 0 ? parseOptionalNumber(row[colMap.purchasePrice]) : undefined;
+    const sellingPrice = colMap.sellingPrice >= 0 ? parseOptionalNumber(row[colMap.sellingPrice]) : undefined;
+    const keywords = colMap.keywords >= 0 ? String(row[colMap.keywords] ?? '').trim() : '';
     const sttVal = colMap.stt >= 0 ? Number(row[colMap.stt]) : NaN;
     const lineNo = Number.isFinite(sttVal) && sttVal > 0 ? sttVal : parsedMap.size + 1;
 
@@ -180,6 +235,11 @@ export async function parseEcountBomExcel(
       if (note && !existing.note.includes(note)) {
         existing.note = existing.note ? `${existing.note}; ${note}` : note;
       }
+      if (!existing.supplierName && supplierName) existing.supplierName = supplierName;
+      if (existing.stockQty === undefined && stockQty !== undefined) existing.stockQty = stockQty;
+      if (existing.purchasePrice === undefined && purchasePrice !== undefined) existing.purchasePrice = purchasePrice;
+      if (existing.sellingPrice === undefined && sellingPrice !== undefined) existing.sellingPrice = sellingPrice;
+      if (!existing.keywords && keywords) existing.keywords = keywords;
     } else {
       parsedMap.set(finalCode, {
         lineNo,
@@ -194,6 +254,12 @@ export async function parseEcountBomExcel(
         rawPartName: rawName,
         detectedColor,
         isNormalizedFromColor,
+        stockQty,
+        ecountStatus,
+        supplierName,
+        purchasePrice,
+        sellingPrice,
+        keywords,
         _rawCodesSeen: new Set([rawCode])
       });
     }
@@ -290,7 +356,7 @@ function applyStyledSheet(
       const align =
         h === 'stt' || h === 'đơn vị' || h === 'trạng thái'
           ? 'center'
-          : h === 'số lượng' || h.includes('số model')
+          : h === 'số lượng' || h.includes('số model') || h.includes('tồn kho') || h.includes('giá')
             ? 'right'
             : 'left';
 
@@ -310,8 +376,8 @@ function applyStyledSheet(
 
 /**
  * Xuất Excel BOM theo Model:
- * - mode 'ecount': đúng 100% các cột như bảng Ecount (STT, Mã mặt hàng, Tên mặt hàng, Thông số, Đơn vị, Số lượng, Ghi chú)
- * - mode 'full': bổ sung thêm Thông số kỹ thuật, Nhà cung cấp, Trạng thái, Dùng chung (Model)
+ * - mode 'ecount': đúng các cột bảng Ecount (STT, Mã mặt hàng, Tên mặt hàng, Thông số, Đơn vị, Số lượng, Ghi chú)
+ * - mode 'full': bổ sung thêm Tồn kho, Giá bán, (Giá mua nếu có quyền), Nhà cung cấp, Từ khóa, Thông số kỹ thuật, Trạng thái, Dùng chung
  */
 export function exportModelBomExcel(params: {
   modelName: string;
@@ -320,8 +386,9 @@ export function exportModelBomExcel(params: {
   partsByCode: Map<string, BomPartMasterItem>;
   whereUsedByCode: Map<string, string[]>;
   mode: 'ecount' | 'full';
+  includePurchasePrice?: boolean;
 }): void {
-  const { modelName, colorCount, lines, partsByCode, whereUsedByCode, mode } = params;
+  const { modelName, colorCount, lines, partsByCode, whereUsedByCode, mode, includePurchasePrice = false } = params;
   const todayStr = new Date().toLocaleDateString('vi-VN');
   const safeFileModel = modelName.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
 
@@ -358,9 +425,13 @@ export function exportModelBomExcel(params: {
     'Tên mặt hàng',
     'Thông số',
     'Đơn vị',
-    'Số lượng',
-    'Thông số kỹ thuật',
+    'Định mức tiêu thụ',
+    'Số lượng tồn kho',
+    ...(includePurchasePrice ? ['Giá mua'] : []),
+    'Giá bán',
     'Nhà cung cấp',
+    'Từ khóa',
+    'Thông số kỹ thuật',
     'Trạng thái',
     'Model dùng chung',
     'Ghi chú'
@@ -377,20 +448,30 @@ export function exportModelBomExcel(params: {
       part?.specGroup || '',
       line.unit || part?.unit || 'Cái',
       line.qty,
-      part?.techSpecs || '',
+      part?.stockQty ?? '',
+      ...(includePurchasePrice ? [part?.purchasePrice ?? ''] : []),
+      part?.sellingPrice ?? '',
       part?.supplierName || '',
+      part?.keywords || '',
+      part?.techSpecs || '',
       part?.status || 'Đang dùng',
       sharedModels.join(', '),
       line.note || part?.note || ''
     ];
   });
 
+  const widths = [
+    7, 18, 38, 15, 10, 14, 14,
+    ...(includePurchasePrice ? [14] : []),
+    14, 28, 24, 34, 15, 34, 24
+  ];
+
   applyStyledSheet(
     `DANH MỤC LINH KIỆN & THÔNG SỐ KỸ THUẬT: ${modelName.toUpperCase()}`,
     `Ngày xuất: ${todayStr}   |   Tổng số linh kiện: ${lines.length} mã   |   Số màu xe: ${colorCount}`,
     headers,
     rows,
-    [7, 18, 38, 15, 10, 11, 34, 24, 16, 34, 28],
+    widths,
     `BOM_${safeFileModel}`,
     `BOM_QLCL_${safeFileModel}.xlsx`
   );
@@ -402,8 +483,9 @@ export function exportModelBomExcel(params: {
 export function exportPartsMasterExcel(params: {
   parts: BomPartMasterItem[];
   whereUsedByCode: Map<string, string[]>;
+  includePurchasePrice?: boolean;
 }): void {
-  const { parts, whereUsedByCode } = params;
+  const { parts, whereUsedByCode, includePurchasePrice = false } = params;
   const todayStr = new Date().toLocaleDateString('vi-VN');
   const headers = [
     'STT',
@@ -411,8 +493,12 @@ export function exportPartsMasterExcel(params: {
     'Tên mặt hàng',
     'Thông số',
     'Đơn vị',
-    'Thông số kỹ thuật',
+    'Số lượng tồn kho',
+    ...(includePurchasePrice ? ['Giá mua'] : []),
+    'Giá bán',
     'Nhà cung cấp',
+    'Từ khóa',
+    'Thông số kỹ thuật',
     'Trạng thái',
     'Số ảnh',
     'Số Model dùng chung',
@@ -429,8 +515,12 @@ export function exportPartsMasterExcel(params: {
       p.partName,
       p.specGroup || '',
       p.unit || 'Cái',
-      p.techSpecs || '',
+      p.stockQty ?? '',
+      ...(includePurchasePrice ? [p.purchasePrice ?? ''] : []),
+      p.sellingPrice ?? '',
       p.supplierName || '',
+      p.keywords || '',
+      p.techSpecs || '',
       p.status || 'Đang dùng',
       Array.isArray(p.images) ? p.images.length : 0,
       models.length,
@@ -439,12 +529,18 @@ export function exportPartsMasterExcel(params: {
     ];
   });
 
+  const widths = [
+    7, 18, 38, 15, 10, 14,
+    ...(includePurchasePrice ? [14] : []),
+    14, 28, 24, 34, 15, 10, 14, 40, 24
+  ];
+
   applyStyledSheet(
     'KHO LINH KIỆN GỐC & DANH SÁCH MODEL DÙNG CHUNG (WHERE-USED)',
     `Ngày xuất: ${todayStr}   |   Tổng số mã linh kiện: ${parts.length}`,
     headers,
     rows,
-    [7, 18, 38, 15, 10, 34, 24, 16, 10, 14, 40, 28],
+    widths,
     'Kho_Linh_Kien_DKBike',
     `Kho_Linh_Kien_DKBike_${new Date().toISOString().slice(0, 10)}.xlsx`
   );

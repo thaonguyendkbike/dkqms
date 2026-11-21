@@ -466,6 +466,10 @@ export function subscribeBomCatalog(
             unit: String(data.unit || 'Cái'),
             techSpecs: data.techSpecs || '',
             supplierName: data.supplierName || '',
+            stockQty: typeof data.stockQty === 'number' ? data.stockQty : undefined,
+            purchasePrice: typeof data.purchasePrice === 'number' ? data.purchasePrice : undefined,
+            sellingPrice: typeof data.sellingPrice === 'number' ? data.sellingPrice : undefined,
+            keywords: data.keywords || '',
             status: data.status || 'Đang dùng',
             imageMode: data.imageMode || inferPartImageMode(data.specGroup),
             images: Array.isArray(data.images) ? data.images : [],
@@ -530,9 +534,18 @@ async function commitWriteBatches(
   }
 }
 
+function mapEcountStatusToQuality(raw?: string): BomPartMasterItem['status'] {
+  const norm = normalizeViText(raw || '');
+  if (norm === 'stop' || norm.includes('ngung') || norm === 'unused' || norm === 'inactive') {
+    return 'Ngừng dùng';
+  }
+  return 'Đang dùng';
+}
+
 /**
- * Import hàng loạt định mức BOM từ Excel Ecount cho 1 Model:
- * - Mã đã tồn tại trong Kho Linh kiện -> giữ nguyên 100% ảnh, thông số kỹ thuật, trạng thái, NCC đã nhập trước đó.
+ * Import hàng loạt định mức BOM từ Excel/CSV Ecount cho 1 Model:
+ * - Mã đã tồn tại trong Kho Linh kiện -> giữ nguyên 100% ảnh, thông số kỹ thuật, cảnh báo QLCL;
+ *   đồng thời tự động cập nhật thêm Nhà cung cấp, Tồn kho, Giá mua, Giá bán, Từ khóa từ file mới nếu có.
  * - Mã chưa có -> tạo mới bản ghi trong Kho Linh kiện.
  */
 export async function bulkImportModelBom(params: {
@@ -543,7 +556,12 @@ export async function bulkImportModelBom(params: {
   existingPartsMap: Map<string, BomPartMasterItem>;
   replaceExistingLines: boolean;
   updatedBy: string;
-}): Promise<{ newPartsCount: number; linkedExistingCount: number; totalLines: number }> {
+}): Promise<{
+  newPartsCount: number;
+  updatedExistingCount: number;
+  linkedExistingCount: number;
+  totalLines: number;
+}> {
   const {
     modelKey,
     modelName,
@@ -557,6 +575,7 @@ export async function bulkImportModelBom(params: {
   const nowIso = new Date().toISOString();
   const ops: Array<{ ref: ReturnType<typeof doc>; data: any }> = [];
   let newPartsCount = 0;
+  let updatedExistingCount = 0;
   let linkedExistingCount = 0;
 
   rows.forEach((row) => {
@@ -564,8 +583,53 @@ export async function bulkImportModelBom(params: {
     const existingPart = existingPartsMap.get(code);
     if (existingPart) {
       linkedExistingCount++;
+
+      // Kiểm tra nếu có thông tin mới (NCC, Tồn kho, Giá mua, Giá bán, Từ khóa...) cần bổ sung/cập nhật
+      const nextSupplier = row.supplierName?.trim() || existingPart.supplierName || '';
+      const nextStockQty = row.stockQty !== undefined ? row.stockQty : existingPart.stockQty;
+      const nextPurchasePrice = row.purchasePrice !== undefined ? row.purchasePrice : existingPart.purchasePrice;
+      const nextSellingPrice = row.sellingPrice !== undefined ? row.sellingPrice : existingPart.sellingPrice;
+      const nextKeywords = row.keywords?.trim() || existingPart.keywords || '';
+      const nextSpecGroup = row.specGroup?.trim() || existingPart.specGroup || '';
+      const nextUnit = row.unit?.trim() || existingPart.unit || 'Cái';
+      const nextNote = row.note?.trim() || existingPart.note || '';
+
+      const hasChanges =
+        nextSupplier !== (existingPart.supplierName || '') ||
+        nextStockQty !== existingPart.stockQty ||
+        nextPurchasePrice !== existingPart.purchasePrice ||
+        nextSellingPrice !== existingPart.sellingPrice ||
+        nextKeywords !== (existingPart.keywords || '') ||
+        nextSpecGroup !== (existingPart.specGroup || '') ||
+        nextUnit !== (existingPart.unit || 'Cái') ||
+        nextNote !== (existingPart.note || '');
+
+      if (hasChanges) {
+        updatedExistingCount++;
+        const docId = existingPart.id || toSafeDocId(code);
+        const mergedPart: BomPartMasterItem = {
+          ...existingPart,
+          id: docId,
+          partCode: code,
+          specGroup: nextSpecGroup,
+          unit: nextUnit,
+          supplierName: nextSupplier,
+          stockQty: nextStockQty,
+          purchasePrice: nextPurchasePrice,
+          sellingPrice: nextSellingPrice,
+          keywords: nextKeywords,
+          note: nextNote,
+          updatedAt: nowIso,
+          updatedBy
+        };
+        ops.push({
+          ref: doc(db, 'dk_db_sync', BOM_PARTS_COLLECTION, 'records', docId),
+          data: mergedPart
+        });
+      }
       return;
     }
+
     newPartsCount++;
     const docId = toSafeDocId(code);
     const newPart: BomPartMasterItem = {
@@ -575,8 +639,12 @@ export async function bulkImportModelBom(params: {
       specGroup: row.specGroup || '',
       unit: row.unit || 'Cái',
       techSpecs: '',
-      supplierName: '',
-      status: 'Đang dùng',
+      supplierName: row.supplierName?.trim() || '',
+      stockQty: row.stockQty,
+      purchasePrice: row.purchasePrice,
+      sellingPrice: row.sellingPrice,
+      keywords: row.keywords?.trim() || '',
+      status: mapEcountStatusToQuality(row.ecountStatus),
       imageMode: inferPartImageMode(row.specGroup),
       images: [],
       note: row.note || '',
@@ -630,6 +698,7 @@ export async function bulkImportModelBom(params: {
   await commitWriteBatches(ops);
   return {
     newPartsCount,
+    updatedExistingCount,
     linkedExistingCount,
     totalLines: finalLines.length
   };

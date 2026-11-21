@@ -12976,6 +12976,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
           <PartsBomCenter
             readOnly={true}
             isLoggedIn={false}
+            canViewPurchasePrice={false}
             onRequestLogin={() => {
               if (typeof window !== 'undefined') {
                 window.location.href = '/?tab=parts-bom';
@@ -13453,6 +13454,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
         <PartsBomCenter
           readOnly={!isUserAuthorized()}
           isLoggedIn={true}
+          canViewPurchasePrice={isUserAuthorized()}
           currentUserName={getLoggedInMember()?.name || firebaseUser?.displayName || firebaseUser?.email || 'QLCL DKBike'}
           onBackToApp={() => {
             if (typeof window !== 'undefined' && window.location.pathname.includes('/lk')) {

@@ -67,6 +67,7 @@ import {
 interface PartsBomCenterProps {
   readOnly?: boolean;
   isLoggedIn?: boolean;
+  canViewPurchasePrice?: boolean;
   currentUserName?: string;
   onBackToApp?: () => void;
   onRequestLogin?: () => void;
@@ -98,6 +99,11 @@ const STATUS_BADGE_MAP: Record<PartQualityStatus, string> = {
   'Ngừng dùng': 'bg-slate-100 text-slate-600 border-slate-300'
 };
 
+function formatPriceDisplay(val?: number, suffix: string = ''): string {
+  if (val === undefined || val === null || !Number.isFinite(val)) return '—';
+  return `${val.toLocaleString('vi-VN')}${suffix}`;
+}
+
 interface PartFormState {
   partCode: string;
   partName: string;
@@ -105,6 +111,10 @@ interface PartFormState {
   unit: string;
   techSpecs: string;
   supplierName: string;
+  stockQty: string;
+  purchasePrice: string;
+  sellingPrice: string;
+  keywords: string;
   status: PartQualityStatus;
   imageMode: PartImageMode;
   images: BomPartImageItem[];
@@ -118,6 +128,10 @@ const EMPTY_PART_FORM: PartFormState = {
   unit: 'Cái',
   techSpecs: '',
   supplierName: '',
+  stockQty: '',
+  purchasePrice: '',
+  sellingPrice: '',
+  keywords: '',
   status: 'Đang dùng',
   imageMode: 'multi',
   images: [],
@@ -127,10 +141,12 @@ const EMPTY_PART_FORM: PartFormState = {
 export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
   readOnly = true,
   isLoggedIn = false,
+  canViewPurchasePrice = false,
   currentUserName = 'QLCL DKBike',
   onBackToApp,
   onRequestLogin
 }) => {
+  const showPurchasePrice = Boolean(isLoggedIn && canViewPurchasePrice);
   const initialCache = useMemo(() => readCachedBomCatalog(), []);
   const [oqcModels, setOqcModels] = useState<OqcModelSummary[]>([]);
   const [bomModels, setBomModels] = useState<BomModelRecord[]>(initialCache.models);
@@ -411,6 +427,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         (part?.partName || '').toLowerCase().includes(q) ||
         (part?.techSpecs || '').toLowerCase().includes(q) ||
         (part?.supplierName || '').toLowerCase().includes(q) ||
+        (part?.keywords || '').toLowerCase().includes(q) ||
         (line.note || '').toLowerCase().includes(q)
       );
     });
@@ -436,6 +453,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         (p.specGroup || '').toLowerCase().includes(q) ||
         (p.techSpecs || '').toLowerCase().includes(q) ||
         (p.supplierName || '').toLowerCase().includes(q) ||
+        (p.keywords || '').toLowerCase().includes(q) ||
         (p.note || '').toLowerCase().includes(q)
       );
     });
@@ -538,7 +556,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       });
       setImportModalState(null);
       showToast(
-        `Đã import ${res.totalLines} dòng BOM cho ${importModalState.modelName} (${res.newPartsCount} mã mới, ${res.linkedExistingCount} mã dùng chung giữ nguyên ảnh/thông số).`,
+        `Đã import ${res.totalLines} dòng BOM cho ${importModalState.modelName} (${res.newPartsCount} mã mới, ${res.updatedExistingCount} mã cập nhật thông tin NCC/giá/tồn kho giữ nguyên ảnh).`,
         'success'
       );
     } catch (err: any) {
@@ -564,6 +582,10 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       unit: existing.unit || 'Cái',
       techSpecs: existing.techSpecs || '',
       supplierName: existing.supplierName || '',
+      stockQty: existing.stockQty !== undefined ? String(existing.stockQty) : '',
+      purchasePrice: existing.purchasePrice !== undefined ? String(existing.purchasePrice) : '',
+      sellingPrice: existing.sellingPrice !== undefined ? String(existing.sellingPrice) : '',
+      keywords: existing.keywords || '',
       status: existing.status || 'Đang dùng',
       imageMode: existing.imageMode || inferPartImageMode(existing.specGroup),
       images: Array.isArray(existing.images) ? existing.images : [],
@@ -589,6 +611,10 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       unit: part.unit || 'Cái',
       techSpecs: part.techSpecs || '',
       supplierName: part.supplierName || '',
+      stockQty: part.stockQty !== undefined ? String(part.stockQty) : '',
+      purchasePrice: part.purchasePrice !== undefined ? String(part.purchasePrice) : '',
+      sellingPrice: part.sellingPrice !== undefined ? String(part.sellingPrice) : '',
+      keywords: part.keywords || '',
       status: part.status || 'Đang dùng',
       imageMode: part.imageMode || inferPartImageMode(part.specGroup),
       images: Array.isArray(part.images) ? part.images : [],
@@ -688,6 +714,13 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
     try {
       const nowIso = new Date().toISOString();
       const docId = editingPartId || toSafeDocId(code);
+      const existingMaster = partsByCode.get(code);
+      const parseNum = (s: string): number | undefined => {
+        const trimmed = s.trim().replace(/,/g, '');
+        if (!trimmed) return undefined;
+        const n = Number(trimmed);
+        return Number.isFinite(n) ? n : undefined;
+      };
       const record: BomPartMasterItem = {
         id: docId,
         partCode: code,
@@ -696,6 +729,10 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         unit: partForm.unit.trim() || 'Cái',
         techSpecs: partForm.techSpecs.trim(),
         supplierName: partForm.supplierName.trim(),
+        stockQty: parseNum(partForm.stockQty),
+        purchasePrice: showPurchasePrice ? parseNum(partForm.purchasePrice) : existingMaster?.purchasePrice,
+        sellingPrice: parseNum(partForm.sellingPrice),
+        keywords: partForm.keywords.trim(),
         status: partForm.status,
         imageMode: partForm.imageMode,
         images: partForm.images,
@@ -941,7 +978,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       <input
         ref={excelInputRef}
         type="file"
-        accept=".xlsx,.xls"
+        accept=".xlsx,.xls,.csv"
         className="hidden"
         onChange={handleExcelFileSelected}
       />
@@ -1367,7 +1404,8 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                         lines: selectedModelEntry.bom?.items || [],
                         partsByCode,
                         whereUsedByCode: whereUsedNamesMap,
-                        mode: 'full'
+                        mode: 'full',
+                        includePurchasePrice: showPurchasePrice
                       })
                     }
                     className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
@@ -1483,10 +1521,15 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                         <th className="py-3 px-3 text-center w-12">STT</th>
                         <th className="py-3 px-3 w-20 text-center">Ảnh</th>
                         <th className="py-3 px-3">Mã mặt hàng</th>
-                        <th className="py-3 px-3 min-w-[220px]">Tên mặt hàng</th>
+                        <th className="py-3 px-3 min-w-[230px]">Tên mặt hàng &amp; NCC</th>
                         <th className="py-3 px-3">Thông số</th>
                         <th className="py-3 px-3 text-center">Đơn vị</th>
-                        <th className="py-3 px-3 text-right">Số lượng</th>
+                        <th className="py-3 px-3 text-right">Định mức</th>
+                        <th className="py-3 px-3 text-right">Tồn kho</th>
+                        {showPurchasePrice && (
+                          <th className="py-3 px-3 text-right bg-amber-950/60">Giá mua</th>
+                        )}
+                        <th className="py-3 px-3 text-right">Giá bán</th>
                         <th className="py-3 px-3">Trạng thái</th>
                         <th className="py-3 px-3">Dùng chung</th>
                         <th className="py-3 px-3">Ghi chú</th>
@@ -1567,6 +1610,11 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                               >
                                 {part?.partName || code}
                               </button>
+                              {part?.supplierName && (
+                                <p className="text-[11px] text-indigo-700/90 font-semibold line-clamp-1 mt-0.5">
+                                  NCC: {part.supplierName}
+                                </p>
+                              )}
                               {part?.techSpecs && (
                                 <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
                                   TSKT: {part.techSpecs}
@@ -1587,6 +1635,23 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                             </td>
                             <td className="py-2.5 px-3 text-right font-black text-slate-900">
                               {line.qty}
+                            </td>
+                            <td
+                              className={`py-2.5 px-3 text-right font-bold whitespace-nowrap ${
+                                typeof part?.stockQty === 'number' && part.stockQty <= 0
+                                  ? 'text-rose-600'
+                                  : 'text-slate-700'
+                              }`}
+                            >
+                              {formatPriceDisplay(part?.stockQty)}
+                            </td>
+                            {showPurchasePrice && (
+                              <td className="py-2.5 px-3 text-right font-extrabold text-amber-800 bg-amber-50/50 whitespace-nowrap">
+                                {formatPriceDisplay(part?.purchasePrice)}
+                              </td>
+                            )}
+                            <td className="py-2.5 px-3 text-right font-extrabold text-emerald-700 whitespace-nowrap">
+                              {formatPriceDisplay(part?.sellingPrice, ' đ')}
                             </td>
                             <td className="py-2.5 px-3 whitespace-nowrap">
                               <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${STATUS_BADGE_MAP[status]}`}>
@@ -1691,7 +1756,8 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                     onClick={() =>
                       exportPartsMasterExcel({
                         parts: filteredPartsMaster,
-                        whereUsedByCode: whereUsedNamesMap
+                        whereUsedByCode: whereUsedNamesMap,
+                        includePurchasePrice: showPurchasePrice
                       })
                     }
                     className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
@@ -1828,10 +1894,30 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                               </span>
                             )}
                             <span>ĐVT: {part.unit || 'Cái'}</span>
-                            <span>•</span>
-                            <span className={part.imageMode === 'single' ? 'text-slate-500' : 'text-indigo-600 font-semibold'}>
-                              {part.imageMode === 'single' ? '1 ảnh' : 'Nhiều ảnh'}
+                            {part.stockQty !== undefined && (
+                              <span
+                                className={`font-bold ${
+                                  part.stockQty <= 0 ? 'text-rose-600' : 'text-slate-700'
+                                }`}
+                              >
+                                • Tồn: {formatPriceDisplay(part.stockQty)}
+                              </span>
+                            )}
+                          </div>
+                          {part.supplierName && (
+                            <p className="mt-1 text-[11px] font-semibold text-indigo-700/90 line-clamp-1">
+                              NCC: {part.supplierName}
+                            </p>
+                          )}
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                            <span className="font-extrabold text-emerald-700">
+                              Giá bán: {formatPriceDisplay(part.sellingPrice, ' đ')}
                             </span>
+                            {showPurchasePrice && part.purchasePrice !== undefined && (
+                              <span className="font-extrabold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                Giá mua: {formatPriceDisplay(part.purchasePrice)}
+                              </span>
+                            )}
                           </div>
                           {part.techSpecs && (
                             <p className="mt-1 text-[11px] text-slate-500 line-clamp-1">
@@ -2150,6 +2236,42 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                             </div>
                           </div>
 
+                          {/* Giá bán / Giá mua / Tồn kho */}
+                          <div className={`grid gap-2.5 text-xs ${showPurchasePrice ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'}`}>
+                            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+                              <span className="block text-[10px] font-extrabold text-emerald-700 uppercase">
+                                Giá bán
+                              </span>
+                              <span className="mt-0.5 block text-sm font-black text-emerald-800">
+                                {formatPriceDisplay(currentPartObj?.sellingPrice, ' đ')}
+                              </span>
+                            </div>
+                            {showPurchasePrice && (
+                              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+                                <span className="block text-[10px] font-extrabold text-amber-800 uppercase">
+                                  Giá mua (Nội bộ)
+                                </span>
+                                <span className="mt-0.5 block text-sm font-black text-amber-900">
+                                  {formatPriceDisplay(currentPartObj?.purchasePrice)}
+                                </span>
+                              </div>
+                            )}
+                            <div className="rounded-xl border border-slate-200 bg-white p-3">
+                              <span className="block text-[10px] font-extrabold text-slate-500 uppercase">
+                                Số lượng tồn kho
+                              </span>
+                              <span
+                                className={`mt-0.5 block text-sm font-black ${
+                                  typeof currentPartObj?.stockQty === 'number' && currentPartObj.stockQty <= 0
+                                    ? 'text-rose-600'
+                                    : 'text-slate-900'
+                                }`}
+                              >
+                                {formatPriceDisplay(currentPartObj?.stockQty)}
+                              </span>
+                            </div>
+                          </div>
+
                           {/* Thông số kỹ thuật */}
                           <div className="rounded-2xl bg-slate-50 border border-slate-200 p-3.5 space-y-1.5">
                             <p className="text-[11px] font-black uppercase tracking-wider text-slate-500">
@@ -2162,7 +2284,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                             </p>
                           </div>
 
-                          {/* Nhà cung cấp & Ghi chú */}
+                          {/* Nhà cung cấp & Ghi chú & Từ khóa */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                             <div className="rounded-xl border border-slate-200 bg-white p-3">
                               <span className="block text-[11px] font-bold text-slate-400 uppercase">
@@ -2180,6 +2302,16 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                                 {partForm.note?.trim() || 'Không có ghi chú'}
                               </span>
                             </div>
+                            {partForm.keywords?.trim() && (
+                              <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                <span className="block text-[11px] font-bold text-slate-400 uppercase">
+                                  Từ khóa tìm kiếm (Ecount)
+                                </span>
+                                <span className="mt-1 block font-semibold text-slate-700">
+                                  {partForm.keywords}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -2547,6 +2679,59 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                   />
                 </div>
 
+                <div className={`grid gap-2.5 sm:col-span-2 ${showPurchasePrice ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Số lượng tồn kho</label>
+                    <input
+                      type="number"
+                      step="any"
+                      disabled={partModalMode === 'view' || readOnly}
+                      value={partForm.stockQty}
+                      onChange={(e) => setPartForm((prev) => ({ ...prev, stockQty: e.target.value }))}
+                      placeholder="VD: 161"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 font-bold disabled:bg-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Giá bán (VNĐ)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      disabled={partModalMode === 'view' || readOnly}
+                      value={partForm.sellingPrice}
+                      onChange={(e) => setPartForm((prev) => ({ ...prev, sellingPrice: e.target.value }))}
+                      placeholder="VD: 30000"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 font-bold disabled:bg-slate-100"
+                    />
+                  </div>
+                  {showPurchasePrice && (
+                    <div>
+                      <label className="block font-bold text-amber-800 mb-1">Giá mua (Nội bộ)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        disabled={partModalMode === 'view' || readOnly}
+                        value={partForm.purchasePrice}
+                        onChange={(e) => setPartForm((prev) => ({ ...prev, purchasePrice: e.target.value }))}
+                        placeholder="VD: 3.5 hoặc 173000"
+                        className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-amber-50/40 font-bold disabled:bg-slate-100"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">Từ khóa tìm kiếm (Ecount)</label>
+                  <input
+                    type="text"
+                    disabled={partModalMode === 'view' || readOnly}
+                    value={partForm.keywords}
+                    onChange={(e) => setPartForm((prev) => ({ ...prev, keywords: e.target.value }))}
+                    placeholder="VD: S1 喇叭, Trước Roma..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 disabled:bg-slate-100"
+                  />
+                </div>
+
                 <div className="sm:col-span-2">
                   <label className="block font-bold text-slate-700 mb-1">
                     Thông số kỹ thuật chi tiết
@@ -2893,6 +3078,13 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                 );
               })()}
 
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700">
+                <p className="font-bold">
+                  Tự động nhận diện các cột mới: <span className="text-indigo-700">Định mức tiêu thụ</span>, <span className="text-indigo-700">Số lượng tồn kho</span>, <span className="text-indigo-700">Tên khách hàng/nhà cung cấp</span>, {showPurchasePrice && <><span className="text-amber-800">Giá mua</span>, </>}<span className="text-emerald-700">Giá bán</span>, <span className="text-indigo-700">Từ khóa</span>.
+                  <span className="text-slate-500"> (Tự động bỏ qua các cột Giá nhập, Thành tiền nhập, Thành tiền bán).</span>
+                </p>
+              </div>
+
               {importModalState.normalizedColoredCount > 0 && (
                 <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900">
                   <p className="font-extrabold">
@@ -2932,8 +3124,12 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                       <th className="py-2 px-3">Mã mặt hàng</th>
                       <th className="py-2 px-3">Tên mặt hàng</th>
                       <th className="py-2 px-3">Thông số</th>
-                      <th className="py-2 px-3">Đơn vị</th>
-                      <th className="py-2 px-3 text-right">SL</th>
+                      <th className="py-2 px-3">ĐVT</th>
+                      <th className="py-2 px-3 text-right">Định mức</th>
+                      <th className="py-2 px-3 text-right">Tồn kho</th>
+                      <th className="py-2 px-3">Nhà cung cấp</th>
+                      {showPurchasePrice && <th className="py-2 px-3 text-right">Giá mua</th>}
+                      <th className="py-2 px-3 text-right">Giá bán</th>
                       <th className="py-2 px-3">Trạng thái Kho</th>
                     </tr>
                   </thead>
@@ -2962,10 +3158,22 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                           <td className="py-1.5 px-3">{r.specGroup || '—'}</td>
                           <td className="py-1.5 px-3">{r.unit}</td>
                           <td className="py-1.5 px-3 text-right font-bold">{r.qty}</td>
+                          <td className="py-1.5 px-3 text-right font-semibold">{formatPriceDisplay(r.stockQty)}</td>
+                          <td className="py-1.5 px-3 max-w-[180px] truncate" title={r.supplierName || ''}>
+                            {r.supplierName || '—'}
+                          </td>
+                          {showPurchasePrice && (
+                            <td className="py-1.5 px-3 text-right font-bold text-amber-800">
+                              {formatPriceDisplay(r.purchasePrice)}
+                            </td>
+                          )}
+                          <td className="py-1.5 px-3 text-right font-bold text-emerald-700">
+                            {formatPriceDisplay(r.sellingPrice, ' đ')}
+                          </td>
                           <td className="py-1.5 px-3">
                             {exists ? (
                               <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Đã có (Dùng chung)
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Cập nhật &amp; giữ ảnh
                               </span>
                             ) : (
                               <span className="text-indigo-700 font-bold">+ Tạo mới</span>

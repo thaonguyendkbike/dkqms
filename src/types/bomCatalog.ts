@@ -22,6 +22,10 @@ export interface BomPartMasterItem {
   unit: string;               // Đơn vị (Cái, Bộ, Đôi...)
   techSpecs?: string;         // Thông số kỹ thuật chi tiết
   supplierName?: string;      // Nhà cung cấp
+  stockQty?: number;          // Số lượng tồn kho
+  purchasePrice?: number;     // Giá mua (chỉ hiển thị khi đăng nhập Google được cấp quyền)
+  sellingPrice?: number;      // Giá bán (hiển thị cả ở chế độ mật khẩu tra cứu)
+  keywords?: string;          // Từ khóa tìm kiếm (Ecount)
   status: PartQualityStatus;  // Trạng thái chất lượng
   imageMode: PartImageMode;   // 'single' cho nhựa/nhựa màu (1 ảnh), 'multi' cho linh kiện cần nhiều ảnh
   images: BomPartImageItem[]; // Danh sách URL ảnh từ Firebase Storage
@@ -73,4 +77,10 @@ export interface EcountParsedBomRow {
   rawPartName?: string;
   detectedColor?: string;
   isNormalizedFromColor?: boolean;
+  stockQty?: number;
+  ecountStatus?: string;
+  supplierName?: string;
+  purchasePrice?: number;
+  sellingPrice?: number;
+  keywords?: string;
 }
