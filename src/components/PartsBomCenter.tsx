@@ -12,6 +12,7 @@ import {
   Download,
   Edit3,
   Eye,
+  EyeOff,
   FileSpreadsheet,
   Filter,
   FolderArchive,
@@ -24,6 +25,7 @@ import {
   Package,
   Palette,
   Plus,
+  RotateCcw,
   Search,
   Share2,
   Trash2,
@@ -53,6 +55,7 @@ import {
   readCachedBomCatalog,
   restoreBomBackupPayload,
   saveBomModelRecord,
+  saveBomModelsBatch,
   saveBomPartRecord,
   subscribeBomCatalog,
   toSafeDocId
@@ -161,8 +164,11 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<'models' | 'parts'>('models');
   const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null);
   const [modelSearch, setModelSearch] = useState('');
-  const [modelFilter, setModelFilter] = useState<'all' | 'has_bom' | 'no_bom' | 'has_alert'>('all');
+  const [modelFilter, setModelFilter] = useState<'active' | 'discontinued' | 'all' | 'has_bom' | 'no_bom' | 'has_alert'>('active');
   const [modelViewMode, setModelViewMode] = useState<'grid' | 'list'>('grid');
+  const [bulkModelSelectMode, setBulkModelSelectMode] = useState(false);
+  const [selectedModelKeysForBulk, setSelectedModelKeysForBulk] = useState<string[]>([]);
+  const [bulkSavingModels, setBulkSavingModels] = useState(false);
 
   // BOM detail filters
   const [bomSearch, setBomSearch] = useState('');
@@ -374,12 +380,16 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
   // Thống kê tổng quan
   const overviewStats = useMemo(() => {
     const totalModels = combinedModels.length;
+    const discontinuedModels = combinedModels.filter((m) => Boolean(m.bom?.isDiscontinued)).length;
+    const activeModels = totalModels - discontinuedModels;
     const modelsWithBom = combinedModels.filter((m) => (m.bom?.items?.length || 0) > 0).length;
     const modelsWithPhoto = combinedModels.filter((m) => Boolean(m.bom?.imageUrl)).length;
     const totalColors = combinedModels.reduce((acc, m) => acc + m.summary.colors.length, 0);
     const sharedPartsCount = Array.from(whereUsedMap.values() as Iterable<unknown[]>).filter((arr) => arr.length >= 2).length;
     return {
       totalModels,
+      activeModels,
+      discontinuedModels,
       modelsWithBom,
       modelsWithPhoto,
       totalColors,
@@ -392,6 +402,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
   const filteredModels = useMemo(() => {
     const q = modelSearch.trim().toLowerCase();
     return combinedModels.filter(({ summary, bom }) => {
+      const isDisc = Boolean(bom?.isDiscontinued);
       const items = bom?.items || [];
       const hasBom = items.length > 0;
       const hasAlert = items.some((line) => {
@@ -399,9 +410,11 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         return st === 'Cảnh báo lỗi' || st === 'Đang ECO';
       });
 
-      if (modelFilter === 'has_bom' && !hasBom) return false;
-      if (modelFilter === 'no_bom' && hasBom) return false;
-      if (modelFilter === 'has_alert' && !hasAlert) return false;
+      if (modelFilter === 'active' && isDisc) return false;
+      if (modelFilter === 'discontinued' && !isDisc) return false;
+      if (modelFilter === 'has_bom' && (isDisc || !hasBom)) return false;
+      if (modelFilter === 'no_bom' && (isDisc || hasBom)) return false;
+      if (modelFilter === 'has_alert' && (isDisc || !hasAlert)) return false;
 
       if (!q) return true;
       if (summary.modelName.toLowerCase().includes(q)) return true;
@@ -494,6 +507,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         modelName: entry.summary.modelName,
         imageUrl: url,
         imagePath: path,
+        isDiscontinued: Boolean(entry.bom?.isDiscontinued),
         items: entry.bom?.items || [],
         updatedAt: new Date().toISOString(),
         updatedBy: currentUserName
@@ -508,6 +522,68 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       showToast(`Lỗi tải ảnh Model: ${err?.message || 'Vui lòng kiểm tra kết nối Storage'}`, 'error');
     } finally {
       setUploadingModelKey(null);
+    }
+  };
+
+  const handleToggleModelDiscontinued = async (modelKey: string, nextDiscontinued: boolean) => {
+    if (readOnly) return;
+    const entry = combinedModels.find((m) => m.summary.modelKey === modelKey);
+    if (!entry) return;
+    try {
+      await saveBomModelRecord({
+        id: modelKey,
+        modelName: entry.summary.modelName,
+        imageUrl: entry.bom?.imageUrl,
+        imagePath: entry.bom?.imagePath,
+        isDiscontinued: nextDiscontinued,
+        items: entry.bom?.items || [],
+        updatedAt: new Date().toISOString(),
+        updatedBy: currentUserName
+      });
+      showToast(
+        nextDiscontinued
+          ? `Đã chuyển "${entry.summary.modelName}" sang Ngừng sản xuất (ẩn khỏi danh sách chính).`
+          : `Đã khôi phục "${entry.summary.modelName}" về Đang sản xuất.`,
+        'info'
+      );
+    } catch (err: any) {
+      showToast(`Lỗi cập nhật trạng thái Model: ${err?.message || err}`, 'error');
+    }
+  };
+
+  const handleBulkSetModelsDiscontinued = async (nextDiscontinued: boolean) => {
+    if (readOnly || selectedModelKeysForBulk.length === 0) return;
+    setBulkSavingModels(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const records: BomModelRecord[] = [];
+      selectedModelKeysForBulk.forEach((key) => {
+        const entry = combinedModels.find((m) => m.summary.modelKey === key);
+        if (!entry) return;
+        records.push({
+          id: key,
+          modelName: entry.summary.modelName,
+          imageUrl: entry.bom?.imageUrl,
+          imagePath: entry.bom?.imagePath,
+          isDiscontinued: nextDiscontinued,
+          items: entry.bom?.items || [],
+          updatedAt: nowIso,
+          updatedBy: currentUserName
+        });
+      });
+      await saveBomModelsBatch(records);
+      setSelectedModelKeysForBulk([]);
+      setBulkModelSelectMode(false);
+      showToast(
+        nextDiscontinued
+          ? `Đã ẩn ${records.length} xe Ngừng sản xuất khỏi danh sách chính.`
+          : `Đã khôi phục ${records.length} xe về Đang sản xuất.`,
+        'success'
+      );
+    } catch (err: any) {
+      showToast(`Lỗi cập nhật hàng loạt: ${err?.message || err}`, 'error');
+    } finally {
+      setBulkSavingModels(false);
     }
   };
 
@@ -816,6 +892,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
             modelName: selectedModelEntry.summary.modelName,
             imageUrl: selectedModelEntry.bom?.imageUrl,
             imagePath: selectedModelEntry.bom?.imagePath,
+            isDiscontinued: Boolean(selectedModelEntry.bom?.isDiscontinued),
             items: nextLines,
             updatedAt: nowIso,
             updatedBy: currentUserName
@@ -898,6 +975,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         modelName: selectedModelEntry.summary.modelName,
         imageUrl: selectedModelEntry.bom?.imageUrl,
         imagePath: selectedModelEntry.bom?.imagePath,
+        isDiscontinued: Boolean(selectedModelEntry.bom?.isDiscontinued),
         items: nextItems,
         updatedAt: new Date().toISOString(),
         updatedBy: currentUserName
@@ -935,6 +1013,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         modelName: selectedModelEntry.summary.modelName,
         imageUrl: selectedModelEntry.bom?.imageUrl,
         imagePath: selectedModelEntry.bom?.imagePath,
+        isDiscontinued: Boolean(selectedModelEntry.bom?.isDiscontinued),
         items: nextItems,
         updatedAt: new Date().toISOString(),
         updatedBy: currentUserName
@@ -962,6 +1041,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         modelName: selectedModelEntry.summary.modelName,
         imageUrl: selectedModelEntry.bom?.imageUrl,
         imagePath: selectedModelEntry.bom?.imagePath,
+        isDiscontinued: Boolean(selectedModelEntry.bom?.isDiscontinued),
         items: nextItems,
         updatedAt: new Date().toISOString(),
         updatedBy: currentUserName
@@ -1147,7 +1227,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
               }`}
             >
               <Bike className="w-3.5 h-3.5" />
-              Tra cứu theo Model xe ({overviewStats.totalModels})
+              Tra cứu theo Model xe ({overviewStats.activeModels}/{overviewStats.totalModels})
             </button>
             <button
               type="button"
@@ -1164,6 +1244,12 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="px-2.5 py-1 rounded-lg bg-white/10 text-indigo-100 font-semibold">
+              Đang SX: <strong className="text-white">{overviewStats.activeModels}</strong>
+              {overviewStats.discontinuedModels > 0 && (
+                <> | Ngừng SX: <strong className="text-slate-300">{overviewStats.discontinuedModels}</strong></>
+              )}
+            </span>
             <span className="px-2.5 py-1 rounded-lg bg-white/10 text-indigo-100 font-semibold">
               Model có BOM: <strong className="text-white">{overviewStats.modelsWithBom}/{overviewStats.totalModels}</strong>
             </span>
@@ -1204,18 +1290,24 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
 
               <div className="flex items-center gap-1.5 flex-wrap">
                 {[
-                  { id: 'all', label: `Tất cả (${combinedModels.length})` },
+                  { id: 'active', label: `Đang sản xuất (${overviewStats.activeModels})` },
                   { id: 'has_bom', label: `Đã có BOM (${overviewStats.modelsWithBom})` },
-                  { id: 'no_bom', label: 'Chưa có BOM' },
-                  { id: 'has_alert', label: 'Có LK Cảnh báo / ECO' }
+                  { id: 'has_alert', label: 'Có LK Cảnh báo / ECO' },
+                  { id: 'discontinued', label: `Đã ngừng SX (${overviewStats.discontinuedModels})` },
+                  { id: 'all', label: `Tất cả (${overviewStats.totalModels})` }
                 ].map((opt) => (
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => setModelFilter(opt.id as any)}
+                    onClick={() => {
+                      setModelFilter(opt.id as any);
+                      setSelectedModelKeysForBulk([]);
+                    }}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
                       modelFilter === opt.id
-                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        ? opt.id === 'discontinued'
+                          ? 'bg-slate-700 text-white border-slate-700'
+                          : 'bg-indigo-600 text-white border-indigo-600'
                         : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                     }`}
                   >
@@ -1223,6 +1315,25 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                   </button>
                 ))}
               </div>
+
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkModelSelectMode((prev) => !prev);
+                    setSelectedModelKeysForBulk([]);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border flex items-center gap-1.5 transition cursor-pointer ${
+                    bulkModelSelectMode
+                      ? 'bg-amber-600 text-white border-amber-600'
+                      : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                  }`}
+                  title="Chọn nhiều xe để đánh dấu Ngừng sản xuất & ẩn hàng loạt"
+                >
+                  <EyeOff className="w-3.5 h-3.5" />
+                  {bulkModelSelectMode ? 'Thoát chọn nhiều' : 'Chọn ẩn nhiều xe'}
+                </button>
+              )}
 
               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 ml-auto">
                 <button
@@ -1254,6 +1365,55 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
               </div>
             </div>
 
+            {!readOnly && bulkModelSelectMode && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="font-extrabold text-amber-950">
+                    Đã chọn {selectedModelKeysForBulk.length} / {filteredModels.length} xe đang hiển thị
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedModelKeysForBulk(filteredModels.map((m) => m.summary.modelKey))}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-900 font-bold cursor-pointer"
+                  >
+                    Chọn tất cả đang hiện
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedModelKeysForBulk([])}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 text-slate-700 font-bold cursor-pointer"
+                  >
+                    Bỏ chọn
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {modelFilter !== 'discontinued' && (
+                    <button
+                      type="button"
+                      disabled={selectedModelKeysForBulk.length === 0 || bulkSavingModels}
+                      onClick={() => handleBulkSetModelsDiscontinued(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white font-extrabold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {bulkSavingModels ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <EyeOff className="w-3.5 h-3.5" />}
+                      Ẩn &amp; Đánh dấu Ngừng SX ({selectedModelKeysForBulk.length})
+                    </button>
+                  )}
+                  {(modelFilter === 'discontinued' || modelFilter === 'all') && (
+                    <button
+                      type="button"
+                      disabled={selectedModelKeysForBulk.length === 0 || bulkSavingModels}
+                      onClick={() => handleBulkSetModelsDiscontinued(false)}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-extrabold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {bulkSavingModels ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                      Khôi phục Đang SX ({selectedModelKeysForBulk.length})
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Grid / List 64 Models */}
             {modelViewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -1264,11 +1424,19 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                   return st === 'Cảnh báo lỗi' || st === 'Đang ECO';
                 }).length;
                 const isUploading = uploadingModelKey === summary.modelKey;
+                const isDiscontinued = Boolean(bom?.isDiscontinued);
+                const isBulkChecked = selectedModelKeysForBulk.includes(summary.modelKey);
 
                 return (
                   <div
                     key={summary.modelKey}
-                    className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs hover:shadow-md hover:border-indigo-300 transition flex flex-col"
+                    className={`bg-white rounded-2xl border overflow-hidden shadow-xs hover:shadow-md transition flex flex-col ${
+                      isBulkChecked
+                        ? 'border-amber-500 ring-2 ring-amber-200'
+                        : isDiscontinued
+                          ? 'border-slate-300 opacity-85 hover:border-slate-400'
+                          : 'border-slate-200 hover:border-indigo-300'
+                    }`}
                   >
                     {/* 1 Ảnh đại diện Model */}
                     <div className="relative h-44 bg-slate-100 border-b border-slate-100 flex items-center justify-center group overflow-hidden">
@@ -1287,6 +1455,28 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                           <Bike className="w-10 h-10 mx-auto opacity-40" />
                           <p className="text-[11px] font-medium">Chưa có ảnh Model</p>
                         </div>
+                      )}
+
+                      {!readOnly && bulkModelSelectMode && (
+                        <label
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute top-2 left-2 z-10 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/95 border border-amber-300 shadow cursor-pointer text-[11px] font-extrabold text-amber-900"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isBulkChecked}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setSelectedModelKeysForBulk((prev) =>
+                                checked
+                                  ? [...prev, summary.modelKey]
+                                  : prev.filter((k) => k !== summary.modelKey)
+                              );
+                            }}
+                            className="accent-amber-600"
+                          />
+                          Chọn
+                        </label>
                       )}
 
                       {bom?.imageUrl && (
@@ -1322,7 +1512,13 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                         </button>
                       )}
 
-                      {alertCount > 0 && (
+                      {isDiscontinued && !bulkModelSelectMode && (
+                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-slate-800 text-white text-[10px] font-extrabold shadow">
+                          Ngừng SX
+                        </span>
+                      )}
+
+                      {alertCount > 0 && !isDiscontinued && !bulkModelSelectMode && (
                         <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-extrabold shadow flex items-center gap-1">
                           <AlertTriangle className="w-3 h-3" />
                           {alertCount} LK lưu ý
@@ -1360,19 +1556,43 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedModelKey(summary.modelKey);
-                          setBomSearch('');
-                          setBomSpecFilter('ALL');
-                          setBomStatusFilter('ALL');
-                        }}
-                        className="w-full py-2 rounded-xl bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white text-xs font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        Xem danh sách linh kiện
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedModelKey(summary.modelKey);
+                            setBomSearch('');
+                            setBomSpecFilter('ALL');
+                            setBomStatusFilter('ALL');
+                          }}
+                          className="flex-1 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white text-xs font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          Xem linh kiện
+                        </button>
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleModelDiscontinued(summary.modelKey, !isDiscontinued)}
+                            className={`p-2 rounded-xl border text-xs font-bold transition cursor-pointer shrink-0 ${
+                              isDiscontinued
+                                ? 'bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border-emerald-200'
+                                : 'bg-slate-100 hover:bg-slate-700 text-slate-600 hover:text-white border-slate-200'
+                            }`}
+                            title={
+                              isDiscontinued
+                                ? 'Khôi phục về Đang sản xuất'
+                                : 'Đánh dấu Ngừng sản xuất & ẩn khỏi danh sách chính'
+                            }
+                          >
+                            {isDiscontinued ? (
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            ) : (
+                              <EyeOff className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -1384,12 +1604,15 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-slate-900 text-white text-[11px] uppercase tracking-wider">
+                        {!readOnly && bulkModelSelectMode && (
+                          <th className="py-3 px-3 text-center w-10">Chọn</th>
+                        )}
                         <th className="py-3 px-3 text-center w-12">STT</th>
                         <th className="py-3 px-3 w-20 text-center">Ảnh xe</th>
                         <th className="py-3 px-3">Tên Model xe</th>
                         <th className="py-3 px-3 text-center">Màu sắc OQC</th>
                         <th className="py-3 px-3 text-center">Số LK BOM</th>
-                        <th className="py-3 px-3">Cảnh báo / ECO</th>
+                        <th className="py-3 px-3">Trạng thái SX / LK</th>
                         <th className="py-3 px-3">Cập nhật</th>
                         <th className="py-3 px-3 text-right">Thao tác</th>
                       </tr>
@@ -1402,9 +1625,33 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                           return st === 'Cảnh báo lỗi' || st === 'Đang ECO';
                         }).length;
                         const isUploading = uploadingModelKey === summary.modelKey;
+                        const isDiscontinued = Boolean(bom?.isDiscontinued);
+                        const isBulkChecked = selectedModelKeysForBulk.includes(summary.modelKey);
 
                         return (
-                          <tr key={summary.modelKey} className="hover:bg-indigo-50/40 transition">
+                          <tr
+                            key={summary.modelKey}
+                            className={`hover:bg-indigo-50/40 transition ${
+                              isDiscontinued ? 'bg-slate-50/70 text-slate-500' : ''
+                            }`}
+                          >
+                            {!readOnly && bulkModelSelectMode && (
+                              <td className="py-2.5 px-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isBulkChecked}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setSelectedModelKeysForBulk((prev) =>
+                                      checked
+                                        ? [...prev, summary.modelKey]
+                                        : prev.filter((k) => k !== summary.modelKey)
+                                    );
+                                  }}
+                                  className="accent-amber-600 cursor-pointer"
+                                />
+                              </td>
+                            )}
                             <td className="py-2.5 px-3 text-center font-bold text-slate-500">
                               {idx + 1}
                             </td>
@@ -1467,14 +1714,23 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                               </span>
                             </td>
                             <td className="py-2.5 px-3">
-                              {alertCount > 0 ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-bold text-[11px]">
-                                  <AlertTriangle className="w-3 h-3" />
-                                  {alertCount} LK lưu ý
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">Bình thường</span>
-                              )}
+                              <div className="flex flex-wrap items-center gap-1">
+                                {isDiscontinued ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold text-[11px]">
+                                    Ngừng SX
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[11px]">
+                                    Đang SX
+                                  </span>
+                                )}
+                                {alertCount > 0 && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-bold text-[11px]">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    {alertCount} lưu ý
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
                               {bom?.updatedAt
@@ -1484,20 +1740,41 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                             <td className="py-2.5 px-3 text-right whitespace-nowrap">
                               <div className="inline-flex items-center gap-1.5">
                                 {!readOnly && (
-                                  <button
-                                    type="button"
-                                    disabled={isUploading}
-                                    onClick={() => handleTriggerModelPhotoUpload(summary.modelKey)}
-                                    className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold inline-flex items-center gap-1 cursor-pointer"
-                                    title="Tải / Đổi 1 ảnh xe"
-                                  >
-                                    {isUploading ? (
-                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    ) : (
-                                      <Camera className="w-3.5 h-3.5" />
-                                    )}
-                                    {bom?.imageUrl ? 'Đổi ảnh' : 'Tải ảnh'}
-                                  </button>
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleToggleModelDiscontinued(summary.modelKey, !isDiscontinued)
+                                      }
+                                      className={`px-2.5 py-1.5 rounded-lg font-bold inline-flex items-center gap-1 cursor-pointer ${
+                                        isDiscontinued
+                                          ? 'bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200'
+                                          : 'bg-slate-100 hover:bg-slate-700 text-slate-700 hover:text-white'
+                                      }`}
+                                      title={isDiscontinued ? 'Khôi phục đang sản xuất' : 'Ẩn (Ngừng sản xuất)'}
+                                    >
+                                      {isDiscontinued ? (
+                                        <RotateCcw className="w-3.5 h-3.5" />
+                                      ) : (
+                                        <EyeOff className="w-3.5 h-3.5" />
+                                      )}
+                                      {isDiscontinued ? 'Khôi phục' : 'Ngừng SX'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isUploading}
+                                      onClick={() => handleTriggerModelPhotoUpload(summary.modelKey)}
+                                      className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold inline-flex items-center gap-1 cursor-pointer"
+                                      title="Tải / Đổi 1 ảnh xe"
+                                    >
+                                      {isUploading ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <Camera className="w-3.5 h-3.5" />
+                                      )}
+                                      {bom?.imageUrl ? 'Đổi ảnh' : 'Tải ảnh'}
+                                    </button>
+                                  </>
                                 )}
                                 <button
                                   type="button"
@@ -1524,8 +1801,17 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
             )}
 
             {filteredModels.length === 0 && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-500 text-sm">
-                Không tìm thấy Model nào phù hợp với điều kiện lọc hiện tại.
+              <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-500 text-sm space-y-2.5">
+                <p>Không tìm thấy Model nào phù hợp với điều kiện lọc hiện tại.</p>
+                {modelFilter !== 'all' && modelFilter !== 'discontinued' && overviewStats.discontinuedModels > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setModelFilter('all')}
+                    className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold cursor-pointer"
+                  >
+                    Tìm cả trong {overviewStats.discontinuedModels} xe đã ngừng sản xuất
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1577,9 +1863,16 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                   </div>
 
                   <div className="min-w-0">
-                    <h2 className="text-lg sm:text-xl font-black text-slate-900 truncate">
-                      {selectedModelEntry.summary.modelName}
-                    </h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-lg sm:text-xl font-black text-slate-900 truncate">
+                        {selectedModelEntry.summary.modelName}
+                      </h2>
+                      {selectedModelEntry.bom?.isDiscontinued && (
+                        <span className="px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-700 text-[11px] font-extrabold">
+                          Đã ngừng sản xuất
+                        </span>
+                      )}
+                    </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
                       <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
                         Định mức BOM: {(selectedModelEntry.bom?.items || []).length} linh kiện
@@ -1592,6 +1885,34 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                         <Palette className="w-3 h-3" />
                         {selectedModelEntry.summary.colors.length} mã màu OQC
                       </button>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleToggleModelDiscontinued(
+                              selectedModelEntry.summary.modelKey,
+                              !Boolean(selectedModelEntry.bom?.isDiscontinued)
+                            )
+                          }
+                          className={`px-2.5 py-0.5 rounded-full font-bold border inline-flex items-center gap-1 cursor-pointer ${
+                            selectedModelEntry.bom?.isDiscontinued
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                          }`}
+                        >
+                          {selectedModelEntry.bom?.isDiscontinued ? (
+                            <>
+                              <RotateCcw className="w-3 h-3" />
+                              Khôi phục đang SX
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff className="w-3 h-3" />
+                              Đánh dấu Ngừng SX
+                            </>
+                          )}
+                        </button>
+                      )}
                       {selectedModelEntry.bom?.updatedAt && (
                         <span className="text-[11px] text-slate-500">
                           Cập nhật: {new Date(selectedModelEntry.bom.updatedAt).toLocaleDateString('vi-VN')}

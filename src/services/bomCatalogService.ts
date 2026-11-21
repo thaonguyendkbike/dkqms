@@ -435,6 +435,7 @@ export function subscribeBomCatalog(
             modelName: String(data.modelName || docSnap.id),
             imageUrl: data.imageUrl || undefined,
             imagePath: data.imagePath || undefined,
+            isDiscontinued: Boolean(data.isDiscontinued),
             items: Array.isArray(data.items) ? data.items : [],
             updatedAt: String(data.updatedAt || ''),
             updatedBy: data.updatedBy || undefined
@@ -499,6 +500,17 @@ export async function saveBomModelRecord(record: BomModelRecord): Promise<void> 
   const docId = record.id || toSafeDocId(record.modelName);
   const ref = doc(db, 'dk_db_sync', BOM_MODELS_COLLECTION, 'records', docId);
   await setDoc(ref, sanitizeFirestorePayload({ ...record, id: docId }));
+}
+
+export async function saveBomModelsBatch(records: BomModelRecord[]): Promise<void> {
+  const ops = records.map((record) => {
+    const docId = record.id || toSafeDocId(record.modelName);
+    return {
+      ref: doc(db, 'dk_db_sync', BOM_MODELS_COLLECTION, 'records', docId),
+      data: { ...record, id: docId }
+    };
+  });
+  await commitWriteBatches(ops);
 }
 
 export async function saveBomPartRecord(part: BomPartMasterItem): Promise<void> {
@@ -771,6 +783,7 @@ export async function bulkImportModelBom(params: {
     modelName,
     imageUrl: existingModel?.imageUrl,
     imagePath: existingModel?.imagePath,
+    isDiscontinued: Boolean(existingModel?.isDiscontinued),
     items: finalLines,
     updatedAt: nowIso,
     updatedBy

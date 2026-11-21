@@ -47,6 +47,7 @@ export interface BomModelRecord {
   modelName: string;          // Tên Model khớp Bảng mã xe (VD: DK S1, DK ROMA SX V2)
   imageUrl?: string;          // 1 ảnh đại diện của Model (URL Firebase Storage)
   imagePath?: string;         // Storage path để xóa/thay thế gọn
+  isDiscontinued?: boolean;   // Đánh dấu xe đã ngừng sản xuất (ẩn mặc định khỏi danh sách chính)
   items: BomModelLineItem[];  // Danh sách ~100 linh kiện theo định mức BOM
   updatedAt: string;
   updatedBy?: string;
