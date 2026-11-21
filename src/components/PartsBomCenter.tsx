@@ -560,7 +560,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       return (
         code.toLowerCase().includes(q) ||
         p.partName.toLowerCase().includes(q) ||
-        (p.specGroup || '').toLowerCase().includes(q) ||
         (p.techSpecs || '').toLowerCase().includes(q) ||
         (p.supplierName || '').toLowerCase().includes(q) ||
         (p.keywords || '').toLowerCase().includes(q) ||
