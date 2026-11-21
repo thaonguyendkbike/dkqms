@@ -13656,6 +13656,46 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
         </div>
 
         <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto justify-between md:justify-end border-t border-slate-100 md:border-none pt-2 md:pt-0">
+          <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-0.5 shrink-0" id="quick_route_buttons">
+            <a
+              href="/lk"
+              onClick={(e) => {
+                e.preventDefault();
+                if (typeof window !== 'undefined') {
+                  window.history.pushState({}, '', '/lk');
+                }
+                setActiveTab('parts_bom');
+              }}
+              className="px-2.5 py-1 rounded-md text-xs font-extrabold font-mono text-slate-700 hover:bg-white hover:text-indigo-700 hover:shadow-2xs transition cursor-pointer"
+              title="Mở /lk"
+            >
+              /lk
+            </a>
+            <a
+              href="/bm"
+              onClick={(e) => {
+                e.preventDefault();
+                if (typeof window !== 'undefined') {
+                  window.history.pushState({}, '', '/bm');
+                }
+                setActiveTab('qms_forms');
+              }}
+              className="px-2.5 py-1 rounded-md text-xs font-extrabold font-mono text-slate-700 hover:bg-white hover:text-indigo-700 hover:shadow-2xs transition cursor-pointer"
+              title="Mở /bm"
+            >
+              /bm
+            </a>
+            <a
+              href="/tv"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2.5 py-1 rounded-md text-xs font-extrabold font-mono text-slate-700 hover:bg-white hover:text-indigo-700 hover:shadow-2xs transition cursor-pointer"
+              title="Mở /tv"
+            >
+              /tv
+            </a>
+          </div>
+
           {redAlertDefects.length > 0 && (
             <button
               onClick={() => setShowRedAlertModal(true)}
@@ -13754,44 +13794,6 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
             >
               <Workflow className={`w-5 h-5 shrink-0 ${activeTab === 'qms_workflow' ? 'text-white' : 'text-cyan-500'}`} />
               Sơ đồ Quy trình QMS
-            </button>
-
-            <button
-              onClick={() => {
-                if (typeof window !== 'undefined') {
-                  window.history.pushState({}, '', '/bm');
-                }
-                setActiveTab('qms_forms');
-              }}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg text-base md:text-[15px] font-medium transition-all text-left cursor-pointer ${activeTab === 'qms_forms' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
-                }`}
-              id="nav_qms_forms"
-              title="Trung tâm hệ thống biểu mẫu chuẩn QLCL (dkqms.cloud/bm)"
-            >
-              <FileSpreadsheet className={`w-5 h-5 shrink-0 ${activeTab === 'qms_forms' ? 'text-white' : 'text-emerald-600'}`} />
-              <div className="flex-1 flex items-center justify-between">
-                <span>Biểu mẫu QLCL (/bm)</span>
-                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${activeTab === 'qms_forms' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'}`}>11 BM</span>
-              </div>
-            </button>
-
-            <button
-              onClick={() => {
-                if (typeof window !== 'undefined') {
-                  window.history.pushState({}, '', '/lk');
-                }
-                setActiveTab('parts_bom');
-              }}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg text-base md:text-[15px] font-medium transition-all text-left cursor-pointer ${activeTab === 'parts_bom' ? 'bg-indigo-600 text-white font-extrabold shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600'
-                }`}
-              id="nav_parts_bom"
-              title="Danh mục Linh kiện & BOM theo Model (dkqms.cloud/lk)"
-            >
-              <Cpu className={`w-5 h-5 shrink-0 ${activeTab === 'parts_bom' ? 'text-white' : 'text-indigo-600'}`} />
-              <div className="flex-1 flex items-center justify-between">
-                <span>Linh kiện &amp; BOM (/lk)</span>
-                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${activeTab === 'parts_bom' ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-800'}`}>/lk</span>
-              </div>
             </button>
 
             <button
