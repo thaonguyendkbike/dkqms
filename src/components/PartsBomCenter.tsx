@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CloudDownload,
   Copy,
   Download,
   Edit3,
@@ -70,6 +71,7 @@ import {
   exportPartsMasterExcel,
   parseEcountBomExcel
 } from '../utils/bomExcel';
+import { LarkBomSyncModal } from './LarkBomSyncModal';
 
 interface PartsBomCenterProps {
   readOnly?: boolean;
@@ -316,6 +318,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
     replaceExistingLines: boolean;
   } | null>(null);
   const [importingExcel, setImportingExcel] = useState(false);
+  const [larkSyncModalOpen, setLarkSyncModalOpen] = useState(false);
 
   // Lightbox Zoom
   const [lightboxState, setLightboxState] = useState<{
@@ -2642,14 +2645,27 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                   </div>
 
                   {!readOnly && (
-                    <button
-                      type="button"
-                      onClick={() => openPartModalForCreate(false)}
-                      className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Thêm LK
-                    </button>
+                    <>
+                      {isLoggedIn && (
+                        <button
+                          type="button"
+                          onClick={() => setLarkSyncModalOpen(true)}
+                          className="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+                          title="Đồng bộ ảnh hàng loạt từ Lark Base sang Kho LK"
+                        >
+                          <CloudDownload className="w-3.5 h-3.5" />
+                          Lark Base
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => openPartModalForCreate(false)}
+                        className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Thêm LK
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -4500,6 +4516,15 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
           </div>
         </div>
       )}
+      {/* MODAL ĐỒNG BỘ ẢNH HÀNG LOẠT TỪ LARK BASE */}
+      <LarkBomSyncModal
+        open={larkSyncModalOpen}
+        onClose={() => setLarkSyncModalOpen(false)}
+        partsByCode={partsByCode}
+        extraColors={knownOqcColors}
+        currentUserName={currentUserName}
+        onToast={showToast}
+      />
     </div>
   );
 };

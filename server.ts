@@ -413,6 +413,306 @@ Kính đề xuất anh Thao chỉ đạo tổ chức triển khai khẩn cấp c
     }
   });
 
+  // ======================= LARK BASE PROXY GATEWAY (SYNC ẢNH BOM) =======================
+  const ALLOWED_LARK_DOMAINS = new Set([
+    "https://open.larksuite.com",
+    "https://open.feishu.cn"
+  ]);
+  const larkTokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+  app.use("/api/lark", (req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Private-Network", "true");
+    if (req.method === "OPTIONS") {
+      return res.status(204).end();
+    }
+    next();
+  });
+
+  function resolveLarkDomain(rawDomain?: string): string {
+    const cleaned = String(rawDomain || "https://open.larksuite.com").trim().replace(/\/+$/, "");
+    if (!ALLOWED_LARK_DOMAINS.has(cleaned)) {
+      throw new Error("Domain Lark API không hợp lệ.");
+    }
+    return cleaned;
+  }
+
+  async function getLarkTenantAccessToken(domain: string, appId: string, appSecret: string): Promise<string> {
+    const cacheKey = `${domain}|${appId}`;
+    const cached = larkTokenCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now() + 60_000) {
+      return cached.token;
+    }
+
+    const tokenRes = await fetch(`${domain}/open-apis/auth/v3/tenant_access_token/internal`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ app_id: appId, app_secret: appSecret })
+    });
+    const tokenJson: any = await tokenRes.json();
+    if (!tokenRes.ok || tokenJson?.code !== 0 || !tokenJson?.tenant_access_token) {
+      throw new Error(
+        `Lark Auth Error (${tokenJson?.code ?? tokenRes.status}): ${tokenJson?.msg || "Không lấy được tenant_access_token. Kiểm tra lại App ID và App Secret."}`
+      );
+    }
+
+    const ttlMs = (Number(tokenJson.expire) || 7200) * 1000;
+    larkTokenCache.set(cacheKey, {
+      token: tokenJson.tenant_access_token,
+      expiresAt: Date.now() + ttlMs
+    });
+    return tokenJson.tenant_access_token;
+  }
+
+  function normalizeLarkHeaderKey(raw: string): string {
+    return String(raw || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/g, "d")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  function extractLarkTextField(val: any): string {
+    if (val === null || val === undefined) return "";
+    if (typeof val === "string") return val.trim();
+    if (typeof val === "number" || typeof val === "boolean") return String(val).trim();
+    if (Array.isArray(val)) {
+      return val
+        .map((item) => extractLarkTextField(item))
+        .filter(Boolean)
+        .join(", ")
+        .trim();
+    }
+    if (typeof val === "object") {
+      if (typeof val.text === "string") return val.text.trim();
+      if (Array.isArray(val.value)) return extractLarkTextField(val.value);
+      if (typeof val.name === "string") return val.name.trim();
+    }
+    return "";
+  }
+
+  function extractLarkImageAttachments(
+    val: any,
+    caption: "Tổng quan" | "Kích thước"
+  ): Array<{ file_token: string; name: string; type?: string; size?: number; caption: "Tổng quan" | "Kích thước" }> {
+    if (!Array.isArray(val)) return [];
+    const results: Array<{
+      file_token: string;
+      name: string;
+      type?: string;
+      size?: number;
+      caption: "Tổng quan" | "Kích thước";
+    }> = [];
+
+    for (const item of val) {
+      if (!item || typeof item !== "object" || !item.file_token) continue;
+      const mime = String(item.type || "").toLowerCase();
+      const fileName = String(item.name || "image.jpg").trim();
+      const isImage =
+        mime.startsWith("image/") ||
+        /\.(png|jpe?g|webp|gif|bmp|heic|heif)$/i.test(fileName) ||
+        !mime;
+      if (!isImage) continue;
+      results.push({
+        file_token: String(item.file_token),
+        name: fileName,
+        type: item.type ? String(item.type) : undefined,
+        size: typeof item.size === "number" ? item.size : undefined,
+        caption
+      });
+    }
+    return results;
+  }
+
+  function findFieldByNormalizedAliases(fields: Record<string, any>, aliases: string[]): any {
+    for (const [k, v] of Object.entries(fields)) {
+      const norm = normalizeLarkHeaderKey(k);
+      if (aliases.some((alias) => norm === alias || norm.includes(alias))) {
+        return v;
+      }
+    }
+    return undefined;
+  }
+
+  app.post("/api/lark/records", async (req, res) => {
+    try {
+      const domain = resolveLarkDomain(req.body?.domain);
+      const appId = String(req.body?.appId || process.env.LARK_APP_ID || "").trim();
+      const appSecret = String(req.body?.appSecret || process.env.LARK_APP_SECRET || "").trim();
+      const appToken = String(req.body?.appToken || "").trim();
+      const tableId = String(req.body?.tableId || "").trim();
+
+      if (!appId || !appSecret || !appToken || !tableId) {
+        return res.status(400).json({
+          success: false,
+          message: "Thiếu thông tin kết nối Lark (App ID, App Secret, app_token hoặc table_id)."
+        });
+      }
+      if (!/^[a-zA-Z0-9_-]{4,100}$/.test(appToken) || !/^[a-zA-Z0-9_-]{4,100}$/.test(tableId)) {
+        return res.status(400).json({
+          success: false,
+          message: "app_token hoặc table_id không đúng định dạng."
+        });
+      }
+
+      const token = await getLarkTenantAccessToken(domain, appId, appSecret);
+      const allItems: any[] = [];
+      let pageToken = "";
+      let pageGuard = 0;
+
+      do {
+        const qs = new URLSearchParams({ page_size: "500" });
+        if (pageToken) qs.set("page_token", pageToken);
+
+        const recRes = await fetch(
+          `${domain}/open-apis/bitable/v1/apps/${appToken}/tables/${tableId}/records?${qs.toString()}`,
+          {
+            method: "GET",
+            headers: { Authorization: `Bearer ${token}` }
+          }
+        );
+        const recJson: any = await recRes.json();
+        if (!recRes.ok || recJson?.code !== 0) {
+          throw new Error(
+            `Lark Bitable Error (${recJson?.code ?? recRes.status}): ${recJson?.msg || "Không đọc được dữ liệu bảng. Kiểm tra lại App đã được Publish và thêm vào Base với quyền đọc chưa."}`
+          );
+        }
+
+        const items = recJson?.data?.items;
+        if (Array.isArray(items)) {
+          allItems.push(...items);
+        }
+        const hasMore = Boolean(recJson?.data?.has_more);
+        pageToken = hasMore ? String(recJson?.data?.page_token || "") : "";
+        pageGuard++;
+      } while (pageToken && pageGuard < 30);
+
+      const records = allItems
+        .map((item) => {
+          const fields = (item?.fields && typeof item.fields === "object") ? item.fields : {};
+          const partCode = extractLarkTextField(
+            findFieldByNormalizedAliases(fields, ["ma mat hang", "ma linh kien", "ma hang", "part code", "item code"])
+          );
+          if (!partCode) return null;
+
+          const partName = extractLarkTextField(
+            findFieldByNormalizedAliases(fields, ["ten mat hang", "ten linh kien", "part name", "item name"])
+          );
+          const specGroup = extractLarkTextField(
+            findFieldByNormalizedAliases(fields, ["nhom lk", "nhom vat tu", "thong so", "spec"])
+          );
+          let techSpecs = extractLarkTextField(
+            findFieldByNormalizedAliases(fields, ["thong so ky thuat", "tskt", "tech specs"])
+          );
+          if (normalizeLarkHeaderKey(techSpecs) === "nhap o day") {
+            techSpecs = "";
+          }
+          const supplierName = extractLarkTextField(
+            findFieldByNormalizedAliases(fields, ["nha cung cap", "ncc", "supplier"])
+          );
+          const overviewImages = extractLarkImageAttachments(
+            findFieldByNormalizedAliases(fields, ["hinh anh tong quan", "anh tong quan"]),
+            "Tổng quan"
+          );
+          const sizeImages = extractLarkImageAttachments(
+            findFieldByNormalizedAliases(fields, ["hinh anh kich thuoc", "anh kich thuoc"]),
+            "Kích thước"
+          );
+
+          return {
+            recordId: String(item.record_id || ""),
+            partCode,
+            partName,
+            specGroup,
+            techSpecs,
+            supplierName,
+            overviewImages,
+            sizeImages
+          };
+        })
+        .filter(Boolean);
+
+      return res.json({
+        success: true,
+        totalRawRecords: allItems.length,
+        records
+      });
+    } catch (err: any) {
+      console.error("[Lark Proxy /records Error]:", err);
+      return res.status(400).json({
+        success: false,
+        message: err?.message || "Lỗi không xác định khi đọc Lark Base."
+      });
+    }
+  });
+
+  app.post("/api/lark/media", async (req, res) => {
+    try {
+      const domain = resolveLarkDomain(req.body?.domain);
+      const appId = String(req.body?.appId || process.env.LARK_APP_ID || "").trim();
+      const appSecret = String(req.body?.appSecret || process.env.LARK_APP_SECRET || "").trim();
+      const fileToken = String(req.body?.fileToken || "").trim();
+
+      if (!appId || !appSecret || !fileToken) {
+        return res.status(400).json({
+          success: false,
+          message: "Thiếu App ID, App Secret hoặc fileToken."
+        });
+      }
+      if (!/^[a-zA-Z0-9_-]{6,160}$/.test(fileToken)) {
+        return res.status(400).json({
+          success: false,
+          message: "fileToken không hợp lệ."
+        });
+      }
+
+      const token = await getLarkTenantAccessToken(domain, appId, appSecret);
+      let mediaRes = await fetch(`${domain}/open-apis/drive/v1/medias/${fileToken}/download`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const contentTypeHeader = mediaRes.headers.get("content-type") || "";
+      if (!mediaRes.ok || contentTypeHeader.includes("application/json")) {
+        // Fallback: xin temporary download url nếu download trực tiếp bị từ chối quyền bitablePerm
+        const tmpRes = await fetch(
+          `${domain}/open-apis/drive/v1/medias/batch_get_temporary_download_url?file_tokens=${encodeURIComponent(fileToken)}`,
+          {
+            method: "GET",
+            headers: { Authorization: `Bearer ${token}` }
+          }
+        );
+        const tmpJson: any = await tmpRes.json();
+        const tmpUrl = tmpJson?.data?.tmp_download_urls?.[0]?.tmp_download_url;
+        if (!tmpUrl) {
+          throw new Error(
+            `Không tải được ảnh Lark (token=${fileToken}, status=${mediaRes.status}). Hãy đảm bảo App đã bật quyền drive:drive:readonly và đã Publish.`
+          );
+        }
+        mediaRes = await fetch(tmpUrl, { method: "GET" });
+        if (!mediaRes.ok) {
+          throw new Error(`Tải temporary URL thất bại (${mediaRes.status}).`);
+        }
+      }
+
+      const contentType = mediaRes.headers.get("content-type") || "image/jpeg";
+      const buf = Buffer.from(await mediaRes.arrayBuffer());
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "no-store");
+      return res.send(buf);
+    } catch (err: any) {
+      console.error("[Lark Proxy /media Error]:", err);
+      return res.status(400).json({
+        success: false,
+        message: err?.message || "Không thể tải ảnh từ Lark Drive."
+      });
+    }
+  });
+
   // Health check endpoint
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
