@@ -2216,7 +2216,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                         <th className="py-3 px-3">Thông số</th>
                         <th className="py-3 px-3 text-center">Đơn vị</th>
                         <th className="py-3 px-3 text-right">Định mức</th>
-                        <th className="py-3 px-3 text-right">Tồn kho</th>
                         {showPurchasePrice && (
                           <th className="py-3 px-3 text-right bg-amber-950/60">Giá mua</th>
                         )}
@@ -2327,15 +2326,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                             </td>
                             <td className="py-2.5 px-3 text-right font-black text-slate-900">
                               {line.qty}
-                            </td>
-                            <td
-                              className={`py-2.5 px-3 text-right font-bold whitespace-nowrap ${
-                                typeof part?.stockQty === 'number' && part.stockQty <= 0
-                                  ? 'text-rose-600'
-                                  : 'text-slate-700'
-                              }`}
-                            >
-                              {formatPriceDisplay(part?.stockQty)}
                             </td>
                             {showPurchasePrice && (
                               <td className="py-2.5 px-3 text-right font-extrabold text-amber-800 bg-amber-50/50 whitespace-nowrap">
@@ -2683,15 +2673,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                               </span>
                             )}
                             <span>ĐVT: {part.unit || 'Cái'}</span>
-                            {part.stockQty !== undefined && (
-                              <span
-                                className={`font-bold ${
-                                  part.stockQty <= 0 ? 'text-rose-600' : 'text-slate-700'
-                                }`}
-                              >
-                                • Tồn: {formatPriceDisplay(part.stockQty)}
-                              </span>
-                            )}
                           </div>
                           {part.supplierName && (
                             <p className="mt-1 text-[11px] font-semibold text-indigo-700/90 line-clamp-1">
@@ -2764,7 +2745,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                         <th className="py-3 px-3 min-w-[230px]">Tên mặt hàng &amp; NCC</th>
                         <th className="py-3 px-3">Thông số</th>
                         <th className="py-3 px-3 text-center">ĐVT</th>
-                        <th className="py-3 px-3 text-right">Tồn kho</th>
                         {showPurchasePrice && (
                           <th className="py-3 px-3 text-right bg-amber-950/60">Giá mua</th>
                         )}
@@ -2864,15 +2844,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                             </td>
                             <td className="py-2.5 px-3 text-center font-semibold text-slate-700">
                               {part.unit || 'Cái'}
-                            </td>
-                            <td
-                              className={`py-2.5 px-3 text-right font-bold whitespace-nowrap ${
-                                typeof part.stockQty === 'number' && part.stockQty <= 0
-                                  ? 'text-rose-600'
-                                  : 'text-slate-700'
-                              }`}
-                            >
-                              {formatPriceDisplay(part.stockQty)}
                             </td>
                             {showPurchasePrice && (
                               <td className="py-2.5 px-3 text-right font-extrabold text-amber-800 bg-amber-50/50 whitespace-nowrap">
@@ -3219,8 +3190,8 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                             </div>
                           </div>
 
-                          {/* Giá bán / Giá mua / Tồn kho */}
-                          <div className={`grid gap-2.5 text-xs ${showPurchasePrice ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'}`}>
+                          {/* Giá bán / Giá mua */}
+                          <div className={`grid gap-2.5 text-xs ${showPurchasePrice ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
                             <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
                               <span className="block text-[10px] font-extrabold text-emerald-700 uppercase">
                                 Giá bán
@@ -3239,20 +3210,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                                 </span>
                               </div>
                             )}
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <span className="block text-[10px] font-extrabold text-slate-500 uppercase">
-                                Số lượng tồn kho
-                              </span>
-                              <span
-                                className={`mt-0.5 block text-sm font-black ${
-                                  typeof currentPartObj?.stockQty === 'number' && currentPartObj.stockQty <= 0
-                                    ? 'text-rose-600'
-                                    : 'text-slate-900'
-                                }`}
-                              >
-                                {formatPriceDisplay(currentPartObj?.stockQty)}
-                              </span>
-                            </div>
                           </div>
 
                           {/* Thông số kỹ thuật */}
