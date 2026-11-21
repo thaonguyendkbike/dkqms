@@ -1782,19 +1782,28 @@ export function App() {
 
   // Listen to Firebase Auth state shifts
   useEffect(() => {
+    const fallbackTimer = setTimeout(() => {
+      setAuthInitialized(true);
+    }, 3000);
+
     // Check redirect results if returning from signInWithRedirect
     checkRedirectResult().then((user) => {
       if (user) {
         setFirebaseUser(user);
         setAuthInitialized(true);
+        clearTimeout(fallbackTimer);
       }
     });
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
       setAuthInitialized(true);
+      clearTimeout(fallbackTimer);
     });
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(fallbackTimer);
+      unsubscribe();
+    };
   }, []);
 
   // Validate database connection on mount

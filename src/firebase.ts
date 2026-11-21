@@ -70,7 +70,8 @@ const safeFirebaseConfig = {
 
 const app = initializeApp(safeFirebaseConfig);
 export const db = initializeFirestore(app, {
-  localCache: memoryLocalCache()
+  localCache: memoryLocalCache(),
+  experimentalAutoDetectLongPolling: true
 }, 'ai-studio-24f3ad28-43fa-4e4b-b0ee-f6e3fbdfeee3'); /* CRITICAL: The app will break without this line */
 export const auth = getAuth(app);
 export const storage = getStorage(app);

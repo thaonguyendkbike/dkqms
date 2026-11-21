@@ -3,6 +3,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   setDoc,
   writeBatch
@@ -470,25 +471,67 @@ export function subscribeBomCatalog(
   const modelsRef = collection(db, 'dk_db_sync', BOM_MODELS_COLLECTION, 'records');
   const partsRef = collection(db, 'dk_db_sync', BOM_PARTS_COLLECTION, 'records');
 
+  let receivedModelsSnapshot = false;
+  let receivedPartsSnapshot = false;
+  let unmounted = false;
+
+  const parseModelsSnap = (snapshot: any): BomModelRecord[] => {
+    const list: BomModelRecord[] = [];
+    snapshot.forEach((docSnap: any) => {
+      const data = docSnap.data();
+      if (data) {
+        list.push({
+          id: docSnap.id,
+          modelName: String(data.modelName || docSnap.id),
+          imageUrl: data.imageUrl || undefined,
+          imagePath: data.imagePath || undefined,
+          isDiscontinued: Boolean(data.isDiscontinued),
+          items: Array.isArray(data.items) ? data.items : [],
+          updatedAt: String(data.updatedAt || ''),
+          updatedBy: data.updatedBy || undefined
+        });
+      }
+    });
+    return list;
+  };
+
+  const parsePartsSnap = (snapshot: any): BomPartMasterItem[] => {
+    const list: BomPartMasterItem[] = [];
+    snapshot.forEach((docSnap: any) => {
+      const data = docSnap.data();
+      if (data) {
+        const partCode = String(data.partCode || docSnap.id).trim().toUpperCase();
+        list.push({
+          id: docSnap.id,
+          partCode,
+          partName: String(data.partName || partCode),
+          specGroup: String(data.specGroup || ''),
+          unit: String(data.unit || 'Cái'),
+          techSpecs: data.techSpecs || '',
+          supplierName: data.supplierName || '',
+          stockQty: typeof data.stockQty === 'number' ? data.stockQty : undefined,
+          purchasePrice: typeof data.purchasePrice === 'number' ? data.purchasePrice : undefined,
+          sellingPrice: typeof data.sellingPrice === 'number' ? data.sellingPrice : undefined,
+          keywords: data.keywords || '',
+          status: data.status || 'Đang dùng',
+          imageMode: data.imageMode || inferPartImageMode(data.specGroup),
+          images: Array.isArray(data.images) ? data.images : [],
+          note: data.note || '',
+          updatedAt: String(data.updatedAt || ''),
+          updatedBy: data.updatedBy || undefined
+        });
+      }
+    });
+    list.sort((a, b) => a.partCode.localeCompare(b.partCode));
+    return list;
+  };
+
   const unsubModels = onSnapshot(
     modelsRef,
     (snapshot) => {
-      const list: BomModelRecord[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data) {
-          list.push({
-            id: docSnap.id,
-            modelName: String(data.modelName || docSnap.id),
-            imageUrl: data.imageUrl || undefined,
-            imagePath: data.imagePath || undefined,
-            isDiscontinued: Boolean(data.isDiscontinued),
-            items: Array.isArray(data.items) ? data.items : [],
-            updatedAt: String(data.updatedAt || ''),
-            updatedBy: data.updatedBy || undefined
-          });
-        }
-      });
+      if (unmounted) return;
+      receivedModelsSnapshot = true;
+      const list = parseModelsSnap(snapshot);
       safeStorage.setItem(CACHE_MODELS_KEY, JSON.stringify(list));
       onModels(list);
     },
@@ -501,33 +544,9 @@ export function subscribeBomCatalog(
   const unsubParts = onSnapshot(
     partsRef,
     (snapshot) => {
-      const list: BomPartMasterItem[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data) {
-          const partCode = String(data.partCode || docSnap.id).trim().toUpperCase();
-          list.push({
-            id: docSnap.id,
-            partCode,
-            partName: String(data.partName || partCode),
-            specGroup: String(data.specGroup || ''),
-            unit: String(data.unit || 'Cái'),
-            techSpecs: data.techSpecs || '',
-            supplierName: data.supplierName || '',
-            stockQty: typeof data.stockQty === 'number' ? data.stockQty : undefined,
-            purchasePrice: typeof data.purchasePrice === 'number' ? data.purchasePrice : undefined,
-            sellingPrice: typeof data.sellingPrice === 'number' ? data.sellingPrice : undefined,
-            keywords: data.keywords || '',
-            status: data.status || 'Đang dùng',
-            imageMode: data.imageMode || inferPartImageMode(data.specGroup),
-            images: Array.isArray(data.images) ? data.images : [],
-            note: data.note || '',
-            updatedAt: String(data.updatedAt || ''),
-            updatedBy: data.updatedBy || undefined
-          });
-        }
-      });
-      list.sort((a, b) => a.partCode.localeCompare(b.partCode));
+      if (unmounted) return;
+      receivedPartsSnapshot = true;
+      const list = parsePartsSnap(snapshot);
       safeStorage.setItem(CACHE_PARTS_KEY, JSON.stringify(list));
       onParts(list);
     },
@@ -537,7 +556,34 @@ export function subscribeBomCatalog(
     }
   );
 
+  // Fallback getDocs qua HTTP thường nếu WebChannel stream bị chậm/treo trên mạng 4G / Zalo trình duyệt trong 4 giây
+  const fallbackTimer = setTimeout(() => {
+    if (unmounted) return;
+    if (!receivedModelsSnapshot) {
+      getDocs(modelsRef)
+        .then((snap) => {
+          if (unmounted || receivedModelsSnapshot) return;
+          const list = parseModelsSnap(snap);
+          safeStorage.setItem(CACHE_MODELS_KEY, JSON.stringify(list));
+          onModels(list);
+        })
+        .catch(() => {});
+    }
+    if (!receivedPartsSnapshot) {
+      getDocs(partsRef)
+        .then((snap) => {
+          if (unmounted || receivedPartsSnapshot) return;
+          const list = parsePartsSnap(snap);
+          safeStorage.setItem(CACHE_PARTS_KEY, JSON.stringify(list));
+          onParts(list);
+        })
+        .catch(() => {});
+    }
+  }, 4000);
+
   return () => {
+    unmounted = true;
+    clearTimeout(fallbackTimer);
     unsubModels();
     unsubParts();
   };

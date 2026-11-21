@@ -67,11 +67,6 @@ import {
   deleteBomImageFromStorage,
   uploadBomImageToStorage
 } from '../services/bomStorageService';
-import {
-  exportModelBomExcel,
-  exportPartsMasterExcel,
-  parseEcountBomExcel
-} from '../utils/bomExcel';
 import { LarkBomSyncModal } from './LarkBomSyncModal';
 import { BomStatsTab } from './BomStatsTab';
 
@@ -727,6 +722,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
     if (!file || !selectedModelEntry || readOnly) return;
 
     try {
+      const { parseEcountBomExcel } = await import('../utils/bomExcel');
       const parsed = await parseEcountBomExcel(file, {
         normalizeColoredPlastic: true,
         extraColors: knownOqcColors
@@ -2063,8 +2059,9 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                       <div className="absolute left-0 sm:left-auto sm:right-0 mt-1.5 w-60 bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 z-40 text-xs">
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             setOpenExportMenu(null);
+                            const { exportModelBomExcel } = await import('../utils/bomExcel');
                             exportModelBomExcel({
                               modelName: selectedModelEntry.summary.modelName,
                               colorCount: selectedModelEntry.summary.colors.length,
@@ -2085,8 +2082,9 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             setOpenExportMenu(null);
+                            const { exportModelBomExcel } = await import('../utils/bomExcel');
                             exportModelBomExcel({
                               modelName: selectedModelEntry.summary.modelName,
                               colorCount: selectedModelEntry.summary.colors.length,
@@ -2600,8 +2598,9 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                       <div className="absolute left-0 sm:left-auto sm:right-0 mt-1.5 w-60 bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 z-40 text-xs">
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             setOpenExportMenu(null);
+                            const { exportPartsMasterExcel } = await import('../utils/bomExcel');
                             exportPartsMasterExcel({
                               parts: filteredPartsMaster,
                               whereUsedByCode: whereUsedNamesMap,
@@ -2619,8 +2618,9 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             setOpenExportMenu(null);
+                            const { exportPartsMasterExcel } = await import('../utils/bomExcel');
                             exportPartsMasterExcel({
                               parts: filteredPartsMaster,
                               whereUsedByCode: whereUsedNamesMap,

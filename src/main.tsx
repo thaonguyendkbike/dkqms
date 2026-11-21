@@ -1,7 +1,22 @@
-import React, { Component, ReactNode, StrictMode, ErrorInfo } from 'react';
+import React, { Component, ReactNode, StrictMode, Suspense, ErrorInfo, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App.tsx';
 import './index.css';
+
+const App = lazy(() => import('./App.tsx'));
+const StandaloneLkApp = lazy(() => import('./components/StandaloneLkApp.tsx'));
+
+function isStandaloneLkRoute(): boolean {
+  if (typeof window === 'undefined') return false;
+  const pathname = (window.location.pathname || '').toLowerCase();
+  const params = new URLSearchParams(window.location.search);
+  return (
+    pathname === '/lk' ||
+    pathname === '/lk/' ||
+    pathname.startsWith('/lk/') ||
+    params.get('lk') === '1' ||
+    params.get('lk') === 'true'
+  );
+}
 
 interface ErrorBoundaryProps {
   children?: ReactNode;
@@ -100,7 +115,18 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <Suspense
+        fallback={
+          <div className="bg-slate-900 min-h-screen w-full flex flex-col items-center justify-center text-slate-100 font-sans p-4 text-center">
+            <div className="w-9 h-9 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3" />
+            <p className="text-xs font-bold text-indigo-300 tracking-wide uppercase">
+              Đang tải DK QMS...
+            </p>
+          </div>
+        }
+      >
+        {isStandaloneLkRoute() ? <StandaloneLkApp /> : <App />}
+      </Suspense>
     </ErrorBoundary>
   </StrictMode>,
 );
