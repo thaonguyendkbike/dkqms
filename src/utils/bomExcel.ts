@@ -374,10 +374,58 @@ function applyStyledSheet(
   XLSXStyle.writeFile(wb, fileName);
 }
 
+function exportFlatEcountSheet(
+  headers: string[],
+  dataRows: (string | number)[][],
+  colWidths: number[],
+  sheetName: string,
+  fileName: string
+): void {
+  const aoa: (string | number)[][] = [headers, ...dataRows];
+  const ws = XLSXStyle.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = colWidths.map((wch) => ({ wch }));
+  ws['!rows'] = [{ hpt: 24 }, ...dataRows.map(() => ({ hpt: 20 }))];
+
+  for (let c = 0; c < headers.length; c++) {
+    const addr = XLSXStyle.utils.encode_cell({ r: 0, c });
+    if (!ws[addr]) ws[addr] = { v: headers[c], t: 's' };
+    ws[addr].s = {
+      font: { name: 'Arial', sz: 10, bold: true, color: { rgb: 'FFFFFF' } },
+      fill: TH_FILL,
+      border: BORDER_THIN,
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true }
+    };
+  }
+
+  for (let r = 0; r < dataRows.length; r++) {
+    const rowIdx = r + 1;
+    for (let c = 0; c < headers.length; c++) {
+      const addr = XLSXStyle.utils.encode_cell({ r: rowIdx, c });
+      if (!ws[addr]) ws[addr] = { v: '', t: 's' };
+      const h = headers[c].toLowerCase();
+      const align =
+        h === 'đơn vị' || h === 'trạng thái'
+          ? 'center'
+          : h.includes('định mức') || h.includes('tồn kho') || h.includes('giá') || h.includes('thành tiền')
+            ? 'right'
+            : 'left';
+      ws[addr].s = {
+        font: { name: 'Arial', sz: 10, color: { rgb: '0F172A' } },
+        border: BORDER_THIN,
+        alignment: { horizontal: align, vertical: 'center' }
+      };
+    }
+  }
+
+  const wb = XLSXStyle.utils.book_new();
+  XLSXStyle.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
+  XLSXStyle.writeFile(wb, fileName);
+}
+
 /**
  * Xuất Excel BOM theo Model:
- * - mode 'ecount': đúng các cột bảng Ecount (STT, Mã mặt hàng, Tên mặt hàng, Thông số, Đơn vị, Số lượng, Ghi chú)
- * - mode 'full': bổ sung thêm Tồn kho, Giá bán, (Giá mua nếu có quyền), Nhà cung cấp, Từ khóa, Thông số kỹ thuật, Trạng thái, Dùng chung
+ * - mode 'ecount': xuất đúng cấu trúc file Ecount anh Thao đã tải lên (dòng 1 là tiêu đề cột, không có dòng ghép)
+ * - mode 'full': báo cáo QLCL DKBike đầy đủ kèm thông số kỹ thuật, trạng thái, Model dùng chung
  */
 export function exportModelBomExcel(params: {
   modelName: string;
@@ -393,26 +441,86 @@ export function exportModelBomExcel(params: {
   const safeFileModel = modelName.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
 
   if (mode === 'ecount') {
-    const headers = ['STT', 'Mã mặt hàng', 'Tên mặt hàng', 'Thông số', 'Đơn vị', 'Số lượng', 'Ghi chú'];
-    const rows = lines.map((line, idx) => {
+    const headers = includePurchasePrice
+      ? [
+          'Mã mặt hàng',
+          'Tên mặt hàng',
+          'Thông số',
+          'Đơn vị',
+          'Ghi chú',
+          'Định mức tiêu thụ',
+          'Số lượng tồn kho',
+          'Trạng thái',
+          'Tên khách hàng/nhà cung cấp',
+          'Giá mua',
+          'Giá nhập',
+          'Thành tiền nhập',
+          'Giá bán',
+          'Thành tiền bán',
+          'Từ khóa'
+        ]
+      : [
+          'Mã mặt hàng',
+          'Tên mặt hàng',
+          'Thông số',
+          'Đơn vị',
+          'Ghi chú',
+          'Định mức tiêu thụ',
+          'Số lượng tồn kho',
+          'Trạng thái',
+          'Tên khách hàng/nhà cung cấp',
+          'Giá bán',
+          'Thành tiền bán',
+          'Từ khóa'
+        ];
+
+    const rows = lines.map((line) => {
       const code = line.partCode.trim().toUpperCase();
       const part = partsByCode.get(code);
+      const ecountStatus = part?.status === 'Ngừng dùng' ? 'Stop' : 'Use';
+      if (includePurchasePrice) {
+        return [
+          code,
+          part?.partName || code,
+          part?.specGroup || '',
+          line.unit || part?.unit || 'Cái',
+          line.note || part?.note || '',
+          line.qty,
+          part?.stockQty ?? '',
+          ecountStatus,
+          part?.supplierName || '',
+          part?.purchasePrice ?? '',
+          '',
+          '',
+          part?.sellingPrice ?? '',
+          '',
+          part?.keywords || ''
+        ];
+      }
       return [
-        idx + 1,
         code,
         part?.partName || code,
         part?.specGroup || '',
         line.unit || part?.unit || 'Cái',
+        line.note || part?.note || '',
         line.qty,
-        line.note || part?.note || ''
+        part?.stockQty ?? '',
+        ecountStatus,
+        part?.supplierName || '',
+        part?.sellingPrice ?? '',
+        '',
+        part?.keywords || ''
       ];
     });
-    applyStyledSheet(
-      `ĐỊNH MỨC LINH KIỆN (BOM) THEO MODEL: ${modelName.toUpperCase()}`,
-      `Ngày xuất: ${todayStr}   |   Tổng số linh kiện: ${lines.length} mã   |   Số màu xe: ${colorCount}   |   Chuẩn cột Ecount`,
+
+    const widths = includePurchasePrice
+      ? [18, 40, 14, 10, 18, 16, 16, 11, 34, 12, 12, 14, 13, 14, 24]
+      : [18, 40, 14, 10, 18, 16, 16, 11, 34, 13, 14, 24];
+
+    exportFlatEcountSheet(
       headers,
       rows,
-      [7, 18, 42, 16, 10, 12, 32],
+      widths,
       `BOM_${safeFileModel}`,
       `BOM_Ecount_${safeFileModel}.xlsx`
     );
@@ -478,15 +586,104 @@ export function exportModelBomExcel(params: {
 }
 
 /**
- * Xuất Excel toàn bộ Kho Linh kiện & Danh sách Model dùng chung (Where-Used).
+ * Xuất Excel toàn bộ Kho Linh kiện:
+ * - mode 'ecount': đúng cấu trúc cột file Ecount đã tải lên
+ * - mode 'full': báo cáo QLCL DKBike đầy đủ kèm Thông số kỹ thuật & Model dùng chung
  */
 export function exportPartsMasterExcel(params: {
   parts: BomPartMasterItem[];
   whereUsedByCode: Map<string, string[]>;
+  mode?: 'ecount' | 'full';
   includePurchasePrice?: boolean;
 }): void {
-  const { parts, whereUsedByCode, includePurchasePrice = false } = params;
+  const { parts, whereUsedByCode, mode = 'full', includePurchasePrice = false } = params;
   const todayStr = new Date().toLocaleDateString('vi-VN');
+
+  if (mode === 'ecount') {
+    const headers = includePurchasePrice
+      ? [
+          'Mã mặt hàng',
+          'Tên mặt hàng',
+          'Thông số',
+          'Đơn vị',
+          'Ghi chú',
+          'Định mức tiêu thụ',
+          'Số lượng tồn kho',
+          'Trạng thái',
+          'Tên khách hàng/nhà cung cấp',
+          'Giá mua',
+          'Giá nhập',
+          'Thành tiền nhập',
+          'Giá bán',
+          'Thành tiền bán',
+          'Từ khóa'
+        ]
+      : [
+          'Mã mặt hàng',
+          'Tên mặt hàng',
+          'Thông số',
+          'Đơn vị',
+          'Ghi chú',
+          'Định mức tiêu thụ',
+          'Số lượng tồn kho',
+          'Trạng thái',
+          'Tên khách hàng/nhà cung cấp',
+          'Giá bán',
+          'Thành tiền bán',
+          'Từ khóa'
+        ];
+
+    const rows = parts.map((p) => {
+      const code = p.partCode.trim().toUpperCase();
+      const ecountStatus = p.status === 'Ngừng dùng' ? 'Stop' : 'Use';
+      if (includePurchasePrice) {
+        return [
+          code,
+          p.partName,
+          p.specGroup || '',
+          p.unit || 'Cái',
+          p.note || '',
+          1,
+          p.stockQty ?? '',
+          ecountStatus,
+          p.supplierName || '',
+          p.purchasePrice ?? '',
+          '',
+          '',
+          p.sellingPrice ?? '',
+          '',
+          p.keywords || ''
+        ];
+      }
+      return [
+        code,
+        p.partName,
+        p.specGroup || '',
+        p.unit || 'Cái',
+        p.note || '',
+        1,
+        p.stockQty ?? '',
+        ecountStatus,
+        p.supplierName || '',
+        p.sellingPrice ?? '',
+        '',
+        p.keywords || ''
+      ];
+    });
+
+    const widths = includePurchasePrice
+      ? [18, 40, 14, 10, 18, 16, 16, 11, 34, 12, 12, 14, 13, 14, 24]
+      : [18, 40, 14, 10, 18, 16, 16, 11, 34, 13, 14, 24];
+
+    exportFlatEcountSheet(
+      headers,
+      rows,
+      widths,
+      'Ecount_Kho_Linh_Kien',
+      `Ecount_Kho_LK_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+    return;
+  }
   const headers = [
     'STT',
     'Mã mặt hàng',
