@@ -139,12 +139,14 @@ const PaginationBar: React.FC<PaginationBarProps> = ({
   }
 
   return (
-    <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-      <span className="text-slate-600 font-semibold">
-        Hiển thị <strong className="text-slate-900">{startItem}–{endItem}</strong> / <strong className="text-slate-900">{totalItems}</strong> linh kiện (tối đa {pageSize}/trang)
+    <div className="px-3 sm:px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:flex-wrap items-center justify-between gap-2.5 text-xs">
+      <span className="text-slate-600 font-semibold text-center sm:text-left">
+        Hiển thị <strong className="text-slate-900">{startItem}–{endItem}</strong> /{' '}
+        <strong className="text-slate-900">{totalItems}</strong> LK{' '}
+        <span className="hidden sm:inline">(tối đa {pageSize}/trang)</span>
       </span>
 
-      <div className="flex items-center gap-1 flex-wrap">
+      <div className="flex items-center justify-center gap-1 flex-wrap">
         <button
           type="button"
           disabled={safePage <= 1}
@@ -284,6 +286,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
   const [partSaving, setPartSaving] = useState(false);
   const [selectedViewImageIdx, setSelectedViewImageIdx] = useState<number>(0);
   const [copiedPartCode, setCopiedPartCode] = useState(false);
+  const [showSharedModelsInDetail, setShowSharedModelsInDetail] = useState(false);
   const [attachToCurrentModelQty, setAttachToCurrentModelQty] = useState<number>(1);
   const [attachToCurrentModel, setAttachToCurrentModel] = useState<boolean>(false);
 
@@ -796,6 +799,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
     setAttachToCurrentModel(false);
     setSelectedViewImageIdx(0);
     setCopiedPartCode(false);
+    setShowSharedModelsInDetail(false);
     setPartModalMode('view');
     setPartModalOpen(true);
   };
@@ -1258,9 +1262,9 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       )}
 
       {/* Brand Header */}
-      <header className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-lg sticky top-0 z-30 border-b border-indigo-800/40">
-        <div className="max-w-[1440px] mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+      <header className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-lg sm:sticky sm:top-0 z-30 border-b border-indigo-800/40">
+        <div className="max-w-[1440px] mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
             {onBackToApp && isLoggedIn && (
               <button
                 type="button"
@@ -1271,31 +1275,31 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                 <ArrowLeft className="w-4 h-4" />
               </button>
             )}
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shrink-0">
-              <Bike className="w-5 h-5 text-indigo-300" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shrink-0">
+              <Bike className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-300" />
             </div>
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-sm sm:text-base font-black tracking-tight truncate">
-                  DANH MỤC LINH KIỆN &amp; BOM THEO MODEL (/lk)
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h1 className="text-xs sm:text-base font-black tracking-tight truncate">
+                  DANH MỤC LINH KIỆN &amp; BOM (/lk)
                 </h1>
                 <span
-                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${
                     readOnly
                       ? 'bg-amber-500/20 text-amber-200 border-amber-400/40'
                       : 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40'
                   }`}
                 >
-                  {readOnly ? 'Chế độ Tra cứu (Chỉ xem)' : 'Chế độ Biên tập QLCL'}
+                  {readOnly ? 'Tra cứu' : 'Biên tập QLCL'}
                 </span>
               </div>
-              <p className="text-[11px] text-indigo-200/90 truncate">
-                Công ty TNHH Xe điện DK Việt Nhật — DKBike (Xe cho cả gia đình) | Phòng Quản lý chất lượng (QLCL / DK QMS)
+              <p className="text-[10px] sm:text-[11px] text-indigo-200/90 truncate">
+                Công ty TNHH Xe điện DK Việt Nhật — DKBike | QLCL
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {!isLoggedIn && onRequestLogin && (
               <button
                 type="button"
@@ -1303,7 +1307,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                 className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
               >
                 <LogIn className="w-3.5 h-3.5" />
-                Đăng nhập
+                <span className="hidden xs:inline sm:inline">Đăng nhập</span>
               </button>
             )}
             {!readOnly && (
@@ -1332,12 +1336,12 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         </div>
 
         {/* Sub-nav & KPI Strip */}
-        <div className="max-w-[1440px] mx-auto px-3 sm:px-6 pb-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 bg-slate-950/50 p-1 rounded-xl border border-white/10">
+        <div className="max-w-[1440px] mx-auto px-3 sm:px-6 pb-2.5 sm:pb-3 flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
+          <div className="w-full sm:w-auto grid grid-cols-2 sm:flex items-center gap-1.5 bg-slate-950/50 p-1 rounded-xl border border-white/10">
             <button
               type="button"
               onClick={() => setActiveSubTab('models')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeSubTab === 'models'
                   ? 'bg-indigo-600 text-white shadow'
                   : 'text-slate-300 hover:text-white hover:bg-white/10'
@@ -1349,7 +1353,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
             <button
               type="button"
               onClick={() => setActiveSubTab('parts')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeSubTab === 'parts'
                   ? 'bg-indigo-600 text-white shadow'
                   : 'text-slate-300 hover:text-white hover:bg-white/10'
@@ -1360,7 +1364,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
             </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <div className="hidden md:flex flex-wrap items-center gap-2 text-[11px]">
             <span className="px-2.5 py-1 rounded-lg bg-white/10 text-indigo-100 font-semibold">
               Đang SX: <strong className="text-white">{overviewStats.activeModels}</strong>
               {overviewStats.discontinuedModels > 0 && (
@@ -1381,7 +1385,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-[1440px] w-full mx-auto px-3 sm:px-6 py-5">
+      <main className="flex-1 max-w-[1440px] w-full mx-auto px-2.5 sm:px-6 py-3 sm:py-5">
         {loadingCatalog && bomModels.length === 0 && bomParts.length === 0 && (
           <div className="mb-4 p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-bold flex items-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -1393,14 +1397,14 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         {activeSubTab === 'models' && !selectedModelEntry && (
           <div className="space-y-4">
             {/* Search & Filters */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[230px]">
+            <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-3.5 shadow-xs flex flex-wrap items-center gap-2.5 sm:gap-3">
+              <div className="relative w-full sm:flex-1 sm:min-w-[230px]">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={modelSearch}
                   onChange={(e) => setModelSearch(e.target.value)}
-                  placeholder="Tìm theo tên Model (DK S1, Roma SX...), màu sắc hoặc mã xe (TEBDS...)..."
+                  placeholder="Tìm Model, màu sắc hoặc mã xe..."
                   className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:outline-hidden focus:border-indigo-500"
                 />
               </div>
@@ -1938,20 +1942,20 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         {activeSubTab === 'models' && selectedModelEntry && (
           <div className="space-y-4">
             {/* Top Bar + Model Banner */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="flex items-start gap-4 min-w-0">
+            <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs">
+              <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
+                <div className="flex items-start gap-2.5 sm:gap-4 min-w-0 flex-1">
                   <button
                     type="button"
                     onClick={() => setSelectedModelKey(null)}
                     className="px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold flex items-center gap-1 transition cursor-pointer shrink-0"
                   >
                     <ArrowLeft className="w-4 h-4" />
-                    Model
+                    <span className="hidden xs:inline sm:inline">Model</span>
                   </button>
 
                   {/* Model thumbnail */}
-                  <div className="w-24 h-20 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 relative group">
+                  <div className="w-16 h-14 sm:w-24 sm:h-20 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 relative group">
                     {selectedModelEntry.bom?.imageUrl ? (
                       <img
                         src={selectedModelEntry.bom.imageUrl}
@@ -2056,7 +2060,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                     </button>
 
                     {openExportMenu === 'model' && (
-                      <div className="absolute right-0 mt-1.5 w-60 bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 z-40 text-xs">
+                      <div className="absolute left-0 sm:left-auto sm:right-0 mt-1.5 w-60 bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 z-40 text-xs">
                         <button
                           type="button"
                           onClick={() => {
@@ -2139,26 +2143,26 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
               </div>
 
               {/* Filter inside BOM */}
-              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3">
-                <div className="relative flex-1 min-w-[220px]">
+              <div className="mt-3 sm:mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2.5 sm:gap-3">
+                <div className="relative w-full sm:flex-1 sm:min-w-[220px]">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={bomSearch}
                     onChange={(e) => setBomSearch(e.target.value)}
-                    placeholder="Tìm Mã mặt hàng, Tên linh kiện, Thông số kỹ thuật, NCC..."
+                    placeholder="Tìm Mã, Tên LK, TSKT, NCC..."
                     className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:outline-hidden focus:border-indigo-500"
                   />
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Filter className="w-3.5 h-3.5 text-slate-400" />
+                <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+                  <Filter className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
                   <select
                     value={bomSpecFilter}
                     onChange={(e) => setBomSpecFilter(e.target.value)}
-                    className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-white"
+                    className="w-full sm:w-auto px-2.5 sm:px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-white"
                   >
-                    <option value="ALL">Tất cả Nhóm (Thông số)</option>
+                    <option value="ALL">Tất cả Thông số</option>
                     {allSpecGroups.map((g) => (
                       <option key={g} value={g}>
                         {g}
@@ -2169,7 +2173,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                   <select
                     value={bomStatusFilter}
                     onChange={(e) => setBomStatusFilter(e.target.value as any)}
-                    className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-white"
+                    className="w-full sm:w-auto px-2.5 sm:px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold bg-white"
                   >
                     <option value="ALL">Tất cả Trạng thái</option>
                     {PART_STATUS_OPTIONS.map((st) => (
@@ -2204,7 +2208,149 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                   )}
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <>
+                {/* Mobile Card List (BOM) */}
+                <div className="md:hidden divide-y divide-slate-100">
+                  {paginatedBomLines.map((line, idx) => {
+                    const globalIdx = (safeBomPage - 1) * PARTS_PER_PAGE + idx + 1;
+                    const code = line.partCode.trim().toUpperCase();
+                    const part = partsByCode.get(code);
+                    const images = part?.images || [];
+                    const firstImg = images[0]?.url;
+                    const sharedList = whereUsedMap.get(code) || [];
+                    const status: PartQualityStatus = part?.status || 'Đang dùng';
+
+                    return (
+                      <div key={code} className="p-3 flex gap-3 hover:bg-indigo-50/30 transition">
+                        <button
+                          type="button"
+                          onClick={() => openPartModalForView(code)}
+                          className="relative w-18 h-18 rounded-xl border border-slate-200 overflow-hidden bg-slate-50 flex items-center justify-center shrink-0 cursor-pointer"
+                        >
+                          {firstImg ? (
+                            <img
+                              src={firstImg}
+                              alt={part?.partName || code}
+                              loading="lazy"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <ImageIcon className="w-6 h-6 text-slate-300" />
+                          )}
+                          <span className="absolute top-1 left-1 px-1.5 py-0.2 rounded bg-slate-900/75 text-white text-[9px] font-black">
+                            #{globalIdx}
+                          </span>
+                          {images.length > 1 && (
+                            <span className="absolute bottom-1 right-1 px-1 rounded bg-slate-900/80 text-white text-[9px] font-extrabold">
+                              +{images.length - 1}
+                            </span>
+                          )}
+                        </button>
+
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-start justify-between gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openPartModalForView(code)}
+                              className="font-mono text-xs font-black text-indigo-700 truncate text-left cursor-pointer"
+                            >
+                              {code}
+                            </button>
+                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${STATUS_BADGE_MAP[status]}`}>
+                              {status}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => openPartModalForView(code)}
+                            className="text-xs font-extrabold text-slate-900 line-clamp-2 text-left cursor-pointer leading-snug"
+                          >
+                            {part?.partName || code}
+                          </button>
+
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
+                            {part?.specGroup && (
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 font-semibold border border-slate-200">
+                                {part.specGroup}
+                              </span>
+                            )}
+                            <span className="font-black text-slate-800">
+                              ĐM: {line.qty} {line.unit || part?.unit || 'Cái'}
+                            </span>
+                            <span className="font-extrabold text-emerald-700">
+                              • {formatPriceDisplay(part?.sellingPrice, ' đ')}
+                            </span>
+                            {showPurchasePrice && part?.purchasePrice !== undefined && (
+                              <span className="font-bold text-amber-800">
+                                • Mua: {formatPriceDisplay(part.purchasePrice)}
+                              </span>
+                            )}
+                          </div>
+
+                          {part?.supplierName && (
+                            <p className="text-[11px] text-indigo-700/90 font-semibold truncate">
+                              NCC: {part.supplierName}
+                            </p>
+                          )}
+
+                          <div className="flex items-center justify-between gap-2 pt-1">
+                            <span className="text-[11px] font-bold text-slate-500">
+                              Dùng chung: {sharedList.length} model
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => openPartModalForView(code)}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-[11px] font-extrabold cursor-pointer"
+                              >
+                                Xem
+                              </button>
+                              {!readOnly && part && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => openPartModalForEdit(part)}
+                                    className="p-1.5 rounded-lg bg-slate-100 text-slate-700 cursor-pointer"
+                                    title="Sửa linh kiện & ảnh"
+                                  >
+                                    <Camera className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setEditingBomLine({
+                                        partCode: code,
+                                        qty: line.qty,
+                                        unit: line.unit || part.unit || 'Cái',
+                                        note: line.note || ''
+                                      })
+                                    }
+                                    className="p-1.5 rounded-lg bg-amber-50 text-amber-700 cursor-pointer"
+                                    title="Sửa ĐM / QL Kho"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveBomLine(code)}
+                                    className="p-1.5 rounded-lg bg-rose-50 text-rose-700 cursor-pointer"
+                                    title="Gỡ khỏi BOM"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Desktop Table (BOM) */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-slate-900 text-white text-[11px] uppercase tracking-wider">
@@ -2409,6 +2555,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
               <PaginationBar
                 currentPage={safeBomPage}
@@ -2422,15 +2569,15 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         {/* TAB 2: KHO LINH KIỆN & DÙNG CHUNG (WHERE-USED) */}
         {activeSubTab === 'parts' && (
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="relative flex-1 min-w-[240px]">
+            <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
+                <div className="relative w-full sm:flex-1 sm:min-w-[240px]">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={partSearch}
                     onChange={(e) => setPartSearch(e.target.value)}
-                    placeholder="Tra cứu nhanh theo Mã mặt hàng Ecount, Tên linh kiện, Thông số kỹ thuật, Nhà cung cấp..."
+                    placeholder="Tìm Mã mặt hàng, Tên linh kiện, TSKT, NCC..."
                     className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:outline-hidden focus:border-indigo-500"
                   />
                 </div>
@@ -2451,7 +2598,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                     </button>
 
                     {openExportMenu === 'parts' && (
-                      <div className="absolute right-0 mt-1.5 w-60 bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 z-40 text-xs">
+                      <div className="absolute left-0 sm:left-auto sm:right-0 mt-1.5 w-60 bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 z-40 text-xs">
                         <button
                           type="button"
                           onClick={() => {
@@ -2507,13 +2654,13 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5 text-xs">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
                 <select
                   value={partSpecFilter}
                   onChange={(e) => setPartSpecFilter(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 font-bold bg-white"
+                  className="flex-1 min-w-[140px] sm:flex-none px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 font-bold bg-white"
                 >
-                  <option value="ALL">Tất cả Nhóm (Thông số)</option>
+                  <option value="ALL">Tất cả Thông số</option>
                   {allSpecGroups.map((g) => (
                     <option key={g} value={g}>
                       {g}
@@ -2524,7 +2671,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                 <select
                   value={partStatusFilter}
                   onChange={(e) => setPartStatusFilter(e.target.value as any)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 font-bold bg-white"
+                  className="flex-1 min-w-[140px] sm:flex-none px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 font-bold bg-white"
                 >
                   <option value="ALL">Tất cả Trạng thái</option>
                   {PART_STATUS_OPTIONS.map((st) => (
@@ -2655,16 +2802,24 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                       <div className="flex-1 min-w-0 flex flex-col justify-between gap-2">
                         <div>
                           <div className="flex items-start justify-between gap-2">
-                            <span className="font-mono text-xs font-black text-indigo-700 truncate">
+                            <button
+                              type="button"
+                              onClick={() => openPartModalForView(code)}
+                              className="font-mono text-xs font-black text-indigo-700 hover:underline truncate text-left cursor-pointer"
+                            >
                               {code}
-                            </span>
+                            </button>
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${STATUS_BADGE_MAP[part.status || 'Đang dùng']}`}>
                               {part.status || 'Đang dùng'}
                             </span>
                           </div>
-                          <h3 className="text-xs sm:text-sm font-bold text-slate-900 line-clamp-2 mt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => openPartModalForView(code)}
+                            className="text-xs sm:text-sm font-bold text-slate-900 hover:text-indigo-700 line-clamp-2 mt-0.5 text-left cursor-pointer"
+                          >
                             {part.partName}
-                          </h3>
+                          </button>
                           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
                             {part.specGroup && (
                               <span className="px-1.5 py-0.5 rounded bg-slate-100 font-semibold">
@@ -2734,7 +2889,123 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
               </div>
             ) : (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-                <div className="overflow-x-auto">
+                {/* Mobile Card List (Kho LK List mode) */}
+                <div className="md:hidden divide-y divide-slate-100">
+                  {paginatedPartsMaster.map((part, idx) => {
+                    const globalIdx = (safePartsPage - 1) * PARTS_PER_PAGE + idx + 1;
+                    const code = part.partCode.trim().toUpperCase();
+                    const images = part.images || [];
+                    const firstImg = images[0]?.url;
+                    const usedModels = whereUsedMap.get(code) || [];
+
+                    return (
+                      <div key={part.id} className="p-3 flex gap-3 hover:bg-indigo-50/30 transition">
+                        <button
+                          type="button"
+                          onClick={() => openPartModalForView(code)}
+                          className="relative w-18 h-18 rounded-xl border border-slate-200 overflow-hidden bg-slate-50 flex items-center justify-center shrink-0 cursor-pointer"
+                        >
+                          {firstImg ? (
+                            <img
+                              src={firstImg}
+                              alt={part.partName}
+                              loading="lazy"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <ImageIcon className="w-6 h-6 text-slate-300" />
+                          )}
+                          <span className="absolute top-1 left-1 px-1.5 py-0.2 rounded bg-slate-900/75 text-white text-[9px] font-black">
+                            #{globalIdx}
+                          </span>
+                          {images.length > 1 && (
+                            <span className="absolute bottom-1 right-1 px-1 rounded bg-slate-900/80 text-white text-[9px] font-extrabold">
+                              +{images.length - 1}
+                            </span>
+                          )}
+                        </button>
+
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-start justify-between gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openPartModalForView(code)}
+                              className="font-mono text-xs font-black text-indigo-700 truncate text-left cursor-pointer"
+                            >
+                              {code}
+                            </button>
+                            <span
+                              className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${
+                                STATUS_BADGE_MAP[part.status || 'Đang dùng']
+                              }`}
+                            >
+                              {part.status || 'Đang dùng'}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => openPartModalForView(code)}
+                            className="text-xs font-extrabold text-slate-900 line-clamp-2 text-left cursor-pointer leading-snug"
+                          >
+                            {part.partName}
+                          </button>
+
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
+                            {part.specGroup && (
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 font-semibold border border-slate-200">
+                                {part.specGroup}
+                              </span>
+                            )}
+                            <span>ĐVT: {part.unit || 'Cái'}</span>
+                            <span className="font-extrabold text-emerald-700">
+                              • {formatPriceDisplay(part.sellingPrice, ' đ')}
+                            </span>
+                            {showPurchasePrice && part.purchasePrice !== undefined && (
+                              <span className="font-bold text-amber-800">
+                                • Mua: {formatPriceDisplay(part.purchasePrice)}
+                              </span>
+                            )}
+                          </div>
+
+                          {part.supplierName && (
+                            <p className="text-[11px] text-indigo-700/90 font-semibold truncate">
+                              NCC: {part.supplierName}
+                            </p>
+                          )}
+
+                          <div className="flex items-center justify-between gap-2 pt-1">
+                            <span className="text-[11px] font-bold text-slate-500">
+                              Dùng chung: {usedModels.length} model
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => openPartModalForView(code)}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-[11px] font-extrabold cursor-pointer"
+                              >
+                                Xem
+                              </button>
+                              {!readOnly && (
+                                <button
+                                  type="button"
+                                  onClick={() => openPartModalForEdit(part)}
+                                  className="p-1.5 rounded-lg bg-slate-100 text-slate-700 cursor-pointer"
+                                  title="Chỉnh sửa linh kiện"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Desktop Table (Kho LK List mode) */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-slate-900 text-white text-[11px] uppercase tracking-wider">
@@ -2968,14 +3239,14 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
 
       {/* MODAL CHI TIẾT / TẠO MỚI / CHỈNH SỬA LINH KIỆN (UNIFIED FORM + VIEW SPEC SHEET) */}
       {partModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div
-            className={`bg-white rounded-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden ${
+            className={`bg-white rounded-t-2xl sm:rounded-2xl w-full max-h-[95vh] sm:max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden ${
               partModalMode === 'view' ? 'max-w-5xl' : 'max-w-4xl'
             }`}
           >
             {/* Header */}
-            <div className="px-4 sm:px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between gap-3">
+            <div className="px-3.5 sm:px-5 py-3 sm:py-3.5 bg-slate-900 text-white flex items-center justify-between gap-2.5 sm:gap-3">
               <div className="min-w-0">
                 <h3 className="text-sm sm:text-base font-black truncate">
                   {partModalMode === 'create'
@@ -3020,11 +3291,11 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                 const usedModels = whereUsedMap.get(codeUpper) || [];
 
                 return (
-                  <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                  <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-5">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5">
                       {/* CỘT TRÁI: TRÌNH XEM ẢNH CHÍNH + THUMBNAILS */}
-                      <div className="lg:col-span-6 space-y-3">
-                        <div className="relative h-72 sm:h-80 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden group">
+                      <div className="lg:col-span-6 space-y-2.5 sm:space-y-3">
+                        <div className="relative h-56 sm:h-80 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden group">
                           {activeImage ? (
                             <>
                               <img
@@ -3223,34 +3494,14 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                             </p>
                           </div>
 
-                          {/* Nhà cung cấp & Ghi chú & Từ khóa */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <span className="block text-[11px] font-bold text-slate-400 uppercase">
-                                Nhà cung cấp
-                              </span>
-                              <span className="mt-1 block font-bold text-slate-800">
-                                {partForm.supplierName?.trim() || 'Chưa cập nhật'}
-                              </span>
-                            </div>
-                            <div className="rounded-xl border border-slate-200 bg-white p-3">
-                              <span className="block text-[11px] font-bold text-slate-400 uppercase">
-                                QL Kho
-                              </span>
-                              <span className="mt-1 block font-semibold text-slate-700">
-                                {partForm.note?.trim() || 'Chưa phân công'}
-                              </span>
-                            </div>
-                            {partForm.keywords?.trim() && (
-                              <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                <span className="block text-[11px] font-bold text-slate-400 uppercase">
-                                  Từ khóa tìm kiếm (Ecount)
-                                </span>
-                                <span className="mt-1 block font-semibold text-slate-700">
-                                  {partForm.keywords}
-                                </span>
-                              </div>
-                            )}
+                          {/* Nhà cung cấp */}
+                          <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs">
+                            <span className="block text-[11px] font-bold text-slate-400 uppercase">
+                              Nhà cung cấp
+                            </span>
+                            <span className="mt-1 block font-bold text-slate-800">
+                              {partForm.supplierName?.trim() || 'Chưa cập nhật'}
+                            </span>
                           </div>
                         </div>
 
@@ -3264,53 +3515,76 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                       </div>
                     </div>
 
-                    {/* DANH SÁCH MODEL DÙNG CHUNG (WHERE-USED) */}
-                    <div className="bg-indigo-50/70 rounded-2xl border border-indigo-200 p-4 space-y-3">
-                      <div className="flex items-center justify-between gap-2">
+                    {/* DANH SÁCH MODEL DÙNG CHUNG (WHERE-USED - TỰ ĐỘNG ẨN, MỞ BẰNG NÚT TAM GIÁC) */}
+                    <div className="bg-indigo-50/70 rounded-2xl border border-indigo-200 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setShowSharedModelsInDetail((prev) => !prev)}
+                        aria-expanded={showSharedModelsInDetail}
+                        className="w-full px-3.5 sm:px-4 py-3 flex items-center justify-between gap-2 text-left hover:bg-indigo-100/60 transition cursor-pointer"
+                      >
                         <h4 className="text-xs font-black text-indigo-950 uppercase flex items-center gap-1.5">
-                          <Share2 className="w-4 h-4 text-indigo-600" />
-                          Các Model xe đang dùng chung linh kiện này ({usedModels.length} model)
+                          <Share2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                          <span>Model dùng chung ({usedModels.length} model)</span>
                         </h4>
-                      </div>
-                      {usedModels.length === 0 ? (
-                        <p className="text-xs text-slate-500">
-                          Mã linh kiện này chưa được gắn vào BOM của Model nào.
-                        </p>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                          {usedModels.map((entry) => {
-                            const modelObj = bomModelsMap.get(entry.modelKey);
-                            return (
-                              <button
-                                key={entry.modelKey}
-                                type="button"
-                                onClick={() => {
-                                  setPartModalOpen(false);
-                                  setActiveSubTab('models');
-                                  setSelectedModelKey(entry.modelKey);
-                                }}
-                                className="p-2.5 rounded-xl bg-white hover:bg-indigo-600 text-slate-800 hover:text-white border border-indigo-200 shadow-2xs transition flex items-center gap-2.5 text-left group cursor-pointer"
-                              >
-                                <div className="w-11 h-9 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
-                                  {modelObj?.imageUrl ? (
-                                    <img
-                                      src={modelObj.imageUrl}
-                                      alt={entry.modelName}
-                                      className="w-full h-full object-contain"
-                                    />
-                                  ) : (
-                                    <Bike className="w-4 h-4 text-slate-400" />
-                                  )}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-xs font-black truncate">{entry.modelName}</p>
-                                  <p className="text-[11px] text-slate-500 group-hover:text-indigo-100 font-semibold">
-                                    Định mức: {entry.qty} {entry.unit} / xe
-                                  </p>
-                                </div>
-                              </button>
-                            );
-                          })}
+                        <span
+                          className="w-7 h-7 rounded-lg bg-white border border-indigo-200 text-indigo-700 flex items-center justify-center shadow-2xs shrink-0"
+                          title={showSharedModelsInDetail ? 'Thu gọn danh sách model' : 'Mở danh sách model dùng chung'}
+                        >
+                          <svg
+                            viewBox="0 0 12 12"
+                            className={`w-3 h-3 fill-current transition-transform duration-200 ${
+                              showSharedModelsInDetail ? 'rotate-180' : 'rotate-0'
+                            }`}
+                          >
+                            <path d="M2 4l4 5 4-5H2z" />
+                          </svg>
+                        </span>
+                      </button>
+
+                      {showSharedModelsInDetail && (
+                        <div className="px-3.5 sm:px-4 pb-3.5 sm:pb-4 pt-1 border-t border-indigo-200/70">
+                          {usedModels.length === 0 ? (
+                            <p className="text-xs text-slate-500 pt-2">
+                              Mã linh kiện này chưa được gắn vào BOM của Model nào.
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-2">
+                              {usedModels.map((entry) => {
+                                const modelObj = bomModelsMap.get(entry.modelKey);
+                                return (
+                                  <button
+                                    key={entry.modelKey}
+                                    type="button"
+                                    onClick={() => {
+                                      setPartModalOpen(false);
+                                      setActiveSubTab('models');
+                                      setSelectedModelKey(entry.modelKey);
+                                    }}
+                                    className="p-2.5 rounded-xl bg-white hover:bg-indigo-600 text-slate-800 hover:text-white border border-indigo-200 shadow-2xs transition flex items-center gap-2.5 text-left group cursor-pointer"
+                                  >
+                                    <div className="w-11 h-9 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                                      {modelObj?.imageUrl ? (
+                                        <img
+                                          src={modelObj.imageUrl}
+                                          alt={entry.modelName}
+                                          className="w-full h-full object-contain"
+                                        />
+                                      ) : (
+                                        <Bike className="w-4 h-4 text-slate-400" />
+                                      )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-black truncate">{entry.modelName}</p>
+                                      <p className="text-[11px] text-slate-500 group-hover:text-indigo-100 font-semibold">
+                                        Định mức: {entry.qty} {entry.unit} / xe
+                                      </p>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
