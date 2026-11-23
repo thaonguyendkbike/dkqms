@@ -2020,6 +2020,13 @@ export function App() {
     'dk_qms_quality_planning_tasks'
   ];
 
+  const EQUIPMENT_SYNC_KEYS = [
+    'dk_equipments',
+    'dk_maintenance_logs',
+    'dk_equipment_incidents',
+    'dk_fabrication_jobs'
+  ];
+
   const getItemId = (item: any, key: string, index: number): string => {
     if (!item) return `idx_${index}`;
     if (key === 'dk_oqc_records' && item.serialNo) {
@@ -2253,14 +2260,31 @@ export function App() {
     const serverTime = parseSafeTimestamp(serverTimeStr);
     const localTime = parseSafeTimestamp(localTimeStr);
 
+    const isEquipmentSyncKey = EQUIPMENT_SYNC_KEYS.includes(key);
     // Field-level merge: Khởi tạo với tất cả trường của serverItem
     const mergedItem: any = { ...serverItem };
+
+    if (isEquipmentSyncKey && localTime > serverTime) {
+      Object.keys(serverItem).forEach((field) => {
+        if (!(field in localItem) || localItem[field] === undefined) {
+          delete mergedItem[field];
+        }
+      });
+    }
 
     Object.keys(localItem).forEach((field) => {
       const localVal = localItem[field];
       const serverVal = serverItem[field];
 
       if (localVal === undefined || localVal === null || localVal === '') {
+        if (isEquipmentSyncKey && localTime > serverTime) {
+          if (localVal === undefined) {
+            delete mergedItem[field];
+          } else {
+            mergedItem[field] = localVal;
+          }
+          return;
+        }
         if (serverVal !== undefined && serverVal !== null && serverVal !== '') {
           mergedItem[field] = serverVal;
         }
@@ -2330,15 +2354,15 @@ export function App() {
 
     if (rawServer.length === 0) return rawLocal;
     if (rawLocal.length === 0) {
-      // Chỉ duy nhất phân hệ bàn giao tạm thời 'dk_oqc_handover_list' mới được phép xóa sạch về [] khi người dùng chủ ý xóa
-      if (key === 'dk_oqc_handover_list') {
+      // Chỉ duy nhất phân hệ bàn giao tạm thời 'dk_oqc_handover_list' (hoặc phân hệ thiết bị khi đã đánh dấu xóa) mới được phép xóa sạch về [] khi người dùng chủ ý xóa
+      if (key === 'dk_oqc_handover_list' || EQUIPMENT_SYNC_KEYS.includes(key)) {
         const isDirty = localStorage.getItem(`${key}_is_dirty`) === 'true';
         let hasDeletedIds = false;
         try {
           const delArr = JSON.parse(localStorage.getItem(`${key}_deleted_ids`) || '[]');
           if (Array.isArray(delArr) && delArr.length > 0) hasDeletedIds = true;
         } catch (e) { }
-        if (isDirty || hasDeletedIds) {
+        if (key === 'dk_oqc_handover_list' ? (isDirty || hasDeletedIds) : (isDirty && hasDeletedIds)) {
           return [];
         }
       }
@@ -2921,6 +2945,9 @@ export function App() {
               .filter((item: any) => item && (item.permission === 'edit' || item.permission === 'admin'))
               .map((item: any) => (item && item.email) ? item.email.toLowerCase().trim() : '')
               .filter(Boolean);
+          }
+          if (EQUIPMENT_SYNC_KEYS.includes(key)) {
+            lastLocalWriteTimestamps.current[key] = timestamp;
           }
           ops.push({ type: 'set', ref: docRef, data: payload });
         }
@@ -4277,23 +4304,35 @@ export function App() {
       if (serverData.dk_dealers !== undefined && Array.isArray(serverData.dk_dealers)) setDealers(serverData.dk_dealers);
       if (serverData.dk_equipments !== undefined && localStorage.getItem('dk_equipments_is_dirty') !== 'true') {
         const cleaned = ensureUniqueIds(serverData.dk_equipments, 'EQP');
+        const cleanedSerialized = JSON.stringify(cleaned);
         setEquipments(cleaned);
-        safeStorage.setItem('dk_equipments', JSON.stringify(cleaned));
+        safeStorage.setItem('dk_equipments', cleanedSerialized);
+        lastSyncedValues.current['dk_equipments'] = cleanedSerialized;
+        lastSeenValues.current['dk_equipments'] = cleanedSerialized;
       }
       if (serverData.dk_maintenance_logs !== undefined && localStorage.getItem('dk_maintenance_logs_is_dirty') !== 'true') {
         const cleaned = ensureUniqueIds(serverData.dk_maintenance_logs, 'MNL');
+        const cleanedSerialized = JSON.stringify(cleaned);
         setMaintenanceLogs(cleaned);
-        safeStorage.setItem('dk_maintenance_logs', JSON.stringify(cleaned));
+        safeStorage.setItem('dk_maintenance_logs', cleanedSerialized);
+        lastSyncedValues.current['dk_maintenance_logs'] = cleanedSerialized;
+        lastSeenValues.current['dk_maintenance_logs'] = cleanedSerialized;
       }
       if (serverData.dk_equipment_incidents !== undefined && localStorage.getItem('dk_equipment_incidents_is_dirty') !== 'true') {
         const cleaned = ensureUniqueIds(serverData.dk_equipment_incidents, 'EQI');
+        const cleanedSerialized = JSON.stringify(cleaned);
         setEquipmentIncidents(cleaned);
-        safeStorage.setItem('dk_equipment_incidents', JSON.stringify(cleaned));
+        safeStorage.setItem('dk_equipment_incidents', cleanedSerialized);
+        lastSyncedValues.current['dk_equipment_incidents'] = cleanedSerialized;
+        lastSeenValues.current['dk_equipment_incidents'] = cleanedSerialized;
       }
       if (serverData.dk_fabrication_jobs !== undefined && Array.isArray(serverData.dk_fabrication_jobs) && localStorage.getItem('dk_fabrication_jobs_is_dirty') !== 'true') {
         const cleaned = ensureUniqueIds(serverData.dk_fabrication_jobs, 'GC');
+        const cleanedSerialized = JSON.stringify(cleaned);
         setFabricationJobs(cleaned);
-        safeStorage.setItem('dk_fabrication_jobs', JSON.stringify(cleaned));
+        safeStorage.setItem('dk_fabrication_jobs', cleanedSerialized);
+        lastSyncedValues.current['dk_fabrication_jobs'] = cleanedSerialized;
+        lastSeenValues.current['dk_fabrication_jobs'] = cleanedSerialized;
       }
       if (serverData.dk_qc_detailed_tasks !== undefined) setQcDetailedTasks(serverData.dk_qc_detailed_tasks);
       if (serverData.dk_oqc_color_changes !== undefined && Array.isArray(serverData.dk_oqc_color_changes)) {
@@ -4866,6 +4905,16 @@ export function App() {
             return;
           }
           const list = Array.isArray(metaData?.data) ? metaData.data : [];
+          const serverTime = metaData?.updatedAt;
+          if (EQUIPMENT_SYNC_KEYS.includes(key)) {
+            if (
+              docSnap.metadata.hasPendingWrites ||
+              (serverTime && serverTime === lastLocalWriteTimestamps.current[key])
+            ) {
+              if (serverTime) serverTimestamps.current[key] = serverTime;
+              return;
+            }
+          }
           if (key === 'dk_oqc_color_changes' && list.length === 0) {
             try {
               const currentLocal = JSON.parse(localStorage.getItem(key) || '[]');
@@ -4875,8 +4924,26 @@ export function App() {
               }
             } catch (e) { }
           }
-          safeStorage.setItem(key, JSON.stringify(list));
-          try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) { }
+          const prefixMap: Record<string, string> = {
+            dk_equipments: 'EQP',
+            dk_maintenance_logs: 'MNL',
+            dk_equipment_incidents: 'EQI',
+            dk_fabrication_jobs: 'GC'
+          };
+          const finalList = EQUIPMENT_SYNC_KEYS.includes(key)
+            ? ensureUniqueIds(list, prefixMap[key])
+            : list;
+          const finalSerialized = JSON.stringify(finalList);
+          safeStorage.setItem(key, finalSerialized);
+          try { localStorage.setItem(key, finalSerialized); } catch (e) { }
+          if (EQUIPMENT_SYNC_KEYS.includes(key)) {
+            lastSyncedValues.current[key] = finalSerialized;
+            lastSeenValues.current[key] = finalSerialized;
+            if (serverTime) {
+              serverTimestamps.current[key] = serverTime;
+              try { localStorage.setItem(`${key}_last_synced_at`, serverTime); } catch (e) { }
+            }
+          }
           isRemoteUpdateRef.current[key] = true;
           setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
           if (key === 'dk_staff') {
@@ -4903,21 +4970,13 @@ export function App() {
               setKpis(list);
             }
           } else if (key === 'dk_equipments') {
-            const cleaned = ensureUniqueIds(list, 'EQP');
-            setEquipments(cleaned);
-            safeStorage.setItem('dk_equipments', JSON.stringify(cleaned));
+            setEquipments(finalList);
           } else if (key === 'dk_maintenance_logs') {
-            const cleaned = ensureUniqueIds(list, 'MNL');
-            setMaintenanceLogs(cleaned);
-            safeStorage.setItem('dk_maintenance_logs', JSON.stringify(cleaned));
+            setMaintenanceLogs(finalList);
           } else if (key === 'dk_equipment_incidents') {
-            const cleaned = ensureUniqueIds(list, 'EQI');
-            setEquipmentIncidents(cleaned);
-            safeStorage.setItem('dk_equipment_incidents', JSON.stringify(cleaned));
+            setEquipmentIncidents(finalList);
           } else if (key === 'dk_fabrication_jobs') {
-            const cleaned = ensureUniqueIds(list, 'GC');
-            setFabricationJobs(cleaned);
-            safeStorage.setItem('dk_fabrication_jobs', JSON.stringify(cleaned));
+            setFabricationJobs(finalList);
           } else if (key === 'dk_oqc_part_codes') {
             if (list.length > 0) {
               window.dispatchEvent(new CustomEvent('dk_oqc_part_codes_updated', { detail: list }));

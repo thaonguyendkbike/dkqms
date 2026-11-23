@@ -691,7 +691,7 @@ export interface MaintenanceLog {
   type: 'Định kỳ' | 'Đột xuất' | 'Hiệu chuẩn' | 'Nâng cấp';
   details: string;
   replacedParts: string;
-  cost: number;
+  cost?: number;
   nextCalibrationDate?: string;
   calibrationCertificateNo?: string;
   calibrationResult?: 'ĐẠT' | 'KHÔNG ĐẠT - ĐÌNH CHỈ';

@@ -12,7 +12,6 @@ import {
   Settings,
   Database,
   Sliders,
-  DollarSign,
   Calendar,
   Search,
   X,
@@ -286,18 +285,19 @@ export default function MachineryMaintenance({
   const [newEq, setNewEq] = useState<Partial<EquipmentItem>>(createInitialNewEq);
 
   // Form states — Maintenance / Calibration Log
-  const [newLog, setNewLog] = useState<Partial<MaintenanceLog>>({
+  const createInitialNewLog = (): Partial<MaintenanceLog> => ({
     equipmentId: '',
     type: 'Hiệu chuẩn',
     details: '',
     replacedParts: '',
-    cost: 0,
     technician: defaultHungName,
     calibrationCertificateNo: '',
     calibrationResult: 'ĐẠT',
     nextCalibrationDate: '',
     status: 'Thành công'
   });
+
+  const [newLog, setNewLog] = useState<Partial<MaintenanceLog>>(createInitialNewLog);
 
   // Form states — Fabrication / Sample / Deep Repair Job
   const createInitialFabJob = (): Partial<FabricationRepairJob> => ({
@@ -330,7 +330,6 @@ export default function MachineryMaintenance({
   const [resolveRootCause, setResolveRootCause] = useState('');
   const [resolveRepairAction, setResolveRepairAction] = useState('');
   const [resolveTechnician, setResolveTechnician] = useState(defaultHungName);
-  const [resolveRepairCost, setResolveRepairCost] = useState(0);
   const [resolveDowntime, setResolveDowntime] = useState(30);
 
   // Computed stats
@@ -370,9 +369,6 @@ export default function MachineryMaintenance({
 
     const totalDowntime = equipmentIncidents.reduce((sum, i) => sum + (i.downtimeMinutes || 0), 0);
     const activeBreakdownsCount = equipmentIncidents.filter(i => i.status !== 'Resolved').length;
-    const totalCosts =
-      maintenanceLogs.reduce((sum, l) => sum + (l.cost || 0), 0) +
-      equipmentIncidents.reduce((sum, i) => sum + (i.repairCost || 0), 0);
 
     return {
       measuringCount,
@@ -386,8 +382,7 @@ export default function MachineryMaintenance({
       doneFabCount: doneFabJobs.length,
       onTimeFabCount,
       totalDowntime,
-      activeBreakdownsCount,
-      totalCosts
+      activeBreakdownsCount
     };
   }, [equipments, fabricationJobs, equipmentIncidents, maintenanceLogs, todayStartMs]);
 
@@ -461,7 +456,10 @@ export default function MachineryMaintenance({
         assetGroup: grp,
         category: newEq.category || metaInfo.categoryLabel,
         status: (newEq.status as EquipmentItem['status']) || 'Running',
-        healthRate: Number(newEq.healthRate) || 100,
+        healthRate:
+          newEq.healthRate !== undefined && newEq.healthRate !== null && String(newEq.healthRate) !== ''
+            ? Number(newEq.healthRate)
+            : 100,
         location: newEq.location?.trim() || 'Phòng QLCL',
         lastMaintenanceDate: newEq.lastCalibrationDate || newEq.lastMaintenanceDate || getLocalDmy(),
         nextMaintenanceDate: calNext,
@@ -505,6 +503,10 @@ export default function MachineryMaintenance({
         lastCalibrationDate: syncedLast,
         nextMaintenanceDate: syncedNext,
         nextCalibrationDate: syncedNext,
+        suspensionReason:
+          editingEq.calibrationStatus !== 'Đình chỉ sử dụng' && editingEq.status !== 'Stopped'
+            ? ''
+            : editingEq.suspensionReason,
         updatedAt: new Date().toISOString()
       };
       setEquipments(prev => prev.map(eq => (eq.id === updatedItem.id ? updatedItem : eq)));
@@ -542,7 +544,7 @@ export default function MachineryMaintenance({
               lastMaintenanceDate: todayStr,
               nextCalibrationDate: nextDateStr,
               nextMaintenanceDate: nextDateStr,
-              suspensionReason: undefined,
+              suspensionReason: '',
               updatedAt: new Date().toISOString()
             }
             : item
@@ -557,7 +559,6 @@ export default function MachineryMaintenance({
         type: 'Hiệu chuẩn',
         details: `Nghiệm thu & dán tem hiệu chuẩn ĐẠT chuẩn BM-KTTD-02. Hạn HC kế tiếp: ${nextDateStr}`,
         replacedParts: 'Tem kiểm định / Hiệu chuẩn xanh',
-        cost: 0,
         nextCalibrationDate: nextDateStr,
         calibrationResult: 'ĐẠT',
         status: 'Thành công'
@@ -596,7 +597,6 @@ export default function MachineryMaintenance({
         type: 'Hiệu chuẩn',
         details: `Tạm đình chỉ sử dụng theo Quyền IV.3 BG-NV-08. Lý do: ${reason}`,
         replacedParts: 'Niêm phong / Gỡ tem',
-        cost: 0,
         calibrationResult: 'KHÔNG ĐẠT - ĐÌNH CHỈ',
         status: 'Tạm dừng'
       };
@@ -618,7 +618,7 @@ export default function MachineryMaintenance({
               status: 'Running',
               healthRate: 95,
               calibrationStatus: 'Đã dán tem ĐẠT',
-              suspensionReason: undefined,
+              suspensionReason: '',
               lastCalibrationDate: todayStr,
               lastMaintenanceDate: todayStr,
               nextCalibrationDate: nextDateStr,
@@ -658,7 +658,6 @@ export default function MachineryMaintenance({
         type: (newLog.type as MaintenanceLog['type']) || 'Hiệu chuẩn',
         details: newLog.details || 'Nghiệm thu bảo dưỡng / hiệu chuẩn định kỳ',
         replacedParts: newLog.replacedParts || 'Không thay thế vật tư',
-        cost: Number(newLog.cost) || 0,
         nextCalibrationDate: isCalibrationFail ? targetEq.nextCalibrationDate : nextDateComputed,
         calibrationCertificateNo: newLog.calibrationCertificateNo?.trim() || undefined,
         calibrationResult:
@@ -687,7 +686,7 @@ export default function MachineryMaintenance({
                 status: 'Running',
                 healthRate: 100,
                 calibrationStatus: 'Đã dán tem ĐẠT',
-                suspensionReason: undefined,
+                suspensionReason: '',
                 lastMaintenanceDate: todayStr,
                 lastCalibrationDate: todayStr,
                 nextMaintenanceDate: nextDateComputed,
@@ -699,18 +698,7 @@ export default function MachineryMaintenance({
       );
 
       setShowAddLogModal(false);
-      setNewLog({
-        equipmentId: '',
-        type: 'Hiệu chuẩn',
-        details: '',
-        replacedParts: '',
-        cost: 0,
-        technician: defaultHungName,
-        calibrationCertificateNo: '',
-        calibrationResult: 'ĐẠT',
-        nextCalibrationDate: '',
-        status: 'Thành công'
-      });
+      setNewLog(createInitialNewLog());
       alert(
         isCalibrationFail
           ? `⛔ Đã lưu biên bản KHÔNG ĐẠT và tự động đình chỉ sử dụng [${targetEq.name}] theo Quyền IV.3!`
@@ -881,7 +869,6 @@ export default function MachineryMaintenance({
               rootCause: resolveRootCause || 'Hao mòn cơ khí / sai lệch cảm biến',
               repairAction: resolveRepairAction || 'Thay thế linh kiện & cân chỉnh lại thông số',
               technician: resolveTechnician || defaultHungName,
-              repairCost: Number(resolveRepairCost) || 0,
               downtimeMinutes: Number(resolveDowntime) || 0
             }
             : inc
@@ -895,7 +882,7 @@ export default function MachineryMaintenance({
               ...eq,
               status: 'Running',
               healthRate: 95,
-              suspensionReason: undefined,
+              suspensionReason: '',
               updatedAt: new Date().toISOString()
             }
             : eq
@@ -905,7 +892,6 @@ export default function MachineryMaintenance({
       setShowResolveIncModal(null);
       setResolveRootCause('');
       setResolveRepairAction('');
-      setResolveRepairCost(0);
       setResolveDowntime(30);
       alert(`✅ Đã nghiệm thu khắc phục sự cố [${showResolveIncModal.equipmentName}]!`);
     });
@@ -1208,7 +1194,10 @@ export default function MachineryMaintenance({
             </button>
             <button
               type="button"
-              onClick={() => setShowAddLogModal(true)}
+              onClick={() => {
+                setNewLog(createInitialNewLog());
+                setShowAddLogModal(true);
+              }}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border-2 border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-bold transition cursor-pointer"
             >
               <CheckCircle className="w-4 h-4 text-slate-600" /> Hiệu chuẩn
@@ -1290,18 +1279,22 @@ export default function MachineryMaintenance({
         </div>
 
         <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
-          <div className="text-xs font-bold uppercase text-slate-500">Sự cố & Chi phí</div>
+          <div className="text-xs font-bold uppercase text-slate-500">Sự cố & Dừng máy</div>
           <div className="mt-1 text-3xl font-extrabold text-slate-900">
-            {equipmentStats.totalCosts.toLocaleString('vi-VN')} đ
+            {equipmentIncidents.length}
+            <span className="text-base font-bold text-slate-500 ml-1">sự cố</span>
           </div>
           <div className="text-xs text-slate-600 mt-1">
-            Sự cố mở:{' '}
+            Đang xử lý:{' '}
             <span className={equipmentStats.activeBreakdownsCount > 0 ? 'font-bold text-rose-700' : ''}>
               {equipmentStats.activeBreakdownsCount}
             </span>{' '}
             | Dừng máy: {equipmentStats.totalDowntime} phút
           </div>
-          <div className="mt-2 text-xs font-semibold text-slate-500">Bảo trì & Khắc phục sự cố</div>
+          <div className="mt-2 text-xs font-semibold text-slate-500">
+            Đã khắc phục: {equipmentIncidents.length - equipmentStats.activeBreakdownsCount} | Đình chỉ:{' '}
+            {equipmentStats.suspendedCount}
+          </div>
         </div>
       </div>
 
@@ -1864,7 +1857,10 @@ export default function MachineryMaintenance({
 
             <button
               type="button"
-              onClick={() => setShowAddLogModal(true)}
+              onClick={() => {
+                setNewLog(createInitialNewLog());
+                setShowAddLogModal(true);
+              }}
               className="px-4 py-2 rounded-xl border-2 border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition cursor-pointer inline-flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" /> Ghi nhận
@@ -1883,7 +1879,6 @@ export default function MachineryMaintenance({
                     <th className="p-3.5 w-28">Loại Hình</th>
                     <th className="p-3.5 min-w-[220px]">Nội Dung & Chứng Chỉ HC</th>
                     <th className="p-3.5">Kết Quả / Hạn Kế</th>
-                    <th className="p-3.5 w-28 text-right">Chi Phí (VNĐ)</th>
                     <th className="p-3.5 w-16 text-center">Xóa</th>
                   </tr>
                 </thead>
@@ -1945,9 +1940,6 @@ export default function MachineryMaintenance({
                           </div>
                         )}
                       </td>
-                      <td className="p-3.5 font-mono font-black text-right text-emerald-700">
-                        {(log.cost || 0).toLocaleString('vi-VN')}
-                      </td>
                       <td className="p-3.5 text-center">
                         <button
                           type="button"
@@ -1967,7 +1959,7 @@ export default function MachineryMaintenance({
                   ))}
                   {filteredLogs.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="p-10 text-center text-slate-500 italic">
+                      <td colSpan={8} className="p-10 text-center text-slate-500 italic">
                         Chưa ghi nhận nhật ký hiệu chuẩn / bảo dưỡng nào.
                       </td>
                     </tr>
@@ -2286,7 +2278,6 @@ export default function MachineryMaintenance({
                     <th className="p-3.5 w-24">Mức Độ</th>
                     <th className="p-3.5 w-20 text-center">Dừng (p)</th>
                     <th className="p-3.5">Hiện Tượng & Khắc Phục</th>
-                    <th className="p-3.5 w-24 text-right">Chi Phí</th>
                     <th className="p-3.5 w-24 text-center">Trạng Thái</th>
                     <th className="p-3.5 w-28 text-center">Xử Lý</th>
                   </tr>
@@ -2333,9 +2324,6 @@ export default function MachineryMaintenance({
                           </div>
                         )}
                       </td>
-                      <td className="p-3.5 font-mono font-bold text-right text-rose-700">
-                        {inc.repairCost ? `${inc.repairCost.toLocaleString('vi-VN')}đ` : '-'}
-                      </td>
                       <td className="p-3.5 text-center">
                         <span
                           className={`px-2 py-0.5 rounded font-black text-[10px] uppercase border ${inc.status === 'Resolved'
@@ -2356,7 +2344,6 @@ export default function MachineryMaintenance({
                               onClick={() => {
                                 setResolveTechnician(defaultHungName);
                                 setResolveDowntime(inc.downtimeMinutes || 30);
-                                setResolveRepairCost(0);
                                 setShowResolveIncModal(inc);
                               }}
                               className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black rounded cursor-pointer uppercase"
@@ -2377,7 +2364,7 @@ export default function MachineryMaintenance({
                   ))}
                   {filteredIncidents.length === 0 && (
                     <tr>
-                      <td colSpan={10} className="p-10 text-center text-slate-500 italic">
+                      <td colSpan={9} className="p-10 text-center text-slate-500 italic">
                         Không có sự cố thiết bị nào trong danh sách.
                       </td>
                     </tr>
@@ -2934,28 +2921,17 @@ export default function MachineryMaintenance({
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[11px] text-slate-700 font-black uppercase">
-                    Ngày HC / Bảo Dưỡng Kế Tiếp
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="DD/MM/YYYY (tự cộng theo chu kỳ)"
-                    value={newLog.nextCalibrationDate || ''}
-                    onChange={e => setNewLog({ ...newLog, nextCalibrationDate: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] text-slate-700 font-black uppercase">Chi Phí Phát Sinh (VNĐ)</label>
-                  <input
-                    type="number"
-                    value={newLog.cost || 0}
-                    onChange={e => setNewLog({ ...newLog, cost: Number(e.target.value) })}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono"
-                  />
-                </div>
+              <div className="space-y-1">
+                <label className="text-[11px] text-slate-700 font-black uppercase">
+                  Ngày HC / Bảo Dưỡng Kế Tiếp
+                </label>
+                <input
+                  type="text"
+                  placeholder="DD/MM/YYYY (tự cộng theo chu kỳ)"
+                  value={newLog.nextCalibrationDate || ''}
+                  onChange={e => setNewLog({ ...newLog, nextCalibrationDate: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono"
+                />
               </div>
 
               <div className="space-y-1">
@@ -3396,7 +3372,7 @@ export default function MachineryMaintenance({
                 </span>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-[11px] text-slate-700 font-black uppercase">Người Sửa Chữa</label>
                   <select
@@ -3420,16 +3396,6 @@ export default function MachineryMaintenance({
                     type="number"
                     value={resolveDowntime}
                     onChange={e => setResolveDowntime(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] text-slate-700 font-black uppercase">Chi Phí (VNĐ)</label>
-                  <input
-                    type="number"
-                    value={resolveRepairCost}
-                    onChange={e => setResolveRepairCost(Number(e.target.value))}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-900"
                     required
                   />
