@@ -160,6 +160,120 @@ export function getNextCapaId(currentCapas: any[]): string {
   return `CAPA-${currentYear}-${padded}`;
 }
 
+const OQC_KNOWN_SERVER_IDS_KEY = 'qms_oqc_known_server_ids';
+const OQC_REMOTE_DELETED_IDS_KEY = 'qms_oqc_remote_deleted_ids';
+const OQC_DELETED_TOMBSTONES_KEY = 'qms_oqc_deleted_tombstones';
+
+function getOqcCanonicalId(item: any): string {
+  if (!item || !item.serialNo) return '';
+  return `OQC-${String(item.serialNo).trim().toUpperCase().replace(/[\/\s.#$\[\]]/g, '_')}`;
+}
+
+function getOqcCandidateIds(item: any): string[] {
+  if (!item || typeof item !== 'object') return [];
+  const ids: string[] = [];
+  const canonicalId = getOqcCanonicalId(item);
+  if (canonicalId) ids.push(canonicalId);
+  if (item.id) {
+    const rawId = String(item.id).trim();
+    if (rawId && !ids.includes(rawId)) ids.push(rawId);
+  }
+  return ids;
+}
+
+function getOqcRecordTimestampMs(item: any): number {
+  if (!item || typeof item !== 'object') return 0;
+  const candidates = [item.updatedAt, item.createdAt];
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c)) return c;
+    if (typeof c === 'string' && c.trim()) {
+      const parsed = Date.parse(c.trim());
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return 0;
+}
+
+function readOqcTombstoneMap(): Record<string, number> {
+  try {
+    const raw = safeStorage.getItem(OQC_DELETED_TOMBSTONES_KEY) || localStorage.getItem(OQC_DELETED_TOMBSTONES_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const map: Record<string, number> = {};
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      Object.keys(parsed).forEach((k) => {
+        const ts = Number(parsed[k]);
+        if (k && Number.isFinite(ts) && ts > 0) {
+          map[String(k)] = ts;
+        }
+      });
+    }
+    return map;
+  } catch (e) {
+    return {};
+  }
+}
+
+function writeOqcTombstoneMap(map: Record<string, number>): void {
+  try {
+    const entries = Object.entries(map).filter(([k, ts]) => Boolean(k) && Number.isFinite(ts) && ts > 0);
+    let finalEntries = entries;
+    if (entries.length > 15000) {
+      entries.sort((a, b) => a[1] - b[1]);
+      finalEntries = entries.slice(-15000);
+    }
+    const cappedMap: Record<string, number> = {};
+    const idList: string[] = [];
+    finalEntries.forEach(([k, ts]) => {
+      cappedMap[k] = ts;
+      idList.push(k);
+    });
+    safeStorage.setItem(OQC_DELETED_TOMBSTONES_KEY, JSON.stringify(cappedMap));
+    safeStorage.setItem(OQC_REMOTE_DELETED_IDS_KEY, JSON.stringify(idList));
+  } catch (e) {
+    console.warn('[OQC Tombstone Write Warning]:', e);
+  }
+}
+
+function recordOqcDeletedTombstones(ids: string[], deletedAtMs: number = Date.now()): void {
+  if (!Array.isArray(ids) || ids.length === 0) return;
+  try {
+    const map = readOqcTombstoneMap();
+    let changed = false;
+    ids.forEach((rawId) => {
+      const id = String(rawId || '').trim();
+      if (!id) return;
+      if (!map[id] || deletedAtMs > map[id]) {
+        map[id] = deletedAtMs;
+        changed = true;
+      }
+    });
+    if (changed) {
+      writeOqcTombstoneMap(map);
+    }
+  } catch (e) {
+    console.warn('[OQC Tombstone Record Warning]:', e);
+  }
+}
+
+function isOqcRecordTombstoned(item: any, tombstoneMap: Record<string, number>): boolean {
+  const candidates = getOqcCandidateIds(item);
+  if (candidates.length === 0) return false;
+  let latestDeletedAt = 0;
+  for (const id of candidates) {
+    const delTs = tombstoneMap[id];
+    if (delTs && delTs > latestDeletedAt) {
+      latestDeletedAt = delTs;
+    }
+  }
+  if (!latestDeletedAt) return false;
+  const recordTs = getOqcRecordTimestampMs(item);
+  // Only allow re-creation if incoming record has a strictly newer timestamp (> deletedAt + 5s buffer)
+  if (recordTs > latestDeletedAt + 5000) {
+    return false;
+  }
+  return true;
+}
+
 export function trackDeletedId(key: string, id: string): void {
   if (!id) return;
   try {
@@ -171,6 +285,9 @@ export function trackDeletedId(key: string, id: string): void {
     } else if (!list.includes(id)) {
       list.push(id);
       localStorage.setItem(deletedKey, JSON.stringify(list));
+    }
+    if (key === 'dk_oqc_records') {
+      recordOqcDeletedTombstones([String(id)], Date.now());
     }
     // Synchronously mark key as dirty and track in localDirtyKeys so onSnapshot respects the deletion
     localStorage.setItem(`${key}_is_dirty`, 'true');
@@ -191,6 +308,9 @@ export function trackDeletedIdsBatch(key: string, ids: string[]): void {
       if (id) set.add(String(id));
     }
     localStorage.setItem(deletedKey, JSON.stringify(Array.from(set)));
+    if (key === 'dk_oqc_records') {
+      recordOqcDeletedTombstones(ids.filter(Boolean).map(String), Date.now());
+    }
     localStorage.setItem(`${key}_is_dirty`, 'true');
   } catch (e) {
     console.error("[trackDeletedIdsBatch Error]:", e);
@@ -1938,6 +2058,7 @@ export function App() {
   const isRemoteUpdateRef = useRef<Record<string, boolean>>({});
   const lastSyncedChunkHashes = useRef<Record<string, string>>({});
   const lastKnownChunkCounts = useRef<Record<string, number>>({});
+  const lastKnownOqcCloudDeletedIds = useRef<string[]>([]);
   const hasCompletedInitialCloudLoad = useRef<boolean>(false);
 
   // Hàm chuẩn hóa thứ tự thuộc tính của bản ghi OQC trước khi băm (hash) và chia chunk 500 xe,
@@ -2131,9 +2252,6 @@ export function App() {
   // BẢO VỆ XÓA LIÊN THIẾT BỊ CHO DỮ LIỆU OQC / KCS (dk_oqc_records)
   // Chống hồi sinh các xe đã xóa (đặc biệt là lô xe "Chưa có LSX") khi mở nhiều máy
   // =========================================================================
-  const OQC_KNOWN_SERVER_IDS_KEY = 'qms_oqc_known_server_ids';
-  const OQC_REMOTE_DELETED_IDS_KEY = 'qms_oqc_remote_deleted_ids';
-
   const readOqcIdSet = (storageKey: string): Set<string> => {
     try {
       const raw = safeStorage.getItem(storageKey) || localStorage.getItem(storageKey);
@@ -2144,7 +2262,11 @@ export function App() {
     }
   };
 
-  const registerOqcServerSnapshot = (serverList: any[], serverDeletedIds?: string[]) => {
+  const registerOqcServerSnapshot = (
+    serverList: any[],
+    serverDeletedIds?: string[],
+    serverDeletedAtMs?: number
+  ) => {
     if (!Array.isArray(serverList) || serverList.length === 0) return;
     try {
       const currentIds: string[] = [];
@@ -2161,39 +2283,136 @@ export function App() {
       });
 
       const prevKnown = readOqcIdSet(OQC_KNOWN_SERVER_IDS_KEY);
-      const remoteDeleted = readOqcIdSet(OQC_REMOTE_DELETED_IDS_KEY);
+      const tombstoneMap = readOqcTombstoneMap();
+      const effectiveDeletedAtMs =
+        serverDeletedAtMs && Number.isFinite(serverDeletedAtMs) && serverDeletedAtMs > 0
+          ? serverDeletedAtMs
+          : Date.now();
       let changed = false;
 
       if (Array.isArray(serverDeletedIds)) {
         serverDeletedIds.forEach((delId) => {
-          const s = String(delId || '');
-          if (s && !currentSet.has(s) && !remoteDeleted.has(s)) {
-            remoteDeleted.add(s);
+          const s = String(delId || '').trim();
+          if (s && (!tombstoneMap[s] || effectiveDeletedAtMs > tombstoneMap[s])) {
+            tombstoneMap[s] = effectiveDeletedAtMs;
             changed = true;
           }
         });
       }
 
       prevKnown.forEach((id) => {
-        if (!currentSet.has(id) && !remoteDeleted.has(id)) {
-          remoteDeleted.add(id);
+        if (!currentSet.has(id) && (!tombstoneMap[id] || effectiveDeletedAtMs > tombstoneMap[id])) {
+          tombstoneMap[id] = effectiveDeletedAtMs;
           changed = true;
         }
       });
 
-      currentSet.forEach((id) => {
-        if (remoteDeleted.has(id)) {
-          remoteDeleted.delete(id);
-          changed = true;
-        }
+      // Only erase a tombstone if the incoming Cloud record is strictly newer (> deletedAtMs + 5s buffer)
+      serverList.forEach((item) => {
+        const recordTs = getOqcRecordTimestampMs(item);
+        if (recordTs <= 0) return;
+        const candidates = getOqcCandidateIds(item);
+        candidates.forEach((id) => {
+          const delTs = tombstoneMap[id];
+          if (delTs && recordTs > delTs + 5000) {
+            delete tombstoneMap[id];
+            changed = true;
+          }
+        });
       });
 
       if (changed) {
-        safeStorage.setItem(OQC_REMOTE_DELETED_IDS_KEY, JSON.stringify(Array.from(remoteDeleted).slice(-15000)));
+        writeOqcTombstoneMap(tombstoneMap);
       }
       safeStorage.setItem(OQC_KNOWN_SERVER_IDS_KEY, JSON.stringify(currentIds));
     } catch (e) {
       console.warn('[OQC Known IDs Warning]:', e);
+    }
+  };
+
+  const filterOqcListWithTombstones = (list: any[], extraDeletedIds?: string[]): any[] => {
+    if (!Array.isArray(list) || list.length === 0) return [];
+    const tombstoneMap = readOqcTombstoneMap();
+    const extraSet = new Set<string>();
+    try {
+      const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
+      if (localDelRaw) {
+        const arr = JSON.parse(localDelRaw);
+        if (Array.isArray(arr)) arr.forEach((x: any) => { if (x) extraSet.add(String(x)); });
+      }
+    } catch (e) { }
+    if (Array.isArray(extraDeletedIds)) {
+      extraDeletedIds.forEach((x) => { if (x) extraSet.add(String(x)); });
+    }
+
+    return list.filter((item, idx) => {
+      if (!item) return false;
+      const cid = getItemId(item, 'dk_oqc_records', idx);
+      const rid = item?.id ? String(item.id) : '';
+      if (extraSet.has(cid) || (rid && extraSet.has(rid))) {
+        // Still allow genuinely newly re-created record if strictly newer than its tombstone
+        const delTs = Math.max(tombstoneMap[cid] || 0, (rid && tombstoneMap[rid]) || 0);
+        const recordTs = getOqcRecordTimestampMs(item);
+        if (!(delTs > 0 && recordTs > delTs + 5000)) {
+          return false;
+        }
+      }
+      if (isOqcRecordTombstoned(item, tombstoneMap)) {
+        return false;
+      }
+      return true;
+    });
+  };
+
+  const buildOqcMergedDeletedIds = (currentList: any[]): string[] => {
+    try {
+      const tombstoneMap = readOqcTombstoneMap();
+      let tombstoneChanged = false;
+      const currentIdsSet = new Set<string>();
+      (Array.isArray(currentList) ? currentList : []).forEach((item: any, idx: number) => {
+        const cid = getItemId(item, 'dk_oqc_records', idx);
+        const rid = item?.id ? String(item.id) : '';
+        if (cid) currentIdsSet.add(cid);
+        if (rid) currentIdsSet.add(rid);
+
+        const recordTs = getOqcRecordTimestampMs(item);
+        if (recordTs > 0) {
+          getOqcCandidateIds(item).forEach((cand) => {
+            if (tombstoneMap[cand] && recordTs > tombstoneMap[cand] + 5000) {
+              delete tombstoneMap[cand];
+              tombstoneChanged = true;
+            }
+          });
+        }
+      });
+
+      const deletedSet = new Set<string>(Object.keys(tombstoneMap));
+      lastKnownOqcCloudDeletedIds.current.forEach((d) => {
+        if (d) deletedSet.add(String(d));
+      });
+      try {
+        const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
+        const localDelArr = localDelRaw ? JSON.parse(localDelRaw) : [];
+        if (Array.isArray(localDelArr)) {
+          localDelArr.forEach((d: any) => {
+            const s = String(d || '').trim();
+            if (s && !currentIdsSet.has(s)) {
+              deletedSet.add(s);
+              if (!tombstoneMap[s]) {
+                tombstoneMap[s] = Date.now();
+                tombstoneChanged = true;
+              }
+            }
+          });
+        }
+      } catch (e) { }
+
+      if (tombstoneChanged) {
+        writeOqcTombstoneMap(tombstoneMap);
+      }
+      return Array.from(deletedSet).filter((id) => !currentIdsSet.has(id)).slice(-6000);
+    } catch (e) {
+      return [];
     }
   };
 
@@ -2423,7 +2642,7 @@ export function App() {
       }
     } catch (e) { }
 
-    const remoteDeletedSet = key === 'dk_oqc_records' ? readOqcIdSet(OQC_REMOTE_DELETED_IDS_KEY) : new Set<string>();
+    const oqcTombstoneMap = key === 'dk_oqc_records' ? readOqcTombstoneMap() : {};
 
     const mergedMap = new Map<string, any>();
 
@@ -2431,15 +2650,30 @@ export function App() {
     serverOrderedIds.forEach((id) => {
       const sItem = serverMap.get(id);
       const sRawId = sItem?.id ? String(sItem.id) : '';
-      if (deletedSet.has(id) || (sRawId && deletedSet.has(sRawId))) {
-        // Bản ghi đã bị xóa có chủ đích -> không khôi phục
-        return;
-      }
       const lItem = localMap.get(id);
 
+      if (deletedSet.has(id) || (sRawId && deletedSet.has(sRawId))) {
+        // Bản ghi đã bị xóa có chủ đích -> không khôi phục (trừ khi bản ghi local có timestamp mới hơn hẳn)
+        if (!(key === 'dk_oqc_records' && lItem && !isOqcRecordTombstoned(lItem, oqcTombstoneMap))) {
+          return;
+        }
+      }
+
+      if (key === 'dk_oqc_records' && isOqcRecordTombstoned(sItem, oqcTombstoneMap)) {
+        // Nếu bản ghi server bị đánh dấu xóa (tombstone), chỉ giữ nếu bản ghi local mới hơn hẳn thời điểm xóa
+        if (lItem && !isOqcRecordTombstoned(lItem, oqcTombstoneMap)) {
+          mergedMap.set(id, lItem);
+        }
+        return;
+      }
+
       if (lItem) {
-        // Cả 2 máy cùng có bản ghi -> Hợp nhất cấp thuộc tính (Field-Level Merge)
-        mergedMap.set(id, smartMergeSingleItem(sItem, lItem, key));
+        if (key === 'dk_oqc_records' && isOqcRecordTombstoned(lItem, oqcTombstoneMap)) {
+          mergedMap.set(id, sItem);
+        } else {
+          // Cả 2 máy cùng có bản ghi -> Hợp nhất cấp thuộc tính (Field-Level Merge)
+          mergedMap.set(id, smartMergeSingleItem(sItem, lItem, key));
+        }
       } else {
         // Chỉ server có -> Giữ nguyên từ server
         mergedMap.set(id, sItem);
@@ -2455,8 +2689,7 @@ export function App() {
         const isDeleted =
           deletedSet.has(id) ||
           (lRawId && deletedSet.has(lRawId)) ||
-          remoteDeletedSet.has(id) ||
-          (lRawId && remoteDeletedSet.has(lRawId));
+          (key === 'dk_oqc_records' && isOqcRecordTombstoned(lItem, oqcTombstoneMap));
         if (lItem && !isDeleted) {
           mergedMap.set(id, lItem);
           localNewItems.push(lItem);
@@ -2948,23 +3181,8 @@ export function App() {
           // Collect deleted IDs to broadcast to other devices via meta doc
           let mergedDeletedIds: string[] = [];
           if (key === 'dk_oqc_records') {
-            try {
-              const currentIdsSet = new Set<string>();
-              currentList.forEach((item: any, idx: number) => {
-                currentIdsSet.add(getItemId(item, 'dk_oqc_records', idx));
-                if (item?.id) currentIdsSet.add(String(item.id));
-              });
-              const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
-              const localDelArr = localDelRaw ? JSON.parse(localDelRaw) : [];
-              const remoteDelSet = readOqcIdSet(OQC_REMOTE_DELETED_IDS_KEY);
-              if (Array.isArray(localDelArr)) {
-                localDelArr.forEach((d: any) => {
-                  const s = String(d || '');
-                  if (s && !currentIdsSet.has(s)) remoteDelSet.add(s);
-                });
-              }
-              mergedDeletedIds = Array.from(remoteDelSet).filter(id => !currentIdsSet.has(id)).slice(-6000);
-            } catch (e) { }
+            mergedDeletedIds = buildOqcMergedDeletedIds(currentList);
+            lastKnownOqcCloudDeletedIds.current = mergedDeletedIds;
           }
 
           // Meta document tracking chunks & cross-device deleted tombstones (pushed LAST after all chunks)
@@ -3691,6 +3909,11 @@ export function App() {
             });
           }
 
+          const mergedDeletedIds = key === 'dk_oqc_records' ? buildOqcMergedDeletedIds(currentList) : [];
+          if (key === 'dk_oqc_records') {
+            lastKnownOqcCloudDeletedIds.current = mergedDeletedIds;
+          }
+
           keyOps.push({
             type: 'set',
             ref: docRef,
@@ -3698,6 +3921,7 @@ export function App() {
               isChunked: true,
               chunkCount: totalChunks,
               totalRecords: currentList.length,
+              ...(key === 'dk_oqc_records' ? { deletedIds: mergedDeletedIds } : {}),
               updatedBy: email,
               updatedAt: timestamp,
               forcedSync: true
@@ -3810,6 +4034,17 @@ export function App() {
 
           // Chỉ xóa cờ is_dirty cho phân hệ đã commit thành công 100% tất cả các batch
           localStorage.setItem(`${group.key}_is_dirty`, 'false');
+          if (group.key === 'dk_oqc_records') {
+            try {
+              const parsedGroup = JSON.parse(group.serializedRaw);
+              if (Array.isArray(parsedGroup)) {
+                const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
+                const localDelArr = localDelRaw ? JSON.parse(localDelRaw) : [];
+                registerOqcServerSnapshot(parsedGroup, Array.isArray(localDelArr) ? localDelArr : [], Date.now());
+              }
+            } catch (e) { }
+          }
+          try { localStorage.setItem(`${group.key}_deleted_ids`, JSON.stringify([])); } catch (e) { }
           if (localDirtyKeys.current) localDirtyKeys.current.delete(group.key);
           lastSyncedValues.current[group.key] = group.serializedRaw;
           lastSeenValues.current[group.key] = group.serializedRaw;
@@ -4186,6 +4421,8 @@ export function App() {
       const serverData: Record<string, any> = {};
       const rawServerData: Record<string, any> = {};
       const legacyRootData: Record<string, any> = {};
+      const failedCloudReadKeys = new Set<string>();
+      let outerFirestoreLoadFailed = false;
 
       // 2. Tải tất cả các tài liệu cấp cao nhất từ dk_db_sync
       try {
@@ -4205,6 +4442,7 @@ export function App() {
         ];
 
         // Thử lấy toàn bộ qua getDocs trước
+        let getDocsFailed = false;
         try {
           const snapshot = await getDocs(collection(db, 'dk_db_sync'));
           snapshot.forEach((docSnap) => {
@@ -4215,6 +4453,7 @@ export function App() {
             }
           });
         } catch (colErr: any) {
+          getDocsFailed = true;
           console.warn("[getDocs Collection Notice]: Chuyển sang nạp trực tiếp từng phân hệ độc lập...", colErr?.message || colErr);
         }
 
@@ -4231,9 +4470,16 @@ export function App() {
                   serverTimestamps.current[key] = d.updatedAt;
                 }
               }
-            } catch (singleErr) { }
+            } catch (singleErr) {
+              failedCloudReadKeys.add(key);
+            }
           });
           await Promise.allSettled(docPromises);
+        }
+        if (getDocsFailed) {
+          ALL_SYNC_KEYS.forEach((k) => {
+            if (!rawDocMap[k]) failedCloudReadKeys.add(k);
+          });
         }
 
         for (const key of Object.keys(rawDocMap)) {
@@ -4307,7 +4553,8 @@ export function App() {
               }
 
               if (chunkCount > 0 && !allChunksComplete) {
-                console.warn(`[Chunk Assembly Fail-Closed]: Thiếu chunk cho '${key}' (cần ${chunkCount}). Giữ nguyên dữ liệu cục bộ, KHÔNG ghi đè một phần.`);
+                console.warn(`[Chunk Assembly Fail-Closed]: Thiếu chunk cho '${key}' (cần ${chunkCount}). Giữ nguyên dữ liệu cục bộ, KHÔNG ghi đè một phần và KHÔNG đẩy ngược lên Cloud.`);
+                failedCloudReadKeys.add(key);
                 rawData = null;
               } else {
                 lastKnownChunkCounts.current[key] = chunkCount;
@@ -4334,6 +4581,7 @@ export function App() {
           }
         }
       } catch (firestoreErr: any) {
+        outerFirestoreLoadFailed = true;
         console.warn("[Firestore Top Level Load Warning]:", firestoreErr?.message || firestoreErr);
         const errMsg = firestoreErr?.message || String(firestoreErr);
         const isQuota = firestoreErr?.code === 'resource-exhausted' ||
@@ -4364,6 +4612,10 @@ export function App() {
       ];
 
       ALL_RECONCILE_KEYS.forEach((key) => {
+        // Tuyệt đối KHÔNG coi Cloud là rỗng nếu quá trình đọc hoặc lắp ráp chunk của khóa này bị lỗi
+        if (outerFirestoreLoadFailed || failedCloudReadKeys.has(key)) return;
+        if (CHUNKED_KEYS.includes(key) && Boolean(rawDocMap[key])) return;
+
         const serverVal = serverData[key];
         const isServerEmpty = serverVal === undefined || serverVal === null || (Array.isArray(serverVal) && serverVal.length === 0);
         if (isServerEmpty) {
@@ -4671,9 +4923,17 @@ export function App() {
       }
       if (serverData.dk_oqc_records !== undefined && Array.isArray(serverData.dk_oqc_records)) {
         const isOqcDirty = localDirtyKeys.current.has('dk_oqc_records') || localStorage.getItem('dk_oqc_records_is_dirty') === 'true';
-        const serverOqcList = Array.isArray(rawServerData.dk_oqc_records)
+        const rawServerOqcList = Array.isArray(rawServerData.dk_oqc_records)
           ? deduplicateOqcRecords(rawServerData.dk_oqc_records)
           : deduplicateOqcRecords(serverData.dk_oqc_records);
+        const oqcMetaDoc = rawDocMap['dk_oqc_records'];
+        const serverDeletedIds = Array.isArray(oqcMetaDoc?.deletedIds) ? oqcMetaDoc.deletedIds.map(String) : [];
+        const serverDeletedAtMs = Date.parse(oqcMetaDoc?.updatedAt || '') || Date.now();
+        lastKnownOqcCloudDeletedIds.current = serverDeletedIds;
+
+        // Register Cloud snapshot & deletedIds tombstones BEFORE merging or filtering (never erases newer tombstones)
+        registerOqcServerSnapshot(rawServerOqcList, serverDeletedIds, serverDeletedAtMs);
+        const serverOqcList = filterOqcListWithTombstones(rawServerOqcList, serverDeletedIds);
 
         if (isOqcDirty) {
           const localOqcRaw = safeStorage.getItem('dk_oqc_records') || localStorage.getItem('dk_oqc_records');
@@ -4685,13 +4945,14 @@ export function App() {
           const mergedOqc = localOqcParsed.length > 0
             ? deduplicateOqcRecords(smartMergeArrays(serverOqcList, localOqcParsed, 'dk_oqc_records'))
             : serverOqcList;
-          const mergedSerialized = JSON.stringify(mergedOqc);
+          const filteredMergedOqc = filterOqcListWithTombstones(mergedOqc, serverDeletedIds);
+          const mergedSerialized = JSON.stringify(filteredMergedOqc);
           const serverSerialized = JSON.stringify(serverOqcList);
           lastSyncedValues.current['dk_oqc_records'] = serverSerialized;
           lastSeenValues.current['dk_oqc_records'] = mergedSerialized;
           safeStorage.setItem('dk_oqc_records', mergedSerialized);
-          setOqcRecords(mergedOqc);
-          pendingSyncBuffer.current['dk_oqc_records'] = mergedOqc;
+          setOqcRecords(filteredMergedOqc);
+          pendingSyncBuffer.current['dk_oqc_records'] = filteredMergedOqc;
           localDirtyKeys.current.add('dk_oqc_records');
         } else {
           const dedupedSerialized = JSON.stringify(serverOqcList);
@@ -4699,7 +4960,6 @@ export function App() {
           lastSeenValues.current['dk_oqc_records'] = dedupedSerialized;
           safeStorage.setItem('dk_oqc_records', dedupedSerialized);
           setOqcRecords(serverOqcList);
-          registerOqcServerSnapshot(serverOqcList, Array.isArray(rawDocMap['dk_oqc_records']?.deletedIds) ? rawDocMap['dk_oqc_records'].deletedIds : []);
         }
       }
       if (serverData.dk_oqc_part_codes !== undefined) {
@@ -5110,9 +5370,14 @@ export function App() {
 
           assembledList = restoreFirestorePayload(assembledList);
 
+          const oqcServerDeletedIds = key === 'dk_oqc_records' && Array.isArray(metaData?.deletedIds)
+            ? metaData.deletedIds.map((x: any) => String(x))
+            : [];
           if (key === 'dk_oqc_records') {
             assembledList = deduplicateOqcRecords(assembledList);
-            registerOqcServerSnapshot(assembledList, Array.isArray(metaData?.deletedIds) ? metaData.deletedIds : []);
+            lastKnownOqcCloudDeletedIds.current = oqcServerDeletedIds;
+            const serverDeletedAtMs = serverTime ? (Date.parse(serverTime) || Date.now()) : Date.now();
+            registerOqcServerSnapshot(assembledList, oqcServerDeletedIds, serverDeletedAtMs);
           }
 
           // Lưu mã băm (hash) chuẩn hóa theo từng chunk để chỉ đẩy đúng chunk thay đổi
@@ -5148,23 +5413,27 @@ export function App() {
 
           if (parsedLocalData.length > 0 && assembledList.length > 0) {
             if (!isDirty && (key === 'dk_oqc_records' || key === 'dk_part_evaluations')) {
-              // Máy hiện tại không có thay đổi bẩn chưa đồng bộ -> Nhận chuẩn 100% danh sách từ Cloud (tránh hồi sinh bản ghi đã xóa ở máy khác)
-              let localDelSet = new Set<string>();
-              try {
-                const delStr = localStorage.getItem(`${key}_deleted_ids`);
-                if (delStr) {
-                  const arr = JSON.parse(delStr);
-                  if (Array.isArray(arr)) localDelSet = new Set(arr.map((x: any) => String(x)));
-                }
-              } catch (e) { }
-              if (localDelSet.size > 0) {
-                finalDisplayData = assembledList.filter((item, idx) => {
-                  const cid = getItemId(item, key, idx);
-                  const rid = item?.id ? String(item.id) : '';
-                  return !localDelSet.has(cid) && (!rid || !localDelSet.has(rid));
-                });
+              // Máy hiện tại không có thay đổi bẩn chưa đồng bộ -> Nhận chuẩn 100% danh sách từ Cloud (nhưng lọc bỏ ID đã bị xóa theo tombstone/deletedIds)
+              if (key === 'dk_oqc_records') {
+                finalDisplayData = filterOqcListWithTombstones(assembledList, oqcServerDeletedIds);
               } else {
-                finalDisplayData = assembledList;
+                let localDelSet = new Set<string>();
+                try {
+                  const delStr = localStorage.getItem(`${key}_deleted_ids`);
+                  if (delStr) {
+                    const arr = JSON.parse(delStr);
+                    if (Array.isArray(arr)) localDelSet = new Set(arr.map((x: any) => String(x)));
+                  }
+                } catch (e) { }
+                if (localDelSet.size > 0) {
+                  finalDisplayData = assembledList.filter((item, idx) => {
+                    const cid = getItemId(item, key, idx);
+                    const rid = item?.id ? String(item.id) : '';
+                    return !localDelSet.has(cid) && (!rid || !localDelSet.has(rid));
+                  });
+                } else {
+                  finalDisplayData = assembledList;
+                }
               }
             } else {
               // Máy hiện tại đang có thay đổi bẩn (isDirty) -> Hợp nhất thông minh nhưng loại bỏ các xe đã xóa từ xa
@@ -5172,7 +5441,9 @@ export function App() {
                 finalDisplayData = smartMergeArrays(assembledList, parsedLocalData, key);
               } catch (e) {
                 console.error(`[Smart Merge Error] for ${key}:`, e);
-                finalDisplayData = assembledList;
+                finalDisplayData = key === 'dk_oqc_records'
+                  ? filterOqcListWithTombstones(assembledList, oqcServerDeletedIds)
+                  : assembledList;
               }
               if (isDirty) {
                 localStorage.setItem(`${key}_is_dirty`, 'true');
@@ -5188,15 +5459,20 @@ export function App() {
             pendingSyncBuffer.current[key] = finalDisplayData;
           } else if (assembledList.length > 0) {
             // Server có dữ liệu và local chưa có gì
-            finalDisplayData = assembledList;
+            finalDisplayData = key === 'dk_oqc_records'
+              ? filterOqcListWithTombstones(assembledList, oqcServerDeletedIds)
+              : assembledList;
           } else if (localParsedCount > 0) {
             finalDisplayData = parsedLocalData;
           }
 
           // CHỐT CHẶN BẢO VỆ TUYỆT ĐỐI CHO OQC RECORDS:
           if (key === 'dk_oqc_records' && assembledList.length > 0 && finalDisplayData.length === 0) {
-            console.warn(`[dk_oqc_records Absolute Safety]: finalDisplayData was empty! Forcing restore from assembledList (${assembledList.length} records).`);
-            finalDisplayData = assembledList;
+            const nonTombstonedServerList = filterOqcListWithTombstones(assembledList, oqcServerDeletedIds);
+            if (nonTombstonedServerList.length > 0) {
+              console.warn(`[dk_oqc_records Absolute Safety]: finalDisplayData was empty! Forcing restore from filtered assembledList (${nonTombstonedServerList.length}/${assembledList.length} records).`);
+              finalDisplayData = nonTombstonedServerList;
+            }
           }
 
           const serialized = JSON.stringify(finalDisplayData);

@@ -5537,11 +5537,29 @@ const handleDeletePqcClick = (id: string) => {
   }
 };
 
+const collectOqcDeleteIds = (removedRecords: OQCRecord[], rawIds: string[]): string[] => {
+  const idsToTrack = new Set<string>(rawIds.filter(Boolean));
+  for (let i = 0; i < removedRecords.length; i++) {
+    const cleanSerial = removedRecords[i].serialNo ? removedRecords[i].serialNo.trim().toUpperCase() : '';
+    if (cleanSerial) {
+      idsToTrack.add(`OQC-${cleanSerial.replace(/[\/\s.#$\[\]]/g, '_')}`);
+    }
+  }
+  return Array.from(idsToTrack);
+};
+
 const handleDeleteOqcClick = (id: string) => {
   if (window.confirm('Bạn có chắc chắn muốn xóa bản ghi đóng thùng OQC này không? Hành động này không thể khôi phục.')) {
     commitPendingOqcOverrides(false);
-    trackDeletedId('dk_oqc_records', id);
-    const updated = latestOqcRecordsRef.current.filter(r => r.id !== id);
+    const currentList = latestOqcRecordsRef.current;
+    const removed: OQCRecord[] = [];
+    const updated: OQCRecord[] = [];
+    for (let i = 0; i < currentList.length; i++) {
+      const r = currentList[i];
+      if (r.id === id) removed.push(r);
+      else updated.push(r);
+    }
+    trackDeletedIdsBatch('dk_oqc_records', collectOqcDeleteIds(removed, [id]));
     saveOqcRecordsOptimized(updated, true);
     alert('Đã xóa bản ghi OQC thành công! Hệ thống đang đồng bộ tự động lên Cloud...');
   }
@@ -5568,8 +5586,16 @@ const handleBulkDeleteOqc = () => {
   }
   if (window.confirm(`Bạn có chắc chắn muốn xóa hàng loạt ${selectedOqcIds.length} bản ghi OQC đã chọn không?`)) {
     commitPendingOqcOverrides(false);
-    selectedOqcIds.forEach(id => trackDeletedId('dk_oqc_records', id));
-    const updated = latestOqcRecordsRef.current.filter(r => !selectedOqcIds.includes(r.id));
+    const selectedSet = new Set(selectedOqcIds);
+    const currentList = latestOqcRecordsRef.current;
+    const removed: OQCRecord[] = [];
+    const updated: OQCRecord[] = [];
+    for (let i = 0; i < currentList.length; i++) {
+      const r = currentList[i];
+      if (selectedSet.has(r.id)) removed.push(r);
+      else updated.push(r);
+    }
+    trackDeletedIdsBatch('dk_oqc_records', collectOqcDeleteIds(removed, selectedOqcIds));
     saveOqcRecordsOptimized(updated, true);
     setSelectedOqcIds([]);
     alert(`Đã xóa thành công ${selectedOqcIds.length} bản ghi OQC! Hệ thống đang đồng bộ tự động lên Cloud...`);
