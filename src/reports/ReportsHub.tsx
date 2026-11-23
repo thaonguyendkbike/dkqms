@@ -666,6 +666,21 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
             {renderQlclNoteCard('lg:col-span-5')}
           </div>
 
+          {/* Missing Date Warning */}
+          {snapshot.missingDateCount > 0 && (
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-900 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span className="font-extrabold">Lưu ý dữ liệu:</span> Có{' '}
+                <strong>{snapshot.missingDateCount}</strong> bản ghi thiếu hoặc sai định dạng ngày nên không thể xếp vào kỳ báo cáo này (
+                {snapshot.missingDateRecords
+                  .slice(0, 4)
+                  .map((m) => `${m.source}: ${m.code}`)
+                  .join(', ')}
+                {snapshot.missingDateCount > 4 ? `, ...` : ''}).
+              </div>
+            </div>
+          )}
+
           {/* 8 Large-Number KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="bg-white rounded-2xl border-2 border-slate-300 p-4 shadow-sm">
@@ -777,10 +792,18 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
                 {kpis.copqAmount.current.toLocaleString('vi-VN')} đ
               </div>
               <div className="text-xs text-slate-600 mt-1">
-                Kỳ trước: {kpis.copqAmount.previous.toLocaleString('vi-VN')} đ
+                {periodType === 'week'
+                  ? `Tổng tháng T${period.start.getMonth() + 1}/${period.start.getFullYear()} (nhập theo tháng)`
+                  : `Kỳ trước: ${kpis.copqAmount.previous.toLocaleString('vi-VN')} đ`}
               </div>
               <div className="mt-2">
-                <DeltaBadge delta={kpis.copqAmount.delta} unit="đ" inverseGood />
+                {periodType === 'week' ? (
+                  <span className="text-xs font-semibold text-slate-500">
+                    Dữ liệu COPQ thống kê theo tháng
+                  </span>
+                ) : (
+                  <DeltaBadge delta={kpis.copqAmount.delta} unit="đ" inverseGood />
+                )}
               </div>
             </div>
           </div>
@@ -1174,11 +1197,19 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
                 Mở phân hệ CAPA →
               </button>
             </div>
-            <div className="space-y-2">
-              {capaEco.capasInPeriod.length === 0 ? (
-                <p className="text-xs text-slate-500">Không phát sinh hồ sơ CAPA trong kỳ.</p>
-              ) : (
-                capaEco.capasInPeriod.slice(0, 20).map((c) => {
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+              {(() => {
+                const seen = new Set<string>();
+                const mergedCapas = [...capaEco.capasInPeriod, ...capaEco.openCapas].filter((c, i) => {
+                  const k = String(c.CAPAID || c.id || `capa-${i}`);
+                  if (seen.has(k)) return false;
+                  seen.add(k);
+                  return true;
+                });
+                if (mergedCapas.length === 0) {
+                  return <p className="text-xs text-slate-500">Không phát sinh hồ sơ CAPA mở hoặc đến hạn trong kỳ.</p>;
+                }
+                return mergedCapas.map((c) => {
                   const isOverdue = capaEco.overdueCapas.some((o) => (o.CAPAID || o.id) === (c.CAPAID || c.id));
                   return (
                     <div
@@ -1204,8 +1235,8 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
                       </div>
                     </div>
                   );
-                })
-              )}
+                });
+              })()}
             </div>
           </div>
 

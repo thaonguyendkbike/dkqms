@@ -196,6 +196,7 @@ export interface ReportSnapshot {
   capaEco: {
     capasAll: CAPA[];
     capasInPeriod: CAPA[];
+    openCapas: CAPA[];
     overdueCapas: CAPA[];
     ecosInPeriod: ECOChange[];
     ecosAll: ECOChange[];
@@ -388,6 +389,18 @@ export function isCapaClosed(c: CAPA): boolean {
 
 function getCapaDueDate(c: CAPA): Date | null {
   return parseFlexibleDate(c.targetDate || c.dueDate || c.DueDate);
+}
+
+export function isDailyLogCompleted(l: DailyLogRecord): boolean {
+  if (!l) return false;
+  const pctStr = String(l.statusPercent || '').trim();
+  const pctNum = parseInt(pctStr.replace('%', ''), 10);
+  if (pctStr === '100%' || (!Number.isNaN(pctNum) && pctNum >= 100)) return true;
+  if (l.target && l.result && String(l.result).trim() !== '' && String(l.result).trim() === String(l.target).trim()) {
+    return true;
+  }
+  const st = String((l as any).status || '').trim().toLowerCase();
+  return st === 'hoàn thành' || st === 'completed' || st === 'đã đóng' || st === 'đã xử lý' || st === 'closed';
 }
 
 // ==========================================
@@ -750,9 +763,17 @@ export function buildReportSnapshot(
     qty: st.qty,
     pct: partQty > 0 ? Math.round((st.qty / partQty) * 100) : 0
   }));
-  const topFailingParts: RankedItem[] = Array.from(partNameMap.entries())
+  const sortedTopParts = Array.from(partNameMap.entries())
     .map(([name, count]) => ({ name, count, pct: partQty > 0 ? Math.round((count / partQty) * 100) : 0, rate: 0 }))
     .sort((a, b) => b.count - a.count);
+  let topPartAcc = 0;
+  const topFailingParts: RankedItem[] = sortedTopParts.map(item => {
+    topPartAcc += item.count;
+    return {
+      ...item,
+      cumPct: partQty > 0 ? Math.round((topPartAcc / partQty) * 100) : 0
+    };
+  });
   const topFailingPartSuppliers: RankedItem[] = Array.from(partSupMap.entries())
     .map(([name, count]) => ({ name, count, pct: partQty > 0 ? Math.round((count / partQty) * 100) : 0, rate: 0 }))
     .sort((a, b) => b.count - a.count);
@@ -782,15 +803,15 @@ export function buildReportSnapshot(
 
   // --- 7. Daily Logs & PTSP ---
   const dailyTotal = curDaily.length;
-  const dailyCompleted = curDaily.filter(l => l.statusPercent === '100%').length;
+  const dailyCompleted = curDaily.filter(isDailyLogCompleted).length;
   const dailyRate = dailyTotal > 0 ? Math.round((dailyCompleted / dailyTotal) * 100) : 100;
 
   const prevDailyTotal = prevDaily.length;
-  const prevDailyCompleted = prevDaily.filter(l => l.statusPercent === '100%').length;
+  const prevDailyCompleted = prevDaily.filter(isDailyLogCompleted).length;
   const prevDailyRate = prevDailyTotal > 0 ? Math.round((prevDailyCompleted / prevDailyTotal) * 100) : dailyRate;
 
-  // Công việc tồn đọng: Chỉ ghi lại các công việc chưa hoàn thành 100% của kỳ cũ (tuần trước / tháng trước)
-  const pendingDailyLogs = prevDaily.filter(l => l.statusPercent !== '100%');
+  // Công việc tồn đọng: Chỉ ghi lại các công việc chưa hoàn thành của kỳ cũ (tuần trước / tháng trước)
+  const pendingDailyLogs = prevDaily.filter(l => !isDailyLogCompleted(l));
   const pendingAssigneeMap = new Map<string, DailyLogRecord[]>();
   pendingDailyLogs.forEach(l => {
     const a = (l.assignee || 'Chưa phân công').trim();
@@ -931,14 +952,22 @@ export function buildReportSnapshot(
       if (period.type === 'month') return c.month === period.value && c.year === period.year;
       const startM = period.start.getMonth() + 1;
       const endM = period.end.getMonth() + 1;
-      return c.year === period.year && (c.month === startM || c.month === endM);
+      return (
+        (c.year === period.start.getFullYear() && c.month === startM) ||
+        (c.year === period.end.getFullYear() && c.month === endM)
+      );
     }
     return false;
   });
   const prevCopqs = input.copqs.filter(c => {
     if (c.month && c.year) {
       if (period.type === 'month') return c.month === prev.value && c.year === prev.year;
-      return false;
+      const prevStartM = prev.start.getMonth() + 1;
+      const prevEndM = prev.end.getMonth() + 1;
+      return (
+        (c.year === prev.start.getFullYear() && c.month === prevStartM) ||
+        (c.year === prev.end.getFullYear() && c.month === prevEndM)
+      );
     }
     return false;
   });
@@ -1328,6 +1357,7 @@ export function buildReportSnapshot(
     capaEco: {
       capasAll: input.capas,
       capasInPeriod,
+      openCapas,
       overdueCapas,
       ecosInPeriod: curEcos,
       ecosAll: input.ecos,

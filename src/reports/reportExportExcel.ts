@@ -330,6 +330,14 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
     // =========================================================
     // SHEET 1: TỔNG QUAN & KPI
     // =========================================================
+    const copqCatDetail =
+      kpis.copqAmount.byCategory.length > 0
+        ? ` (${kpis.copqAmount.byCategory.map((c) => `${c.category}: ${c.amount.toLocaleString('vi-VN')} đ`).join(', ')})`
+        : '';
+    const copqDetailText =
+      period.type === 'week'
+        ? `Tổng tháng T${period.start.getMonth() + 1}/${period.start.getFullYear()} (dữ liệu COPQ lưu theo tháng)${copqCatDetail}`
+        : `So kỳ trước: ${kpis.copqAmount.delta >= 0 ? '+' : ''}${kpis.copqAmount.delta.toLocaleString('vi-VN')} đ${copqCatDetail}`;
     const summaryRows: (string | number)[][] = [
       ['Chỉ số Q-Index tổng hợp', qIndex.activeWeightSum > 0 ? `${qIndex.score.toFixed(1)} / 100 (${qIndex.grade})` : 'Không phát sinh', qIndex.formulaText],
       ['Tỷ lệ đạt OQC', kpis.oqcYield.total > 0 ? `${kpis.oqcYield.current.toFixed(1)}%` : 'Không phát sinh', kpis.oqcYield.total > 0 ? `Đạt ${kpis.oqcYield.passed}/${kpis.oqcYield.total} xe (so kỳ trước: ${kpis.oqcYield.delta >= 0 ? '+' : ''}${kpis.oqcYield.delta.toFixed(1)}%)` : 'Không phát sinh xe kiểm tra trong kỳ'],
@@ -339,7 +347,7 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
       ['Linh kiện lỗi thẩm định (PTSP)', `${kpis.partEvalQty.current} chiếc`, `${kpis.partEvalQty.records} biên bản (NCC ${kpis.partEvalQty.nccPct.toFixed(0)}%, SX ${kpis.partEvalQty.sxPct.toFixed(0)}%, KH ${kpis.partEvalQty.khPct.toFixed(0)}%)`],
       ['CAPA đang mở / Quá hạn', `${kpis.capaOpen.total} mở / ${kpis.capaOpen.overdue} quá hạn`, `Đóng trong kỳ: ${kpis.capaOpen.closedInPeriod}`],
       ['Tuân thủ báo cáo ngày', kpis.dailyCompliance.total > 0 ? `${kpis.dailyCompliance.current.toFixed(1)}%` : 'Không phát sinh', kpis.dailyCompliance.total > 0 ? `Hoàn thành ${kpis.dailyCompliance.completed}/${kpis.dailyCompliance.total} đầu việc | Tồn kỳ cũ: ${kpis.dailyCompliance.pendingCount}` : `Không phát sinh báo cáo ngày trong kỳ | Tồn kỳ cũ: ${kpis.dailyCompliance.pendingCount}`],
-      ['Chi phí chất lượng kém (COPQ)', `${kpis.copqAmount.current.toLocaleString('vi-VN')} đ`, `So kỳ trước: ${kpis.copqAmount.delta >= 0 ? '+' : ''}${kpis.copqAmount.delta.toLocaleString('vi-VN')} đ`],
+      ['Chi phí chất lượng kém (COPQ)', `${kpis.copqAmount.current.toLocaleString('vi-VN')} đ`, copqDetailText],
       ['Nhận xét & Kết luận QLCL', note?.summary || 'Chưa có nhận xét QLCL trong kỳ', [note?.highlights && `Điểm nhấn: ${note.highlights}`, note?.nextActions && `Kỳ tới: ${note.nextActions}`, note?.author && `Người lập: ${note.author}`].filter(Boolean).join(' | ')]
     ];
     const qIndexRows: (string | number)[][] = qIndex.components.map((c) => [
@@ -350,7 +358,18 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
     ]);
     const alertRows: (string | number)[][] = [
       ...warnings.map((w) => ['Cảnh báo', w.category, w.title, w.detail]),
-      ...highlights.map((h) => ['Điểm sáng', h.category, h.title, h.detail])
+      ...highlights.map((h) => ['Điểm sáng', h.category, h.title, h.detail]),
+      ...(snapshot.missingDateCount > 0
+        ? [[
+            'Lưu ý dữ liệu',
+            'Hệ thống',
+            `Có ${snapshot.missingDateCount} bản ghi thiếu/sai định dạng ngày bị loại khỏi thống kê kỳ`,
+            snapshot.missingDateRecords
+              .slice(0, 6)
+              .map((m) => `${m.source}: ${m.code}`)
+              .join(', ')
+          ]]
+        : [])
     ];
     XLSXStyle.utils.book_append_sheet(
       wb,
@@ -380,7 +399,7 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
       r.totalQty || 0,
       r.checkedQty || 0,
       r.failedQty || 0,
-      r.result || '--',
+      r.result || (r as any).status || '--',
       r.defectDetail || ''
     ]);
     const pqcRows: (string | number)[][] = production.pqcRecords.map((r) => [
@@ -488,17 +507,27 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
     // =========================================================
     // SHEET 4: CAPA, ECO & CÔNG VIỆC
     // =========================================================
+    const seenCapaKeys = new Set<string>();
+    const mergedCapas = [...capaEco.capasInPeriod, ...capaEco.openCapas].filter((c, i) => {
+      const key = String(c.CAPAID || c.id || `capa-${i}`);
+      if (seenCapaKeys.has(key)) return false;
+      seenCapaKeys.add(key);
+      return true;
+    });
+
     const capaEcoItems: (string | number)[][] = [
-      ...capaEco.capasInPeriod.map((c) => [
-        'CAPA',
-        c.title || c.Issue || c.issue || '--',
-        c.owner || c.Owner || c.assignee || '--',
-        formatDateStrVi(c.dueDate || c.DueDate || c.targetDate),
-        c.status || c.Status || '--',
-        c.CAPAID || c.id || '--',
-        c.source || '--',
-        c.priority || (c.isRepeated ? 'Lặp lại / Cao' : '--')
-      ]),
+      ...mergedCapas.map((c) => {
+        const isOverdue = capaEco.overdueCapas.some((o) => (o.CAPAID || o.id) === (c.CAPAID || c.id));
+        return [
+          'CAPA',
+          c.title || c.Issue || c.issue || '--',
+          c.owner || c.Owner || c.assignee || '--',
+          formatDateStrVi(c.dueDate || c.DueDate || c.targetDate),
+          isOverdue ? 'Quá hạn' : (c.status || c.Status || '--'),
+          c.CAPAID || c.id || '--',
+          c.source || '--'
+        ];
+      }),
       ...capaEco.ecosInPeriod.map((e) => [
         'ECO',
         e.content || e.component || '--',
@@ -506,11 +535,22 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
         formatDateStrVi(e.applyDate),
         e.status || '--',
         e.ecrId || e.id,
-        e.category || '--',
-        e.model || '--'
+        e.model || e.category || '--'
       ])
     ];
     const capaEcoRows: (string | number)[][] = capaEcoItems.map((row, idx) => [idx + 1, ...row]);
+
+    const pendingWorkRows: (string | number)[][] = work.pendingDailyLogs.map((w, idx) => [
+      idx + 1,
+      w.category || '--',
+      w.content || '',
+      w.assignee || '--',
+      formatDateStrVi(w.date),
+      w.statusPercent || '0%',
+      w.result || '--',
+      w.note || '',
+      w.evaluation || '--'
+    ]);
 
     const workRows: (string | number)[][] = work.dailyLogsInPeriod.map((w, idx) => [
       idx + 1,
@@ -520,7 +560,19 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
       formatDateStrVi(w.date),
       w.statusPercent || '--',
       w.result || '--',
-      w.note || ''
+      w.note || '',
+      w.evaluation || '--'
+    ]);
+
+    const ptspIssueRows: (string | number)[][] = work.ptspIssuesInPeriod.map((issue, idx) => [
+      idx + 1,
+      `${issue.modelName}${issue.partOrArea ? ` — ${issue.partOrArea}` : ''}`,
+      issue.description || '--',
+      issue.ownerDept || '--',
+      `${formatDateStrVi(issue.createdAt)}${issue.dueDate ? ` → ${formatDateStrVi(issue.dueDate)}` : ''}`,
+      `Mức ${issue.severity}`,
+      issue.status || '--',
+      issue.modelCode || '--'
     ]);
 
     const sectionViMap: Record<string, string> = {
@@ -530,15 +582,22 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
       coordination: 'Phối hợp',
       eco: 'ECO'
     };
-    const planTaskRows: (string | number)[][] = work.planningTasksInPeriod.map((t, idx) => [
+    const mergedPlanningTasks = [
+      ...work.planningTasksInPeriod.map((t) => ({ task: t, isOverduePrev: false })),
+      ...work.planningTasksOverdue
+        .filter((o) => !work.planningTasksInPeriod.some((p) => p.id === o.id))
+        .map((t) => ({ task: t, isOverduePrev: true }))
+    ];
+    const planTaskRows: (string | number)[][] = mergedPlanningTasks.map(({ task: t, isOverduePrev }, idx) => [
       idx + 1,
-      sectionViMap[t.section] || t.section.toUpperCase(),
+      `${sectionViMap[t.section] || t.section.toUpperCase()}${isOverduePrev ? ` (Tồn ${period.type === 'week' ? 'tuần trước' : 'tháng trước'})` : ''}`,
       t.title,
       t.assignee || '--',
       t.deadline ? formatDateStrVi(t.deadline) : t.week || '--',
       t.priority,
       t.status === 'Completed' ? 'Hoàn thành' : t.status === 'In_Progress' ? 'Đang làm' : 'Chờ xử lý',
-      [t.modelOrSupplier, t.notes].filter(Boolean).join(' • ') || '--'
+      [t.modelOrSupplier, t.notes].filter(Boolean).join(' • ') || '--',
+      t.evaluation || '--'
     ]);
     XLSXStyle.utils.book_append_sheet(
       wb,
@@ -548,22 +607,32 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
         rLabel,
         [
           {
-            title: '1. THEO DÕI CAPA & ECO',
-            headers: ['STT', 'Nhóm', 'Công việc / Tác vụ', 'Người làm', 'Thời gian (Hạn / Áp dụng)', 'Trạng thái', 'Mã', 'Nguồn / Mức độ'],
+            title: '1. THEO DÕI CAPA ĐANG MỞ / QUÁ HẠN & ECO',
+            headers: ['STT', 'Nhóm', 'Công việc / Tác vụ', 'Người làm', 'Thời gian (Hạn / Áp dụng)', 'Trạng thái', 'Mã', 'Nguồn / Model'],
             rows: capaEcoRows
           },
           {
-            title: '2. CÔNG VIỆC BÁO CÁO NGÀY TRONG KỲ',
-            headers: ['STT', 'Nhóm', 'Công việc / Tác vụ', 'Người làm', 'Thời gian (Ngày)', 'Tiến độ', 'Kết quả', 'Ghi chú'],
+            title: '2. CÔNG VIỆC TỒN ĐỌNG TỪ KỲ TRƯỚC (BÁO CÁO NGÀY)',
+            headers: ['STT', 'Nhóm', 'Công việc / Tác vụ', 'Người làm', 'Thời gian (Ngày)', 'Tiến độ', 'Kết quả', 'Ghi chú', 'Đánh giá QLCL'],
+            rows: pendingWorkRows
+          },
+          {
+            title: '3. CÔNG VIỆC BÁO CÁO NGÀY TRONG KỲ',
+            headers: ['STT', 'Nhóm', 'Công việc / Tác vụ', 'Người làm', 'Thời gian (Ngày)', 'Tiến độ', 'Kết quả', 'Ghi chú', 'Đánh giá QLCL'],
             rows: workRows
           },
           {
-            title: '3. TÁC VỤ TỪ LẬP KẾ HOẠCH CHẤT LƯỢNG TRONG KỲ',
-            headers: ['STT', 'Nhóm', 'Công việc / Tác vụ', 'Người làm', 'Thời gian (Hạn / Tuần)', 'Ưu tiên', 'Trạng thái', 'Model / NCC & Ghi chú'],
+            title: '4. VẤN ĐỀ PTSP PHÁT SINH TRONG KỲ',
+            headers: ['STT', 'Model / Khu vực', 'Nội dung vấn đề', 'Bộ phận', 'Ngày phát sinh / Hạn', 'Mức độ', 'Trạng thái', 'Mã Model'],
+            rows: ptspIssueRows
+          },
+          {
+            title: '5. TÁC VỤ TỪ LẬP KẾ HOẠCH CHẤT LƯỢNG',
+            headers: ['STT', 'Nhóm', 'Công việc / Tác vụ', 'Người làm', 'Thời gian (Hạn / Tuần)', 'Ưu tiên', 'Trạng thái', 'Model / NCC & Ghi chú', 'Đánh giá QLCL'],
             rows: planTaskRows
           }
         ],
-        [8, 18, 44, 20, 18, 14, 16, 26]
+        [8, 22, 42, 18, 20, 14, 16, 26, 26]
       ),
       'CAPA, ECO & Cong viec'
     );

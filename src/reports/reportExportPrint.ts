@@ -78,7 +78,7 @@ export function printReportA4(snapshot: ReportSnapshot, onToast?: ToastFn): void
       ['LK lỗi thẩm định', `${kpis.partEvalQty.current} chiếc`, `${kpis.partEvalQty.records} biên bản`],
       ['CAPA mở / Quá hạn', `${kpis.capaOpen.total} / ${kpis.capaOpen.overdue}`, `Đóng kỳ này: ${kpis.capaOpen.closedInPeriod}`],
       ['Tuân thủ báo ngày', kpis.dailyCompliance.total > 0 ? `${kpis.dailyCompliance.current.toFixed(1)}%` : '--', `${kpis.dailyCompliance.completed}/${kpis.dailyCompliance.total} việc`],
-      ['Chi phí COPQ', `${kpis.copqAmount.current.toLocaleString('vi-VN')} đ`, `Kỳ trước: ${kpis.copqAmount.previous.toLocaleString('vi-VN')} đ`]
+      ['Chi phí COPQ', `${kpis.copqAmount.current.toLocaleString('vi-VN')} đ`, period.type === 'week' ? `Tháng T${period.start.getMonth() + 1}/${period.start.getFullYear()} (theo tháng)` : `Kỳ trước: ${kpis.copqAmount.previous.toLocaleString('vi-VN')} đ`]
     ]
       .map(
         ([label, val, sub]) => `
@@ -231,26 +231,32 @@ export function printReportA4(snapshot: ReportSnapshot, onToast?: ToastFn): void
     </ul>
   </div>
 
-  ${
-    snapshot.work.planningTasksInPeriod.length > 0
+  ${(() => {
+    const mergedPrintPlanTasks = [
+      ...snapshot.work.planningTasksInPeriod.map((t) => ({ task: t, isOverduePrev: false })),
+      ...snapshot.work.planningTasksOverdue
+        .filter((o) => !snapshot.work.planningTasksInPeriod.some((p) => p.id === o.id))
+        .map((t) => ({ task: t, isOverduePrev: true }))
+    ];
+    return mergedPrintPlanTasks.length > 0
       ? `<div class="section">
-    <div class="section-title">4. Tác vụ từ Lập kế hoạch Chất lượng (${snapshot.work.planningTasksInPeriod.length} việc trong kỳ • ${snapshot.work.planningTasksCompleted} hoàn thành)</div>
+    <div class="section-title">4. Tác vụ từ Lập kế hoạch Chất lượng (${snapshot.work.planningTasksInPeriod.length} việc trong kỳ • ${snapshot.work.planningTasksCompleted} hoàn thành${snapshot.work.planningTasksOverdue.length > 0 ? ` • ${snapshot.work.planningTasksOverdue.length} tồn` : ''})</div>
     <table>
       <thead>
         <tr>
-          <th style="width:70px;">Nhóm</th>
+          <th style="width:85px;">Nhóm</th>
           <th>Nội dung tác vụ</th>
-          <th style="width:110px;">Phụ trách</th>
-          <th style="width:80px;">Hạn</th>
-          <th style="width:85px;">Trạng thái</th>
+          <th style="width:105px;">Phụ trách</th>
+          <th style="width:78px;">Hạn</th>
+          <th style="width:80px;">Trạng thái</th>
         </tr>
       </thead>
       <tbody>
-        ${snapshot.work.planningTasksInPeriod
+        ${mergedPrintPlanTasks
           .slice(0, 20)
           .map(
-            (t) => `<tr>
-              <td>${esc(t.section.toUpperCase())}</td>
+            ({ task: t, isOverduePrev }) => `<tr>
+              <td>${esc(t.section.toUpperCase())}${isOverduePrev ? ' (Tồn)' : ''}</td>
               <td>${esc(t.title)}</td>
               <td>${esc(t.assignee || '--')}</td>
               <td>${esc(t.deadline ? formatDateStrVi(t.deadline) : t.week || '--')}</td>
@@ -261,11 +267,11 @@ export function printReportA4(snapshot: ReportSnapshot, onToast?: ToastFn): void
       </tbody>
     </table>
   </div>`
-      : ''
-  }
+      : '';
+  })()}
 
   <div class="section">
-    <div class="section-title">${snapshot.work.planningTasksInPeriod.length > 0 ? '5' : '4'}. Nhận xét & Kết luận của Phòng QLCL</div>
+    <div class="section-title">${snapshot.work.planningTasksInPeriod.length > 0 || snapshot.work.planningTasksOverdue.length > 0 ? '5' : '4'}. Nhận xét & Kết luận của Phòng QLCL</div>
     <div class="note-box">
       ${
         note
