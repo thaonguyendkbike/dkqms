@@ -2592,9 +2592,9 @@ export function App() {
     const baseIdsSet = collectBatchIds(baseBatch);
     const lateIdsSet = collectBatchIds(lateBatch);
     const augSepIdsSet = collectBatchIds(augSepBatch);
-    const RECOVERED_BASE_TS_MS = Date.parse('2026-11-23T12:25:00.000Z') || 1795436700000;
-    const RECOVERED_LATE_TS_MS = Date.parse('2026-11-23T13:38:00.000Z') || 1795441080000;
-    const RECOVERED_AUG_SEP_TS_MS = Date.parse('2026-11-23T15:00:00.000Z') || 1795446000000;
+    const RECOVERED_BASE_TS_MS = Date.parse('2026-11-23T16:00:00.000Z') || 1795449600000;
+    const RECOVERED_LATE_TS_MS = Date.parse('2026-11-23T16:00:00.000Z') || 1795449600000;
+    const RECOVERED_AUG_SEP_TS_MS = Date.parse('2026-11-23T16:00:00.000Z') || 1795449600000;
 
     const getBatchCutoffForId = (id: string): number => {
       if (augSepIdsSet.has(id)) return RECOVERED_AUG_SEP_TS_MS;
@@ -2769,9 +2769,9 @@ export function App() {
       });
     };
 
-    // Nạp đợt 1 (2,742 xe) trước, sau đó nạp đợt 2 (656 bản ghi), và đợt 3 (1,292 xe 20 lệnh tháng 8-9/2026)
+    // Nạp đợt 1 (2,742 xe), đợt 2 (656 bản ghi), và đợt 3 (1,292 xe 20 lệnh tháng 8-9/2026)
     applyBatch(baseBatch, alreadyAppliedBase, false);
-    applyBatch(lateBatch, alreadyAppliedLate, !alreadyAppliedLate);
+    applyBatch(lateBatch, alreadyAppliedLate, false);
     applyBatch(augSepBatch, alreadyAppliedAugSep, false);
 
     if (safeStorage.isReady() || baseList.length > 500) {

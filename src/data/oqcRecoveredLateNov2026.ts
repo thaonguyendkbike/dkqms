@@ -1,6 +1,6 @@
 import { OQCRecord } from '../qualityTestData';
 
-export const RECOVERED_OQC_LATE_NOV2026_VERSION = 'oqc_recovered_late_nov2026_v1';
+export const RECOVERED_OQC_LATE_NOV2026_VERSION = 'oqc_recovered_late_nov2026_v2';
 
 export const RECOVERED_OQC_LATE_NOV2026_RECORDS: OQCRecord[] = [
   {
