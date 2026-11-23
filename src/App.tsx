@@ -9,6 +9,7 @@ import { calculateAQLSample } from './utils/aqlUtils';
 import { exportIqcRecordToExcel, getAqlGroupName } from './utils/iqcLineItems';
 import { getLocalYmd, parseFlexibleDate, getWeekAndMonthFromDate as getWeekAndMonthFromDateUtil } from './utils/dateUtils';
 import { ReportsHub } from './reports/ReportsHub';
+import { RECOVERED_OQC_NOV2026_RECORDS, RECOVERED_OQC_NOV2026_VERSION } from './data/oqcRecoveredNov2026';
 import XLSXStyle from 'xlsx-js-style';
 import {
   BarChart,
@@ -2550,6 +2551,176 @@ export function App() {
     }
   };
 
+  // =========================================================================
+  // KHÔI PHỤC TỰ ĐỘNG 2,742 XE OQC / KCS TỪ BÁO CÁO BACKUP CỦA ANH THAO (LSX 26-326 -> 26-374)
+  // =========================================================================
+  const RECOVERED_OQC_NOV2026_APPLIED_KEY = 'dk_oqc_recovered_nov2026_applied';
+
+  const mergeRecoveredOqcNov2026Records = (
+    currentList: OQCRecord[]
+  ): { list: OQCRecord[]; changed: boolean } => {
+    if (!Array.isArray(RECOVERED_OQC_NOV2026_RECORDS) || RECOVERED_OQC_NOV2026_RECORDS.length === 0) {
+      return { list: Array.isArray(currentList) ? currentList : [], changed: false };
+    }
+
+    const alreadyApplied = safeStorage.getItem(RECOVERED_OQC_NOV2026_APPLIED_KEY) === RECOVERED_OQC_NOV2026_VERSION;
+    const recoveredIdsSet = new Set<string>();
+    RECOVERED_OQC_NOV2026_RECORDS.forEach((rec) => {
+      if (!rec) return;
+      if (rec.id) recoveredIdsSet.add(String(rec.id).trim());
+      const cid = getOqcCanonicalId(rec.serialNo);
+      if (cid) recoveredIdsSet.add(cid);
+      const rawSerial = String(rec.serialNo || '').trim().toUpperCase();
+      if (rawSerial) recoveredIdsSet.add(rawSerial);
+    });
+
+    const RECOVERED_BACKUP_TS_MS = Date.parse('2026-11-23T12:25:00.000Z') || 1795436700000;
+    try {
+      const tombstoneMap = readOqcTombstoneMap();
+      let tombstoneModified = false;
+      recoveredIdsSet.forEach((id) => {
+        if (tombstoneMap[id] !== undefined && tombstoneMap[id] <= RECOVERED_BACKUP_TS_MS + 5000) {
+          delete tombstoneMap[id];
+          tombstoneModified = true;
+        }
+      });
+      if (tombstoneModified) {
+        writeOqcTombstoneMap(tombstoneMap);
+      } else if (!alreadyApplied) {
+        const remoteDel = readOqcIdSet(OQC_REMOTE_DELETED_IDS_KEY);
+        let remoteModified = false;
+        recoveredIdsSet.forEach((id) => {
+          if (remoteDel.delete(id)) remoteModified = true;
+        });
+        if (remoteModified) {
+          safeStorage.setItem(OQC_REMOTE_DELETED_IDS_KEY, JSON.stringify(Array.from(remoteDel)));
+        }
+      }
+
+      const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
+      if (localDelRaw) {
+        const localDelArr = JSON.parse(localDelRaw);
+        if (Array.isArray(localDelArr)) {
+          const filteredLocalDel = localDelArr.filter((x: any) => {
+            const s = String(x || '').trim();
+            return !recoveredIdsSet.has(s) || (tombstoneMap[s] && tombstoneMap[s] > RECOVERED_BACKUP_TS_MS + 5000);
+          });
+          if (filteredLocalDel.length !== localDelArr.length) {
+            localStorage.setItem('dk_oqc_records_deleted_ids', JSON.stringify(filteredLocalDel));
+          }
+        }
+      }
+      if (lastKnownOqcCloudDeletedIds.current.length > 0) {
+        lastKnownOqcCloudDeletedIds.current = lastKnownOqcCloudDeletedIds.current.filter((id) => {
+          const s = String(id || '').trim();
+          return !recoveredIdsSet.has(s) || (tombstoneMap[s] && tombstoneMap[s] > RECOVERED_BACKUP_TS_MS + 5000);
+        });
+      }
+    } catch (e) {
+      console.warn('[OQC Recovery Tombstone Cleanup Warning]:', e);
+    }
+
+    const tombstoneMap = readOqcTombstoneMap();
+    const baseList: OQCRecord[] = Array.isArray(currentList) ? [...currentList] : [];
+    const serialToIndex = new Map<string, number>();
+    baseList.forEach((item, idx) => {
+      const s = String(item?.serialNo || '').trim().toUpperCase();
+      if (s && !serialToIndex.has(s)) {
+        serialToIndex.set(s, idx);
+      }
+    });
+
+    let changed = false;
+    const newlyRecovered: OQCRecord[] = [];
+
+    RECOVERED_OQC_NOV2026_RECORDS.forEach((rec) => {
+      if (!rec || !rec.serialNo) return;
+      const normSerial = rec.serialNo.trim().toUpperCase();
+      if (!normSerial) return;
+
+      const existingIdx = serialToIndex.get(normSerial);
+      if (existingIdx === undefined) {
+        if (alreadyApplied && isOqcRecordTombstoned(rec, tombstoneMap)) {
+          return;
+        }
+        newlyRecovered.push({ ...rec });
+        changed = true;
+      } else {
+        const existing = baseList[existingIdx];
+        if (!existing) return;
+
+        let itemChanged = false;
+        const nextItem: OQCRecord = { ...existing };
+
+        const fillStringField = (field: keyof OQCRecord, badValues: string[] = ['--', '--:--', 'Chưa có LSX']) => {
+          const recVal = String((rec as any)[field] || '').trim();
+          const curVal = String((nextItem as any)[field] || '').trim();
+          if (recVal && (!curVal || badValues.includes(curVal))) {
+            (nextItem as any)[field] = (rec as any)[field];
+            itemChanged = true;
+          }
+        };
+
+        fillStringField('chassisNo');
+        fillStringField('engineNo');
+        fillStringField('checkedBy');
+        fillStringField('defectDetail');
+        fillStringField('rootCause');
+        fillStringField('treatment');
+        fillStringField('lsx');
+        fillStringField('partCode');
+        fillStringField('model');
+        fillStringField('color');
+        fillStringField('checkTime');
+        fillStringField('date');
+
+        const curStatus = String(nextItem.status || '').trim();
+        const recStatus = String(rec.status || '').trim();
+        if (
+          (curStatus === '' || curStatus === 'Chưa kiểm tra') &&
+          (recStatus === 'Đạt' || recStatus === 'Lỗi')
+        ) {
+          nextItem.status = rec.status;
+          nextItem.passFlag = rec.passFlag;
+          nextItem.failedCount = rec.failedCount;
+          nextItem.totalLlr = rec.totalLlr;
+          if (rec.defectDetail) nextItem.defectDetail = rec.defectDetail;
+          if (rec.rootCause) nextItem.rootCause = rec.rootCause;
+          if (rec.treatment) nextItem.treatment = rec.treatment;
+          if (rec.checkedBy) nextItem.checkedBy = rec.checkedBy;
+          if (rec.checkTime) nextItem.checkTime = rec.checkTime;
+          if (rec.date) {
+            nextItem.date = rec.date;
+            nextItem.month = rec.month;
+            nextItem.year = rec.year;
+          }
+          itemChanged = true;
+        }
+
+        if (itemChanged) {
+          nextItem.updatedAt = rec.updatedAt || nextItem.updatedAt || new Date().toISOString();
+          baseList[existingIdx] = nextItem;
+          changed = true;
+        }
+      }
+    });
+
+    if (!alreadyApplied && (safeStorage.isReady() || baseList.length > 500)) {
+      safeStorage.setItem(RECOVERED_OQC_NOV2026_APPLIED_KEY, RECOVERED_OQC_NOV2026_VERSION);
+    }
+
+    if (newlyRecovered.length > 0) {
+      const mergedList = deduplicateOqcRecords([...newlyRecovered, ...baseList]);
+      console.log(`[OQC Nov2026 Recovery]: Đã khôi phục ${newlyRecovered.length} xe thiếu và làm giàu dữ liệu -> tổng ${mergedList.length} xe.`);
+      return { list: mergedList, changed: true };
+    }
+    if (changed) {
+      const mergedList = deduplicateOqcRecords(baseList);
+      return { list: mergedList, changed: true };
+    }
+    return { list: baseList, changed: false };
+  };
+
   const cleanAndSortObject = (obj: any): any => {
     if (obj === null || obj === undefined) return null;
     if (Array.isArray(obj)) {
@@ -5055,8 +5226,24 @@ export function App() {
           ? deduplicateOqcRecords(rawServerData.dk_oqc_records)
           : deduplicateOqcRecords(serverData.dk_oqc_records);
         const oqcMetaDoc = rawDocMap['dk_oqc_records'];
-        const serverDeletedIds = Array.isArray(oqcMetaDoc?.deletedIds) ? oqcMetaDoc.deletedIds.map(String) : [];
         const serverDeletedAtMs = Date.parse(oqcMetaDoc?.updatedAt || '') || Date.now();
+        const recoveredBackupTsMs = Date.parse('2026-11-23T12:25:00.000Z') || 1795436700000;
+        const shouldScrubRecoveredFromServerDeleted =
+          safeStorage.getItem(RECOVERED_OQC_NOV2026_APPLIED_KEY) !== RECOVERED_OQC_NOV2026_VERSION ||
+          serverDeletedAtMs <= recoveredBackupTsMs + 5000;
+        const recoveredIdSetForFilter = shouldScrubRecoveredFromServerDeleted
+          ? new Set<string>(
+              RECOVERED_OQC_NOV2026_RECORDS.flatMap((r) => [
+                String(r.id || '').trim(),
+                getOqcCanonicalId(r.serialNo),
+                String(r.serialNo || '').trim().toUpperCase()
+              ]).filter(Boolean)
+            )
+          : null;
+        const rawServerDeletedIds = Array.isArray(oqcMetaDoc?.deletedIds) ? oqcMetaDoc.deletedIds.map(String) : [];
+        const serverDeletedIds = recoveredIdSetForFilter
+          ? rawServerDeletedIds.filter((id) => !recoveredIdSetForFilter.has(String(id || '').trim()))
+          : rawServerDeletedIds;
         lastKnownOqcCloudDeletedIds.current = serverDeletedIds;
 
         // Register Cloud snapshot & deletedIds tombstones BEFORE merging or filtering (never erases newer tombstones)
@@ -5074,20 +5261,30 @@ export function App() {
             ? deduplicateOqcRecords(smartMergeArrays(serverOqcList, localOqcParsed, 'dk_oqc_records'))
             : serverOqcList;
           const filteredMergedOqc = filterOqcListWithTombstones(mergedOqc, serverDeletedIds);
-          const mergedSerialized = JSON.stringify(filteredMergedOqc);
+          const { list: recoveredMergedOqc } = mergeRecoveredOqcNov2026Records(filteredMergedOqc);
+          const mergedSerialized = JSON.stringify(recoveredMergedOqc);
           const serverSerialized = JSON.stringify(serverOqcList);
           lastSyncedValues.current['dk_oqc_records'] = serverSerialized;
           lastSeenValues.current['dk_oqc_records'] = mergedSerialized;
           safeStorage.setItem('dk_oqc_records', mergedSerialized);
-          setOqcRecords(filteredMergedOqc);
-          pendingSyncBuffer.current['dk_oqc_records'] = filteredMergedOqc;
+          setOqcRecords(recoveredMergedOqc);
+          localStorage.setItem('dk_oqc_records_is_dirty', 'true');
+          pendingSyncBuffer.current['dk_oqc_records'] = recoveredMergedOqc;
           localDirtyKeys.current.add('dk_oqc_records');
+          syncToServer('dk_oqc_records', recoveredMergedOqc);
         } else {
-          const dedupedSerialized = JSON.stringify(serverOqcList);
-          lastSyncedValues.current['dk_oqc_records'] = dedupedSerialized;
+          const { list: recoveredServerOqc, changed: recoveredChanged } = mergeRecoveredOqcNov2026Records(serverOqcList);
+          const dedupedSerialized = JSON.stringify(recoveredServerOqc);
+          lastSyncedValues.current['dk_oqc_records'] = JSON.stringify(serverOqcList);
           lastSeenValues.current['dk_oqc_records'] = dedupedSerialized;
           safeStorage.setItem('dk_oqc_records', dedupedSerialized);
-          setOqcRecords(serverOqcList);
+          setOqcRecords(recoveredServerOqc);
+          if (recoveredChanged) {
+            localStorage.setItem('dk_oqc_records_is_dirty', 'true');
+            localDirtyKeys.current.add('dk_oqc_records');
+            pendingSyncBuffer.current['dk_oqc_records'] = recoveredServerOqc;
+            syncToServer('dk_oqc_records', recoveredServerOqc);
+          }
         }
       }
       if (serverData.dk_oqc_part_codes !== undefined) {
@@ -8901,7 +9098,20 @@ export function App() {
   // IN-PROCESS & QUALITY TEST INSPECTION STATES (IQC, PQC, OQC)
   const [iqcRecords, setIqcRecords] = useState<IQCRecord[]>(() => getSavedState('dk_iqc_records', INITIAL_IQC_DATA));
   const [pqcRecords, setPqcRecords] = useState<PQCRecord[]>(() => getSavedState('dk_pqc_records', INITIAL_PQC_DATA));
-  const [oqcRecords, setOqcRecords] = useState<OQCRecord[]>(() => getSavedState('dk_oqc_records', INITIAL_OQC_DATA));
+  const [oqcRecords, setOqcRecords] = useState<OQCRecord[]>(() => {
+    const saved = getSavedState('dk_oqc_records', INITIAL_OQC_DATA);
+    const savedArr = Array.isArray(saved) ? saved : [];
+    // Chỉ ghi vào safeStorage nếu IndexedDB đã preload xong hoặc tập dữ liệu đã có sẵn trong RAM, tránh đè lên 30,000+ xe đang nạp từ IndexedDB
+    if (safeStorage.isReady() || savedArr.length > 500) {
+      const { list, changed } = mergeRecoveredOqcNov2026Records(savedArr);
+      if (changed) {
+        safeStorage.setItem('dk_oqc_records', JSON.stringify(list));
+        try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
+      }
+      return list;
+    }
+    return mergeRecoveredOqcNov2026Records(savedArr).list;
+  });
   const [oqcColorChanges, setOqcColorChanges] = useState<OqcColorChangeRecord[]>(() => getSavedState('dk_oqc_color_changes', []));
   const [oqcHandoverList, setOqcHandoverList] = useState<any[]>(() => getSavedState('dk_oqc_handover_list', []));
   const [supplierProductionAudits, setSupplierProductionAudits] = useState<SupplierProductionAudit[]>(() => getSavedState('dk_supplier_production_audits', INITIAL_SUPPLIER_AUDITS));
@@ -9051,13 +9261,22 @@ export function App() {
           if (Array.isArray(parsed) && parsed.length > 0) {
             const deduplicated = deduplicateOqcRecords(parsed);
             setOqcRecords(prev => {
+              let combined: OQCRecord[];
               if (!prev || prev.length === 0) {
                 console.log(`[IndexedDB Ready Sync] Restored ${deduplicated.length} OQC records from IndexedDB.`);
-                return deduplicated;
+                combined = deduplicated;
+              } else {
+                const merged = smartMergeArrays(deduplicated, prev, 'dk_oqc_records');
+                console.log(`[IndexedDB Ready Sync] Merged ${deduplicated.length} IDB records with ${prev.length} in-memory records -> ${merged.length} total.`);
+                combined = deduplicated.length >= merged.length && prev.length === 0 ? deduplicated : merged;
               }
-              const merged = smartMergeArrays(deduplicated, prev, 'dk_oqc_records');
-              console.log(`[IndexedDB Ready Sync] Merged ${deduplicated.length} IDB records with ${prev.length} in-memory records -> ${merged.length} total.`);
-              return deduplicated.length >= merged.length && prev.length === 0 ? deduplicated : merged;
+              const { list: withRecovered, changed } = mergeRecoveredOqcNov2026Records(combined);
+              if (changed) {
+                safeStorage.setItem('dk_oqc_records', JSON.stringify(withRecovered));
+                try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
+                if (localDirtyKeys.current) localDirtyKeys.current.add('dk_oqc_records');
+              }
+              return withRecovered;
             });
           }
         } catch (e) { }
