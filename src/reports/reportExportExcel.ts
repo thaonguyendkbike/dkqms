@@ -331,14 +331,14 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
     // SHEET 1: TỔNG QUAN & KPI
     // =========================================================
     const summaryRows: (string | number)[][] = [
-      ['Chỉ số Q-Index tổng hợp', `${qIndex.score.toFixed(1)} / 100 (${qIndex.grade})`, qIndex.formulaText],
-      ['Tỷ lệ đạt OQC', `${kpis.oqcYield.current.toFixed(1)}%`, `Đạt ${kpis.oqcYield.passed}/${kpis.oqcYield.total} xe (so kỳ trước: ${kpis.oqcYield.delta >= 0 ? '+' : ''}${kpis.oqcYield.delta.toFixed(1)}%)`],
-      ['Tỷ lệ đạt lô IQC', `${kpis.iqcPassRate.current.toFixed(1)}%`, `Đạt ${kpis.iqcPassRate.passed}/${kpis.iqcPassRate.total} lô`],
-      ['Tỷ lệ xử lý PQC', `${kpis.pqcResolveRate.current.toFixed(1)}%`, `Đã xử lý ${kpis.pqcResolveRate.resolved}/${kpis.pqcResolveRate.total} điểm`],
-      ['Tỷ lệ xử lý Phản ánh thị trường', `${kpis.marketResolveRate.current.toFixed(1)}%`, `Đóng ${kpis.marketResolveRate.resolved}/${kpis.marketResolveRate.total} | Lỗi mức A: ${kpis.marketResolveRate.sevA}`],
+      ['Chỉ số Q-Index tổng hợp', qIndex.activeWeightSum > 0 ? `${qIndex.score.toFixed(1)} / 100 (${qIndex.grade})` : 'Không phát sinh', qIndex.formulaText],
+      ['Tỷ lệ đạt OQC', kpis.oqcYield.total > 0 ? `${kpis.oqcYield.current.toFixed(1)}%` : 'Không phát sinh', kpis.oqcYield.total > 0 ? `Đạt ${kpis.oqcYield.passed}/${kpis.oqcYield.total} xe (so kỳ trước: ${kpis.oqcYield.delta >= 0 ? '+' : ''}${kpis.oqcYield.delta.toFixed(1)}%)` : 'Không phát sinh xe kiểm tra trong kỳ'],
+      ['Tỷ lệ đạt lô IQC', kpis.iqcPassRate.total > 0 ? `${kpis.iqcPassRate.current.toFixed(1)}%` : 'Không phát sinh', kpis.iqcPassRate.total > 0 ? `Đạt ${kpis.iqcPassRate.passed}/${kpis.iqcPassRate.total} lô` : 'Không phát sinh lô kiểm trong kỳ'],
+      ['Tỷ lệ xử lý PQC', kpis.pqcResolveRate.total > 0 ? `${kpis.pqcResolveRate.current.toFixed(1)}%` : 'Không phát sinh', kpis.pqcResolveRate.total > 0 ? `Đã xử lý ${kpis.pqcResolveRate.resolved}/${kpis.pqcResolveRate.total} điểm` : 'Không phát sinh điểm kiểm PQC trong kỳ'],
+      ['Tỷ lệ xử lý Phản ánh thị trường', kpis.marketResolveRate.total > 0 ? `${kpis.marketResolveRate.current.toFixed(1)}%` : 'Không phát sinh', kpis.marketResolveRate.total > 0 ? `Đóng ${kpis.marketResolveRate.resolved}/${kpis.marketResolveRate.total} | Lỗi mức A: ${kpis.marketResolveRate.sevA}` : 'Không phát sinh phản ánh trong kỳ'],
       ['Linh kiện lỗi thẩm định (PTSP)', `${kpis.partEvalQty.current} chiếc`, `${kpis.partEvalQty.records} biên bản (NCC ${kpis.partEvalQty.nccPct.toFixed(0)}%, SX ${kpis.partEvalQty.sxPct.toFixed(0)}%, KH ${kpis.partEvalQty.khPct.toFixed(0)}%)`],
       ['CAPA đang mở / Quá hạn', `${kpis.capaOpen.total} mở / ${kpis.capaOpen.overdue} quá hạn`, `Đóng trong kỳ: ${kpis.capaOpen.closedInPeriod}`],
-      ['Tuân thủ báo cáo ngày', `${kpis.dailyCompliance.current.toFixed(1)}%`, `Hoàn thành ${kpis.dailyCompliance.completed}/${kpis.dailyCompliance.total} đầu việc | Tồn kỳ cũ: ${kpis.dailyCompliance.pendingCount}`],
+      ['Tuân thủ báo cáo ngày', kpis.dailyCompliance.total > 0 ? `${kpis.dailyCompliance.current.toFixed(1)}%` : 'Không phát sinh', kpis.dailyCompliance.total > 0 ? `Hoàn thành ${kpis.dailyCompliance.completed}/${kpis.dailyCompliance.total} đầu việc | Tồn kỳ cũ: ${kpis.dailyCompliance.pendingCount}` : `Không phát sinh báo cáo ngày trong kỳ | Tồn kỳ cũ: ${kpis.dailyCompliance.pendingCount}`],
       ['Chi phí chất lượng kém (COPQ)', `${kpis.copqAmount.current.toLocaleString('vi-VN')} đ`, `So kỳ trước: ${kpis.copqAmount.delta >= 0 ? '+' : ''}${kpis.copqAmount.delta.toLocaleString('vi-VN')} đ`],
       ['Nhận xét & Kết luận QLCL', note?.summary || 'Chưa có nhận xét QLCL trong kỳ', [note?.highlights && `Điểm nhấn: ${note.highlights}`, note?.nextActions && `Kỳ tới: ${note.nextActions}`, note?.author && `Người lập: ${note.author}`].filter(Boolean).join(' | ')]
     ];
@@ -489,22 +489,16 @@ export function exportReportToExcel(snapshot: ReportSnapshot, onToast?: ToastFn)
     // SHEET 4: CAPA, ECO & CÔNG VIỆC
     // =========================================================
     const capaEcoItems: (string | number)[][] = [
-      ...capaEco.capasAll
-        .filter((c) => {
-          const st = (c.status || c.Status || '').trim().toLowerCase();
-          const closed = st === 'đóng' || st === 'đã đóng' || st === 'closed' || st === 'hoàn thành';
-          return !closed || capaEco.capasInPeriod.some((p) => p.id === c.id);
-        })
-        .map((c) => [
-          'CAPA',
-          c.title || c.issue || '--',
-          c.owner || c.assignee || '--',
-          formatDateStrVi(c.dueDate || c.targetDate),
-          c.status || '--',
-          c.CAPAID || c.id,
-          c.source || '--',
-          c.priority || '--'
-        ]),
+      ...capaEco.capasInPeriod.map((c) => [
+        'CAPA',
+        c.title || c.Issue || c.issue || '--',
+        c.owner || c.Owner || c.assignee || '--',
+        formatDateStrVi(c.dueDate || c.DueDate || c.targetDate),
+        c.status || c.Status || '--',
+        c.CAPAID || c.id || '--',
+        c.source || '--',
+        c.priority || (c.isRepeated ? 'Lặp lại / Cao' : '--')
+      ]),
       ...capaEco.ecosInPeriod.map((e) => [
         'ECO',
         e.content || e.component || '--',

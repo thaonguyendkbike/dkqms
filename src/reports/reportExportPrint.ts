@@ -71,13 +71,13 @@ export function printReportA4(snapshot: ReportSnapshot, onToast?: ToastFn): void
     const { period, qIndex, kpis, qcTools, warnings, highlights, note, market } = snapshot;
 
     const kpiCardsHtml = [
-      ['Tỷ lệ đạt OQC', `${kpis.oqcYield.current.toFixed(1)}%`, `${kpis.oqcYield.passed}/${kpis.oqcYield.total} đạt`],
-      ['Tỷ lệ đạt IQC', `${kpis.iqcPassRate.current.toFixed(1)}%`, `${kpis.iqcPassRate.passed}/${kpis.iqcPassRate.total} lô`],
-      ['Xử lý PQC', `${kpis.pqcResolveRate.current.toFixed(1)}%`, `${kpis.pqcResolveRate.resolved}/${kpis.pqcResolveRate.total} điểm`],
-      ['Xử lý Thị trường', `${kpis.marketResolveRate.current.toFixed(1)}%`, `${kpis.marketResolveRate.resolved}/${kpis.marketResolveRate.total} phản ánh`],
+      ['Tỷ lệ đạt OQC', kpis.oqcYield.total > 0 ? `${kpis.oqcYield.current.toFixed(1)}%` : '--', `${kpis.oqcYield.passed}/${kpis.oqcYield.total} đạt`],
+      ['Tỷ lệ đạt IQC', kpis.iqcPassRate.total > 0 ? `${kpis.iqcPassRate.current.toFixed(1)}%` : '--', `${kpis.iqcPassRate.passed}/${kpis.iqcPassRate.total} lô`],
+      ['Xử lý PQC', kpis.pqcResolveRate.total > 0 ? `${kpis.pqcResolveRate.current.toFixed(1)}%` : '--', `${kpis.pqcResolveRate.resolved}/${kpis.pqcResolveRate.total} điểm`],
+      ['Xử lý Thị trường', kpis.marketResolveRate.total > 0 ? `${kpis.marketResolveRate.current.toFixed(1)}%` : '--', `${kpis.marketResolveRate.resolved}/${kpis.marketResolveRate.total} phản ánh`],
       ['LK lỗi thẩm định', `${kpis.partEvalQty.current} chiếc`, `${kpis.partEvalQty.records} biên bản`],
       ['CAPA mở / Quá hạn', `${kpis.capaOpen.total} / ${kpis.capaOpen.overdue}`, `Đóng kỳ này: ${kpis.capaOpen.closedInPeriod}`],
-      ['Tuân thủ báo ngày', `${kpis.dailyCompliance.current.toFixed(1)}%`, `${kpis.dailyCompliance.completed}/${kpis.dailyCompliance.total} việc`],
+      ['Tuân thủ báo ngày', kpis.dailyCompliance.total > 0 ? `${kpis.dailyCompliance.current.toFixed(1)}%` : '--', `${kpis.dailyCompliance.completed}/${kpis.dailyCompliance.total} việc`],
       ['Chi phí COPQ', `${kpis.copqAmount.current.toLocaleString('vi-VN')} đ`, `Kỳ trước: ${kpis.copqAmount.previous.toLocaleString('vi-VN')} đ`]
     ]
       .map(

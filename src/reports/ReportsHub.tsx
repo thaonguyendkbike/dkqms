@@ -1175,94 +1175,36 @@ export const ReportsHub: React.FC<ReportsHubProps> = ({
               </button>
             </div>
             <div className="space-y-2">
-              {capaEco.capasAll
-                .filter((c) => !isCapaClosed(c))
-                .slice(0, 15)
-                .map((c) => {
-                  const isOverdue = capaEco.overdueCapas.some((o) => o.id === c.id);
-                  const renderQlclNoteCard = (extraClass = '') => (
-    <div
-      className={`bg-white rounded-2xl border-2 border-blue-300 p-5 shadow-sm flex flex-col justify-between ${extraClass}`}
-    >
-      <div>
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-600" />
-            <span className="text-base font-extrabold text-slate-900">
-              Nhận xét & Kết luận QLCL
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={openNoteModal}
-            className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
-          >
-            {snapshot.note ? 'Sửa nhận xét' : 'Viết nhận xét'}
-          </button>
-        </div>
-
-        {snapshot.note ? (
-          <div className="space-y-2 text-sm text-slate-800">
-            <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 font-medium">
-              {snapshot.note.summary}
-            </div>
-            {snapshot.note.highlights && (
-              <div className="text-xs text-slate-700">
-                <span className="font-bold text-emerald-700">Điểm nhấn: </span>
-                {snapshot.note.highlights}
-              </div>
-            )}
-            {snapshot.note.nextActions && (
-              <div className="text-xs text-slate-700">
-                <span className="font-bold text-blue-700">Kế hoạch kỳ tới: </span>
-                {snapshot.note.nextActions}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="p-4 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500 text-center">
-            Chưa có nhận xét QLCL cho {period.label}. Bấm <strong>Viết nhận xét</strong> để bổ sung kết luận trước khi xuất báo cáo.
-          </div>
-        )}
-      </div>
-
-      {snapshot.note && (
-        <div className="pt-3 mt-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-          <span>Người lập: {snapshot.note.author}</span>
-          <span>Cập nhật: {new Date(snapshot.note.updatedAt).toLocaleString('vi-VN')}</span>
-        </div>
-      )}
-    </div>
-  );
-
-  return (
+              {capaEco.capasInPeriod.length === 0 ? (
+                <p className="text-xs text-slate-500">Không phát sinh hồ sơ CAPA trong kỳ.</p>
+              ) : (
+                capaEco.capasInPeriod.slice(0, 20).map((c) => {
+                  const isOverdue = capaEco.overdueCapas.some((o) => (o.CAPAID || o.id) === (c.CAPAID || c.id));
+                  return (
                     <div
-                      key={c.id}
+                      key={c.CAPAID || c.id}
                       className={`p-3 rounded-xl border text-xs ${
                         isOverdue ? 'border-rose-300 bg-rose-50' : 'border-slate-200 bg-slate-50'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-extrabold text-slate-900">
-                          {c.CAPAID || c.id} — {c.title || c.issue || '--'}
+                          {c.CAPAID || c.id} — {c.title || c.Issue || c.issue || '--'}
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded-full font-bold ${
                             isOverdue ? 'bg-rose-200 text-rose-900' : 'bg-blue-100 text-blue-800'
                           }`}
                         >
-                          {isOverdue ? 'Quá hạn' : c.status}
+                          {isOverdue ? 'Quá hạn' : c.status || c.Status || '--'}
                         </span>
                       </div>
                       <div className="text-slate-600 mt-1">
-                        Phụ trách: {c.owner || c.assignee || '--'} | Hạn: {formatDateStrVi(c.dueDate || c.targetDate)}
+                        Phụ trách: {c.owner || c.Owner || c.assignee || '--'} | Hạn: {formatDateStrVi(c.dueDate || c.DueDate || c.targetDate)}
                       </div>
                     </div>
                   );
-                })}
-              {capaEco.capasAll.filter((c) => !isCapaClosed(c))
-                .length === 0 && (
-                <p className="text-xs text-slate-500">Không có hồ sơ CAPA đang mở.</p>
+                })
               )}
             </div>
           </div>

@@ -758,19 +758,24 @@ export function buildReportSnapshot(
     .sort((a, b) => b.count - a.count);
 
   // --- 6. CAPA & ECO ---
-  const openCapas = input.capas.filter(c => !isCapaClosed(c));
+  const openCapas = input.capas.filter(c => {
+    if (isCapaClosed(c)) return false;
+    const due = getCapaDueDate(c);
+    return !due || due.getTime() <= end.getTime();
+  });
+  const overdueRefMs = Math.min(now.getTime(), end.getTime());
   const overdueCapas = openCapas.filter(c => {
     const s = getCapaStatus(c);
     if (s === 'Quá hạn') return true;
     const due = getCapaDueDate(c);
-    return due ? due.getTime() < now.getTime() : false;
+    return due ? due.getTime() < overdueRefMs : false;
   });
-  const closedCapas = input.capas.filter(c => isCapaClosed(c));
-  const effectiveCapas = closedCapas.filter(c => (c.effectiveness || c.Effectiveness) === 'Hiệu quả');
   const capasInPeriod = filterDated(input.capas, c => c.targetDate || c.dueDate || c.DueDate, start, end);
+  const closedCapasInPeriod = capasInPeriod.filter(isCapaClosed);
+  const effectiveCapas = closedCapasInPeriod.filter(c => (c.effectiveness || c.Effectiveness) === 'Hiệu quả');
   const capaOnTimeScore =
-    openCapas.length + closedCapas.length > 0
-      ? Math.round(((openCapas.length - overdueCapas.length + closedCapas.length) / (openCapas.length + closedCapas.length)) * 100)
+    openCapas.length + closedCapasInPeriod.length > 0
+      ? Math.round(((openCapas.length - overdueCapas.length + closedCapasInPeriod.length) / (openCapas.length + closedCapasInPeriod.length)) * 100)
       : 100;
 
   const improvementsDone = input.improvementActions.filter(a => a.status === 'Đã hoàn thành').length;
@@ -937,12 +942,17 @@ export function buildReportSnapshot(
     }
     return false;
   });
-  const copqAmount = curCopqs.reduce((s, c) => s + (Number(c.totalAmount ?? c.amount) || 0), 0);
-  const prevCopqAmount = prevCopqs.reduce((s, c) => s + (Number(c.totalAmount ?? c.amount) || 0), 0);
+  const resolveCopqVnd = (c: COPQMetric): number => {
+    if (c.totalAmount !== undefined && c.totalAmount !== null) return Number(c.totalAmount) || 0;
+    const raw = Number(c.amount) || 0;
+    return raw > 0 && raw < 1000 ? raw * 1000000 : raw;
+  };
+  const copqAmount = curCopqs.reduce((s, c) => s + resolveCopqVnd(c), 0);
+  const prevCopqAmount = prevCopqs.reduce((s, c) => s + resolveCopqVnd(c), 0);
   const copqCatMap = new Map<string, number>();
   curCopqs.forEach(c => {
     const cat = c.category || 'Khác';
-    copqCatMap.set(cat, (copqCatMap.get(cat) || 0) + (Number(c.totalAmount ?? c.amount) || 0));
+    copqCatMap.set(cat, (copqCatMap.get(cat) || 0) + resolveCopqVnd(c));
   });
   const copqByCategory = Array.from(copqCatMap.entries())
     .map(([category, amount]) => ({ category, amount }))
@@ -982,8 +992,8 @@ export function buildReportSnapshot(
       key: 'capa',
       label: 'CAPA đúng hạn',
       weight: 10,
-      score: openCapas.length + closedCapas.length > 0 ? capaOnTimeScore : null,
-      detail: openCapas.length + closedCapas.length > 0 ? `${overdueCapas.length} quá hạn / ${openCapas.length} đang mở` : 'Không phát sinh'
+      score: openCapas.length + closedCapasInPeriod.length > 0 ? capaOnTimeScore : null,
+      detail: openCapas.length + closedCapasInPeriod.length > 0 ? `${overdueCapas.length} quá hạn / ${openCapas.length} đang mở` : 'Không phát sinh'
     },
     {
       key: 'daily',
@@ -1288,7 +1298,7 @@ export function buildReportSnapshot(
       pqcResolveRate: { ...makeDelta(pqcRate, prevPqcRate), total: pqcTotal, resolved: pqcResolved, pending: pqcPending },
       marketResolveRate: { ...makeDelta(mktRate, prevMktRate), total: mktTotal, resolved: mktResolved, pending: mktPending, sevA: mktSevA },
       partEvalQty: { ...makeDelta(partQty, prevPartQty), records: curPartEvals.length, nccPct, sxPct, khPct },
-      capaOpen: { ...makeDelta(openCapas.length, openCapas.length), total: input.capas.length, overdue: overdueCapas.length, closedInPeriod: closedCapas.length, effectiveCount: effectiveCapas.length },
+      capaOpen: { ...makeDelta(openCapas.length, openCapas.length), total: openCapas.length, overdue: overdueCapas.length, closedInPeriod: closedCapasInPeriod.length, effectiveCount: effectiveCapas.length },
       dailyCompliance: { ...makeDelta(dailyRate, prevDailyRate), total: dailyTotal, completed: dailyCompleted, pendingCount: pendingDailyLogs.length },
       copqAmount: { ...makeDelta(copqAmount, prevCopqAmount), byCategory: copqByCategory }
     },
