@@ -4356,7 +4356,7 @@ export const INITIAL_OQC_PART_CODES: OqcPartCodeItem[] = [
     "id": "PC-TEMNOV0201-544",
     "partCode": "TEMNOV0201",
     "nameWithColor": "DK Nova X - Đen khói",
-    "model": "DK Nova",
+    "model": "DK Nova X",
     "color": "Đen khói",
     "updatedAt": "2026-08-14"
   },
@@ -4364,7 +4364,7 @@ export const INITIAL_OQC_PART_CODES: OqcPartCodeItem[] = [
     "id": "PC-TEMNOV0202-545",
     "partCode": "TEMNOV0202",
     "nameWithColor": "DK Nova X - Trắng pha lê",
-    "model": "DK Nova",
+    "model": "DK Nova X",
     "color": "Trắng pha lê",
     "updatedAt": "2026-08-14"
   },
@@ -4372,7 +4372,7 @@ export const INITIAL_OQC_PART_CODES: OqcPartCodeItem[] = [
     "id": "PC-TEMNOV0203-546",
     "partCode": "TEMNOV0203",
     "nameWithColor": "DK Nova X - Xám khói tuyết",
-    "model": "DK Nova",
+    "model": "DK Nova X",
     "color": "Xám khói tuyết",
     "updatedAt": "2026-08-14"
   },
@@ -4380,7 +4380,7 @@ export const INITIAL_OQC_PART_CODES: OqcPartCodeItem[] = [
     "id": "PC-TEMNOV0204-547",
     "partCode": "TEMNOV0204",
     "nameWithColor": "DK Nova X - Ghi khói",
-    "model": "DK Nova",
+    "model": "DK Nova X",
     "color": "Ghi khói",
     "updatedAt": "2026-08-14"
   },
@@ -4388,7 +4388,7 @@ export const INITIAL_OQC_PART_CODES: OqcPartCodeItem[] = [
     "id": "PC-TEMNOV0205-548",
     "partCode": "TEMNOV0205",
     "nameWithColor": "DK Nova X - Đỏ cherry",
-    "model": "DK Nova",
+    "model": "DK Nova X",
     "color": "Đỏ cherry",
     "updatedAt": "2026-08-14"
   },
@@ -4396,7 +4396,7 @@ export const INITIAL_OQC_PART_CODES: OqcPartCodeItem[] = [
     "id": "PC-TEMNOV0206-549",
     "partCode": "TEMNOV0206",
     "nameWithColor": "DK Nova X - Vàng đồng",
-    "model": "DK Nova",
+    "model": "DK Nova X",
     "color": "Vàng đồng",
     "updatedAt": "2026-08-14"
   },
@@ -4404,7 +4404,7 @@ export const INITIAL_OQC_PART_CODES: OqcPartCodeItem[] = [
     "id": "PC-TEMNOV0207-550",
     "partCode": "TEMNOV0207",
     "nameWithColor": "DK Nova X - Xanh ngân hà",
-    "model": "DK Nova",
+    "model": "DK Nova X",
     "color": "Xanh ngân hà",
     "updatedAt": "2026-08-14"
   },

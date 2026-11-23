@@ -3139,15 +3139,27 @@ export default function QualityInspectionRecords({
   }, [oqcRecords.length]);
 
   // Master Part Codes (Bảng mã xe / Mã quy cách) states
+  const normalizeOqcPartCodesList = (list: OqcPartCodeItem[]): OqcPartCodeItem[] =>
+    list.map((item) => {
+      if (
+        item &&
+        String(item.model || '').trim().toLowerCase() === 'dk nova' &&
+        /^dk\s+nova\s*x\b/i.test(String(item.nameWithColor || '').trim())
+      ) {
+        return { ...item, model: 'DK Nova X' };
+      }
+      return item;
+    });
+
   const [oqcPartCodes, setOqcPartCodes] = useState<OqcPartCodeItem[]>(() => {
     try {
       const saved = safeStorage.getItem('dk_oqc_part_codes');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return normalizeOqcPartCodesList(parsed);
       }
     } catch { }
-    return INITIAL_OQC_PART_CODES;
+    return normalizeOqcPartCodesList(INITIAL_OQC_PART_CODES);
   });
 
   const saveOqcPartCodes = (list: OqcPartCodeItem[]) => {
@@ -3189,7 +3201,7 @@ export default function QualityInspectionRecords({
     const handleRemotePartCodes = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (Array.isArray(detail) && detail.length > 0) {
-        setOqcPartCodes(detail);
+        setOqcPartCodes(normalizeOqcPartCodesList(detail));
       }
     };
     window.addEventListener('dk_oqc_part_codes_updated', handleRemotePartCodes);

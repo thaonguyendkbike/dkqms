@@ -317,28 +317,53 @@ export function normalizeColoredPlasticPart(
   };
 }
 
+export function normalizeModelMatchKey(modelName: string): string {
+  return String(modelName || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/[\s_\-]+/g, '')
+    .trim();
+}
+
+export function resolveOqcPartCodeModelName(item: Partial<OqcPartCodeItem>): string {
+  const rawModel = String(item?.model || '').trim();
+  const nameWithColor = String(item?.nameWithColor || '').trim();
+  if (rawModel.toLowerCase() === 'dk nova' && /^dk\s+nova\s*x\b/i.test(nameWithColor)) {
+    return 'DK Nova X';
+  }
+  return rawModel;
+}
+
 function groupPartCodesByModel(items: OqcPartCodeItem[]): OqcModelSummary[] {
   const map = new Map<string, OqcModelSummary>();
   items.forEach((item) => {
-    const modelName = String(item?.model || '').trim();
+    const modelName = resolveOqcPartCodeModelName(item);
     if (!modelName) return;
-    const modelKey = toSafeDocId(modelName);
-    if (!map.has(modelKey)) {
-      map.set(modelKey, {
-        modelKey,
+    const matchKey = normalizeModelMatchKey(modelName);
+    if (!matchKey) return;
+    if (!map.has(matchKey)) {
+      map.set(matchKey, {
+        modelKey: toSafeDocId(modelName),
         modelName,
         colors: []
       });
     }
-    const entry = map.get(modelKey)!;
+    const entry = map.get(matchKey)!;
     const partCode = String(item.partCode || '').trim();
     const color = String(item.color || '').trim();
     if (partCode || color) {
-      entry.colors.push({
-        partCode,
-        color,
-        nameWithColor: String(item.nameWithColor || `${modelName} - ${color}`).trim()
-      });
+      const exists = entry.colors.some(
+        (c) => (partCode && c.partCode.toUpperCase() === partCode.toUpperCase()) || (!partCode && c.color === color)
+      );
+      if (!exists) {
+        entry.colors.push({
+          partCode,
+          color,
+          nameWithColor: String(item.nameWithColor || `${modelName} - ${color}`).trim()
+        });
+      }
     }
   });
 

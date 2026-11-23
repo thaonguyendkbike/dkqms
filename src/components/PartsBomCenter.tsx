@@ -54,6 +54,7 @@ import {
   inferPartImageMode,
   isColoredPlasticSpec,
   normalizeColoredPlasticPart,
+  normalizeModelMatchKey,
   readCachedBomCatalog,
   restoreBomBackupPayload,
   saveBomModelRecord,
@@ -395,8 +396,34 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
     return map;
   }, [bomParts]);
 
-  // Hợp nhất 64 Model từ Bảng mã xe với dữ liệu BOM đã lưu
+  // Hợp nhất các Model từ Bảng mã xe với dữ liệu BOM đã lưu (khớp chuẩn cả khi lệch dấu cách/gạch dưới như "DK EZ5 +" vs "DK EZ5+")
   const combinedModels = useMemo(() => {
+    const bomByMatchKey = new Map<string, BomModelRecord>();
+    bomModels.forEach((bom) => {
+      const matchKey = normalizeModelMatchKey(bom.modelName || bom.id);
+      if (!matchKey) return;
+      const existing = bomByMatchKey.get(matchKey);
+      if (!existing) {
+        bomByMatchKey.set(matchKey, bom);
+        return;
+      }
+      const existingScore = (existing.items?.length || 0) * 10 + (existing.imageUrl ? 1 : 0);
+      const nextScore = (bom.items?.length || 0) * 10 + (bom.imageUrl ? 1 : 0);
+      if (nextScore > existingScore) {
+        bomByMatchKey.set(matchKey, {
+          ...bom,
+          imageUrl: bom.imageUrl || existing.imageUrl,
+          imagePath: bom.imagePath || existing.imagePath
+        });
+      } else if (!existing.imageUrl && bom.imageUrl) {
+        bomByMatchKey.set(matchKey, {
+          ...existing,
+          imageUrl: bom.imageUrl,
+          imagePath: bom.imagePath
+        });
+      }
+    });
+
     const map = new Map<
       string,
       {
@@ -406,16 +433,45 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
     >();
 
     oqcModels.forEach((summary) => {
-      map.set(summary.modelKey, {
-        summary,
-        bom: bomModelsMap.get(summary.modelKey)
-      });
+      const matchKey = normalizeModelMatchKey(summary.modelName || summary.modelKey);
+      const matchedBom = bomModelsMap.get(summary.modelKey) || bomByMatchKey.get(matchKey);
+      const canonicalSummary: OqcModelSummary = matchedBom
+        ? {
+            modelKey: matchedBom.id || summary.modelKey,
+            modelName: matchedBom.modelName || summary.modelName,
+            colors: summary.colors
+          }
+        : summary;
+
+      const existingEntry = map.get(matchKey);
+      if (!existingEntry) {
+        map.set(matchKey, {
+          summary: canonicalSummary,
+          bom: matchedBom
+        });
+      } else {
+        const mergedColors = [...existingEntry.summary.colors];
+        summary.colors.forEach((c) => {
+          const dup = mergedColors.some(
+            (ec) => (c.partCode && ec.partCode.toUpperCase() === c.partCode.toUpperCase()) || (!c.partCode && ec.color === c.color)
+          );
+          if (!dup) mergedColors.push(c);
+        });
+        map.set(matchKey, {
+          summary: {
+            ...existingEntry.summary,
+            colors: mergedColors
+          },
+          bom: existingEntry.bom || matchedBom
+        });
+      }
     });
 
     bomModels.forEach((bom) => {
-      const key = bom.id || toSafeDocId(bom.modelName);
-      if (!map.has(key)) {
-        map.set(key, {
+      const matchKey = normalizeModelMatchKey(bom.modelName || bom.id);
+      if (!map.has(matchKey)) {
+        const key = bom.id || toSafeDocId(bom.modelName);
+        map.set(matchKey, {
           summary: {
             modelKey: key,
             modelName: bom.modelName,
