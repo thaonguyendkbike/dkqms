@@ -490,8 +490,13 @@ export const safeStorage = {
 export function sanitizeFirestorePayload(val: any): any {
   if (val === undefined) return null;
   if (val === null) return null;
+  if (typeof val === 'number' && !Number.isFinite(val)) return null;
   if (Array.isArray(val)) {
-    return val.map(sanitizeFirestorePayload);
+    return val.map((item) =>
+      Array.isArray(item)
+        ? { __dkNestedArr: sanitizeFirestorePayload(item) }
+        : sanitizeFirestorePayload(item)
+    );
   }
   if (typeof val === 'object') {
     const cleaned: any = {};
@@ -502,6 +507,25 @@ export function sanitizeFirestorePayload(val: any): any {
       }
     }
     return cleaned;
+  }
+  return val;
+}
+
+export function restoreFirestorePayload(val: any): any {
+  if (val === null || val === undefined) return val;
+  if (Array.isArray(val)) {
+    return val.map(restoreFirestorePayload);
+  }
+  if (typeof val === 'object') {
+    const keys = Object.keys(val);
+    if (keys.length === 1 && keys[0] === '__dkNestedArr' && Array.isArray(val.__dkNestedArr)) {
+      return restoreFirestorePayload(val.__dkNestedArr);
+    }
+    const restored: any = {};
+    for (const k of keys) {
+      restored[k] = restoreFirestorePayload(val[k]);
+    }
+    return restored;
   }
   return val;
 }

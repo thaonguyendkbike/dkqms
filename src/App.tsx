@@ -4,7 +4,7 @@
  */
 
 import { useState, useMemo, memo, useCallback, FormEvent, useEffect, useRef, Fragment, Dispatch, SetStateAction } from 'react';
-import { safeStorage, safeStorage as localStorage, sanitizeFirestorePayload, onSafeStorageReady } from './safeStorage';
+import { safeStorage, safeStorage as localStorage, sanitizeFirestorePayload, restoreFirestorePayload, onSafeStorageReady } from './safeStorage';
 import { calculateAQLSample } from './utils/aqlUtils';
 import { exportIqcRecordToExcel, getAqlGroupName } from './utils/iqcLineItems';
 import { getLocalYmd, parseFlexibleDate, getWeekAndMonthFromDate as getWeekAndMonthFromDateUtil } from './utils/dateUtils';
@@ -2563,7 +2563,7 @@ export function App() {
           const docRef = doc(db, 'dk_db_sync', key);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists() && docSnap.data().data !== undefined) {
-            serverRecords = docSnap.data().data;
+            serverRecords = restoreFirestorePayload(docSnap.data().data);
           }
         }
 
@@ -2656,7 +2656,7 @@ export function App() {
           const docRef = doc(db, 'dk_db_sync', key);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists() && docSnap.data().data !== undefined) {
-            serverRecords = docSnap.data().data;
+            serverRecords = restoreFirestorePayload(docSnap.data().data);
           }
         }
 
@@ -4028,7 +4028,7 @@ export function App() {
               rawData = assembledArray;
               console.log(`[Chunk Assembly]: Đã lắp ráp thành công mảng ${key} gồm ${assembledArray.length} bản ghi.`);
             } else if (docData.data !== undefined) {
-              rawData = docData.data;
+              rawData = restoreFirestorePayload(docData.data);
             }
 
             if (rawData !== null) {
@@ -4434,7 +4434,7 @@ export function App() {
           if (docSnap.exists()) {
             const d = docSnap.data();
             if (d && Array.isArray(d.data)) {
-              list = d.data;
+              list = restoreFirestorePayload(d.data);
             }
           }
 
@@ -4928,7 +4928,7 @@ export function App() {
             setStaffKpiEvaluations(dict);
             return;
           }
-          const list = Array.isArray(metaData?.data) ? metaData.data : [];
+          const list = Array.isArray(metaData?.data) ? restoreFirestorePayload(metaData.data) : [];
           const serverTime = metaData?.updatedAt;
           if (EQUIPMENT_SYNC_KEYS.includes(key)) {
             if (
@@ -25123,6 +25123,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   </div>
                 </div>
               </div>
+
+              {syncStatus === 'error' && lastSyncErrorMsg && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3 text-[11px] font-medium break-words">
+                  <span className="font-extrabold">Chi tiết lỗi:</span> {lastSyncErrorMsg}
+                </div>
+              )}
 
               {/* Progress if forcing sync */}
               {forcingSync && forceSyncProgress && (
