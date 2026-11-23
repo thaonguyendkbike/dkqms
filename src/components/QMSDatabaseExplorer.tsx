@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { safeStorage, safeStorage as localStorage } from '../safeStorage';
+import { safeStorage, safeStorage as localStorage, flushSafeStorageWrites } from '../safeStorage';
 import { getLocalYmd } from '../utils/dateUtils';
 import { 
   Building2, 
@@ -352,12 +352,26 @@ export default function QMSDatabaseExplorer({
     triggerToast("Đã khôi phục thành công toàn bộ cơ sở dữ liệu mặc định!");
   };
 
+  const isInternalSyncOrMetaKey = (key: string): boolean => {
+    return (
+      !key ||
+      key.endsWith('_is_dirty') ||
+      key.endsWith('_last_synced_at') ||
+      key.endsWith('_deleted_ids') ||
+      key === 'dk_current_user' ||
+      key === 'dk_firebase_quota_exceeded' ||
+      key === 'dk_last_synced_global_time' ||
+      key === 'dk_oqc_pending_overrides' ||
+      key.startsWith('qms_oqc_')
+    );
+  };
+
   const handleExportJSONBackup = () => {
     try {
       const backup: Record<string, any> = {};
       const allKeys = safeStorage.getAllKeys();
       allKeys.forEach((key) => {
-        if (key && key.startsWith('dk_')) {
+        if (key && key.startsWith('dk_') && !isInternalSyncOrMetaKey(key)) {
           const val = localStorage.getItem(key);
           if (val) {
             try {
@@ -391,7 +405,7 @@ export default function QMSDatabaseExplorer({
     }
     
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const content = event.target?.result;
         if (typeof content !== 'string') return;
@@ -404,14 +418,15 @@ export default function QMSDatabaseExplorer({
         
         let importedCount = 0;
         Object.keys(backup).forEach((key) => {
-          if (key.startsWith('dk_')) {
+          if (key.startsWith('dk_') && !isInternalSyncOrMetaKey(key)) {
             const val = backup[key];
             localStorage.setItem(key, typeof val === 'object' ? JSON.stringify(val) : String(val));
             localStorage.setItem(`${key}_is_dirty`, 'true'); // Đánh dấu dirty để đồng bộ đám mây
             importedCount++;
           }
         });
-        
+
+        await flushSafeStorageWrites();
         alert(`Khôi phục thành công ${importedCount} danh mục dữ liệu từ file sao lưu! Hệ thống cần tải lại trang để áp dụng toàn bộ các thay đổi.`);
         window.location.reload();
       } catch (err) {

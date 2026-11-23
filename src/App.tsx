@@ -4,7 +4,7 @@
  */
 
 import { useState, useMemo, memo, useCallback, FormEvent, useEffect, useRef, Fragment, Dispatch, SetStateAction } from 'react';
-import { safeStorage, safeStorage as localStorage, sanitizeFirestorePayload, restoreFirestorePayload, onSafeStorageReady } from './safeStorage';
+import { safeStorage, safeStorage as localStorage, sanitizeFirestorePayload, restoreFirestorePayload, onSafeStorageReady, waitForSafeStoragePreload } from './safeStorage';
 import { calculateAQLSample } from './utils/aqlUtils';
 import { exportIqcRecordToExcel, getAqlGroupName } from './utils/iqcLineItems';
 import { getLocalYmd, parseFlexibleDate, getWeekAndMonthFromDate as getWeekAndMonthFromDateUtil } from './utils/dateUtils';
@@ -384,7 +384,7 @@ export function mergeMasterModels(currentList: any[], baseList: any[] = INITIAL_
   if (!Array.isArray(currentList)) return Array.isArray(baseList) ? baseList : [];
   if (!Array.isArray(baseList)) return currentList;
 
-  const normalizeKey = (str: string) => (str || '').trim().toLowerCase().replace(/[_s-]+/g, ' ');
+  const normalizeKey = (str: string) => (str || '').trim().toLowerCase().replace(/[_\s-]+/g, ' ');
   const map = new Map<string, any>();
 
   // 1. Existing models take priority
@@ -1937,6 +1937,8 @@ export function App() {
   const lastLocalWriteTimestamps = useRef<Record<string, string>>({});
   const isRemoteUpdateRef = useRef<Record<string, boolean>>({});
   const lastSyncedChunkHashes = useRef<Record<string, string>>({});
+  const lastKnownChunkCounts = useRef<Record<string, number>>({});
+  const hasCompletedInitialCloudLoad = useRef<boolean>(false);
 
   // Hàm chuẩn hóa thứ tự thuộc tính của bản ghi OQC trước khi băm (hash) và chia chunk 500 xe,
   // đảm bảo chỉ những chunk thực sự có thay đổi mới được đẩy lên Firestore (1 chunk thay vì 72 chunks)
@@ -2103,6 +2105,26 @@ export function App() {
       console.log(`[Daily Logs Remote Delete Protection]: Bỏ ${list.length - pruned.length} bản ghi đã bị xóa trên Cloud từ máy khác (không hồi sinh).`);
     }
     return pruned;
+  };
+
+  const readSubcollectionKnownServerIds = (key: string): Set<string> => {
+    try {
+      const raw = safeStorage.getItem(`qms_known_server_ids_${key}`) || localStorage.getItem(`qms_known_server_ids_${key}`);
+      const arr = raw ? JSON.parse(raw) : [];
+      return new Set(Array.isArray(arr) ? arr.map((x: any) => String(x)) : []);
+    } catch (e) {
+      return new Set();
+    }
+  };
+
+  const registerSubcollectionKnownServerIds = (key: string, serverList: any[]) => {
+    if (!Array.isArray(serverList) || serverList.length === 0) return;
+    try {
+      const ids = serverList.map((item, idx) => getItemId(item, key, idx)).filter(Boolean);
+      safeStorage.setItem(`qms_known_server_ids_${key}`, JSON.stringify(ids));
+    } catch (e) {
+      console.warn(`[Known Server IDs Warning] for ${key}:`, e);
+    }
   };
 
   // =========================================================================
@@ -2430,15 +2452,11 @@ export function App() {
       if (!mergedMap.has(id)) {
         const lItem = localMap.get(id);
         const lRawId = lItem?.id ? String(lItem.id) : '';
-        const isMissingLsxGhost =
-          key === 'dk_oqc_records' &&
-          (!lItem?.lsx || !String(lItem.lsx).trim() || String(lItem.lsx).trim() === 'Chưa có LSX');
         const isDeleted =
           deletedSet.has(id) ||
           (lRawId && deletedSet.has(lRawId)) ||
           remoteDeletedSet.has(id) ||
-          (lRawId && remoteDeletedSet.has(lRawId)) ||
-          isMissingLsxGhost;
+          (lRawId && remoteDeletedSet.has(lRawId));
         if (lItem && !isDeleted) {
           mergedMap.set(id, lItem);
           localNewItems.push(lItem);
@@ -2544,15 +2562,21 @@ export function App() {
             serverRecords = docData.data;
           }
         } else if (isSubcollection) {
-          const subCollectionRef = collection(db, 'dk_db_sync', key, 'records');
-          const querySnap = await getDocs(subCollectionRef);
-          querySnap.forEach((docSnap) => {
-            const d = docSnap.data();
-            if (d) {
-              d.id = docSnap.id;
-              serverRecords.push(d);
-            }
-          });
+          const docRef = doc(db, 'dk_db_sync', key);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists() && Array.isArray(docSnap.data()?.data)) {
+            serverRecords = restoreFirestorePayload(docSnap.data().data);
+          } else {
+            const subCollectionRef = collection(db, 'dk_db_sync', key, 'records');
+            const querySnap = await getDocs(subCollectionRef);
+            querySnap.forEach((recSnap) => {
+              const d = recSnap.data();
+              if (d) {
+                d.id = recSnap.id;
+                serverRecords.push(restoreFirestorePayload(d));
+              }
+            });
+          }
 
           if (key === 'dk_daily_logs') {
             serverRecords = sanitizeDailyLogs(serverRecords);
@@ -2643,15 +2667,21 @@ export function App() {
             serverRecords = docData.data;
           }
         } else if (isSubcollection) {
-          const subCollectionRef = collection(db, 'dk_db_sync', key, 'records');
-          const querySnap = await getDocs(subCollectionRef);
-          querySnap.forEach((docSnap) => {
-            const d = docSnap.data();
-            if (d) {
-              d.id = docSnap.id;
-              serverRecords.push(d);
-            }
-          });
+          const docRef = doc(db, 'dk_db_sync', key);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists() && Array.isArray(docSnap.data()?.data)) {
+            serverRecords = restoreFirestorePayload(docSnap.data().data);
+          } else {
+            const subCollectionRef = collection(db, 'dk_db_sync', key, 'records');
+            const querySnap = await getDocs(subCollectionRef);
+            querySnap.forEach((recSnap) => {
+              const d = recSnap.data();
+              if (d) {
+                d.id = recSnap.id;
+                serverRecords.push(restoreFirestorePayload(d));
+              }
+            });
+          }
         } else {
           const docRef = doc(db, 'dk_db_sync', key);
           const docSnap = await getDoc(docRef);
@@ -2844,11 +2874,32 @@ export function App() {
     try {
       const email = auth.currentUser.email || 'Hệ thống Quản lý Chất lượng DKBike';
       const timestamp = new Date().toISOString();
-      const ops: { type: 'set' | 'delete'; ref: any; data?: any }[] = [];
 
-      dirtyKeys.forEach((key) => {
+      const commitBatchWithRetry = async (batchInstance: any, retries = 1) => {
+        try {
+          await Promise.race([
+            batchInstance.commit(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Batch Commit Timeout (30s)")), 30000))
+          ]);
+        } catch (batchErr) {
+          if (retries > 0) {
+            console.warn("[Cloud Sync Batch Retry]: Thử lại commit batch sau 1 giây...", batchErr);
+            await new Promise(r => setTimeout(r, 1000));
+            await commitBatchWithRetry(batchInstance, retries - 1);
+          } else {
+            throw batchErr;
+          }
+        }
+      };
+
+      let succeededCount = 0;
+      const failedKeys: { key: string; err: any }[] = [];
+
+      for (const key of dirtyKeys) {
         const val = dirtyItems[key];
         const docRef = doc(db, 'dk_db_sync', key);
+        const keyOps: { type: 'set' | 'delete'; ref: any; data?: any; chunkHashEntry?: { chunkKey: string; chunkHash: string } }[] = [];
+        let totalChunksForKey = 0;
 
         if (CHUNKED_KEYS.includes(key)) {
           // Process dataset into chunked documents (500 records/chunk for OQC, 8 records/chunk for Part Evaluations with images)
@@ -2859,6 +2910,7 @@ export function App() {
 
           const CHUNK_SIZE = key === 'dk_part_evaluations' ? 8 : 500;
           const totalChunks = Math.ceil(currentList.length / CHUNK_SIZE) || 1;
+          totalChunksForKey = totalChunks;
 
           for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
             const chunkData = currentList.slice(cIdx * CHUNK_SIZE, (cIdx + 1) * CHUNK_SIZE);
@@ -2866,10 +2918,10 @@ export function App() {
             const chunkKey = `${key}_chunk_${cIdx}`;
 
             // Diff protection: Only push chunk document if data inside this chunk actually changed!
+            // Do NOT update lastSyncedChunkHashes until after the batch commits successfully.
             if (lastSyncedChunkHashes.current[chunkKey] !== chunkHash) {
-              lastSyncedChunkHashes.current[chunkKey] = chunkHash;
               const chunkRef = doc(db, 'dk_db_sync', chunkKey);
-              ops.push({
+              keyOps.push({
                 type: 'set',
                 ref: chunkRef,
                 data: {
@@ -2877,9 +2929,20 @@ export function App() {
                   parentKey: key,
                   data: chunkData,
                   updatedAt: timestamp
-                }
+                },
+                chunkHashEntry: { chunkKey, chunkHash }
               });
             }
+          }
+
+          // Clean up orphaned tail chunks if dataset shrunk
+          const prevChunkCount = lastKnownChunkCounts.current[key] || 0;
+          for (let oldIdx = totalChunks; oldIdx < prevChunkCount; oldIdx++) {
+            keyOps.push({
+              type: 'delete',
+              ref: doc(db, 'dk_db_sync', `${key}_chunk_${oldIdx}`),
+              chunkHashEntry: { chunkKey: `${key}_chunk_${oldIdx}`, chunkHash: '' }
+            });
           }
 
           // Collect deleted IDs to broadcast to other devices via meta doc
@@ -2904,8 +2967,8 @@ export function App() {
             } catch (e) { }
           }
 
-          // Meta document tracking chunks & cross-device deleted tombstones
-          ops.push({
+          // Meta document tracking chunks & cross-device deleted tombstones (pushed LAST after all chunks)
+          keyOps.push({
             type: 'set',
             ref: docRef,
             data: {
@@ -2946,132 +3009,150 @@ export function App() {
               .map((item: any) => (item && item.email) ? item.email.toLowerCase().trim() : '')
               .filter(Boolean);
           }
-          if (EQUIPMENT_SYNC_KEYS.includes(key)) {
-            lastLocalWriteTimestamps.current[key] = timestamp;
-          }
-          ops.push({ type: 'set', ref: docRef, data: payload });
+          lastLocalWriteTimestamps.current[key] = timestamp;
+          serverTimestamps.current[key] = timestamp;
+          keyOps.push({ type: 'set', ref: docRef, data: payload });
         }
-      });
 
-      // Commit operations in small batches of 4 (prevents network timeouts on massive document payloads like OQC)
-      const CHUNK_LIMIT = 4;
-      for (let i = 0; i < ops.length; i += CHUNK_LIMIT) {
-        const chunk = ops.slice(i, i + CHUNK_LIMIT);
-        const chunkBatch = writeBatch(db);
-        chunk.forEach((op) => {
-          if (op.type === 'set') {
-            chunkBatch.set(op.ref, sanitizeFirestorePayload(op.data));
-          } else {
-            chunkBatch.delete(op.ref);
-          }
-        });
-        const commitBatchWithRetry = async (batchInstance: any, retries = 1) => {
-          try {
-            await Promise.race([
-              batchInstance.commit(),
-              new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Batch Commit Timeout (30s)")), 30000))
-            ]);
-          } catch (batchErr) {
-            if (retries > 0) {
-              console.warn("[Cloud Sync Batch Retry]: Thử lại commit batch sau 1 giây...", batchErr);
-              await new Promise(r => setTimeout(r, 1000));
-              await commitBatchWithRetry(batchInstance, retries - 1);
-            } else {
-              throw batchErr;
-            }
-          }
-        };
-        await commitBatchWithRetry(chunkBatch);
-      }
-
-      console.log(`[Batch Cloud Sync]: Đã đồng bộ thành công ${dirtyKeys.length} khóa lên Firestore`);
-
-      // CẬP NHẬT LOGIC SAFE STORAGE & LOCALSTORAGE: Đã ghi thành công lên Firestore Server -> giải phóng cờ bẩn an toàn
-      dirtyKeys.forEach((key) => {
         try {
-          const val = dirtyItems[key];
-          localStorage.setItem(`${key}_is_dirty`, 'false');
-          if (key === 'dk_oqc_records' && Array.isArray(val)) {
-            const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
-            const localDelArr = localDelRaw ? JSON.parse(localDelRaw) : [];
-            registerOqcServerSnapshot(val, Array.isArray(localDelArr) ? localDelArr : []);
-          }
-          localStorage.setItem(`${key}_deleted_ids`, JSON.stringify([]));
-          if (localDirtyKeys.current) {
-            localDirtyKeys.current.delete(key);
+          // Commit operations in small batches of 4 (prevents network timeouts on massive document payloads like OQC)
+          const CHUNK_LIMIT = 4;
+          for (let i = 0; i < keyOps.length; i += CHUNK_LIMIT) {
+            const chunk = keyOps.slice(i, i + CHUNK_LIMIT);
+            const chunkBatch = writeBatch(db);
+            chunk.forEach((op) => {
+              if (op.type === 'set') {
+                chunkBatch.set(op.ref, sanitizeFirestorePayload(op.data));
+              } else {
+                chunkBatch.delete(op.ref);
+              }
+            });
+            await commitBatchWithRetry(chunkBatch);
+            // Only record chunk hashes AFTER this batch actually committed
+            chunk.forEach((op) => {
+              if (op.chunkHashEntry) {
+                if (op.chunkHashEntry.chunkHash) {
+                  lastSyncedChunkHashes.current[op.chunkHashEntry.chunkKey] = op.chunkHashEntry.chunkHash;
+                } else {
+                  delete lastSyncedChunkHashes.current[op.chunkHashEntry.chunkKey];
+                }
+              }
+            });
           }
 
-          const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
-          const serializedVal = JSON.stringify(val);
-          if (!isMetadataKey) {
-            safeStorage.setItem(key, serializedVal);
-            localStorage.setItem(`${key}_last_synced_at`, timestamp);
-            serverTimestamps.current[key] = timestamp;
-            lastLocalWriteTimestamps.current[key] = timestamp;
-            if (key === 'dk_capas') {
-              const relationalCapas = (val || []).map((c: any) => ({
-                CAPAID: c.CAPAID || c.id,
-                Issue: c.title || c.Issue || c.issue || '',
-                RootCause: c.rootCause || c.RootCause || '',
-                Correction: c.actions || c.Correction || c.correction || '',
-                CorrectiveAction: c.actions || c.CorrectiveAction || c.correctiveAction || '',
-                PreventiveAction: c.actions || c.PreventiveAction || c.preventiveAction || '',
-                Owner: c.assignee || c.Owner || c.owner || '',
-                DueDate: c.targetDate || c.DueDate || c.dueDate || '',
-                Status: c.status === 'Đóng' || c.status === 'Đã đóng' ? 'Đã đóng' : (c.status || c.Status || 'Mở'),
-                Effectiveness: c.effectiveness || c.Effectiveness || 'Chưa đánh giá',
-                isRepeated: !!c.isRepeated,
-                supplierName: c.supplierName || '',
-                modelName: c.modelName || '',
-                imageUrl: c.imageUrl || ''
-              }));
-              localStorage.setItem('dk_qms_capas', JSON.stringify(relationalCapas));
-            }
+          if (CHUNKED_KEYS.includes(key)) {
+            lastKnownChunkCounts.current[key] = totalChunksForKey;
           }
-          // Update baseline after successful sync
-          lastSyncedValues.current[key] = serializedVal;
-          lastSeenValues.current[key] = serializedVal;
-        } catch (postSyncErr) {
-          console.warn(`[Post-Sync Local Cleanup Warning for ${key}]:`, postSyncErr);
+
+          // CẬP NHẬT LOGIC SAFE STORAGE & LOCALSTORAGE: Đã ghi thành công lên Firestore Server -> giải phóng cờ bẩn an toàn
+          try {
+            localStorage.setItem(`${key}_is_dirty`, 'false');
+            if (key === 'dk_oqc_records' && Array.isArray(val)) {
+              const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
+              const localDelArr = localDelRaw ? JSON.parse(localDelRaw) : [];
+              registerOqcServerSnapshot(val, Array.isArray(localDelArr) ? localDelArr : []);
+            }
+            if (SUBCOLLECTION_KEYS.includes(key) && Array.isArray(val)) {
+              registerSubcollectionKnownServerIds(key, val);
+              if (key === 'dk_daily_logs') {
+                registerDailyLogsServerSnapshot(val);
+              }
+            }
+            localStorage.setItem(`${key}_deleted_ids`, JSON.stringify([]));
+            if (localDirtyKeys.current) {
+              localDirtyKeys.current.delete(key);
+            }
+
+            const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
+            const serializedVal = JSON.stringify(val);
+            if (!isMetadataKey) {
+              safeStorage.setItem(key, serializedVal);
+              localStorage.setItem(`${key}_last_synced_at`, timestamp);
+              serverTimestamps.current[key] = timestamp;
+              lastLocalWriteTimestamps.current[key] = timestamp;
+              if (key === 'dk_capas') {
+                const relationalCapas = (val || []).map((c: any) => ({
+                  CAPAID: c.CAPAID || c.id,
+                  Issue: c.title || c.Issue || c.issue || '',
+                  RootCause: c.rootCause || c.RootCause || '',
+                  Correction: c.actions || c.Correction || c.correction || '',
+                  CorrectiveAction: c.actions || c.CorrectiveAction || c.correctiveAction || '',
+                  PreventiveAction: c.actions || c.PreventiveAction || c.preventiveAction || '',
+                  Owner: c.assignee || c.Owner || c.owner || '',
+                  DueDate: c.targetDate || c.DueDate || c.dueDate || '',
+                  Status: c.status === 'Đóng' || c.status === 'Đã đóng' ? 'Đã đóng' : (c.status || c.Status || 'Mở'),
+                  Effectiveness: c.effectiveness || c.Effectiveness || 'Chưa đánh giá',
+                  isRepeated: !!c.isRepeated,
+                  supplierName: c.supplierName || '',
+                  modelName: c.modelName || '',
+                  imageUrl: c.imageUrl || ''
+                }));
+                localStorage.setItem('dk_qms_capas', JSON.stringify(relationalCapas));
+              }
+            }
+            // Update baseline after successful sync
+            lastSyncedValues.current[key] = serializedVal;
+            lastSeenValues.current[key] = serializedVal;
+          } catch (postSyncErr) {
+            console.warn(`[Post-Sync Local Cleanup Warning for ${key}]:`, postSyncErr);
+          }
+
+          succeededCount++;
+        } catch (keyErr: any) {
+          console.error(`[Debounced Cloud Sync Error for ${key}]:`, keyErr);
+          failedKeys.push({ key, err: keyErr });
+          try { localStorage.setItem(`${key}_is_dirty`, 'true'); } catch (e) { }
+          if (localDirtyKeys.current) {
+            localDirtyKeys.current.add(key);
+          }
         }
-      });
+      }
 
       clearTimeout(safetyTimeout);
 
-      // Successfully synced: transition immediately to green, and back to idle after 1.5s
-      const syncTimeFormatted = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      setLastSyncedTime(syncTimeFormatted);
-      try {
-        localStorage.setItem('dk_last_synced_global_time', new Date().toISOString());
-      } catch (e) { }
+      if (failedKeys.length > 0) {
+        console.warn(`[Batch Cloud Sync]: Thành công ${succeededCount}/${dirtyKeys.length} khóa, lỗi ${failedKeys.length} khóa:`, failedKeys.map(f => f.key));
+        setSyncStatus('error');
+        const firstErr = failedKeys[0].err;
+        const errMsg = `${failedKeys.map(f => f.key).join(', ')}: ${firstErr?.message || String(firstErr)}`;
+        setLastSyncErrorMsg(errMsg);
 
-      setSyncStatus('synced');
-      setTimeout(() => {
-        setSyncStatus('idle');
-      }, 1800);
+        const isQuota = failedKeys.some(f => {
+          const m = (f.err?.message || String(f.err)).toLowerCase();
+          return f.err?.code === 'resource-exhausted' ||
+            m.includes('resource has been exhausted') ||
+            m.includes('daily limit exceeded');
+        });
+        if (isQuota) {
+          isFirebaseQuotaExceeded.current = true;
+          setQuotaExceededModalOpen(true);
+        }
+      } else {
+        console.log(`[Batch Cloud Sync]: Đã đồng bộ thành công ${succeededCount} khóa lên Firestore`);
+        // Successfully synced: transition immediately to green, and back to idle after 1.5s
+        const syncTimeFormatted = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLastSyncedTime(syncTimeFormatted);
+        try {
+          localStorage.setItem('dk_last_synced_global_time', new Date().toISOString());
+        } catch (e) { }
+
+        setSyncStatus('synced');
+        setTimeout(() => {
+          setSyncStatus('idle');
+        }, 1800);
+      }
     } catch (err: any) {
       clearTimeout(safetyTimeout);
       console.error("[Debounced Cloud Sync Error]:", err);
-      // Đánh dấu lại các khóa bị lỗi là dirty để có thể thử lại lúc khác hoặc chặn bị ghi đè thô bạo
       dirtyKeys.forEach((key) => {
         try { localStorage.setItem(`${key}_is_dirty`, 'true'); } catch (e) { }
         if (localDirtyKeys.current) {
-          localDirtyKeys.current.add(key); // Đánh dấu lại bẩn trong bộ nhớ trong khi lỗi
+          localDirtyKeys.current.add(key);
         }
       });
       setSyncStatus('error');
-
       const errMsg = err?.message || String(err);
       setLastSyncErrorMsg(errMsg);
-
-      const isQuota = err?.code === 'resource-exhausted' ||
-        errMsg.toLowerCase().includes('resource has been exhausted') ||
-        errMsg.toLowerCase().includes('daily limit exceeded');
-
-      if (isQuota) {
-        isFirebaseQuotaExceeded.current = true;
-        setQuotaExceededModalOpen(true);
-      }
     }
   };
 
@@ -3101,7 +3182,7 @@ export function App() {
             const isExplicitlyDirty = localStorage.getItem(`${key}_is_dirty`) === 'true';
             const localSaved = safeStorage.getItem(key) || localStorage.getItem(key);
             let hasUnsyncedData = false;
-            if (!isExplicitlyDirty && SYNCABLE_STARTUP_KEYS.has(key) && localSaved) {
+            if (!isExplicitlyDirty && hasCompletedInitialCloudLoad.current && SYNCABLE_STARTUP_KEYS.has(key) && localSaved) {
               try {
                 const parsed = JSON.parse(localSaved);
                 if (Array.isArray(parsed) && parsed.length > 0) {
@@ -3150,6 +3231,12 @@ export function App() {
       const serializedCheck = JSON.stringify(data);
       if (isChunkedKey ? serializedCheck === serverSerialized : isFunctionallyIdentical(serializedCheck, serverSerialized, key)) {
         isRemoteUpdateRef.current[key] = false;
+        if (localStorage.getItem(`${key}_is_dirty`) === 'true') {
+          localStorage.setItem(`${key}_is_dirty`, 'false');
+        }
+        if (localDirtyKeys.current) {
+          localDirtyKeys.current.delete(key);
+        }
         return;
       }
       // Dữ liệu khác với máy chủ -> Người dùng thao tác thực tế -> Tuyệt đối không được bỏ qua!
@@ -3159,8 +3246,17 @@ export function App() {
     const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
     const serialized = JSON.stringify(data);
 
-    // If the data is exactly identical to the last seen/saved data, skip completely!
+    // If the data is exactly identical to the last seen/saved data, skip completely (and clear stale dirty flag if matching server)!
     if (lastSeenValues.current[key] === serialized) {
+      const serverSerialized = lastSyncedValues.current[key];
+      if (serverSerialized !== undefined && (isChunkedKey ? serialized === serverSerialized : isFunctionallyIdentical(serialized, serverSerialized, key))) {
+        if (localStorage.getItem(`${key}_is_dirty`) === 'true') {
+          localStorage.setItem(`${key}_is_dirty`, 'false');
+        }
+        if (localDirtyKeys.current) {
+          localDirtyKeys.current.delete(key);
+        }
+      }
       return;
     }
 
@@ -3487,7 +3583,6 @@ export function App() {
     try {
       const email = auth.currentUser?.email || currentUser?.email || 'thaonguyendkbike@gmail.com';
       const timestamp = new Date().toISOString();
-      const ops: { type: 'set' | 'delete'; ref: any; data: any }[] = [];
 
       // 1. Xác định danh sách khóa cần xử lý
       let localKeys: string[] = [];
@@ -3495,15 +3590,31 @@ export function App() {
         localKeys = dirtyKeys;
       } else {
         try {
-          const storageObj = window.localStorage as any;
-          for (let i = 0; i < storageObj.length; i++) {
-            const k = storageObj.key(i);
-            if (k && k.startsWith('dk_') && !k.endsWith('_is_dirty') && !k.endsWith('_last_synced') && k !== 'dk_current_user') {
+          safeStorage.getAllKeys().forEach((k) => {
+            if (
+              k &&
+              k.startsWith('dk_') &&
+              !k.endsWith('_is_dirty') &&
+              !k.endsWith('_last_synced_at') &&
+              !k.endsWith('_last_synced') &&
+              !k.endsWith('_deleted_ids') &&
+              k !== 'dk_current_user' &&
+              k !== 'dk_firebase_quota_exceeded' &&
+              k !== 'dk_last_synced_global_time' &&
+              k !== 'dk_active_tab' &&
+              k !== 'dk_master_sub_tab' &&
+              k !== 'dk_weekly_sub_tab' &&
+              k !== 'dk_monthly_sub_tab' &&
+              k !== 'dk_qms_bm_unlocked_v1' &&
+              k !== 'dk_oqc_pending_overrides' &&
+              k !== 'dk_qms_capas' &&
+              !k.startsWith('dk_qms_filled_form_')
+            ) {
               localKeys.push(k);
             }
-          }
+          });
         } catch (err) {
-          console.warn("Không thể quét động toàn bộ localStorage:", err);
+          console.warn("Không thể quét động toàn bộ safeStorage:", err);
         }
         const defaultKeys = [
           'dk_tasks', 'dk_kpis', 'dk_suppliers', 'dk_capas', 'dk_projects', 'dk_ptsp_tasks',
@@ -3515,39 +3626,50 @@ export function App() {
           'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
           'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
           'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records'
+          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions',
+          'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records', 'dk_ptsp_models',
+          'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations'
         ];
         defaultKeys.forEach(dk => {
           if (!localKeys.includes(dk)) localKeys.push(dk);
         });
       }
 
-      // 2. Chuyển đổi dữ liệu và đóng gói thao tác bằng thuật toán so khớp tối ưu
+      // 2. Chuyển đổi dữ liệu và đóng gói thao tác theo từng khóa để cách ly lỗi
+      const keyOpsGroups: {
+        key: string;
+        totalChunks: number;
+        serializedRaw: string;
+        ops: { type: 'set' | 'delete'; ref: any; data?: any; chunkHashEntry?: { chunkKey: string; chunkHash: string } }[];
+      }[] = [];
+
       localKeys.forEach((key) => {
-        const rawStored = (key === 'dk_oqc_records' || key === 'dk_part_evaluations')
-          ? (safeStorage.getItem(key) || localStorage.getItem(key))
-          : localStorage.getItem(key);
+        const rawStored = safeStorage.getItem(key) || localStorage.getItem(key);
         if (!rawStored) return;
 
         let parsed: any = null;
         try {
           parsed = JSON.parse(rawStored);
         } catch (e) {
-          // Bỏ qua nếu dữ liệu lỗi
           return;
         }
 
         const docRef = doc(db, 'dk_db_sync', key);
+        const keyOps: { type: 'set' | 'delete'; ref: any; data?: any; chunkHashEntry?: { chunkKey: string; chunkHash: string } }[] = [];
+        let totalChunks = 0;
 
         if (CHUNKED_KEYS.includes(key)) {
-          const currentList = Array.isArray(parsed) ? parsed : [];
-          const CHUNK_SIZE = key === 'dk_part_evaluations' ? 8 : 400;
-          const totalChunks = Math.ceil(currentList.length / CHUNK_SIZE) || 1;
+          const rawList = Array.isArray(parsed) ? parsed : [];
+          const currentList = key === 'dk_oqc_records' ? rawList.map(minifyOqcChunkRecord) : rawList;
+          const CHUNK_SIZE = key === 'dk_part_evaluations' ? 8 : 500;
+          totalChunks = Math.ceil(currentList.length / CHUNK_SIZE) || 1;
 
           for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
             const chunkData = currentList.slice(cIdx * CHUNK_SIZE, (cIdx + 1) * CHUNK_SIZE);
-            const chunkRef = doc(db, 'dk_db_sync', `${key}_chunk_${cIdx}`);
-            ops.push({
+            const chunkKey = `${key}_chunk_${cIdx}`;
+            const chunkHash = JSON.stringify(chunkData);
+            const chunkRef = doc(db, 'dk_db_sync', chunkKey);
+            keyOps.push({
               type: 'set',
               ref: chunkRef,
               data: {
@@ -3555,11 +3677,21 @@ export function App() {
                 parentKey: key,
                 data: chunkData,
                 updatedAt: timestamp
-              }
+              },
+              chunkHashEntry: { chunkKey, chunkHash }
             });
           }
 
-          ops.push({
+          const prevChunkCount = lastKnownChunkCounts.current[key] || 0;
+          for (let oldIdx = totalChunks; oldIdx < prevChunkCount; oldIdx++) {
+            keyOps.push({
+              type: 'delete',
+              ref: doc(db, 'dk_db_sync', `${key}_chunk_${oldIdx}`),
+              chunkHashEntry: { chunkKey: `${key}_chunk_${oldIdx}`, chunkHash: '' }
+            });
+          }
+
+          keyOps.push({
             type: 'set',
             ref: docRef,
             data: {
@@ -3588,18 +3720,27 @@ export function App() {
               .map((item: any) => (item && item.email) ? item.email.toLowerCase().trim() : '')
               .filter(Boolean);
           }
-          ops.push({
+          keyOps.push({
             type: 'set',
             ref: docRef,
             data: payload
           });
         }
+
+        keyOpsGroups.push({
+          key,
+          totalChunks,
+          serializedRaw: JSON.stringify(parsed),
+          ops: keyOps
+        });
       });
 
-      if (ops.length === 0) {
+      const totalOpsCount = keyOpsGroups.reduce((sum, g) => sum + g.ops.length, 0);
+      if (totalOpsCount === 0) {
         alert("Tuyệt vời anh Thao! Hệ thống kiểm tra thấy toàn bộ dữ liệu cục bộ trên thiết bị này đã hoàn toàn đồng bộ và khớp 100% với đám mây. Không có bất kỳ sự khác biệt nào cần tải lên (đã tối ưu hóa giảm tải thành công toàn bộ bản ghi trùng lặp). Trình duyệt sẽ tự động làm mới để cập nhật trạng thái.");
         localKeys.forEach((key) => {
           localStorage.setItem(`${key}_is_dirty`, 'false');
+          if (localDirtyKeys.current) localDirtyKeys.current.delete(key);
         });
         setForcingSync(false);
         setForceSyncProgress(null);
@@ -3609,55 +3750,109 @@ export function App() {
         return;
       }
 
-      // 3. Thực thi chunking batch viết theo từng mảng nhỏ an toàn 4 bản ghi để tránh quá tải dung lượng kết nối gRPC
+      // 3. Thực thi chunking batch viết theo từng mảng nhỏ an toàn 4 bản ghi (cách ly lỗi theo từng phân hệ)
       const CHUNK_SIZE = 4;
-      const totalParts = Math.ceil(ops.length / CHUNK_SIZE);
+      const totalParts = keyOpsGroups.reduce((sum, g) => sum + Math.ceil(g.ops.length / CHUNK_SIZE), 0);
 
       setForceSyncProgress({
         totalParts,
         currentPart: 0,
-        statusText: `Tổng phân tích có ${ops.length} tác vụ cần đẩy. Đã chia thành ${totalParts} gói an toàn. Bắt đầu đẩy dữ liệu...`,
+        statusText: `Tổng phân tích có ${totalOpsCount} tác vụ cần đẩy (${keyOpsGroups.length} phân hệ). Đã chia thành ${totalParts} gói an toàn. Bắt đầu đẩy dữ liệu...`,
         completed: false
       });
 
-      for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
-        const partIndex = Math.floor(i / CHUNK_SIZE) + 1;
-        setForceSyncProgress(prev => prev ? {
-          ...prev,
-          currentPart: partIndex,
-          statusText: `Đang đẩy gói dữ liệu ${partIndex}/${totalParts} (Gồm ${Math.min(CHUNK_SIZE, ops.length - i)} bản ghi)...`
-        } : null);
+      let partIndex = 0;
+      let committedOpsCount = 0;
+      const succeededKeys: string[] = [];
+      const failedGroups: { key: string; err: any }[] = [];
 
-        const chunk = ops.slice(i, i + CHUNK_SIZE);
-        const chunkBatch = writeBatch(db);
-
-        chunk.forEach((op) => {
-          if (op.type === 'set') {
-            chunkBatch.set(op.ref, sanitizeFirestorePayload(op.data));
-          } else {
-            chunkBatch.delete(op.ref);
-          }
-        });
-
+      for (const group of keyOpsGroups) {
         try {
-          // Bọc Timeout an toàn 30s cho mỗi đợt commit mạng tránh treo luồng
-          await Promise.race([
-            chunkBatch.commit(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Batch Commit Timeout (30s)")), 30000))
-          ]);
-        } catch (commitErr: any) {
-          console.warn(`[Force Sync Batch Warning Part ${partIndex}]:`, commitErr?.message || commitErr);
-          // Không throw ra lỗi chặn luồng nếu một số gói nhỏ hoàn thành
-        }
+          lastLocalWriteTimestamps.current[group.key] = timestamp;
+          serverTimestamps.current[group.key] = timestamp;
 
-        // Tạm nghỉ 30ms để giải phóng CPU và stream
-        await new Promise(resolve => setTimeout(resolve, 30));
+          for (let i = 0; i < group.ops.length; i += CHUNK_SIZE) {
+            partIndex++;
+            const chunk = group.ops.slice(i, i + CHUNK_SIZE);
+            setForceSyncProgress(prev => prev ? {
+              ...prev,
+              currentPart: partIndex,
+              statusText: `Đang đẩy gói ${partIndex}/${totalParts} (${group.key} - ${chunk.length} tài liệu)...`
+            } : null);
+
+            const chunkBatch = writeBatch(db);
+            chunk.forEach((op) => {
+              if (op.type === 'set') {
+                chunkBatch.set(op.ref, sanitizeFirestorePayload(op.data));
+              } else {
+                chunkBatch.delete(op.ref);
+              }
+            });
+
+            // Bọc Timeout an toàn 30s cho mỗi đợt commit mạng và KHÔNG nuốt lỗi batch!
+            await Promise.race([
+              chunkBatch.commit(),
+              new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore Batch Commit Timeout (30s)")), 30000))
+            ]);
+
+            chunk.forEach((op) => {
+              if (op.chunkHashEntry) {
+                if (op.chunkHashEntry.chunkHash) {
+                  lastSyncedChunkHashes.current[op.chunkHashEntry.chunkKey] = op.chunkHashEntry.chunkHash;
+                } else {
+                  delete lastSyncedChunkHashes.current[op.chunkHashEntry.chunkKey];
+                }
+              }
+            });
+            committedOpsCount += chunk.length;
+            await new Promise(resolve => setTimeout(resolve, 30));
+          }
+
+          // Chỉ xóa cờ is_dirty cho phân hệ đã commit thành công 100% tất cả các batch
+          localStorage.setItem(`${group.key}_is_dirty`, 'false');
+          if (localDirtyKeys.current) localDirtyKeys.current.delete(group.key);
+          lastSyncedValues.current[group.key] = group.serializedRaw;
+          lastSeenValues.current[group.key] = group.serializedRaw;
+          if (CHUNKED_KEYS.includes(group.key)) {
+            lastKnownChunkCounts.current[group.key] = group.totalChunks;
+          }
+          succeededKeys.push(group.key);
+        } catch (groupErr: any) {
+          console.error(`[Force Sync Error for ${group.key}]:`, groupErr);
+          localStorage.setItem(`${group.key}_is_dirty`, 'true');
+          if (localDirtyKeys.current) localDirtyKeys.current.add(group.key);
+          failedGroups.push({ key: group.key, err: groupErr });
+        }
       }
 
-      // 4. Xóa cờ is_dirty đối với tất cả phím đã đồng bộ cưỡng bức thành công
-      localKeys.forEach((key) => {
-        localStorage.setItem(`${key}_is_dirty`, 'false');
-      });
+      if (failedGroups.length > 0) {
+        const firstErr = failedGroups[0].err;
+        const errMsg = `${failedGroups.map(f => f.key).join(', ')}: ${firstErr?.message || String(firstErr)}`;
+        setSyncStatus('error');
+        setLastSyncErrorMsg(errMsg);
+
+        const isQuota = failedGroups.some(f => {
+          const m = (f.err?.message || String(f.err)).toLowerCase();
+          return f.err?.code === 'resource-exhausted' ||
+            m.includes('quota exceeded') ||
+            m.includes('resource has been exhausted') ||
+            m.includes('daily limit exceeded');
+        });
+        if (isQuota) {
+          isFirebaseQuotaExceeded.current = true;
+          localStorage.setItem('dk_firebase_quota_exceeded', 'true');
+          setQuotaExceededModalOpen(true);
+        }
+
+        setForceSyncProgress({
+          totalParts,
+          currentPart: partIndex,
+          statusText: `⚠️ Đẩy thành công ${succeededKeys.length}/${keyOpsGroups.length} phân hệ; lỗi tại: ${failedGroups.map(f => f.key).join(', ')}`,
+          completed: false
+        });
+        alert(`Kính gửi anh Thao!\n\nĐã đẩy thành công ${succeededKeys.length}/${keyOpsGroups.length} phân hệ (${committedOpsCount} gói), nhưng các phân hệ sau gặp lỗi nên VẪN ĐƯỢC GIỮ NGUYÊN TRẠNG THÁI CHỜ ĐỒNG BỘ (không xóa dữ liệu cục bộ):\n\n- ${errMsg}`);
+        return;
+      }
 
       // Đặt lại cờ Quota về false vì đã đẩy thành công toàn bộ
       isFirebaseQuotaExceeded.current = false;
@@ -3666,11 +3861,11 @@ export function App() {
       setForceSyncProgress({
         totalParts,
         currentPart: totalParts,
-        statusText: `🚀 Cưỡng bức đồng bộ thành công! Đã chuyển toàn bộ ${ops.length} bản ghi lên Cloud siêu tốc.`,
+        statusText: `🚀 Cưỡng bức đồng bộ thành công! Đã chuyển toàn bộ ${committedOpsCount} bản ghi lên Cloud siêu tốc.`,
         completed: true
       });
 
-      alert(`Tuyệt vời anh Thao! Hệ thống đã hoàn tất đẩy toàn bộ ${ops.length} bản ghi lên Cloud Firestore mà không gặp bất kỳ lỗi nào. Trình duyệt sẽ tự động làm mới để cập nhật trạng thái đồng bộ.`);
+      alert(`Tuyệt vời anh Thao! Hệ thống đã hoàn tất đẩy toàn bộ ${committedOpsCount} bản ghi lên Cloud Firestore mà không gặp bất kỳ lỗi nào. Trình duyệt sẽ tự động làm mới để cập nhật trạng thái đồng bộ.`);
 
       setTimeout(() => {
         window.location.reload();
@@ -3864,12 +4059,20 @@ export function App() {
     setSyncStatus('syncing');
 
     const loadFromFirestore = async () => {
-      // Timeout an toàn 15s khởi động tránh treo trạng thái syncing
+      hasCompletedInitialCloudLoad.current = false;
+      // Timeout an toàn 15s khởi động tránh treo trạng thái syncing (không đánh dấu initialCloudLoad hoàn tất)
       const startupTimeout = setTimeout(() => {
         setSyncSource('local');
         setSyncStatus('idle');
         setSyncLoaded(true);
       }, 15000);
+
+      // Chờ IndexedDB preload hoàn tất vào memoryStore trước khi so sánh/hợp nhất các khóa >1MB như dk_oqc_records
+      try {
+        if (typeof waitForSafeStoragePreload === 'function') {
+          await waitForSafeStoragePreload();
+        }
+      } catch (e) { }
 
       // PROACTIVELY TEST QUOTA RESTORATION ON STARTUP IF IT WAS PREVIOUSLY EXCEEDED
       if (isFirebaseQuotaExceeded.current) {
@@ -3887,6 +4090,7 @@ export function App() {
             errMsg.toLowerCase().includes('daily limit exceeded');
           if (isQuota) {
             console.warn("[Quota Check]: Hạn ngạch Google vẫn đang cạn kiệt. Chạy chế độ offline an toàn sử dụng bộ nhớ cục bộ.");
+            clearTimeout(startupTimeout);
             setSyncSource('local');
             setSyncStatus('idle');
             setSyncLoaded(true);
@@ -3899,28 +4103,74 @@ export function App() {
         }
       }
 
-      // 1. Tải riêng biệt dk_staff hỗ trợ hiển thị danh sách cán bộ được duyệt ngoài màn hình đăng nhập
+      // 1. Tải riêng biệt dk_staff và các khóa nhẹ thiết yếu (Thiết bị, PTSP Models, KPI) song song TRƯỚC khi chờ tải OQC chunks nặng
+      const rawDocMap: Record<string, any> = {};
       try {
-        if (localStorage.getItem('dk_staff_is_dirty') === 'true') {
-          console.log('[Staff Load Protection]: Local dk_staff is dirty. Skipping initial cloud overwrite.');
-        } else {
-          let staffSnap;
-          try {
-            staffSnap = await getDocFromServer(doc(db, 'dk_db_sync', 'dk_staff'));
-          } catch {
-            staffSnap = await getDoc(doc(db, 'dk_db_sync', 'dk_staff'));
-          }
-          if (staffSnap && staffSnap.exists()) {
-            const docData = staffSnap.data();
-            if (docData && docData.data !== undefined && Array.isArray(docData.data)) {
-              const cleanedStaff = sanitizeMasterStaff(docData.data);
-              setStaff(cleanedStaff);
-              safeStorage.setItem('dk_staff', JSON.stringify(cleanedStaff));
-            }
+        const FAST_PRIORITY_KEYS = [
+          'dk_staff',
+          ...EQUIPMENT_SYNC_KEYS,
+          'dk_ptsp_models',
+          'dk_qc_detailed_tasks',
+          'dk_staff_kpi_evaluations'
+        ];
+        await Promise.allSettled(
+          FAST_PRIORITY_KEYS.map(async (fKey) => {
+            try {
+              let snap;
+              if (fKey === 'dk_staff') {
+                try {
+                  snap = await getDocFromServer(doc(db, 'dk_db_sync', fKey));
+                } catch {
+                  snap = await getDoc(doc(db, 'dk_db_sync', fKey));
+                }
+              } else {
+                snap = await getDoc(doc(db, 'dk_db_sync', fKey));
+              }
+              if (snap && snap.exists()) {
+                const d = snap.data();
+                rawDocMap[fKey] = d;
+                if (d && d.updatedAt) {
+                  serverTimestamps.current[fKey] = d.updatedAt;
+                }
+              }
+            } catch (e) { }
+          })
+        );
+
+        if (rawDocMap['dk_staff'] && Array.isArray(rawDocMap['dk_staff'].data)) {
+          if (localStorage.getItem('dk_staff_is_dirty') === 'true') {
+            console.log('[Staff Load Protection]: Local dk_staff is dirty. Skipping initial cloud overwrite.');
+          } else {
+            const cleanedStaff = sanitizeMasterStaff(restoreFirestorePayload(rawDocMap['dk_staff'].data));
+            const cleanedStaffStr = JSON.stringify(cleanedStaff);
+            setStaff(cleanedStaff);
+            safeStorage.setItem('dk_staff', cleanedStaffStr);
+            lastSyncedValues.current['dk_staff'] = cleanedStaffStr;
+            lastSeenValues.current['dk_staff'] = cleanedStaffStr;
           }
         }
+
+        // Cập nhật sớm phân hệ Thiết bị ngay khi các doc nhẹ phản hồi (không bị chặn bởi ~72 chunks OQC)
+        const fastEquipDispatch: { key: string; prefix: string; setter: (v: any) => void }[] = [
+          { key: 'dk_equipments', prefix: 'EQP', setter: setEquipments },
+          { key: 'dk_maintenance_logs', prefix: 'MNL', setter: setMaintenanceLogs },
+          { key: 'dk_equipment_incidents', prefix: 'EQI', setter: setEquipmentIncidents },
+          { key: 'dk_fabrication_jobs', prefix: 'GC', setter: setFabricationJobs }
+        ];
+        fastEquipDispatch.forEach(({ key, prefix, setter }) => {
+          const docData = rawDocMap[key];
+          if (docData && Array.isArray(docData.data) && localStorage.getItem(`${key}_is_dirty`) !== 'true') {
+            const restored = restoreFirestorePayload(docData.data);
+            const cleaned = ensureUniqueIds(restored, prefix);
+            const cleanedSerialized = JSON.stringify(cleaned);
+            setter(cleaned);
+            safeStorage.setItem(key, cleanedSerialized);
+            lastSyncedValues.current[key] = cleanedSerialized;
+            lastSeenValues.current[key] = cleanedSerialized;
+          }
+        });
       } catch (err: any) {
-        console.warn("[Staff Load Warning]: Không thể tải trực tiếp dk_staff:", err?.message || err);
+        console.warn("[Fast Priority Load Warning]:", err?.message || err);
         const errMsg = err?.message || String(err);
         const isQuota = err?.code === 'resource-exhausted' ||
           errMsg.toLowerCase().includes('quota exceeded') ||
@@ -3934,6 +4184,7 @@ export function App() {
       }
 
       const serverData: Record<string, any> = {};
+      const rawServerData: Record<string, any> = {};
       const legacyRootData: Record<string, any> = {};
 
       // 2. Tải tất cả các tài liệu cấp cao nhất từ dk_db_sync
@@ -3948,10 +4199,10 @@ export function App() {
           'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
           'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
           'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions', 'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records'
+          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions',
+          'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records',
+          'dk_ptsp_models', 'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations'
         ];
-
-        const rawDocMap: Record<string, any> = {};
 
         // Thử lấy toàn bộ qua getDocs trước
         try {
@@ -3997,44 +4248,87 @@ export function App() {
             if (docData.isChunked === true) {
               const chunkCount = docData.chunkCount || 0;
               let assembledArray: any[] = [];
+              const missingChunkIndices: number[] = [];
+
               for (let i = 0; i < chunkCount; i++) {
                 const chunkKey = `${key}_chunk_${i}`;
                 const chunkDoc = rawDocMap[chunkKey];
                 if (chunkDoc && Array.isArray(chunkDoc.data)) {
                   assembledArray = assembledArray.concat(chunkDoc.data);
+                } else {
+                  missingChunkIndices.push(i);
                 }
               }
-              // Nếu getDocs không lấy được chunkDoc từ trước, tiến hành fetch các chunks trực tiếp
-              if (assembledArray.length === 0 && chunkCount > 0) {
+
+              // Nếu có bất kỳ chunk nào thiếu từ getDocs, fetch trực tiếp đúng các chunk thiếu và chỉ chấp nhận khi đủ 100% chunks!
+              let allChunksComplete = missingChunkIndices.length === 0;
+              if (missingChunkIndices.length > 0 && chunkCount > 0) {
                 try {
-                  console.log(`[Chunk Assembly Fallback] Đang tải trực tiếp ${chunkCount} chunks cho ${key}...`);
-                  const chunkProms = [];
-                  for (let c = 0; c < chunkCount; c++) {
-                    chunkProms.push(getDoc(doc(db, 'dk_db_sync', `${key}_chunk_${c}`)));
-                  }
+                  console.log(`[Chunk Assembly Fallback] Đang tải trực tiếp ${missingChunkIndices.length}/${chunkCount} chunks cho ${key}...`);
+                  const chunkProms = missingChunkIndices.map((c) => getDoc(doc(db, 'dk_db_sync', `${key}_chunk_${c}`)));
                   const chunkRes = await Promise.allSettled(chunkProms);
-                  chunkRes.forEach((res) => {
+                  const chunkByIdx = new Map<number, any[]>();
+                  let failedFallback = false;
+                  chunkRes.forEach((res, idx) => {
+                    const cIdx = missingChunkIndices[idx];
                     if (res.status === 'fulfilled' && (res.value as any).exists()) {
                       const cd = (res.value as any).data();
                       if (cd && Array.isArray(cd.data)) {
-                        assembledArray = assembledArray.concat(cd.data);
+                        chunkByIdx.set(cIdx, cd.data);
+                      } else {
+                        failedFallback = true;
                       }
+                    } else {
+                      failedFallback = true;
                     }
                   });
+
+                  if (!failedFallback) {
+                    assembledArray = [];
+                    allChunksComplete = true;
+                    for (let i = 0; i < chunkCount; i++) {
+                      const chunkDoc = rawDocMap[`${key}_chunk_${i}`];
+                      if (chunkDoc && Array.isArray(chunkDoc.data)) {
+                        assembledArray = assembledArray.concat(chunkDoc.data);
+                      } else if (chunkByIdx.has(i)) {
+                        assembledArray = assembledArray.concat(chunkByIdx.get(i)!);
+                      } else {
+                        allChunksComplete = false;
+                        break;
+                      }
+                    }
+                  } else {
+                    allChunksComplete = false;
+                  }
                 } catch (err) {
+                  allChunksComplete = false;
                   console.error(`[Chunk Assembly Fallback Error] for ${key}:`, err);
                 }
               }
-              rawData = assembledArray;
-              console.log(`[Chunk Assembly]: Đã lắp ráp thành công mảng ${key} gồm ${assembledArray.length} bản ghi.`);
+
+              if (chunkCount > 0 && !allChunksComplete) {
+                console.warn(`[Chunk Assembly Fail-Closed]: Thiếu chunk cho '${key}' (cần ${chunkCount}). Giữ nguyên dữ liệu cục bộ, KHÔNG ghi đè một phần.`);
+                rawData = null;
+              } else {
+                lastKnownChunkCounts.current[key] = chunkCount;
+                rawData = restoreFirestorePayload(assembledArray);
+                console.log(`[Chunk Assembly]: Đã lắp ráp thành công mảng ${key} gồm ${assembledArray.length} bản ghi (${chunkCount} chunks).`);
+              }
             } else if (docData.data !== undefined) {
               rawData = restoreFirestorePayload(docData.data);
             }
 
             if (rawData !== null) {
               serverData[key] = rawData;
+              rawServerData[key] = rawData;
               if (SUBCOLLECTION_KEYS.includes(key)) {
                 legacyRootData[key] = rawData;
+                if (Array.isArray(rawData)) {
+                  registerSubcollectionKnownServerIds(key, rawData);
+                  if (key === 'dk_daily_logs') {
+                    registerDailyLogsServerSnapshot(rawData);
+                  }
+                }
               }
             }
           }
@@ -4064,14 +4358,16 @@ export function App() {
         'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
         'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
         'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-        'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions', 'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records'
+        'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions',
+        'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records',
+        'dk_ptsp_models', 'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations'
       ];
 
       ALL_RECONCILE_KEYS.forEach((key) => {
         const serverVal = serverData[key];
         const isServerEmpty = serverVal === undefined || serverVal === null || (Array.isArray(serverVal) && serverVal.length === 0);
         if (isServerEmpty) {
-          const localSaved = localStorage.getItem(key);
+          const localSaved = safeStorage.getItem(key) || localStorage.getItem(key);
           if (localSaved) {
             try {
               const parsedLocal = JSON.parse(localSaved);
@@ -4100,11 +4396,10 @@ export function App() {
       Object.keys(serverData).forEach((key) => {
         if (SUBCOLLECTION_KEYS.includes(key)) return;
         const rawData = serverData[key];
-        const localSaved = localStorage.getItem(key);
         let isDirty = localStorage.getItem(`${key}_is_dirty`) === 'true';
 
         if (isDirty) {
-          const localSavedVal = localStorage.getItem(key);
+          const localSavedVal = safeStorage.getItem(key) || localStorage.getItem(key);
           if (localSavedVal) {
             try {
               const parsedLocal = JSON.parse(localSavedVal);
@@ -4117,11 +4412,12 @@ export function App() {
           }
         } else {
           serverData[key] = rawData;
-          lastSyncedValues.current[key] = JSON.stringify(rawData);
-          lastSeenValues.current[key] = JSON.stringify(rawData);
+          const serializedRaw = JSON.stringify(rawData);
+          lastSyncedValues.current[key] = serializedRaw;
+          lastSeenValues.current[key] = serializedRaw;
           const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
           if (!isMetadataKey) {
-            localStorage.setItem(key, JSON.stringify(rawData));
+            safeStorage.setItem(key, serializedRaw);
           }
         }
       });
@@ -4129,8 +4425,13 @@ export function App() {
       // Dispatch non-subcollection states to React
       if (serverData.dk_staff !== undefined && Array.isArray(serverData.dk_staff)) {
         const cleanedStaff = sanitizeMasterStaff(serverData.dk_staff);
+        const cleanedStaffStr = JSON.stringify(cleanedStaff);
         setStaff(cleanedStaff);
-        safeStorage.setItem('dk_staff', JSON.stringify(cleanedStaff));
+        safeStorage.setItem('dk_staff', cleanedStaffStr);
+        if (localStorage.getItem('dk_staff_is_dirty') !== 'true') {
+          lastSyncedValues.current['dk_staff'] = cleanedStaffStr;
+          lastSeenValues.current['dk_staff'] = cleanedStaffStr;
+        }
       }
       if (serverData.dk_kpis !== undefined) setKpis(serverData.dk_kpis);
       if (serverData.dk_suppliers !== undefined) {
@@ -4297,6 +4598,10 @@ export function App() {
         setPtspModels(serverData.dk_ptsp_models);
         safeStorage.setItem('dk_ptsp_models', JSON.stringify(serverData.dk_ptsp_models));
       }
+      if (serverData.dk_staff_kpi_evaluations !== undefined && typeof serverData.dk_staff_kpi_evaluations === 'object' && !Array.isArray(serverData.dk_staff_kpi_evaluations) && localStorage.getItem('dk_staff_kpi_evaluations_is_dirty') !== 'true') {
+        setStaffKpiEvaluations(serverData.dk_staff_kpi_evaluations);
+        safeStorage.setItem('dk_staff_kpi_evaluations', JSON.stringify(serverData.dk_staff_kpi_evaluations));
+      }
       if (serverData.dk_fmea !== undefined) setFmea(serverData.dk_fmea);
       if (serverData.dk_custom_forms !== undefined) setCustomForms(serverData.dk_custom_forms);
       const isModelsDirty = localStorage.getItem('dk_models_is_dirty') === 'true';
@@ -4306,8 +4611,11 @@ export function App() {
         try { localParsed = localSaved ? JSON.parse(localSaved) : []; } catch (e) { }
         if (!isModelsDirty) {
           const merged = mergeMasterModels(serverData.dk_models, localParsed.length > 0 ? localParsed : INITIAL_MODELS);
+          const mergedStr = JSON.stringify(merged);
           setModels(merged);
-          safeStorage.setItem('dk_models', JSON.stringify(merged));
+          safeStorage.setItem('dk_models', mergedStr);
+          lastSyncedValues.current['dk_models'] = mergedStr;
+          lastSeenValues.current['dk_models'] = mergedStr;
         } else {
           // Bảo vệ dữ liệu bẩn của người dùng: Hợp nhất dữ liệu cục bộ với Cloud và đồng bộ
           const merged = mergeMasterModels(localParsed, serverData.dk_models);
@@ -4349,19 +4657,50 @@ export function App() {
         lastSyncedValues.current['dk_fabrication_jobs'] = cleanedSerialized;
         lastSeenValues.current['dk_fabrication_jobs'] = cleanedSerialized;
       }
-      if (serverData.dk_qc_detailed_tasks !== undefined) setQcDetailedTasks(serverData.dk_qc_detailed_tasks);
-      if (serverData.dk_oqc_color_changes !== undefined && Array.isArray(serverData.dk_oqc_color_changes)) {
+      if (serverData.dk_qc_detailed_tasks !== undefined && localStorage.getItem('dk_qc_detailed_tasks_is_dirty') !== 'true') {
+        setQcDetailedTasks(serverData.dk_qc_detailed_tasks);
+        safeStorage.setItem('dk_qc_detailed_tasks', JSON.stringify(serverData.dk_qc_detailed_tasks));
+      }
+      if (serverData.dk_oqc_color_changes !== undefined && Array.isArray(serverData.dk_oqc_color_changes) && localStorage.getItem('dk_oqc_color_changes_is_dirty') !== 'true') {
         setOqcColorChanges(serverData.dk_oqc_color_changes);
         safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(serverData.dk_oqc_color_changes));
       }
-      if (serverData.dk_supplier_production_audits !== undefined && Array.isArray(serverData.dk_supplier_production_audits)) {
+      if (serverData.dk_supplier_production_audits !== undefined && Array.isArray(serverData.dk_supplier_production_audits) && localStorage.getItem('dk_supplier_production_audits_is_dirty') !== 'true') {
         setSupplierProductionAudits(serverData.dk_supplier_production_audits);
         safeStorage.setItem('dk_supplier_production_audits', JSON.stringify(serverData.dk_supplier_production_audits));
       }
       if (serverData.dk_oqc_records !== undefined && Array.isArray(serverData.dk_oqc_records)) {
-        const deduped = deduplicateOqcRecords(serverData.dk_oqc_records);
-        safeStorage.setItem('dk_oqc_records', JSON.stringify(deduped));
-        setOqcRecords(deduped);
+        const isOqcDirty = localDirtyKeys.current.has('dk_oqc_records') || localStorage.getItem('dk_oqc_records_is_dirty') === 'true';
+        const serverOqcList = Array.isArray(rawServerData.dk_oqc_records)
+          ? deduplicateOqcRecords(rawServerData.dk_oqc_records)
+          : deduplicateOqcRecords(serverData.dk_oqc_records);
+
+        if (isOqcDirty) {
+          const localOqcRaw = safeStorage.getItem('dk_oqc_records') || localStorage.getItem('dk_oqc_records');
+          let localOqcParsed: any[] = [];
+          try {
+            const p = localOqcRaw ? JSON.parse(localOqcRaw) : [];
+            if (Array.isArray(p)) localOqcParsed = deduplicateOqcRecords(p);
+          } catch (e) { }
+          const mergedOqc = localOqcParsed.length > 0
+            ? deduplicateOqcRecords(smartMergeArrays(serverOqcList, localOqcParsed, 'dk_oqc_records'))
+            : serverOqcList;
+          const mergedSerialized = JSON.stringify(mergedOqc);
+          const serverSerialized = JSON.stringify(serverOqcList);
+          lastSyncedValues.current['dk_oqc_records'] = serverSerialized;
+          lastSeenValues.current['dk_oqc_records'] = mergedSerialized;
+          safeStorage.setItem('dk_oqc_records', mergedSerialized);
+          setOqcRecords(mergedOqc);
+          pendingSyncBuffer.current['dk_oqc_records'] = mergedOqc;
+          localDirtyKeys.current.add('dk_oqc_records');
+        } else {
+          const dedupedSerialized = JSON.stringify(serverOqcList);
+          lastSyncedValues.current['dk_oqc_records'] = dedupedSerialized;
+          lastSeenValues.current['dk_oqc_records'] = dedupedSerialized;
+          safeStorage.setItem('dk_oqc_records', dedupedSerialized);
+          setOqcRecords(serverOqcList);
+          registerOqcServerSnapshot(serverOqcList, Array.isArray(rawDocMap['dk_oqc_records']?.deletedIds) ? rawDocMap['dk_oqc_records'].deletedIds : []);
+        }
       }
       if (serverData.dk_oqc_part_codes !== undefined) {
         const partCodesList = Array.isArray(serverData.dk_oqc_part_codes) ? serverData.dk_oqc_part_codes : [];
@@ -4416,6 +4755,7 @@ export function App() {
 
       // Kích hoạt ngay trạng thái tải hoàn tất để hiển thị toàn bộ số liệu trên màn hình không phải chờ đợi
       clearTimeout(startupTimeout);
+      hasCompletedInitialCloudLoad.current = true;
       setSyncSource('firestore');
       setSyncStatus('idle');
       setSyncLoaded(true);
@@ -4424,18 +4764,43 @@ export function App() {
       const initialConflicts: string[] = [];
 
       // Now set up real-time onSnapshot listeners for each SUBCOLLECTION_KEYS and CHUNKED_KEYS
-      let listenersInitialized = 0;
+      const initializedListenerKeys = new Set<string>();
+      let initialHydrationCompleted = false;
       const totalListeners = SUBCOLLECTION_KEYS.length + CHUNKED_KEYS.length;
+      const markListenerInitialized = (listenerKey: string) => {
+        initializedListenerKeys.add(listenerKey);
+        if (!initialHydrationCompleted && initializedListenerKeys.size >= totalListeners) {
+          initialHydrationCompleted = true;
+          hasCompletedInitialCloudLoad.current = true;
+          setSyncSource('firestore');
+          setSyncStatus('idle');
+          setSyncLoaded(true);
+        }
+      };
 
       SUBCOLLECTION_KEYS.forEach((key) => {
         const docRef = doc(db, 'dk_db_sync', key);
         const unsub = onSnapshot(docRef, (docSnap) => {
+          const docData = docSnap.exists() ? docSnap.data() : null;
+          const serverTime = docData?.updatedAt;
+
+          if (
+            docSnap.metadata.hasPendingWrites ||
+            (serverTime &&
+              (serverTime === lastLocalWriteTimestamps.current[key] ||
+                (initialHydrationCompleted && serverTime === serverTimestamps.current[key])))
+          ) {
+            if (serverTime) serverTimestamps.current[key] = serverTime;
+            markListenerInitialized(key);
+            return;
+          }
+          if (serverTime) {
+            serverTimestamps.current[key] = serverTime;
+          }
+
           let list: any[] = [];
-          if (docSnap.exists()) {
-            const d = docSnap.data();
-            if (d && Array.isArray(d.data)) {
-              list = restoreFirestorePayload(d.data);
-            }
+          if (docData && Array.isArray(docData.data)) {
+            list = restoreFirestorePayload(docData.data);
           }
 
           let finalDisplayData = list;
@@ -4444,7 +4809,7 @@ export function App() {
             if (Array.isArray(rootFallback) && rootFallback.length > 0) {
               finalDisplayData = rootFallback;
             } else {
-              const localSavedFallback = localStorage.getItem(key);
+              const localSavedFallback = safeStorage.getItem(key) || localStorage.getItem(key);
               if (localSavedFallback) {
                 try {
                   const parsedFallback = JSON.parse(localSavedFallback);
@@ -4460,12 +4825,13 @@ export function App() {
           }
 
           // Local conflict/dirty checks
-          const localSaved = localStorage.getItem(key);
+          const localSaved = safeStorage.getItem(key) || localStorage.getItem(key);
           const isDirty = localDirtyKeys.current.has(key) || localStorage.getItem(`${key}_is_dirty`) === 'true';
 
           // Freeze automatic merging and synchronization if this key is actively in conflict
           if (conflictKeys.includes(key)) {
             console.log(`[onSnapshot Sync Protection]: Phân hệ '${key}' đang có xung đột chưa giải quyết. Tạm dừng gộp tự động.`);
+            markListenerInitialized(key);
             return;
           }
 
@@ -4474,13 +4840,16 @@ export function App() {
               let parsedLocal = JSON.parse(localSaved);
               if (!Array.isArray(parsedLocal)) parsedLocal = [];
               finalDisplayData = smartMergeArrays(list, parsedLocal, key);
+              if (key === 'dk_daily_logs' && Array.isArray(finalDisplayData)) {
+                finalDisplayData = pruneRemotelyDeletedDailyLogs(finalDisplayData, list);
+              }
             } catch (e) {
               console.error(`[Smart Merge Error] for ${key}:`, e);
             }
           }
 
-          // SUBCOLLECTIONS Race Protection: If we are not dirty but localSaved contains records that are not in the server list,
-          // preserve them to prevent them from being wiped out due to Firestore snapshot propagation delay, EXCEPT if explicitly deleted.
+          // SUBCOLLECTIONS Race Protection: Only preserve local items that were NEVER seen on server before (truly created offline),
+          // so items deleted remotely on another device are NEVER resurrected.
           if (SUBCOLLECTION_KEYS.includes(key) && !isDirty && localSaved) {
             try {
               let parsedLocal = JSON.parse(localSaved);
@@ -4489,24 +4858,23 @@ export function App() {
                 const deletedStr = localStorage.getItem(deletedKey);
                 const deletedIds = deletedStr ? JSON.parse(deletedStr) : [];
                 const deletedSet = new Set(Array.isArray(deletedIds) ? deletedIds : []);
+                const knownServerIds = readSubcollectionKnownServerIds(key);
 
                 const serverIds = new Set(list.map((item: any, idx: number) => getItemId(item, key, idx)));
                 const missingLocalItems = parsedLocal.filter((item: any, idx: number) => {
                   const itemId = getItemId(item, key, idx);
-                  return !serverIds.has(itemId) && !deletedSet.has(itemId);
+                  return !serverIds.has(itemId) && !deletedSet.has(itemId) && !knownServerIds.has(itemId);
                 });
                 if (missingLocalItems.length > 0 && list.length > 0) {
-                  console.log(`[${key} Race Protection]: Preserving and auto-syncing ${missingLocalItems.length} local records not yet present on Firestore server.`);
+                  console.log(`[${key} Race Protection]: Preserving and auto-syncing ${missingLocalItems.length} unsynced local records not yet seen on server.`);
                   finalDisplayData = [...list, ...missingLocalItems];
 
-                  // Ensure any merged data is properly sanitized and deduplicated to prevent list bloating
                   if (key === 'dk_daily_logs' && Array.isArray(finalDisplayData)) {
-                    finalDisplayData = sanitizeDailyLogs(finalDisplayData);
+                    finalDisplayData = sanitizeDailyLogs(pruneRemotelyDeletedDailyLogs(finalDisplayData, list));
                   } else if (key === 'dk_defects' && Array.isArray(finalDisplayData)) {
                     finalDisplayData = sanitizeDefects(finalDisplayData);
                   }
 
-                  // Tự động giải cứu và đồng bộ ngay các bản ghi cục bộ chưa có trên Cloud sang các thiết bị khác (như điện thoại)
                   try {
                     localStorage.setItem(`${key}_is_dirty`, 'true');
                     if (localDirtyKeys.current) {
@@ -4518,6 +4886,13 @@ export function App() {
               }
             } catch (e) {
               console.error(`[${key} Race Protection Error]:`, e);
+            }
+          }
+
+          if (list.length > 0) {
+            registerSubcollectionKnownServerIds(key, list);
+            if (key === 'dk_daily_logs') {
+              registerDailyLogsServerSnapshot(list);
             }
           }
 
@@ -4563,19 +4938,19 @@ export function App() {
           lastSyncedValues.current[key] = JSON.stringify(sanitizedServerList); // Use sanitized server snapshot as sync baseline
           lastSeenValues.current[key] = serialized;
           if (finalDisplayData.length > 0) {
-            localStorage.setItem(key, serialized);
-            const serverTime = serverTimestamps.current[key] || new Date().toISOString();
-            localStorage.setItem(`${key}_last_synced_at`, serverTime);
+            safeStorage.setItem(key, serialized);
+            const st = serverTimestamps.current[key] || new Date().toISOString();
+            localStorage.setItem(`${key}_last_synced_at`, st);
           }
+
+          // Mark state update as remote update from Firestore server BEFORE dispatching reload events to prevent echo loops
+          isRemoteUpdateRef.current[key] = true;
+          setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
 
           // Dispatch reload event for components listening to window storage changes in real-time
           try {
             window.dispatchEvent(new CustomEvent('dk_planning_reload_state', { detail: { key, value: serialized } }));
           } catch (err) { }
-
-          // Mark state update as remote update from Firestore server to prevent triggerCloudSynchronization echo loop
-          isRemoteUpdateRef.current[key] = true;
-          setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
 
           // Dispatch to state
           if (key === 'dk_tasks') setTasks(finalDisplayData);
@@ -4614,14 +4989,7 @@ export function App() {
           else if (key === 'dk_fmea') setFmea(finalDisplayData);
           else if (key === 'dk_improvement_actions') setImprovementActions(finalDisplayData);
 
-          // Mark this listener as initialized
-          listenersInitialized++;
-          if (listenersInitialized >= totalListeners) {
-            setSyncSource('firestore');
-            setSyncStatus('synced');
-            setTimeout(() => setSyncStatus('idle'), 1500);
-            setSyncLoaded(true);
-          }
+          markListenerInitialized(key);
         }, (err) => {
           console.warn(`[onSnapshot Notice] for ${key}:`, err?.message || err);
           // Fallback to serverData / local storage if permissions or connection fails
@@ -4629,7 +4997,7 @@ export function App() {
           let fallbackData = Array.isArray(rootFallback) && rootFallback.length > 0 ? rootFallback : null;
 
           if (!fallbackData) {
-            const localSaved = localStorage.getItem(key);
+            const localSaved = safeStorage.getItem(key) || localStorage.getItem(key);
             if (localSaved) {
               try {
                 const parsed = JSON.parse(localSaved);
@@ -4661,11 +5029,7 @@ export function App() {
             else if (key === 'dk_improvement_actions') setImprovementActions(sanitizedParsed);
           }
 
-          listenersInitialized++;
-          if (listenersInitialized >= totalListeners) {
-            setSyncStatus('idle');
-            setSyncLoaded(true);
-          }
+          markListenerInitialized(key);
         });
         unsubscribes.current.push(unsub);
       });
@@ -4675,39 +5039,37 @@ export function App() {
         const metaDocRef = doc(db, 'dk_db_sync', key);
         const unsub = onSnapshot(metaDocRef, async (docSnap) => {
           if (!docSnap.exists()) {
-            listenersInitialized++;
-            if (listenersInitialized >= totalListeners) {
-              setSyncSource('firestore');
-              setSyncStatus('synced');
-              setTimeout(() => setSyncStatus('idle'), 1500);
-              setSyncLoaded(true);
-            }
+            markListenerInitialized(key);
             return;
           }
 
           const metaData = docSnap.data();
           const serverTime = metaData?.updatedAt;
-          const localSaved = localStorage.getItem(key);
+          const localSaved = safeStorage.getItem(key) || localStorage.getItem(key);
           const isDirty = localDirtyKeys.current.has(key) || localStorage.getItem(`${key}_is_dirty`) === 'true';
 
           // Bỏ qua sự kiện dội ngược (Echo) từ chính thao tác ghi của máy hiện tại để tránh tải lại toàn bộ 72 chunks (72 reads)
           if (
-            listenersInitialized >= totalListeners &&
-            (docSnap.metadata.hasPendingWrites ||
-              (serverTime && (serverTime === lastLocalWriteTimestamps.current[key] || serverTime === serverTimestamps.current[key])))
+            docSnap.metadata.hasPendingWrites ||
+            (serverTime &&
+              (serverTime === lastLocalWriteTimestamps.current[key] ||
+                (initialHydrationCompleted && serverTime === serverTimestamps.current[key])))
           ) {
             if (serverTime) {
               serverTimestamps.current[key] = serverTime;
             }
+            markListenerInitialized(key);
             return;
           }
 
           if (conflictKeys.includes(key)) {
             console.log(`[Chunked onSnapshot]: Phân hệ '${key}' đang có xung đột chưa giải quyết. Tạm dừng gộp.`);
+            markListenerInitialized(key);
             return;
           }
 
           let assembledList: any[] = [];
+          let chunksComplete = true;
 
           if (metaData?.isChunked && metaData?.chunkCount) {
             try {
@@ -4717,21 +5079,36 @@ export function App() {
               }
               const chunkResults = await Promise.allSettled(chunkPromises);
               chunkResults.forEach((res, cIdx) => {
-                if (res.status === 'fulfilled') {
+                if (res.status === 'fulfilled' && res.value.exists()) {
                   const cd = res.value.data();
                   if (cd && Array.isArray(cd.data)) {
                     assembledList = assembledList.concat(cd.data);
+                  } else {
+                    chunksComplete = false;
+                    console.error(`[Chunk Fetch Error] Chunk ${cIdx} for ${key} has invalid/missing data array.`);
                   }
                 } else {
-                  console.error(`[Chunk Fetch Error] Failed to load chunk ${cIdx}:`, res.reason);
+                  chunksComplete = false;
+                  console.error(`[Chunk Fetch Error] Failed to load chunk ${cIdx} for ${key}:`, res.status === 'rejected' ? res.reason : 'not found');
                 }
               });
             } catch (err) {
+              chunksComplete = false;
               console.error(`[Chunked Fetch Error] for ${key}:`, err);
             }
+
+            // Fail-closed: NEVER overwrite local state or poison remote_deleted_ids if any chunk failed to load!
+            if (!chunksComplete) {
+              console.warn(`[Chunked onSnapshot Fail-Closed]: Bỏ qua cập nhật ${key} vì tải thiếu chunk (số chunk cần: ${metaData.chunkCount}).`);
+              markListenerInitialized(key);
+              return;
+            }
+            lastKnownChunkCounts.current[key] = metaData.chunkCount;
           } else if (Array.isArray(metaData?.data)) {
             assembledList = metaData.data;
           }
+
+          assembledList = restoreFirestorePayload(assembledList);
 
           if (key === 'dk_oqc_records') {
             assembledList = deduplicateOqcRecords(assembledList);
@@ -4833,9 +5210,7 @@ export function App() {
           }
 
           if (isDirty) {
-            const isIdentical = CHUNKED_KEYS.includes(key)
-              ? serialized === assembledSerialized
-              : isFunctionallyIdentical(serialized, assembledSerialized, key);
+            const isIdentical = serialized === assembledSerialized || isFunctionallyIdentical(serialized, assembledSerialized, key);
             if (isIdentical) {
               try { localStorage.setItem(`${key}_is_dirty`, 'false'); } catch (e) { }
               localDirtyKeys.current.delete(key);
@@ -4845,28 +5220,18 @@ export function App() {
 
           if (key === 'dk_oqc_records') {
             isRemoteUpdateRef.current[key] = true;
-            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
+            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
             setOqcRecords(finalDisplayData);
           } else if (key === 'dk_part_evaluations') {
             isRemoteUpdateRef.current[key] = true;
-            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
+            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
             setPartEvaluations(finalDisplayData);
           }
 
-          listenersInitialized++;
-          if (listenersInitialized >= totalListeners) {
-            setSyncSource('firestore');
-            setSyncStatus('synced');
-            setTimeout(() => setSyncStatus('idle'), 1500);
-            setSyncLoaded(true);
-          }
+          markListenerInitialized(key);
         }, (err) => {
           console.error(`[Chunked onSnapshot Error] for ${key}:`, err);
-          listenersInitialized++;
-          if (listenersInitialized >= totalListeners) {
-            setSyncStatus('error');
-            setSyncLoaded(true);
-          }
+          markListenerInitialized(key);
         });
         unsubscribes.current.push(unsub);
       });
@@ -4880,6 +5245,7 @@ export function App() {
         'dk_models',
         'dk_copqs',
         'dk_ptsp_models',
+        'dk_qc_detailed_tasks',
         'dk_kpis',
         'dk_staff_kpi_evaluations',
         'dk_equipments',
@@ -4898,47 +5264,56 @@ export function App() {
         const docRef = doc(db, 'dk_db_sync', key);
         const unsub = onSnapshot(docRef, (docSnap) => {
           if (!docSnap.exists()) return;
+          const metaData = docSnap.data();
+          const serverTime = metaData?.updatedAt;
+
+          if (
+            docSnap.metadata.hasPendingWrites ||
+            (serverTime && serverTime === lastLocalWriteTimestamps.current[key])
+          ) {
+            if (serverTime) serverTimestamps.current[key] = serverTime;
+            return;
+          }
+
           if (localStorage.getItem(`${key}_is_dirty`) === 'true') {
             console.log(`[Standard Doc onSnapshot Protection]: Local ${key} is dirty. Preserving local state.`);
             return;
           }
-          const metaData = docSnap.data();
+
           const isPlanningDict = key.startsWith('dk_weekly_') || key.startsWith('dk_monthly_');
           if (isPlanningDict) {
-            const dict = metaData?.data && typeof metaData.data === 'object' && !Array.isArray(metaData.data) ? metaData.data : null;
+            const dict = metaData?.data && typeof metaData.data === 'object' && !Array.isArray(metaData.data)
+              ? restoreFirestorePayload(metaData.data)
+              : null;
             if (!dict) return;
             const serialized = JSON.stringify(dict);
             safeStorage.setItem(key, serialized);
             try { localStorage.setItem(key, serialized); } catch (e) { }
             isRemoteUpdateRef.current[key] = true;
             lastSyncedValues.current[key] = serialized;
-            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
+            lastSeenValues.current[key] = serialized;
+            if (serverTime) serverTimestamps.current[key] = serverTime;
+            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
             window.dispatchEvent(new CustomEvent('dk_planning_reload_state', { detail: { key, value: serialized } }));
             return;
           }
           if (key === 'dk_staff_kpi_evaluations') {
-            const dict = metaData?.data && typeof metaData.data === 'object' && !Array.isArray(metaData.data) ? metaData.data : null;
+            const dict = metaData?.data && typeof metaData.data === 'object' && !Array.isArray(metaData.data)
+              ? restoreFirestorePayload(metaData.data)
+              : null;
             if (!dict) return;
             const serialized = JSON.stringify(dict);
             safeStorage.setItem(key, serialized);
             try { localStorage.setItem(key, serialized); } catch (e) { }
             isRemoteUpdateRef.current[key] = true;
             lastSyncedValues.current[key] = serialized;
-            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
+            lastSeenValues.current[key] = serialized;
+            if (serverTime) serverTimestamps.current[key] = serverTime;
+            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
             setStaffKpiEvaluations(dict);
             return;
           }
           const list = Array.isArray(metaData?.data) ? restoreFirestorePayload(metaData.data) : [];
-          const serverTime = metaData?.updatedAt;
-          if (EQUIPMENT_SYNC_KEYS.includes(key)) {
-            if (
-              docSnap.metadata.hasPendingWrites ||
-              (serverTime && serverTime === lastLocalWriteTimestamps.current[key])
-            ) {
-              if (serverTime) serverTimestamps.current[key] = serverTime;
-              return;
-            }
-          }
           if (key === 'dk_oqc_color_changes' && list.length === 0) {
             try {
               const currentLocal = JSON.parse(localStorage.getItem(key) || '[]');
@@ -4954,44 +5329,46 @@ export function App() {
             dk_equipment_incidents: 'EQI',
             dk_fabrication_jobs: 'GC'
           };
-          const finalList = EQUIPMENT_SYNC_KEYS.includes(key)
+          let finalList = EQUIPMENT_SYNC_KEYS.includes(key)
             ? ensureUniqueIds(list, prefixMap[key])
             : list;
+          if (key === 'dk_staff') {
+            finalList = sanitizeMasterStaff(list);
+          } else if (key === 'dk_models' && list.length > 0) {
+            finalList = mergeMasterModels(list, INITIAL_MODELS);
+          }
           const finalSerialized = JSON.stringify(finalList);
           safeStorage.setItem(key, finalSerialized);
           try { localStorage.setItem(key, finalSerialized); } catch (e) { }
-          if (EQUIPMENT_SYNC_KEYS.includes(key)) {
-            lastSyncedValues.current[key] = finalSerialized;
-            lastSeenValues.current[key] = finalSerialized;
-            if (serverTime) {
-              serverTimestamps.current[key] = serverTime;
-              try { localStorage.setItem(`${key}_last_synced_at`, serverTime); } catch (e) { }
-            }
+          lastSyncedValues.current[key] = finalSerialized;
+          lastSeenValues.current[key] = finalSerialized;
+          if (serverTime) {
+            serverTimestamps.current[key] = serverTime;
+            try { localStorage.setItem(`${key}_last_synced_at`, serverTime); } catch (e) { }
           }
           isRemoteUpdateRef.current[key] = true;
-          setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 800);
+          setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
           if (key === 'dk_staff') {
-            const cleaned = sanitizeMasterStaff(list);
-            setStaff(cleaned);
-            safeStorage.setItem('dk_staff', JSON.stringify(cleaned));
-            try { localStorage.setItem('dk_staff', JSON.stringify(cleaned)); } catch (e) { }
+            setStaff(finalList);
           } else if (key === 'dk_oqc_color_changes') {
-            setOqcColorChanges(list);
+            setOqcColorChanges(finalList);
           } else if (key === 'dk_supplier_production_audits') {
-            setSupplierProductionAudits(list);
+            setSupplierProductionAudits(finalList);
           } else if (key === 'dk_oqc_handover_list') {
-            setOqcHandoverList(list);
+            setOqcHandoverList(finalList);
           } else if (key === 'dk_models') {
             if (list.length > 0) {
-              setModels(mergeMasterModels(list, INITIAL_MODELS));
+              setModels(finalList);
             }
           } else if (key === 'dk_copqs') {
-            setCopqs(list);
+            setCopqs(finalList);
           } else if (key === 'dk_ptsp_models') {
-            setPtspModels(list);
+            setPtspModels(finalList);
+          } else if (key === 'dk_qc_detailed_tasks') {
+            setQcDetailedTasks(finalList);
           } else if (key === 'dk_kpis') {
             if (list.length > 0) {
-              setKpis(list);
+              setKpis(finalList);
             }
           } else if (key === 'dk_equipments') {
             setEquipments(finalList);
@@ -5003,9 +5380,6 @@ export function App() {
             setFabricationJobs(finalList);
           } else if (key === 'dk_oqc_part_codes') {
             if (list.length > 0) {
-              const serializedPartCodes = JSON.stringify(list);
-              lastSyncedValues.current['dk_oqc_part_codes'] = serializedPartCodes;
-              lastSeenValues.current['dk_oqc_part_codes'] = serializedPartCodes;
               window.dispatchEvent(new CustomEvent('dk_oqc_part_codes_updated', { detail: list }));
             }
           }
@@ -5350,6 +5724,7 @@ export function App() {
         return updated;
       });
     } else if (type === 'OQC') {
+      (window as any).__oqcManagedSaveTs = 0;
       if (id.startsWith('OQC_GROUP_')) {
         setOqcRecords(prev => {
           const updated = prev.map(item => {
@@ -5362,6 +5737,9 @@ export function App() {
             }
             return item;
           });
+          safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+          try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (err) { }
+          if (localDirtyKeys.current) localDirtyKeys.current.add('dk_oqc_records');
           syncToServer('dk_oqc_records', updated);
           return updated;
         });
@@ -5373,6 +5751,9 @@ export function App() {
             treatment: treatment,
             status: status === 'Đã xử lý' ? 'Đạt' : (status === 'Cần theo dõi' ? 'Lỗi' : 'Chưa kiểm tra')
           } : item);
+          safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
+          try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (err) { }
+          if (localDirtyKeys.current) localDirtyKeys.current.add('dk_oqc_records');
           syncToServer('dk_oqc_records', updated);
           return updated;
         });
@@ -5605,8 +5986,9 @@ export function App() {
     return sanitizeMasterStaff(rawList);
   });
 
-  // Tải tức thời và lắng nghe thời gian thực Master Staff từ Firestore (hoạt động liên tục cả trước và sau đăng nhập)
+  // Tải tức thời và lắng nghe thời gian thực Master Staff từ Firestore trước khi đăng nhập (khi đã đăng nhập, STANDARD_DOC_SYNC_KEYS đảm nhiệm duy nhất để tránh trùng listener)
   useEffect(() => {
+    if (firebaseUser) return;
     let isMounted = true;
     const docRef = doc(db, 'dk_db_sync', 'dk_staff');
 
@@ -5620,14 +6002,19 @@ export function App() {
       const docData = snap.data();
       if (docData && Array.isArray(docData.data) && docData.data.length > 0) {
         const cleaned = sanitizeMasterStaff(docData.data);
+        const cleanedStr = JSON.stringify(cleaned);
+        isRemoteUpdateRef.current['dk_staff'] = true;
+        lastSyncedValues.current['dk_staff'] = cleanedStr;
+        lastSeenValues.current['dk_staff'] = cleanedStr;
+        setTimeout(() => { isRemoteUpdateRef.current['dk_staff'] = false; }, 1500);
         setStaff(cleaned);
-        safeStorage.setItem('dk_staff', JSON.stringify(cleaned));
+        safeStorage.setItem('dk_staff', cleanedStr);
       }
     }).catch(err => {
       console.warn("[Global Staff Initial Fetch Notice]:", err?.message || err);
     });
 
-    // 2. Lắng nghe real-time liên tục
+    // 2. Lắng nghe real-time liên tục khi chưa đăng nhập
     const unsub = onSnapshot(docRef, (snap) => {
       if (!isMounted || !snap.exists()) return;
       if (localStorage.getItem('dk_staff_is_dirty') === 'true') {
@@ -5637,8 +6024,13 @@ export function App() {
       const docData = snap.data();
       if (docData && Array.isArray(docData.data) && docData.data.length > 0) {
         const cleaned = sanitizeMasterStaff(docData.data);
+        const cleanedStr = JSON.stringify(cleaned);
+        isRemoteUpdateRef.current['dk_staff'] = true;
+        lastSyncedValues.current['dk_staff'] = cleanedStr;
+        lastSeenValues.current['dk_staff'] = cleanedStr;
+        setTimeout(() => { isRemoteUpdateRef.current['dk_staff'] = false; }, 1500);
         setStaff(cleaned);
-        safeStorage.setItem('dk_staff', JSON.stringify(cleaned));
+        safeStorage.setItem('dk_staff', cleanedStr);
       }
     }, (err) => {
       console.warn("[Global Staff Snapshot Notice]:", err?.message || err);
@@ -5648,7 +6040,7 @@ export function App() {
       isMounted = false;
       unsub();
     };
-  }, []);
+  }, [firebaseUser]);
 
   // Sync currentUser with corresponding firebaseUser metadata and authorized staff lists
   useEffect(() => {
@@ -8935,9 +9327,31 @@ export function App() {
   useEffect(() => {
     try {
       if (planningTasks && planningTasks.length > 0) {
-        safeStorage.setItem('dk_qms_quality_planning_tasks', JSON.stringify(planningTasks));
-        safeStorage.setItem('dk_qms_quality_planning_tasks_is_dirty', 'true');
-        syncToServer('dk_qms_quality_planning_tasks', planningTasks);
+        const serialized = JSON.stringify(planningTasks);
+        if (isRemoteUpdateRef.current['dk_qms_quality_planning_tasks']) {
+          isRemoteUpdateRef.current['dk_qms_quality_planning_tasks'] = false;
+          return;
+        }
+        const serverBaseline = lastSyncedValues.current['dk_qms_quality_planning_tasks'];
+        if (
+          (serverBaseline !== undefined && isFunctionallyIdentical(serialized, serverBaseline, 'dk_qms_quality_planning_tasks')) ||
+          lastSeenValues.current['dk_qms_quality_planning_tasks'] === serialized
+        ) {
+          return;
+        }
+        if (
+          lastSeenValues.current['dk_qms_quality_planning_tasks'] === undefined &&
+          localStorage.getItem('dk_qms_quality_planning_tasks_is_dirty') !== 'true'
+        ) {
+          lastSeenValues.current['dk_qms_quality_planning_tasks'] = serialized;
+          return;
+        }
+        if (localStorage.getItem('dk_qms_quality_planning_tasks_is_dirty') === 'true' || syncLoaded) {
+          safeStorage.setItem('dk_qms_quality_planning_tasks', serialized);
+          safeStorage.setItem('dk_qms_quality_planning_tasks_is_dirty', 'true');
+          if (localDirtyKeys.current) localDirtyKeys.current.add('dk_qms_quality_planning_tasks');
+          syncToServer('dk_qms_quality_planning_tasks', planningTasks);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -8966,20 +9380,32 @@ export function App() {
         try {
           const parsed = JSON.parse(value);
           if (Array.isArray(parsed)) {
+            const isRemoteOrIdentical =
+              isRemoteUpdateRef.current[key] ||
+              (lastSyncedValues.current[key] !== undefined && isFunctionallyIdentical(value, lastSyncedValues.current[key], key));
             setPlanningTasks(parsed);
             safeStorage.setItem('dk_qms_quality_planning_tasks', value);
-            safeStorage.setItem('dk_qms_quality_planning_tasks_is_dirty', 'true');
-            syncToServer('dk_qms_quality_planning_tasks', parsed);
+            if (!isRemoteOrIdentical) {
+              safeStorage.setItem('dk_qms_quality_planning_tasks_is_dirty', 'true');
+              if (localDirtyKeys.current) localDirtyKeys.current.add('dk_qms_quality_planning_tasks');
+              syncToServer('dk_qms_quality_planning_tasks', parsed);
+            }
           }
         } catch (err) { }
       } else if (key === 'dk_capas' && value) {
         try {
           const parsed = JSON.parse(value);
           if (Array.isArray(parsed)) {
+            const isRemoteOrIdentical =
+              isRemoteUpdateRef.current[key] ||
+              (lastSyncedValues.current[key] !== undefined && isFunctionallyIdentical(value, lastSyncedValues.current[key], key));
             setCapas(parsed);
             safeStorage.setItem('dk_capas', value);
-            safeStorage.setItem('dk_capas_is_dirty', 'true');
-            syncToServer('dk_capas', parsed);
+            if (!isRemoteOrIdentical) {
+              safeStorage.setItem('dk_capas_is_dirty', 'true');
+              if (localDirtyKeys.current) localDirtyKeys.current.add('dk_capas');
+              syncToServer('dk_capas', parsed);
+            }
           }
         } catch (err) { }
       }

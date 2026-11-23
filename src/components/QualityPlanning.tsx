@@ -1724,11 +1724,14 @@ export default function QualityPlanning({
     return getInitialQmsPlanningTasks(6, 2026);
   });
 
+  const skipNextTaskSyncRef = useRef(false);
+
   // Lắng nghe dữ liệu mới được đẩy từ bên ngoài qua props (ví dụ Firestore onSnapshot từ thiết bị khác)
   useEffect(() => {
     if (Array.isArray(planningTasksProp) && planningTasksProp.length > 0) {
       const incomingStr = JSON.stringify(planningTasksProp);
       if (JSON.stringify(tasks) !== incomingStr) {
+        skipNextTaskSyncRef.current = true;
         setTasks(planningTasksProp);
       }
     }
@@ -1736,6 +1739,10 @@ export default function QualityPlanning({
 
   useEffect(() => {
     try {
+      if (skipNextTaskSyncRef.current) {
+        skipNextTaskSyncRef.current = false;
+        return;
+      }
       const serialized = JSON.stringify(tasks);
       if (localStorage.getItem('dk_qms_quality_planning_tasks') !== serialized) {
         saveAndSync('dk_qms_quality_planning_tasks', tasks);
@@ -1843,6 +1850,7 @@ export default function QualityPlanning({
           }
         } else if (key === 'dk_qms_quality_planning_tasks') {
           if (JSON.stringify(currentStates.tasks) !== value) {
+            skipNextTaskSyncRef.current = true;
             setTasks(parsed);
             updated = true;
           }

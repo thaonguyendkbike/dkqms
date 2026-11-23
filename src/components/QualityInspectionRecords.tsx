@@ -3034,8 +3034,7 @@ export default function QualityInspectionRecords({
     });
     const arr = Array.from(set).sort((a, b) => a - b);
     return arr.length > 0 ? arr : Array.from({ length: 12 }, (_, i) => i + 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oqcRecords.length]);
+  }, [oqcRecords]);
 
   const uniqueKcsYears = useMemo(() => {
     const set = new Set<number>();
@@ -3049,8 +3048,7 @@ export default function QualityInspectionRecords({
     });
     const arr = Array.from(set).sort((a, b) => b - a);
     return arr.length > 0 ? arr : [2026];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oqcRecords.length]);
+  }, [oqcRecords]);
 
   // Unique LSX list & fast O(1) count map for OQC Line Station
   const { uniqueOqcLsxs, oqcLsxCountsMap } = useMemo(() => {
@@ -3065,8 +3063,7 @@ export default function QualityInspectionRecords({
       uniqueOqcLsxs: list,
       oqcLsxCountsMap: countsMap
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oqcRecords.length]);
+  }, [oqcRecords]);
 
   // Cached global OQC counts — single pass, avoids inline .filter() on 31K records every render
   const oqcGlobalCounts = useMemo(() => {
@@ -3721,20 +3718,11 @@ export default function QualityInspectionRecords({
     });
 
     if (hasDirtyModel) {
-      setOqcRecords(cleaned);
-      safeStorage.setItem('dk_oqc_records', JSON.stringify(cleaned));
-      try {
-        localStorage.setItem('dk_oqc_records_is_dirty', 'true');
-      } catch (e) { }
-      if (typeof (window as any).syncToServer === 'function') {
-        (window as any).syncToServer('dk_oqc_records', cleaned);
-      }
+      saveOqcRecordsOptimized(cleaned, true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [oqcRecords.length, getCleanModelName, setOqcRecords]);
+  }, [oqcRecords, getCleanModelName, saveOqcRecordsOptimized]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const uniqueOqcModels = useMemo(() => Array.from(new Set(oqcRecords.map(r => getCleanModelName(r)).filter(Boolean))).sort(), [oqcRecords.length, getCleanModelName]);
+  const uniqueOqcModels = useMemo(() => Array.from(new Set(oqcRecords.map(r => getCleanModelName(r)).filter(Boolean))).sort(), [oqcRecords, getCleanModelName]);
 
   // Performance: Cache ref for guarded useMemo (Tối ưu 1)
   const defectModelTokenCountsCacheRef = useRef<{ [model: string]: { [token: string]: number } }>({});
@@ -5551,9 +5539,10 @@ const handleDeletePqcClick = (id: string) => {
 
 const handleDeleteOqcClick = (id: string) => {
   if (window.confirm('Bạn có chắc chắn muốn xóa bản ghi đóng thùng OQC này không? Hành động này không thể khôi phục.')) {
+    commitPendingOqcOverrides(false);
     trackDeletedId('dk_oqc_records', id);
-    const updated = oqcRecords.filter(r => r.id !== id);
-    saveOqcRecordsOptimized(updated);
+    const updated = latestOqcRecordsRef.current.filter(r => r.id !== id);
+    saveOqcRecordsOptimized(updated, true);
     alert('Đã xóa bản ghi OQC thành công! Hệ thống đang đồng bộ tự động lên Cloud...');
   }
 };
@@ -5578,9 +5567,10 @@ const handleBulkDeleteOqc = () => {
     return;
   }
   if (window.confirm(`Bạn có chắc chắn muốn xóa hàng loạt ${selectedOqcIds.length} bản ghi OQC đã chọn không?`)) {
+    commitPendingOqcOverrides(false);
     selectedOqcIds.forEach(id => trackDeletedId('dk_oqc_records', id));
-    const updated = oqcRecords.filter(r => !selectedOqcIds.includes(r.id));
-    saveOqcRecordsOptimized(updated);
+    const updated = latestOqcRecordsRef.current.filter(r => !selectedOqcIds.includes(r.id));
+    saveOqcRecordsOptimized(updated, true);
     setSelectedOqcIds([]);
     alert(`Đã xóa thành công ${selectedOqcIds.length} bản ghi OQC! Hệ thống đang đồng bộ tự động lên Cloud...`);
   }
@@ -5717,10 +5707,13 @@ const handleAddOqcRecord = (e: FormEvent) => {
   };
 
   // Khi nhập tay dữ liệu mới: Tự động gộp các bản ghi trùng lặp
-  const existingIndex = oqcRecords.findIndex(r => r.serialNo.trim().toLowerCase() === newOqcSerialNo.trim().toLowerCase());
+  commitPendingOqcOverrides(false);
+  const currentOqcList = latestOqcRecordsRef.current;
+  const existingIndex = currentOqcList.findIndex(r => r.serialNo.trim().toLowerCase() === newOqcSerialNo.trim().toLowerCase());
   if (existingIndex > -1) {
-    const updatedOqcRecords = [...oqcRecords];
-    const existing = updatedOqcRecords[existingIndex];
+    const updatedOqcRecords = [...currentOqcList];
+    const existing = { ...updatedOqcRecords[existingIndex] };
+    updatedOqcRecords[existingIndex] = existing;
     if (newRecord.status === 'Lỗi' || existing.status === 'Lỗi') {
       existing.status = 'Lỗi';
     }
@@ -5749,20 +5742,10 @@ const handleAddOqcRecord = (e: FormEvent) => {
     if (newRecord.color) existing.color = newRecord.color;
     if (newRecord.lsx) existing.lsx = newRecord.lsx;
     existing.updatedAt = nowIso;
-    setOqcRecords(updatedOqcRecords);
-    safeStorage.setItem('dk_oqc_records', JSON.stringify(updatedOqcRecords));
-    try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
-    if (typeof (window as any).syncToServer === 'function') {
-      (window as any).syncToServer('dk_oqc_records', updatedOqcRecords);
-    }
+    saveOqcRecordsOptimized(updatedOqcRecords, true);
   } else {
-    const updatedOqcRecords = [newRecord, ...oqcRecords];
-    setOqcRecords(updatedOqcRecords);
-    safeStorage.setItem('dk_oqc_records', JSON.stringify(updatedOqcRecords));
-    try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
-    if (typeof (window as any).syncToServer === 'function') {
-      (window as any).syncToServer('dk_oqc_records', updatedOqcRecords);
-    }
+    const updatedOqcRecords = [newRecord, ...currentOqcList];
+    saveOqcRecordsOptimized(updatedOqcRecords, true);
   }
 
   setKcsCurrentPage(1);
@@ -5794,197 +5777,178 @@ const handleStartEditOqc = (record: OQCRecord, groupIds: string[]) => {
   setShowEditOqcModal(true);
 };
 
-const handleSaveOqcEdit = (e: FormEvent) => {
-  e.preventDefault();
-  if (!editingOqcRecord) return;
+  const handleSaveOqcEdit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingOqcRecord) return;
 
-  const now = new Date();
-  const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-  const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
-  const nowMonth = now.getMonth() + 1;
-  const nowYear = now.getFullYear();
-  const nowIso = now.toISOString();
+    commitPendingOqcOverrides(false);
+    const now = new Date();
+    const nowTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const nowDate = standardizeDate(now.toLocaleDateString('vi-VN'));
+    const nowMonth = now.getMonth() + 1;
+    const nowYear = now.getFullYear();
+    const nowIso = now.toISOString();
 
-  const updated = oqcRecords.map(r => {
-    if (r.id === editingOqcRecord.id || editingOqcGroupIds.includes(r.id)) {
-      return {
-        ...r,
-        status: editOqcStatus,
-        defectDetail: editOqcDefectDetail,
-        rootCause: editOqcRootCause,
-        evaluation: editOqcEvaluation,
-        treatment: editOqcTreatment,
-        checkTime: nowTime,
-        date: nowDate,
-        month: nowMonth,
-        year: nowYear,
-        updatedAt: nowIso
-      };
+    const updated = latestOqcRecordsRef.current.map(r => {
+      if (r.id === editingOqcRecord.id || editingOqcGroupIds.includes(r.id)) {
+        return {
+          ...r,
+          status: editOqcStatus,
+          defectDetail: editOqcDefectDetail,
+          rootCause: editOqcRootCause,
+          evaluation: editOqcEvaluation,
+          treatment: editOqcTreatment,
+          checkTime: nowTime,
+          date: nowDate,
+          month: nowMonth,
+          year: nowYear,
+          updatedAt: nowIso
+        };
+      }
+      return r;
+    });
+
+    saveOqcRecordsOptimized(updated, true);
+    setShowEditOqcModal(false);
+    setEditingOqcRecord(null);
+    setEditingOqcGroupIds([]);
+    alert('Cập nhật thông tin & thời gian chỉnh sửa KCS thành công!');
+  };
+
+  const handleClearAllOqcData = () => {
+    commitPendingOqcOverrides(false);
+    const totalCount = latestOqcRecordsRef.current.length;
+    if (totalCount === 0) {
+      alert('ℹ️ Cơ sở dữ liệu KCS hiện đang trống, không có bản ghi nào để xóa.');
+      setShowImportOqcModal(true);
+      return;
     }
-    return r;
-  });
 
-  setOqcRecords(updated);
-  safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-  try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
-  if (typeof (window as any).syncToServer === 'function') {
-    (window as any).syncToServer('dk_oqc_records', updated);
-  }
-  setShowEditOqcModal(false);
-  setEditingOqcRecord(null);
-  setEditingOqcGroupIds([]);
-  alert('Cập nhật thông tin & thời gian chỉnh sửa KCS thành công!');
-};
+    const confirmMsg = `⚠️ CẢNH BÁO XÓA TOÀN BỘ DỮ LIỆU KCS:\n\nAnh Thao có chắc chắn muốn XÓA SẠCH TOÀN BỘ ${totalCount.toLocaleString('vi-VN')} xe trong cơ sở dữ liệu KCS không?\n\n• Thao tác này sẽ làm sạch toàn bộ dữ liệu trên thiết bị và đồng bộ làm sạch lên Cloud Firebase.\n• Sau khi xóa, anh Thao có thể nạp ngay bộ dữ liệu Excel mới tinh.`;
 
-const handleClearAllOqcData = () => {
-  const totalCount = oqcRecords.length;
-  if (totalCount === 0) {
-    alert('ℹ️ Cơ sở dữ liệu KCS hiện đang trống, không có bản ghi nào để xóa.');
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+
+    saveOqcRecordsOptimized([], true);
+
+    alert(`✓ Đã xóa sạch toàn bộ ${totalCount.toLocaleString('vi-VN')} xe KCS cũ thành công!\n\nHệ thống sẽ tự động mở cửa sổ 'Dán Excel KCS' để anh Thao nạp bộ dữ liệu mới.`);
+    setOqcImportReplaceAll(false);
     setShowImportOqcModal(true);
-    return;
-  }
+  };
 
-  const confirmMsg = `⚠️ CẢNH BÁO XÓA TOÀN BỘ DỮ LIỆU KCS:\n\nAnh Thao có chắc chắn muốn XÓA SẠCH TOÀN BỘ ${totalCount.toLocaleString('vi-VN')} xe trong cơ sở dữ liệu KCS không?\n\n• Thao tác này sẽ làm sạch toàn bộ dữ liệu trên thiết bị và đồng bộ làm sạch lên Cloud Firebase.\n• Sau khi xóa, anh Thao có thể nạp ngay bộ dữ liệu Excel mới tinh.`;
+  const isLsxEmpty = (val?: string): boolean => {
+    if (!val) return true;
+    const trimmed = val.trim();
+    if (!trimmed || trimmed === '-' || trimmed === '--' || trimmed.toUpperCase() === 'N/A') return true;
+    const lower = trimmed.toLowerCase();
+    if (lower === 'chưa có' || lower === 'chưa có lsx' || lower === 'trống' || lower === 'none' || lower === 'null') return true;
+    return false;
+  };
 
-  if (!window.confirm(confirmMsg)) {
-    return;
-  }
+  const commitOqcImport = (finalParsed: OQCRecord[], isReplaceAll: boolean) => {
+    commitPendingOqcOverrides(false);
+    const baseRecords = latestOqcRecordsRef.current;
+    let finalUpdatedList: OQCRecord[] = [];
+    let updatedCount = 0;
+    let addedCount = 0;
 
-  setOqcRecords([]);
-  safeStorage.setItem('dk_oqc_records', JSON.stringify([]));
-  try {
-    localStorage.setItem('dk_oqc_records_is_dirty', 'true');
-  } catch (e) { }
+    if (isReplaceAll) {
+      // GHI ĐÈ THAY THẾ TOÀN BỘ (REPLACE ALL): Xóa sạch dữ liệu cũ, chỉ lấy dữ liệu mới vừa dán
+      finalUpdatedList = finalParsed;
+      addedCount = finalParsed.length;
+    } else {
+      // Multi-key lookup map for existing records
+      const finalParsedLookupMap = new Map<string, OQCRecord>();
+      finalParsed.forEach(r => {
+        if (r.serialNo) finalParsedLookupMap.set(r.serialNo.trim().toUpperCase(), r);
+        if (r.chassisNo) finalParsedLookupMap.set(r.chassisNo.trim().toUpperCase(), r);
+        if (r.id) finalParsedLookupMap.set(r.id.trim().toUpperCase().replace(/^OQC-/, ''), r);
+      });
 
-  if (typeof (window as any).syncToServer === 'function') {
-    (window as any).syncToServer('dk_oqc_records', []);
-  }
+      const justUpdatedRecords: OQCRecord[] = [];
+      const untouchedRecords: OQCRecord[] = [];
+      const matchedImportedSerials = new Set<string>();
 
-  alert(`✓ Đã xóa sạch toàn bộ ${totalCount.toLocaleString('vi-VN')} xe KCS cũ thành công!\n\nHệ thống sẽ tự động mở cửa sổ 'Dán Excel KCS' để anh Thao nạp bộ dữ liệu mới.`);
-  setOqcImportReplaceAll(false);
-  setShowImportOqcModal(true);
-};
+      baseRecords.forEach(oldRec => {
+        const sKey = (oldRec.serialNo || '').trim().toUpperCase();
+        const cKey = (oldRec.chassisNo || '').trim().toUpperCase();
+        const idKey = (oldRec.id || '').trim().toUpperCase().replace(/^OQC-/, '');
 
-const isLsxEmpty = (val?: string): boolean => {
-  if (!val) return true;
-  const trimmed = val.trim();
-  if (!trimmed || trimmed === '-' || trimmed === '--' || trimmed.toUpperCase() === 'N/A') return true;
-  const lower = trimmed.toLowerCase();
-  if (lower === 'chưa có' || lower === 'chưa có lsx' || lower === 'trống' || lower === 'none' || lower === 'null') return true;
-  return false;
-};
+        const newRec = (sKey && finalParsedLookupMap.get(sKey)) ||
+          (cKey && finalParsedLookupMap.get(cKey)) ||
+          (idKey && finalParsedLookupMap.get(idKey));
 
-const commitOqcImport = (finalParsed: OQCRecord[], isReplaceAll: boolean) => {
-  let finalUpdatedList: OQCRecord[] = [];
-  let updatedCount = 0;
-  let addedCount = 0;
+        if (newRec) {
+          updatedCount++;
+          const oldHasResult = oldRec.status === 'Đạt' || oldRec.status === 'Lỗi';
+          const newHasResult = newRec.status === 'Đạt' || newRec.status === 'Lỗi';
+          const keepOldResult = oldHasResult && !newHasResult;
+          const lockedDateTime = isKcsDateTimeLocked(oldRec);
+          const effectivePartCode = (newRec.partCode && newRec.partCode !== 'TEM-GEN') ? newRec.partCode : (oldRec.partCode === 'TEM-GEN' ? '' : (oldRec.partCode || newRec.partCode || ''));
+          const matched = lookupPartCode(effectivePartCode);
+          const nextModel = matched ? matched.model : (newRec.model || oldRec.model);
+          const nextColor = matched
+            ? (matched.nameWithColor || (matched.model && matched.color ? `${matched.model} - ${matched.color}` : matched.color))
+            : getStandardColorWithPrefix(newRec.color || oldRec.color, nextModel, effectivePartCode, lookupPartCode);
 
-  if (isReplaceAll) {
-    // GHI ĐÈ THAY THẾ TOÀN BỘ (REPLACE ALL): Xóa sạch dữ liệu cũ, chỉ lấy dữ liệu mới vừa dán
-    finalUpdatedList = finalParsed;
-    addedCount = finalParsed.length;
-  } else {
-    // Multi-key lookup map for existing records
-    const finalParsedLookupMap = new Map<string, OQCRecord>();
-    finalParsed.forEach(r => {
-      if (r.serialNo) finalParsedLookupMap.set(r.serialNo.trim().toUpperCase(), r);
-      if (r.chassisNo) finalParsedLookupMap.set(r.chassisNo.trim().toUpperCase(), r);
-      if (r.id) finalParsedLookupMap.set(r.id.trim().toUpperCase().replace(/^OQC-/, ''), r);
-    });
+          // Nếu dữ liệu mới chưa có thông tin Đạt/Lỗi thì ưu tiên giữ dữ liệu Đạt/Lỗi cũ đã có;
+          // đồng thời nếu xe cũ đã khóa giờ/ngày kiểm tra (sau khi kết thúc ngày kiểm) thì giữ nguyên giờ/ngày cũ.
+          justUpdatedRecords.push({
+            ...oldRec,
+            status: keepOldResult ? oldRec.status : newRec.status,
+            defectDetail: keepOldResult ? oldRec.defectDetail : newRec.defectDetail,
+            failedCount: keepOldResult ? oldRec.failedCount : newRec.failedCount,
+            rootCause: keepOldResult ? oldRec.rootCause : newRec.rootCause,
+            defectCauseDetail: keepOldResult ? oldRec.defectCauseDetail : (newRec.defectCauseDetail || oldRec.defectCauseDetail),
+            evaluation: keepOldResult ? oldRec.evaluation : (newRec.evaluation || oldRec.evaluation),
+            treatment: keepOldResult ? oldRec.treatment : (newRec.treatment || oldRec.treatment),
+            checkedBy: keepOldResult ? oldRec.checkedBy : (newRec.checkedBy || oldRec.checkedBy),
+            model: nextModel,
+            color: nextColor,
+            lsx: newRec.lsx || oldRec.lsx,
+            partCode: effectivePartCode,
+            chassisNo: newRec.chassisNo || oldRec.chassisNo,
+            engineNo: newRec.engineNo || oldRec.engineNo,
+            date: (keepOldResult || lockedDateTime) ? oldRec.date : (newRec.date || (newRec.status === 'Chưa kiểm tra' ? '' : (oldRec.date || ''))),
+            month: (keepOldResult || lockedDateTime) ? oldRec.month : (newRec.month || oldRec.month),
+            year: (keepOldResult || lockedDateTime) ? oldRec.year : (newRec.year || oldRec.year),
+            checkTime: (keepOldResult || lockedDateTime) ? (oldRec.checkTime || '') : (newRec.checkTime || (newRec.status === 'Chưa kiểm tra' ? '' : (oldRec.checkTime || '')))
+          });
+          if (newRec.serialNo) matchedImportedSerials.add(newRec.serialNo.trim().toUpperCase());
+        } else {
+          untouchedRecords.push(oldRec);
+        }
+      });
 
-    const justUpdatedRecords: OQCRecord[] = [];
-    const untouchedRecords: OQCRecord[] = [];
-    const matchedImportedSerials = new Set<string>();
+      // Add any brand new serials that were not in oqcRecords before
+      const brandNewRecords: OQCRecord[] = [];
+      finalParsed.forEach(newRec => {
+        const sUpper = (newRec.serialNo || '').trim().toUpperCase();
+        if (!matchedImportedSerials.has(sUpper)) {
+          const matched = lookupPartCode(newRec.partCode);
+          const modelVal = matched ? matched.model : newRec.model;
+          const colorVal = matched
+            ? (matched.nameWithColor || (matched.model && matched.color ? `${matched.model} - ${matched.color}` : matched.color))
+            : getStandardColorWithPrefix(newRec.color, modelVal, newRec.partCode, lookupPartCode);
+          const isPending = !newRec.status || newRec.status === 'Chưa kiểm tra';
+          brandNewRecords.push({
+            ...newRec,
+            model: modelVal,
+            color: colorVal,
+            checkTime: isPending ? '' : (newRec.checkTime || ''),
+            date: isPending ? '' : (newRec.date || '')
+          });
+          addedCount++;
+        }
+      });
 
-    oqcRecords.forEach(oldRec => {
-      const sKey = (oldRec.serialNo || '').trim().toUpperCase();
-      const cKey = (oldRec.chassisNo || '').trim().toUpperCase();
-      const idKey = (oldRec.id || '').trim().toUpperCase().replace(/^OQC-/, '');
+      // Đưa toàn bộ các xe vừa thêm mới và xe vừa cập nhật lên đầu danh sách để hiển thị ngay ở Trang 1
+      finalUpdatedList = [...brandNewRecords, ...justUpdatedRecords, ...untouchedRecords];
+    }
 
-      const newRec = (sKey && finalParsedLookupMap.get(sKey)) ||
-        (cKey && finalParsedLookupMap.get(cKey)) ||
-        (idKey && finalParsedLookupMap.get(idKey));
-
-      if (newRec) {
-        updatedCount++;
-        const oldHasResult = oldRec.status === 'Đạt' || oldRec.status === 'Lỗi';
-        const newHasResult = newRec.status === 'Đạt' || newRec.status === 'Lỗi';
-        const keepOldResult = oldHasResult && !newHasResult;
-        const lockedDateTime = isKcsDateTimeLocked(oldRec);
-        const effectivePartCode = (newRec.partCode && newRec.partCode !== 'TEM-GEN') ? newRec.partCode : (oldRec.partCode === 'TEM-GEN' ? '' : (oldRec.partCode || newRec.partCode || ''));
-        const matched = lookupPartCode(effectivePartCode);
-        const nextModel = matched ? matched.model : (newRec.model || oldRec.model);
-        const nextColor = matched
-          ? (matched.nameWithColor || (matched.model && matched.color ? `${matched.model} - ${matched.color}` : matched.color))
-          : getStandardColorWithPrefix(newRec.color || oldRec.color, nextModel, effectivePartCode, lookupPartCode);
-
-        // Nếu dữ liệu mới chưa có thông tin Đạt/Lỗi thì ưu tiên giữ dữ liệu Đạt/Lỗi cũ đã có;
-        // đồng thời nếu xe cũ đã khóa giờ/ngày kiểm tra (sau khi kết thúc ngày kiểm) thì giữ nguyên giờ/ngày cũ.
-        justUpdatedRecords.push({
-          ...oldRec,
-          status: keepOldResult ? oldRec.status : newRec.status,
-          defectDetail: keepOldResult ? oldRec.defectDetail : newRec.defectDetail,
-          failedCount: keepOldResult ? oldRec.failedCount : newRec.failedCount,
-          rootCause: keepOldResult ? oldRec.rootCause : newRec.rootCause,
-          defectCauseDetail: keepOldResult ? oldRec.defectCauseDetail : (newRec.defectCauseDetail || oldRec.defectCauseDetail),
-          evaluation: keepOldResult ? oldRec.evaluation : (newRec.evaluation || oldRec.evaluation),
-          treatment: keepOldResult ? oldRec.treatment : (newRec.treatment || oldRec.treatment),
-          checkedBy: keepOldResult ? oldRec.checkedBy : (newRec.checkedBy || oldRec.checkedBy),
-          model: nextModel,
-          color: nextColor,
-          lsx: newRec.lsx || oldRec.lsx,
-          partCode: effectivePartCode,
-          chassisNo: newRec.chassisNo || oldRec.chassisNo,
-          engineNo: newRec.engineNo || oldRec.engineNo,
-          date: (keepOldResult || lockedDateTime) ? oldRec.date : (newRec.date || (newRec.status === 'Chưa kiểm tra' ? '' : (oldRec.date || ''))),
-          month: (keepOldResult || lockedDateTime) ? oldRec.month : (newRec.month || oldRec.month),
-          year: (keepOldResult || lockedDateTime) ? oldRec.year : (newRec.year || oldRec.year),
-          checkTime: (keepOldResult || lockedDateTime) ? (oldRec.checkTime || '') : (newRec.checkTime || (newRec.status === 'Chưa kiểm tra' ? '' : (oldRec.checkTime || '')))
-        });
-        if (newRec.serialNo) matchedImportedSerials.add(newRec.serialNo.trim().toUpperCase());
-      } else {
-        untouchedRecords.push(oldRec);
-      }
-    });
-
-    // Add any brand new serials that were not in oqcRecords before
-    const brandNewRecords: OQCRecord[] = [];
-    finalParsed.forEach(newRec => {
-      const sUpper = (newRec.serialNo || '').trim().toUpperCase();
-      if (!matchedImportedSerials.has(sUpper)) {
-        const matched = lookupPartCode(newRec.partCode);
-        const modelVal = matched ? matched.model : newRec.model;
-        const colorVal = matched
-          ? (matched.nameWithColor || (matched.model && matched.color ? `${matched.model} - ${matched.color}` : matched.color))
-          : getStandardColorWithPrefix(newRec.color, modelVal, newRec.partCode, lookupPartCode);
-        const isPending = !newRec.status || newRec.status === 'Chưa kiểm tra';
-        brandNewRecords.push({
-          ...newRec,
-          model: modelVal,
-          color: colorVal,
-          checkTime: isPending ? '' : (newRec.checkTime || ''),
-          date: isPending ? '' : (newRec.date || '')
-        });
-        addedCount++;
-      }
-    });
-
-    // Đưa toàn bộ các xe vừa thêm mới và xe vừa cập nhật lên đầu danh sách để hiển thị ngay ở Trang 1
-    finalUpdatedList = [...brandNewRecords, ...justUpdatedRecords, ...untouchedRecords];
-  }
-
-  // GHI ĐÈ AN TOÀN VÀO SAFE STORAGE & ĐẨY LÊN CLOUD FIREBASE
-  latestOqcRecordsRef.current = finalUpdatedList;
-  setOqcRecords(finalUpdatedList);
-  safeStorage.setItem('dk_oqc_records', JSON.stringify(finalUpdatedList));
-  try {
-    localStorage.setItem('dk_oqc_records_is_dirty', 'true');
-  } catch (e) { }
-
-  // Trigger immediate synchronization to Firebase
-  if (typeof (window as any).syncToServer === 'function') {
-    (window as any).syncToServer('dk_oqc_records', finalUpdatedList);
-  }
+    // GHI ĐÈ AN TOÀN VÀO SAFE STORAGE & ĐẨY LÊN CLOUD FIREBASE
+    saveOqcRecordsOptimized(finalUpdatedList, true);
 
   // Tự động chuyển bộ lọc LSX sang đúng LSX của lô xe vừa nạp để hiển thị ngay trước mắt
   const firstImportedLsx = finalParsed.find(r => r.lsx && !isLsxEmpty(r.lsx))?.lsx;
@@ -7361,8 +7325,10 @@ const handleSaveStagedScans = () => {
     });
 
     // 1. Update OQC records in RAM
+    commitPendingOqcOverrides(false);
+    const currentOqcList = latestOqcRecordsRef.current;
     const existingSerials = new Set<string>();
-    const updatedOqc = oqcRecords.map(r => {
+    const updatedOqc = currentOqcList.map(r => {
       const sUpper = (r.serialNo || '').trim().toUpperCase();
       existingSerials.add(sUpper);
       const change = serialChangeMap.get(sUpper);
@@ -7449,16 +7415,8 @@ const handleSaveStagedScans = () => {
     ];
 
     // 3. PERSIST ONCE: Single disk write & Single Cloud sync
-    setOqcRecords(finalOqc);
+    saveOqcRecordsOptimized(finalOqc, true);
     updateColorChanges(mergedChanges);
-    safeStorage.setItem('dk_oqc_records', JSON.stringify(finalOqc));
-    try {
-      localStorage.setItem('dk_oqc_records_is_dirty', 'true');
-    } catch (e) { }
-
-    if (typeof (window as any).syncToServer === 'function') {
-      (window as any).syncToServer('dk_oqc_records', finalOqc);
-    }
     if (typeof (window as any).triggerCloudSynchronization === 'function') {
       (window as any).triggerCloudSynchronization();
     }
@@ -7530,8 +7488,9 @@ const handleSaveEditColorChange = (e: FormEvent) => {
   });
 
   // 2. Update in oqcRecords
+  commitPendingOqcOverrides(false);
   let hasMatchedOqc = false;
-  const updatedOqc = oqcRecords.map(r => {
+  const updatedOqc = latestOqcRecordsRef.current.map(r => {
     if (r.serialNo && (r.serialNo.trim().toUpperCase() === editingColorChangeRecord.serialNo.trim().toUpperCase() || r.serialNo.trim().toUpperCase() === cleanSerial)) {
       hasMatchedOqc = true;
       return {
@@ -7577,12 +7536,7 @@ const handleSaveEditColorChange = (e: FormEvent) => {
 
   // 3. Persist & Sync
   updateColorChanges(updatedChanges);
-  setOqcRecords(finalOqc);
-  safeStorage.setItem('dk_oqc_records', JSON.stringify(finalOqc));
-  try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
-  if (typeof (window as any).syncToServer === 'function') {
-    (window as any).syncToServer('dk_oqc_records', finalOqc);
-  }
+  saveOqcRecordsOptimized(finalOqc, true);
 
   setShowEditColorChangeModal(false);
   setEditingColorChangeRecord(null);
@@ -7599,7 +7553,8 @@ const handleDeleteColorChange = (record: OqcColorChangeRecord) => {
   updateColorChanges(newChanges);
 
   // Revert in OQC records
-  const updatedOqc = oqcRecords.map(r => {
+  commitPendingOqcOverrides(false);
+  const updatedOqc = latestOqcRecordsRef.current.map(r => {
     if (r.serialNo && r.serialNo.trim().toUpperCase() === record.serialNo.trim().toUpperCase()) {
       return {
         ...r,
@@ -7612,14 +7567,7 @@ const handleDeleteColorChange = (record: OqcColorChangeRecord) => {
     return r;
   });
 
-  setOqcRecords(updatedOqc);
-  safeStorage.setItem('dk_oqc_records', JSON.stringify(updatedOqc));
-  try {
-    localStorage.setItem('dk_oqc_records_is_dirty', 'true');
-  } catch (e) { }
-  if (typeof (window as any).syncToServer === 'function') {
-    (window as any).syncToServer('dk_oqc_records', updatedOqc);
-  }
+  saveOqcRecordsOptimized(updatedOqc, true);
 };
 
 // Export Color Change CSV
@@ -7660,8 +7608,9 @@ const handleImportColorChangeSubmit = (e: FormEvent) => {
     });
 
     // 1. Update OQC records
+    commitPendingOqcOverrides(false);
     const existingSerials = new Set<string>();
-    const updatedOqc = oqcRecords.map(r => {
+    const updatedOqc = latestOqcRecordsRef.current.map(r => {
       const sUpper = (r.serialNo || '').trim().toUpperCase();
       existingSerials.add(sUpper);
       const change = serialChangeMap.get(sUpper);
@@ -7739,16 +7688,8 @@ const handleImportColorChangeSubmit = (e: FormEvent) => {
     ];
 
     // 3. PERSIST ONCE: Single disk write & Single Cloud sync
-    setOqcRecords(finalOqc);
+    saveOqcRecordsOptimized(finalOqc, true);
     updateColorChanges(mergedChanges);
-    safeStorage.setItem('dk_oqc_records', JSON.stringify(finalOqc));
-    try {
-      localStorage.setItem('dk_oqc_records_is_dirty', 'true');
-    } catch (e) { }
-
-    if (typeof (window as any).syncToServer === 'function') {
-      (window as any).syncToServer('dk_oqc_records', finalOqc);
-    }
     if (typeof (window as any).triggerCloudSynchronization === 'function') {
       (window as any).triggerCloudSynchronization();
     }
@@ -9405,9 +9346,10 @@ return (
             const nowMonth = Number(dateParts[1]) || (now.getMonth() + 1);
             const nowYear = Number(dateParts[2]) || now.getFullYear();
 
+            commitPendingOqcOverrides(false);
             const pendingIds = new Set(displayLsxRecords.filter(r => r.status !== 'Đạt' && r.status !== 'Lỗi').map(r => r.id));
 
-            const updated = oqcRecords.map(r => {
+            const updated = latestOqcRecordsRef.current.map(r => {
               if (pendingIds.has(r.id)) {
                 return {
                   ...r,
@@ -9424,7 +9366,7 @@ return (
               }
               return r;
             });
-            saveOqcRecordsOptimized(updated);
+            saveOqcRecordsOptimized(updated, true);
           };
 
           return (
@@ -9971,10 +9913,11 @@ return (
                                         if (!file) return;
                                         const compressed = await compressImageFile(file, 500, 500, 0.4);
                                         // Change 6: Use optimistic override + saveOqcRecordsOptimized instead of direct setState + sync localStorage
+                                        commitPendingOqcOverrides(false);
                                         if (r.id) {
                                           setLocalOqcOverrides(prev => ({ ...prev, [r.id]: { ...r, imageUrl: compressed } }));
                                         }
-                                        const updated = oqcRecords.map(item => {
+                                        const updated = latestOqcRecordsRef.current.map(item => {
                                           if (item.id === r.id || item.serialNo.toUpperCase() === r.serialNo.toUpperCase()) {
                                             return { ...item, imageUrl: compressed };
                                           }
@@ -14372,8 +14315,10 @@ return (
                 }
 
                 // Merge with existing oqcRecords with O(1) Map lookup & smart preservation of existing Đạt/Lỗi results
+                commitPendingOqcOverrides(false);
+                const currentOqcRecords = latestOqcRecordsRef.current;
                 const existingMap = new Map<string, OQCRecord>();
-                oqcRecords.forEach(r => {
+                currentOqcRecords.forEach(r => {
                   if (r.serialNo) existingMap.set(r.serialNo.trim().toUpperCase(), r);
                 });
 
@@ -14387,7 +14332,7 @@ return (
                 let unchangedCount = 0;
 
                 const norm = (v: any) => String(v ?? '').trim().toLowerCase();
-                const updatedRecords = oqcRecords.map(oldRec => {
+                const updatedRecords = currentOqcRecords.map(oldRec => {
                   const key = (oldRec.serialNo || '').trim().toUpperCase();
                   const newRec = key ? newRecordsMap.get(key) : undefined;
                   if (newRec) {
@@ -14462,16 +14407,7 @@ return (
                 }
 
                 const finalRecords = [...brandNewLsx, ...updatedRecords];
-                setOqcRecords(finalRecords);
-                safeStorage.setItem('dk_oqc_records', JSON.stringify(finalRecords));
-                try {
-                  localStorage.setItem('dk_oqc_records_is_dirty', 'true');
-                } catch (e) { }
-
-                // Trigger immediate synchronization to Firebase
-                if (typeof (window as any).syncToServer === 'function') {
-                  (window as any).syncToServer('dk_oqc_records', finalRecords);
-                }
+                saveOqcRecordsOptimized(finalRecords, true);
 
                 if (defaultLsx) {
                   setKcsSelectedLsx(defaultLsx);
@@ -14603,13 +14539,15 @@ return (
                 updatedAt: nowIso
               };
 
-              const existingIndex = oqcRecords.findIndex(r => r.serialNo.trim().toUpperCase() === serial.toUpperCase());
+              commitPendingOqcOverrides(false);
+              const currentOqcList = latestOqcRecordsRef.current;
+              const existingIndex = currentOqcList.findIndex(r => r.serialNo.trim().toUpperCase() === serial.toUpperCase());
               let updated: OQCRecord[];
               if (existingIndex > -1) {
-                const oldRec = oqcRecords[existingIndex];
+                const oldRec = currentOqcList[existingIndex];
                 const oldHasResult = oldRec.status === 'Đạt' || oldRec.status === 'Lỗi';
                 const lockedDateTime = isKcsDateTimeLocked(oldRec);
-                updated = [...oqcRecords];
+                updated = [...currentOqcList];
                 updated[existingIndex] = {
                   ...oldRec,
                   ...newRec,
@@ -14625,15 +14563,10 @@ return (
                   updatedAt: nowIso
                 };
               } else {
-                updated = [newRec, ...oqcRecords];
+                updated = [newRec, ...currentOqcList];
               }
 
-              setOqcRecords(updated);
-              safeStorage.setItem('dk_oqc_records', JSON.stringify(updated));
-              try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
-              if (typeof (window as any).syncToServer === 'function') {
-                (window as any).syncToServer('dk_oqc_records', updated);
-              }
+              saveOqcRecordsOptimized(updated, true);
               setKcsSelectedLsx(newRec.lsx);
               setKcsCurrentPage(1);
               setKcsFilterDate('All');

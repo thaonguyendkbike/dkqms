@@ -38,30 +38,67 @@ function getIDBDatabase(): Promise<IDBDatabase | null> {
   return idbDatabasePromise;
 }
 
+const pendingIdbWrites = new Set<Promise<void>>();
+const writtenDuringStartup = new Set<string>();
+
+function trackIdbPromise(promise: Promise<void>): void {
+  pendingIdbWrites.add(promise);
+  promise.finally(() => {
+    pendingIdbWrites.delete(promise);
+  });
+}
+
 // Write a key-value pair asynchronously to IndexedDB
 function writeIDB(key: string, val: string): void {
-  getIDBDatabase().then((db) => {
-    if (!db) return;
-    try {
-      const tx = db.transaction(IDB_STORE, 'readwrite');
-      const store = tx.objectStore(IDB_STORE);
-      store.put(val, key);
-    } catch (err) {
+  const writePromise = getIDBDatabase()
+    .then((db) => {
+      if (!db) return;
+      return new Promise<void>((resolve) => {
+        try {
+          const tx = db.transaction(IDB_STORE, 'readwrite');
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => {
+            console.warn(`[safeStorage IDB Write Error] for key '${key}':`, tx.error);
+            resolve();
+          };
+          tx.onabort = () => {
+            console.warn(`[safeStorage IDB Write Aborted] for key '${key}':`, tx.error);
+            resolve();
+          };
+          const store = tx.objectStore(IDB_STORE);
+          store.put(val, key);
+        } catch (err) {
+          console.warn(`[safeStorage IDB Write Error] for key '${key}':`, err);
+          resolve();
+        }
+      });
+    })
+    .catch((err) => {
       console.warn(`[safeStorage IDB Write Error] for key '${key}':`, err);
-    }
-  });
+    });
+  trackIdbPromise(writePromise);
 }
 
 // Delete a key asynchronously from IndexedDB
 function deleteIDB(key: string): void {
-  getIDBDatabase().then((db) => {
-    if (!db) return;
-    try {
-      const tx = db.transaction(IDB_STORE, 'readwrite');
-      const store = tx.objectStore(IDB_STORE);
-      store.delete(key);
-    } catch (err) {}
-  });
+  const deletePromise = getIDBDatabase()
+    .then((db) => {
+      if (!db) return;
+      return new Promise<void>((resolve) => {
+        try {
+          const tx = db.transaction(IDB_STORE, 'readwrite');
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+          tx.onabort = () => resolve();
+          const store = tx.objectStore(IDB_STORE);
+          store.delete(key);
+        } catch (err) {
+          resolve();
+        }
+      });
+    })
+    .catch(() => {});
+  trackIdbPromise(deletePromise);
 }
 
 let isSafeStorageReady = false;
@@ -75,46 +112,69 @@ export function onSafeStorageReady(callback: () => void): void {
   }
 }
 
-// Pre-load all data from IndexedDB into memoryStore on startup
-if (typeof window !== 'undefined' && window.indexedDB) {
-  getIDBDatabase().then((db) => {
-    if (!db) {
-      isSafeStorageReady = true;
-      readyCallbacks.forEach(cb => { try { cb(); } catch (e) {} });
-      return;
-    }
-    try {
-      const tx = db.transaction(IDB_STORE, 'readonly');
-      const store = tx.objectStore(IDB_STORE);
-      const req = store.openCursor();
-      req.onsuccess = () => {
-        const cursor = req.result;
-        if (cursor) {
-          const k = String(cursor.key);
-          const v = String(cursor.value);
-          // Populate RAM from IndexedDB (IndexedDB is source of truth for persistent data)
-          memoryStore[k] = v;
-          cursor.continue();
-        } else {
-          // Finished reading all keys from IndexedDB
+const preloadPromise: Promise<void> = (typeof window !== 'undefined' && window.indexedDB)
+  ? getIDBDatabase()
+      .then((db) => {
+        if (!db) {
           isSafeStorageReady = true;
           readyCallbacks.forEach(cb => { try { cb(); } catch (e) {} });
-          try {
-            window.dispatchEvent(new CustomEvent('dk_safe_storage_ready'));
-          } catch (e) {}
+          return;
         }
-      };
-      req.onerror = () => {
+        return new Promise<void>((resolve) => {
+          try {
+            const tx = db.transaction(IDB_STORE, 'readonly');
+            const store = tx.objectStore(IDB_STORE);
+            const req = store.openCursor();
+            req.onsuccess = () => {
+              const cursor = req.result;
+              if (cursor) {
+                const k = String(cursor.key);
+                const v = String(cursor.value);
+                // Populate RAM from IndexedDB unless this key was explicitly written/deleted during startup
+                if (!writtenDuringStartup.has(k)) {
+                  memoryStore[k] = v;
+                }
+                cursor.continue();
+              } else {
+                // Finished reading all keys from IndexedDB
+                isSafeStorageReady = true;
+                readyCallbacks.forEach(cb => { try { cb(); } catch (e) {} });
+                try {
+                  window.dispatchEvent(new CustomEvent('dk_safe_storage_ready'));
+                } catch (e) {}
+                resolve();
+              }
+            };
+            req.onerror = () => {
+              isSafeStorageReady = true;
+              readyCallbacks.forEach(cb => { try { cb(); } catch (e) {} });
+              resolve();
+            };
+          } catch (e) {
+            isSafeStorageReady = true;
+            readyCallbacks.forEach(cb => { try { cb(); } catch (e) {} });
+            resolve();
+          }
+        });
+      })
+      .catch(() => {
         isSafeStorageReady = true;
         readyCallbacks.forEach(cb => { try { cb(); } catch (e) {} });
-      };
-    } catch (e) {
+      })
+  : (() => {
       isSafeStorageReady = true;
-      readyCallbacks.forEach(cb => { try { cb(); } catch (e) {} });
-    }
-  });
-} else {
-  isSafeStorageReady = true;
+      return Promise.resolve();
+    })();
+
+export function waitForSafeStoragePreload(): Promise<void> {
+  return preloadPromise.catch(() => {});
+}
+
+export async function flushSafeStorageWrites(): Promise<void> {
+  await waitForSafeStoragePreload();
+  while (pendingIdbWrites.size > 0) {
+    await Promise.allSettled(Array.from(pendingIdbWrites));
+  }
 }
 
 // Test if localStorage is accessible and writable
@@ -300,7 +360,8 @@ if (typeof window !== 'undefined' && window.localStorage && rawSetItem) {
       const strVal = String(value);
       // For large datasets, keep purely in memoryStore & IndexedDB to avoid freezing the browser
       if (strVal.length > 1000000 || key === 'dk_oqc_records') {
-        memoryStore[key] = strVal;
+        writtenDuringStartup.add(key);
+    memoryStore[key] = strVal;
         writeIDB(key, strVal);
         return;
       }
@@ -308,7 +369,8 @@ if (typeof window !== 'undefined' && window.localStorage && rawSetItem) {
       try {
         rawSetItem.call(window.localStorage, key, value);
       } catch (err: any) {
-        memoryStore[key] = strVal;
+        writtenDuringStartup.add(key);
+    memoryStore[key] = strVal;
         if (!isCleaningInProgress) {
           isCleaningInProgress = true;
           try {
@@ -400,6 +462,7 @@ export const safeStorage = {
       }
     }
 
+    writtenDuringStartup.add(key);
     memoryStore[key] = strVal;
     
     // Always persist to IndexedDB asynchronously (no 5MB quota limit!)
@@ -443,6 +506,7 @@ export const safeStorage = {
   },
 
   removeItem(key: string): void {
+    writtenDuringStartup.add(key);
     delete memoryStore[key];
     deleteIDB(key);
     if (isInMemory) {
