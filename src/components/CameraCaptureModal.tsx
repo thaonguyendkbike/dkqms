@@ -25,7 +25,7 @@ interface CameraCaptureModalProps {
   onConfirmFiles: (shots: Array<{ file: File; caption: string }>) => Promise<void>;
 }
 
-const QUICK_CAPTIONS = ['Tổng quan', 'Kích thước', 'Giắc / Chi tiết', ''];
+const QUICK_CAPTIONS = ['Tổng quan', 'Kích thước', 'Chi tiết', ''];
 
 export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   open,
@@ -81,7 +81,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setCameraError(
-          'Trình duyệt không hỗ trợ bật camera trực tiếp trong trang. Anh hãy bấm nút "Camera mặc định ĐT" bên dưới để chụp nhé.'
+          'Trình duyệt không hỗ trợ bật camera trực tiếp. Bấm "Camera ĐT" bên dưới để chụp.'
         );
         return;
       }
@@ -110,11 +110,11 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         const msg = String(err?.message || err?.name || '');
         if (msg.includes('NotAllowed') || msg.includes('Permission')) {
           setCameraError(
-            'Chưa cấp quyền Camera cho trình duyệt. Anh hãy bấm Cho phép quyền Camera hoặc dùng nút "Camera mặc định ĐT".'
+            'Chưa cấp quyền Camera. Bấm Cho phép hoặc dùng "Camera ĐT" bên dưới.'
           );
         } else {
           setCameraError(
-            'Không mở được camera trực tiếp trên thiết bị này. Anh hãy bấm nút "Camera mặc định ĐT" để chụp ảnh.'
+            'Không mở được camera trực tiếp. Bấm "Camera ĐT" để chụp ảnh.'
           );
         }
       }
@@ -206,37 +206,31 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] bg-slate-950/90 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="bg-slate-900 text-white rounded-t-2xl sm:rounded-2xl max-w-2xl w-full max-h-[96vh] flex flex-col border border-slate-700 shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-[70] bg-slate-950/85 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4">
+      <div className="bg-slate-900 text-white rounded-2xl max-w-lg w-full max-h-[92dvh] flex flex-col border border-slate-700 shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="px-4 py-3 bg-slate-950 flex items-center justify-between gap-2 border-b border-slate-800">
-          <div className="min-w-0">
-            <h3 className="text-sm font-black flex items-center gap-2 truncate">
-              <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span className="truncate">{title}</span>
-            </h3>
-            <p className="text-[11px] text-slate-400 truncate">
-              {multiple
-                ? 'Chụp 1 hoặc nhiều góc liên tiếp rồi bấm Lưu ảnh'
-                : 'Chế độ 1 ảnh — chụp xong bấm Lưu ảnh'}
-            </p>
-          </div>
+        <div className="px-3.5 py-2.5 bg-slate-950 flex items-center justify-between gap-2 border-b border-slate-800 shrink-0">
+          <h3 className="text-xs sm:text-sm font-black flex items-center gap-1.5 truncate min-w-0">
+            <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="truncate">{title}</span>
+          </h3>
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               disabled={saving}
               onClick={() => setFacingMode((m) => (m === 'environment' ? 'user' : 'environment'))}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer"
               title="Đổi camera trước / sau"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Đổi cam</span>
+              Đổi cam
             </button>
             <button
               type="button"
               disabled={saving}
               onClick={onClose}
               className="p-1.5 rounded-lg hover:bg-white/10 cursor-pointer"
+              title="Đóng"
             >
               <X className="w-4 h-4" />
             </button>
@@ -255,16 +249,15 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         />
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3">
+        <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
           {/* Quick Caption Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-            <span className="text-slate-400 font-bold mr-1">Chú thích:</span>
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 text-[11px]">
             {QUICK_CAPTIONS.map((cap) => (
               <button
                 key={cap || 'empty'}
                 type="button"
                 onClick={() => setActiveCaption(cap)}
-                className={`px-2.5 py-1 rounded-full font-bold border transition cursor-pointer ${
+                className={`px-2.5 py-1 rounded-full font-bold border whitespace-nowrap shrink-0 transition cursor-pointer ${
                   activeCaption === cap
                     ? 'bg-indigo-600 text-white border-indigo-400'
                     : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
@@ -276,7 +269,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
           </div>
 
           {/* Live Camera Viewport */}
-          <div className="relative rounded-2xl overflow-hidden bg-black border border-slate-800 aspect-[4/3] flex items-center justify-center">
+          <div className="relative rounded-xl overflow-hidden bg-black border border-slate-800 aspect-[4/3] max-h-[46dvh] w-full flex items-center justify-center">
             {!cameraError ? (
               <>
                 <video
@@ -289,35 +282,35 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 {!cameraReady && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 text-slate-300 gap-2 text-xs">
                     <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
-                    <span>Đang khởi động Camera...</span>
+                    <span>Đang bật Camera...</span>
                   </div>
                 )}
               </>
             ) : (
-              <div className="p-6 text-center space-y-3 max-w-sm">
-                <Camera className="w-10 h-10 text-slate-500 mx-auto" />
+              <div className="p-4 text-center space-y-2.5 max-w-xs">
+                <Camera className="w-9 h-9 text-slate-500 mx-auto" />
                 <p className="text-xs text-slate-300 leading-relaxed">{cameraError}</p>
                 <button
                   type="button"
                   onClick={() => nativeCameraInputRef.current?.click()}
-                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold inline-flex items-center gap-2 cursor-pointer shadow-lg"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
                 >
                   <Smartphone className="w-4 h-4" />
-                  Mở Camera mặc định ĐT
+                  Mở Camera ĐT
                 </button>
               </div>
             )}
           </div>
 
-          {/* Shutter + Native Camera Action */}
-          <div className="flex items-center justify-center gap-3">
+          {/* Capture Controls */}
+          <div className="flex items-center justify-center gap-2.5 pt-0.5">
             <button
               type="button"
               disabled={!cameraReady || Boolean(cameraError) || saving}
               onClick={handleCaptureFrame}
-              className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-sm font-black inline-flex items-center gap-2 shadow-lg cursor-pointer active:scale-95 transition"
+              className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs sm:text-sm font-black inline-flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-95 transition"
             >
-              <Camera className="w-5 h-5" />
+              <Camera className="w-4 h-4" />
               Chụp ảnh
             </button>
 
@@ -325,8 +318,8 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
               type="button"
               disabled={saving}
               onClick={() => nativeCameraInputRef.current?.click()}
-              className="px-3.5 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
-              title="Mở ứng dụng Camera gốc của điện thoại (nét & có đèn Flash)"
+              className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shrink-0"
+              title="Dùng ứng dụng Camera mặc định của điện thoại"
             >
               <Smartphone className="w-4 h-4" />
               Camera ĐT
@@ -335,34 +328,32 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
 
           {/* Captured Shots Preview */}
           {shots.length > 0 && (
-            <div className="bg-slate-950/70 rounded-xl border border-slate-800 p-2.5 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-extrabold text-emerald-400">
-                  Đã chụp {shots.length} ảnh (chờ lưu):
-                </span>
-              </div>
-              <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
+            <div className="bg-slate-950/70 rounded-xl border border-slate-800 p-2 space-y-1.5">
+              <span className="text-[11px] font-extrabold text-emerald-400 block">
+                Đã chụp ({shots.length} ảnh):
+              </span>
+              <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
                 {shots.map((shot) => (
                   <div
                     key={shot.id}
-                    className="relative w-20 shrink-0 rounded-xl overflow-hidden border border-slate-700 bg-slate-900"
+                    className="relative w-16 shrink-0 rounded-lg overflow-hidden border border-slate-700 bg-slate-900"
                   >
                     <img
                       src={shot.previewUrl}
                       alt={shot.caption || 'Ảnh chụp'}
-                      className="w-20 h-20 object-cover"
+                      className="w-16 h-16 object-cover"
                     />
                     <button
                       type="button"
                       disabled={saving}
                       onClick={() => handleRemoveShot(shot.id)}
-                      className="absolute top-1 right-1 p-1 rounded-full bg-rose-600 text-white cursor-pointer"
-                      title="Xóa ảnh vừa chụp"
+                      className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-rose-600 text-white cursor-pointer"
+                      title="Xóa ảnh"
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
                     {shot.caption && (
-                      <div className="px-1 py-0.5 text-[10px] font-bold text-center text-slate-200 bg-slate-900 truncate">
+                      <div className="px-1 py-0.5 text-[9px] font-bold text-center text-slate-200 bg-slate-900 truncate">
                         {shot.caption}
                       </div>
                     )}
@@ -374,7 +365,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-2 text-xs">
+        <div className="px-3.5 py-2.5 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-2 text-xs shrink-0">
           <button
             type="button"
             disabled={saving}
@@ -395,7 +386,7 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             ) : (
               <Check className="w-4 h-4" />
             )}
-            {saving ? 'Đang lưu ảnh...' : `Lưu ${shots.length} ảnh ngay`}
+            {saving ? 'Đang lưu...' : `Xong (${shots.length} ảnh)`}
           </button>
         </div>
       </div>
