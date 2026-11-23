@@ -261,6 +261,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
   const [bomSearch, setBomSearch] = useState('');
   const [bomSpecFilter, setBomSpecFilter] = useState('ALL');
   const [bomStatusFilter, setBomStatusFilter] = useState<'ALL' | PartQualityStatus>('ALL');
+  const [bomMissingImgOnly, setBomMissingImgOnly] = useState(false);
   const [bomPage, setBomPage] = useState(1);
 
   // Parts Master filters
@@ -523,6 +524,15 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
     });
   }, [combinedModels, modelSearch, modelFilter, partsByCode]);
 
+  const bomMissingImgCount = useMemo(() => {
+    if (!selectedModelEntry?.bom?.items) return 0;
+    return selectedModelEntry.bom.items.filter((line) => {
+      const part = partsByCode.get(line.partCode.trim().toUpperCase());
+      const imgCount = Array.isArray(part?.images) ? part.images.length : 0;
+      return imgCount === 0;
+    }).length;
+  }, [selectedModelEntry, partsByCode]);
+
   // Lọc danh sách linh kiện trong BOM của Model đang mở
   const filteredModelBomLines = useMemo(() => {
     if (!selectedModelEntry?.bom?.items) return [];
@@ -532,9 +542,11 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       const part = partsByCode.get(code);
       const specGroup = part?.specGroup || '';
       const status = part?.status || 'Đang dùng';
+      const imgCount = Array.isArray(part?.images) ? part.images.length : 0;
 
       if (bomSpecFilter !== 'ALL' && specGroup !== bomSpecFilter) return false;
       if (bomStatusFilter !== 'ALL' && status !== bomStatusFilter) return false;
+      if (bomMissingImgOnly && imgCount > 0) return false;
       if (!q) return true;
 
       return (
@@ -546,7 +558,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         (line.note || '').toLowerCase().includes(q)
       );
     });
-  }, [selectedModelEntry, bomSearch, bomSpecFilter, bomStatusFilter, partsByCode]);
+  }, [selectedModelEntry, bomSearch, bomSpecFilter, bomStatusFilter, bomMissingImgOnly, partsByCode]);
 
   // Lọc Kho Linh kiện (Tab 2)
   const filteredPartsMaster = useMemo(() => {
@@ -575,7 +587,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
 
   useEffect(() => {
     setBomPage(1);
-  }, [selectedModelKey, bomSearch, bomSpecFilter, bomStatusFilter]);
+  }, [selectedModelKey, bomSearch, bomSpecFilter, bomStatusFilter, bomMissingImgOnly]);
 
   useEffect(() => {
     setPartsPage(1);
@@ -886,6 +898,23 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
     }
   };
 
+  const persistUpdatedPartImages = async (
+    code: string,
+    nextImages: BomPartImageItem[],
+    nextImageMode: PartImageMode
+  ) => {
+    const existing = partsByCode.get(code);
+    if (!existing) return;
+    const updatedRecord: BomPartMasterItem = {
+      ...existing,
+      imageMode: nextImageMode,
+      images: nextImages,
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUserName
+    };
+    await saveBomPartRecord(updatedRecord);
+  };
+
   const handlePartImagesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     const files: File[] = fileList ? Array.from(fileList as ArrayLike<File>) : [];
@@ -898,7 +927,9 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       return;
     }
 
-    const filesToUpload: File[] = partForm.imageMode === 'single' ? [files[0]] : files;
+    const isViewQuickAdd = partModalMode === 'view';
+    const filesToUpload: File[] =
+      !isViewQuickAdd && partForm.imageMode === 'single' ? [files[0]] : files;
 
     setPartImagesUploading(true);
     try {
@@ -910,12 +941,24 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
           id: `IMG_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
           url,
           path,
-          caption: partForm.imageMode === 'single' ? 'Ảnh linh kiện' : '',
+          caption: !isViewQuickAdd && partForm.imageMode === 'single' ? 'Ảnh linh kiện' : '',
           updatedAt: new Date().toISOString()
         });
       }
 
-      if (partForm.imageMode === 'single') {
+      if (isViewQuickAdd) {
+        const prevCount = partForm.images.length;
+        const nextImages = [...partForm.images, ...uploadedItems];
+        const nextImageMode: PartImageMode = nextImages.length > 1 ? 'multi' : partForm.imageMode;
+        await persistUpdatedPartImages(code, nextImages, nextImageMode);
+        setPartForm((prev) => ({
+          ...prev,
+          imageMode: nextImageMode,
+          images: nextImages
+        }));
+        setSelectedViewImageIdx(prevCount);
+        showToast(`Đã thêm và lưu ${uploadedItems.length} ảnh cho mã ${code}.`, 'success');
+      } else if (partForm.imageMode === 'single') {
         // Xóa ảnh cũ nếu chế độ 1 ảnh (chỉ xóa file Storage nếu không có mã khác dùng chung)
         for (const oldImg of partForm.images) {
           if (oldImg.path && !isStoragePathShared(oldImg.path, editingPartId)) {
@@ -923,10 +966,11 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
           }
         }
         setPartForm((prev) => ({ ...prev, images: uploadedItems }));
+        showToast(`Đã tải lên ${uploadedItems.length} ảnh sắc nét cho mã ${code}.`, 'success');
       } else {
         setPartForm((prev) => ({ ...prev, images: [...prev.images, ...uploadedItems] }));
+        showToast(`Đã tải lên ${uploadedItems.length} ảnh sắc nét cho mã ${code}.`, 'success');
       }
-      showToast(`Đã tải lên ${uploadedItems.length} ảnh sắc nét cho mã ${code}.`, 'success');
     } catch (err: any) {
       console.error('[Part Image Upload Error]:', err);
       showToast(`Lỗi tải ảnh: ${err?.message || 'Vui lòng kiểm tra kết nối Firebase Storage'}`, 'error');
@@ -960,6 +1004,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
 
     setCameraSaving(true);
     try {
+      const isViewQuickAdd = partModalMode === 'view';
       const safeFolder = `parts/${toSafeDocId(targetCode)}`;
       const nowIso = new Date().toISOString();
       const uploadedItems: BomPartImageItem[] = [];
@@ -970,22 +1015,35 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
           id: `IMG_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
           url,
           path,
-          caption: shot.caption || (partForm.imageMode === 'single' ? 'Ảnh linh kiện' : ''),
+          caption: shot.caption || (!isViewQuickAdd && partForm.imageMode === 'single' ? 'Ảnh linh kiện' : ''),
           updatedAt: nowIso
         });
       }
 
-      if (partForm.imageMode === 'single') {
+      if (isViewQuickAdd) {
+        const prevCount = partForm.images.length;
+        const nextImages = [...partForm.images, ...uploadedItems];
+        const nextImageMode: PartImageMode = nextImages.length > 1 ? 'multi' : partForm.imageMode;
+        await persistUpdatedPartImages(targetCode, nextImages, nextImageMode);
+        setPartForm((prev) => ({
+          ...prev,
+          imageMode: nextImageMode,
+          images: nextImages
+        }));
+        setSelectedViewImageIdx(prevCount);
+        showToast(`Đã chụp và lưu ${uploadedItems.length} ảnh cho ${targetCode}.`, 'success');
+      } else if (partForm.imageMode === 'single') {
         for (const oldImg of partForm.images) {
           if (oldImg.path && !isStoragePathShared(oldImg.path, editingPartId)) {
             await deleteBomImageFromStorage(oldImg.path);
           }
         }
         setPartForm((prev) => ({ ...prev, images: [uploadedItems[0]] }));
+        showToast(`Đã chụp và tải lên ${uploadedItems.length} ảnh cho ${targetCode} (nhớ bấm Lưu).`, 'success');
       } else {
         setPartForm((prev) => ({ ...prev, images: [...prev.images, ...uploadedItems] }));
+        showToast(`Đã chụp và tải lên ${uploadedItems.length} ảnh cho ${targetCode} (nhớ bấm Lưu).`, 'success');
       }
-      showToast(`Đã chụp và tải lên ${uploadedItems.length} ảnh cho ${targetCode} (nhớ bấm Lưu).`, 'success');
       setCameraCaptureOpen(false);
     } catch (err: any) {
       console.error('[Camera Capture Upload Error]:', err);
@@ -1737,6 +1795,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                               setBomSearch('');
                               setBomSpecFilter('ALL');
                               setBomStatusFilter('ALL');
+                              setBomMissingImgOnly(false);
                             }}
                             className="flex-1 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white text-xs font-extrabold transition flex items-center justify-center gap-1.5 cursor-pointer"
                           >
@@ -1857,6 +1916,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                                   setBomSearch('');
                                   setBomSpecFilter('ALL');
                                   setBomStatusFilter('ALL');
+                                  setBomMissingImgOnly(false);
                                 }}
                                 className="font-black text-slate-900 hover:text-indigo-700 text-left cursor-pointer text-sm"
                               >
@@ -1952,6 +2012,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                                     setBomSearch('');
                                     setBomSpecFilter('ALL');
                                     setBomStatusFilter('ALL');
+                                    setBomMissingImgOnly(false);
                                   }}
                                   className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold inline-flex items-center gap-1 cursor-pointer"
                                 >
@@ -2231,6 +2292,20 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                       </option>
                     ))}
                   </select>
+
+                  <button
+                    type="button"
+                    onClick={() => setBomMissingImgOnly((prev) => !prev)}
+                    aria-pressed={bomMissingImgOnly}
+                    className={`col-span-2 sm:col-span-1 px-3 py-2 rounded-xl border text-xs font-extrabold inline-flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0 ${
+                      bomMissingImgOnly
+                        ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    <span>Chưa có ảnh ({bomMissingImgCount})</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -2341,11 +2416,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                               <span className="font-extrabold text-emerald-700">
                                 • {formatPriceDisplay(part?.sellingPrice, ' đ')}
                               </span>
-                              {showPurchasePrice && part?.purchasePrice !== undefined && (
-                                <span className="font-bold text-amber-800">
-                                  • Mua: {formatPriceDisplay(part.purchasePrice)}
-                                </span>
-                              )}
                             </div>
 
                             {part?.supplierName && (
@@ -2407,9 +2477,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                           <th className="py-3 px-3">Thông số</th>
                           <th className="py-3 px-3 text-center">Đơn vị</th>
                           <th className="py-3 px-3 text-right">Định mức</th>
-                          {showPurchasePrice && (
-                            <th className="py-3 px-3 text-right bg-amber-950/60">Giá mua</th>
-                          )}
                           <th className="py-3 px-3 text-right">Giá bán</th>
                           <th className="py-3 px-3">Trạng thái</th>
                           <th className="py-3 px-3">Dùng chung</th>
@@ -2518,11 +2585,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                               <td className="py-2.5 px-3 text-right font-black text-slate-900">
                                 {line.qty}
                               </td>
-                              {showPurchasePrice && (
-                                <td className="py-2.5 px-3 text-right font-extrabold text-amber-800 bg-amber-50/50 whitespace-nowrap">
-                                  {formatPriceDisplay(part?.purchasePrice)}
-                                </td>
-                              )}
                               <td className="py-2.5 px-3 text-right font-extrabold text-emerald-700 whitespace-nowrap">
                                 {formatPriceDisplay(part?.sellingPrice, ' đ')}
                               </td>
@@ -2897,11 +2959,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                               <span className="font-extrabold text-emerald-700">
                                 Giá bán: {formatPriceDisplay(part.sellingPrice, ' đ')}
                               </span>
-                              {showPurchasePrice && part.purchasePrice !== undefined && (
-                                <span className="font-extrabold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                                  Giá mua: {formatPriceDisplay(part.purchasePrice)}
-                                </span>
-                              )}
                             </div>
                           </div>
 
@@ -3020,11 +3077,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                             <span className="font-extrabold text-emerald-700">
                               • {formatPriceDisplay(part.sellingPrice, ' đ')}
                             </span>
-                            {showPurchasePrice && part.purchasePrice !== undefined && (
-                              <span className="font-bold text-amber-800">
-                                • Mua: {formatPriceDisplay(part.purchasePrice)}
-                              </span>
-                            )}
                           </div>
 
                           {part.supplierName && (
@@ -3068,9 +3120,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                         <th className="py-3 px-3 min-w-[230px]">Tên mặt hàng &amp; NCC</th>
                         <th className="py-3 px-3">Thông số</th>
                         <th className="py-3 px-3 text-center">ĐVT</th>
-                        {showPurchasePrice && (
-                          <th className="py-3 px-3 text-right bg-amber-950/60">Giá mua</th>
-                        )}
                         <th className="py-3 px-3 text-right">Giá bán</th>
                         <th className="py-3 px-3">Trạng thái</th>
                         <th className="py-3 px-3">Dùng chung</th>
@@ -3168,11 +3217,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                             <td className="py-2.5 px-3 text-center font-semibold text-slate-700">
                               {part.unit || 'Cái'}
                             </td>
-                            {showPurchasePrice && (
-                              <td className="py-2.5 px-3 text-right font-extrabold text-amber-800 bg-amber-50/50 whitespace-nowrap">
-                                {formatPriceDisplay(part.purchasePrice)}
-                              </td>
-                            )}
                             <td className="py-2.5 px-3 text-right font-extrabold text-emerald-700 whitespace-nowrap">
                               {formatPriceDisplay(part.sellingPrice, ' đ')}
                             </td>
@@ -3245,6 +3289,10 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
             onOpenModelBom={(modelKey) => {
               setActiveSubTab('models');
               setSelectedModelKey(modelKey);
+              setBomSearch('');
+              setBomSpecFilter('ALL');
+              setBomStatusFilter('ALL');
+              setBomMissingImgOnly(false);
             }}
             onFilterPartsTab={({ specGroup, missingImgOnly, status }) => {
               setPartSearch('');
@@ -3353,6 +3401,17 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
               </div>
             </div>
 
+            {!readOnly && (
+              <input
+                ref={partImageInputRef}
+                type="file"
+                accept="image/*"
+                multiple={partModalMode === 'view' || partForm.imageMode === 'multi'}
+                className="hidden"
+                onChange={handlePartImagesSelected}
+              />
+            )}
+
             {/* CHẾ ĐỘ XEM CHI TIẾT 1 LINH KIỆN (LAYOUT 2 CỘT RÕ NÉT) */}
             {partModalMode === 'view' ? (
               (() => {
@@ -3437,18 +3496,61 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                                 Chưa có hình ảnh cho mã linh kiện này
                               </p>
                               {!readOnly && (
-                                <button
-                                  type="button"
-                                  onClick={() => setPartModalMode('edit')}
-                                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
-                                >
-                                  <Camera className="w-3.5 h-3.5" />
-                                  Tải ảnh lên ngay
-                                </button>
+                                <div className="flex flex-wrap items-center justify-center gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={partImagesUploading || cameraSaving}
+                                    onClick={() => partImageInputRef.current?.click()}
+                                    className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
+                                  >
+                                    {partImagesUploading ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <Plus className="w-3.5 h-3.5" />
+                                    )}
+                                    Thêm ảnh
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={partImagesUploading || cameraSaving}
+                                    onClick={() => setCameraCaptureOpen(true)}
+                                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
+                                  >
+                                    <Camera className="w-3.5 h-3.5" />
+                                    Chụp ảnh
+                                  </button>
+                                </div>
                               )}
                             </div>
                           )}
                         </div>
+
+                        {!readOnly && activeImage && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={partImagesUploading || cameraSaving}
+                              onClick={() => partImageInputRef.current?.click()}
+                              className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-extrabold inline-flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
+                            >
+                              {partImagesUploading ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Plus className="w-3.5 h-3.5" />
+                              )}
+                              Thêm ảnh
+                            </button>
+                            <button
+                              type="button"
+                              disabled={partImagesUploading || cameraSaving}
+                              onClick={() => setCameraCaptureOpen(true)}
+                              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-extrabold inline-flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
+                            >
+                              <Camera className="w-3.5 h-3.5" />
+                              Chụp ảnh
+                            </button>
+                          </div>
+                        )}
 
                         {images.length > 1 && (
                           <div className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -3716,15 +3818,6 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                           <option value="single">1 ảnh (Nhựa / Đơn giản)</option>
                           <option value="multi">Nhiều ảnh (Chi tiết / Cụm)</option>
                         </select>
-
-                        <input
-                          ref={partImageInputRef}
-                          type="file"
-                          accept="image/*"
-                          multiple={partForm.imageMode === 'multi'}
-                          className="hidden"
-                          onChange={handlePartImagesSelected}
-                        />
 
                         <button
                           type="button"
@@ -4589,7 +4682,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       <CameraCaptureModal
         open={cameraCaptureOpen}
         title={`Chụp ảnh: ${partForm.partCode || 'Linh kiện mới'}`}
-        multiple={partForm.imageMode === 'multi'}
+        multiple={partModalMode === 'view' || partForm.imageMode === 'multi'}
         saving={cameraSaving}
         onClose={() => {
           if (!cameraSaving) setCameraCaptureOpen(false);
