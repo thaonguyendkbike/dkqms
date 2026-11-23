@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Camera,
   Check,
@@ -214,17 +214,41 @@ export default function QmsAppShowcaseTab({ readOnly = false }: { readOnly?: boo
   const [compressing, setCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  useEffect(() => {
+    const handleRemoteSync = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.key === SHOWCASE_STORAGE_KEY && Array.isArray(detail.data) && detail.data.length > 0) {
+        const existingIds = new Set(detail.data.map((x: AppModuleShowcaseItem) => x.id));
+        const missingDefaults = DEFAULT_APP_MODULES.filter((d) => !existingIds.has(d.id));
+        setModules([...detail.data, ...missingDefaults]);
+        setHasCustomEdits(true);
+      }
+    };
+    window.addEventListener('dk_local_module_remote_sync', handleRemoteSync);
+    return () => window.removeEventListener('dk_local_module_remote_sync', handleRemoteSync);
+  }, []);
+
   const persistModules = (next: AppModuleShowcaseItem[]) => {
     setModules(next);
     setHasCustomEdits(true);
     safeStorage.setItem(SHOWCASE_STORAGE_KEY, JSON.stringify(next));
+    safeStorage.setItem(`${SHOWCASE_STORAGE_KEY}_is_dirty`, 'true');
+    try {
+      window.localStorage.setItem(`${SHOWCASE_STORAGE_KEY}_is_dirty`, 'true');
+    } catch {}
+    (window as any).syncToServer?.(SHOWCASE_STORAGE_KEY, next);
   };
 
   const handleResetDefault = () => {
     if (!window.confirm('Khôi phục toàn bộ thông tin giới thiệu 9 phân hệ về mặc định ban đầu?')) return;
     setModules(DEFAULT_APP_MODULES);
     setHasCustomEdits(false);
-    safeStorage.removeItem(SHOWCASE_STORAGE_KEY);
+    safeStorage.setItem(SHOWCASE_STORAGE_KEY, JSON.stringify(DEFAULT_APP_MODULES));
+    safeStorage.setItem(`${SHOWCASE_STORAGE_KEY}_is_dirty`, 'true');
+    try {
+      window.localStorage.setItem(`${SHOWCASE_STORAGE_KEY}_is_dirty`, 'true');
+    } catch {}
+    (window as any).syncToServer?.(SHOWCASE_STORAGE_KEY, DEFAULT_APP_MODULES);
   };
 
   const filtered = useMemo(() => {
@@ -254,7 +278,7 @@ export default function QmsAppShowcaseTab({ readOnly = false }: { readOnly?: boo
       const nextImages = [...editingItem.images];
       for (let i = 0; i < files.length; i++) {
         if (nextImages.length >= 4) break;
-        const compressed = await compressImageFile(files[i], 1600, 1600, 0.88, 350000);
+        const compressed = await compressImageFile(files[i], 500, 500, 0.4);
         if (compressed) nextImages.push(compressed);
       }
       setEditingItem({ ...editingItem, images: nextImages });

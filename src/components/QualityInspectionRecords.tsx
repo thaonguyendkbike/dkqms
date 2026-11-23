@@ -2383,17 +2383,31 @@ export default function QualityInspectionRecords({
     const docRef = doc(db, 'dk_db_sync', 'dk_custom_defect_analyses');
     getDocFromServer(docRef)
       .then((snap) => {
-        if (snap.exists()) {
+        if (snap.exists() && safeStorage.getItem('dk_custom_defect_analyses_is_dirty') !== 'true') {
           const remoteData = snap.data()?.data;
-          if (remoteData) {
+          if (remoteData && typeof remoteData === 'object') {
             setCustomDefectAnalyses(remoteData);
-            localStorage.setItem('dk_custom_defect_analyses', JSON.stringify(remoteData));
+            safeStorage.setItem('dk_custom_defect_analyses', JSON.stringify(remoteData));
           }
         }
       })
       .catch((err) => {
         console.warn("[Firestore Warning] Lỗi tải phân tích lỗi tùy chỉnh từ Cloud Firestore:", err);
       });
+
+    const handleRemoteSync = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (
+        detail?.key === 'dk_custom_defect_analyses' &&
+        detail.data &&
+        typeof detail.data === 'object' &&
+        safeStorage.getItem('dk_custom_defect_analyses_is_dirty') !== 'true'
+      ) {
+        setCustomDefectAnalyses(detail.data);
+      }
+    };
+    window.addEventListener('dk_local_module_remote_sync', handleRemoteSync);
+    return () => window.removeEventListener('dk_local_module_remote_sync', handleRemoteSync);
   }, []);
 
   const [draftSeverity, setDraftSeverity] = useState('');
@@ -2450,6 +2464,11 @@ export default function QualityInspectionRecords({
 
     setCustomDefectAnalyses(updated);
     safeStorage.setItem('dk_custom_defect_analyses', JSON.stringify(updated));
+    safeStorage.setItem('dk_custom_defect_analyses_is_dirty', 'true');
+    try {
+      localStorage.setItem('dk_custom_defect_analyses_is_dirty', 'true');
+    } catch {}
+    (window as any).syncToServer?.('dk_custom_defect_analyses', updated);
 
     // Async server side backup - only sync to Firestore if there is a real Google Firebase login session
     if (auth.currentUser) {
@@ -2459,6 +2478,12 @@ export default function QualityInspectionRecords({
         updatedBy: auth.currentUser?.email || 'System Public Session',
         updatedAt: new Date().toISOString()
       }))
+        .then(() => {
+          safeStorage.setItem('dk_custom_defect_analyses_is_dirty', 'false');
+          try {
+            localStorage.setItem('dk_custom_defect_analyses_is_dirty', 'false');
+          } catch {}
+        })
         .catch((err: any) => {
           console.error("Lỗi đồng bộ phân tích lỗi tùy chỉnh lên Cloud Firestore:", err);
         });
@@ -5023,25 +5048,16 @@ export default function QualityInspectionRecords({
       const file = e.target.files?.[0];
       if (file) {
         try {
-          // Tự động nén ảnh xuống tối đa 800px và mức chất lượng 0.5 để tiết kiệm tối đa bộ nhớ & băng thông đám mây
-          const compressed = await compressImageFile(file, 800, 800, 0.5);
+          // Tự động nén ảnh xuống tối đa 500x500px và mức chất lượng 0.4 (<30KB) theo chuẩn AGENTS.md Rule 1
+          const compressed = await compressImageFile(file, 500, 500, 0.4);
           if (compressed) {
             setImageUrl(compressed);
           } else {
-            // fallback
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              setImageUrl(reader.result as string);
-            };
-            reader.readAsDataURL(file);
+            alert('Không thể nén ảnh. Vui lòng chọn ảnh khác nhỏ hơn.');
           }
         } catch (err) {
           console.error("[Image Compression Error]:", err);
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            setImageUrl(reader.result as string);
-          };
-          reader.readAsDataURL(file);
+          alert('Lỗi khi nén ảnh. Vui lòng chọn ảnh khác.');
         }
       }
     };
@@ -5856,6 +5872,14 @@ const handleStartEditOqc = (record: OQCRecord, groupIds: string[]) => {
       return;
     }
 
+    const currentAll = latestOqcRecordsRef.current;
+    trackDeletedIdsBatch(
+      'dk_oqc_records',
+      collectOqcDeleteIds(
+        currentAll,
+        currentAll.map(r => r.id).filter(Boolean)
+      )
+    );
     saveOqcRecordsOptimized([], true);
 
     alert(`✓ Đã xóa sạch toàn bộ ${totalCount.toLocaleString('vi-VN')} xe KCS cũ thành công!\n\nHệ thống sẽ tự động mở cửa sổ 'Dán Excel KCS' để anh Thao nạp bộ dữ liệu mới.`);
@@ -13614,13 +13638,12 @@ return (
                             const compressed = await compressImageFile(file, 500, 500, 0.4);
                             if (compressed) {
                               setNewIqcImageUrls(prev => [...prev, compressed]);
+                            } else {
+                              alert('Không thể nén ảnh. Vui lòng chọn ảnh khác nhỏ hơn.');
                             }
                           } catch (err) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setNewIqcImageUrls(prev => [...prev, reader.result as string]);
-                            };
-                            reader.readAsDataURL(file);
+                            console.error('[IQC Image Compression Error]:', err);
+                            alert('Lỗi khi nén ảnh. Vui lòng chọn ảnh khác.');
                           }
                         }
                       }}
@@ -13807,13 +13830,12 @@ return (
                             const compressed = await compressImageFile(file, 500, 500, 0.4);
                             if (compressed) {
                               setNewPqcImageUrls(prev => [...prev, compressed]);
+                            } else {
+                              alert('Không thể nén ảnh. Vui lòng chọn ảnh khác nhỏ hơn.');
                             }
                           } catch (err) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setNewPqcImageUrls(prev => [...prev, reader.result as string]);
-                            };
-                            reader.readAsDataURL(file);
+                            console.error('[PQC Image Compression Error]:', err);
+                            alert('Lỗi khi nén ảnh. Vui lòng chọn ảnh khác.');
                           }
                         }
                       }}
@@ -14006,18 +14028,12 @@ return (
                                 imageUrls: updatedUrls,
                                 imageUrl: updatedUrls[0] || ''
                               });
+                            } else {
+                              alert('Không thể nén ảnh. Vui lòng chọn ảnh khác nhỏ hơn.');
                             }
                           } catch (err) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              const updatedUrls = [...(editingPqcRecord.imageUrls || []), reader.result as string];
-                              setEditingPqcRecord({
-                                ...editingPqcRecord,
-                                imageUrls: updatedUrls,
-                                imageUrl: updatedUrls[0] || ''
-                              });
-                            };
-                            reader.readAsDataURL(file);
+                            console.error('[Edit PQC Image Compression Error]:', err);
+                            alert('Lỗi khi nén ảnh. Vui lòng chọn ảnh khác.');
                           }
                         }
                       }}
@@ -17617,13 +17633,12 @@ return (
                           const compressed = await compressImageFile(file, 500, 500, 0.4);
                           if (compressed) {
                             setEditAuditImageUrl(compressed);
+                          } else {
+                            alert('Không thể nén ảnh. Vui lòng chọn ảnh khác nhỏ hơn.');
                           }
                         } catch (err) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setEditAuditImageUrl(reader.result as string);
-                          };
-                          reader.readAsDataURL(file);
+                          console.error('[Supplier Audit Image Compression Error]:', err);
+                          alert('Lỗi khi nén ảnh. Vui lòng chọn ảnh khác.');
                         }
                       }
                     }}
@@ -17650,13 +17665,12 @@ return (
                             const compressed = await compressImageFile(file, 500, 500, 0.4);
                             if (compressed) {
                               setEditAuditImageUrl(compressed);
+                            } else {
+                              alert('Không thể nén ảnh. Vui lòng chọn ảnh khác nhỏ hơn.');
                             }
                           } catch (err) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setEditAuditImageUrl(reader.result as string);
-                            };
-                            reader.readAsDataURL(file);
+                            console.error('[Supplier Audit Image Compression Error]:', err);
+                            alert('Lỗi khi nén ảnh. Vui lòng chọn ảnh khác.');
                           }
                         }
                       }}

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bike,
   Camera,
@@ -752,17 +752,39 @@ export default function QmsProductsTab({ readOnly = false }: { readOnly?: boolea
   const [compressing, setCompressing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  useEffect(() => {
+    const handleRemoteSync = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.key === PRODUCTS_STORAGE_KEY && Array.isArray(detail.data) && detail.data.length > 0) {
+        setProducts(detail.data);
+        setHasCustomEdits(true);
+      }
+    };
+    window.addEventListener('dk_local_module_remote_sync', handleRemoteSync);
+    return () => window.removeEventListener('dk_local_module_remote_sync', handleRemoteSync);
+  }, []);
+
   const persistProducts = (next: ProductSpecItem[]) => {
     setProducts(next);
     setHasCustomEdits(true);
     safeStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(next));
+    safeStorage.setItem(`${PRODUCTS_STORAGE_KEY}_is_dirty`, 'true');
+    try {
+      window.localStorage.setItem(`${PRODUCTS_STORAGE_KEY}_is_dirty`, 'true');
+    } catch {}
+    (window as any).syncToServer?.(PRODUCTS_STORAGE_KEY, next);
   };
 
   const handleResetDefault = () => {
     if (!window.confirm('Khôi phục toàn bộ 17 model sản phẩm về thông số mặc định ban đầu?')) return;
     setProducts(DEFAULT_PRODUCTS);
     setHasCustomEdits(false);
-    safeStorage.removeItem(PRODUCTS_STORAGE_KEY);
+    safeStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(DEFAULT_PRODUCTS));
+    safeStorage.setItem(`${PRODUCTS_STORAGE_KEY}_is_dirty`, 'true');
+    try {
+      window.localStorage.setItem(`${PRODUCTS_STORAGE_KEY}_is_dirty`, 'true');
+    } catch {}
+    (window as any).syncToServer?.(PRODUCTS_STORAGE_KEY, DEFAULT_PRODUCTS);
   };
 
   const filtered = useMemo(() => {

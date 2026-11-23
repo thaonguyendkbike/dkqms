@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { doc, setDoc, deleteDoc, collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { compressImageFile } from '../imageCompressor';
-import { safeStorage as localStorage } from '../safeStorage';
+import { safeStorage as localStorage, sanitizeFirestorePayload } from '../safeStorage';
 import { QualityStaff, Supplier, Dealer, DKBikeModel, ChatNoteMessage } from '../types';
 
 interface ChatNoteTabProps {
@@ -92,32 +92,83 @@ export default function ChatNoteTab({
     };
   }, []);
 
-  // Fetch real-time chat messages from Firestore with offline fallback
+  // Helper to read/write unsent offline messages queue
+  const readPendingQueue = (): ChatNoteMessage[] => {
+    try {
+      const raw = localStorage.getItem('dk_chat_notes_pending_queue');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writePendingQueue = (queue: ChatNoteMessage[]) => {
+    try {
+      localStorage.setItem('dk_chat_notes_pending_queue', JSON.stringify(queue));
+    } catch (e) {
+      console.warn('Failed to persist pending chat queue:', e);
+    }
+  };
+
+  // Fetch real-time chat messages from Firestore with offline fallback & pending replay
   useEffect(() => {
     const chatCollection = collection(db, 'qms_chat_notes');
     const q = query(chatCollection, orderBy('timestamp', 'asc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs: ChatNoteMessage[] = [];
-      snapshot.forEach((doc) => {
-        msgs.push({ id: doc.id, ...doc.data() } as ChatNoteMessage);
+      const cloudMsgs: ChatNoteMessage[] = [];
+      const cloudIds = new Set<string>();
+      snapshot.forEach((docSnap) => {
+        cloudIds.add(docSnap.id);
+        cloudMsgs.push({ id: docSnap.id, ...docSnap.data() } as ChatNoteMessage);
       });
-      setMessages(msgs);
+
+      // Reconcile and retry any pending offline messages not yet confirmed in Cloud snapshot
+      const pending = readPendingQueue();
+      const remainingPending: ChatNoteMessage[] = [];
+      pending.forEach((pMsg) => {
+        if (pMsg?.id && !cloudIds.has(pMsg.id)) {
+          remainingPending.push(pMsg);
+          setDoc(doc(db, 'qms_chat_notes', pMsg.id), sanitizeFirestorePayload(pMsg))
+            .then(() => {
+              const currentQ = readPendingQueue().filter((x) => x.id !== pMsg.id);
+              writePendingQueue(currentQ);
+            })
+            .catch(() => {});
+        }
+      });
+      if (remainingPending.length !== pending.length) {
+        writePendingQueue(remainingPending);
+      }
+
+      const mergedMsgs =
+        remainingPending.length > 0
+          ? [...cloudMsgs, ...remainingPending].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+          : cloudMsgs;
+
+      setMessages(mergedMsgs);
       setFirebaseError(null);
-      // Cache messages locally
+      // Cache messages locally (including any still-pending offline messages)
       try {
-        localStorage.setItem('dk_chat_notes_cache', JSON.stringify(msgs));
+        localStorage.setItem('dk_chat_notes_cache', JSON.stringify(mergedMsgs));
       } catch (e) {
         console.warn('Failed to cache chat messages to localStorage:', e);
       }
     }, (error) => {
       console.error('Firestore real-time subscription error:', error);
       setFirebaseError('Không thể đồng bộ thời gian thực từ Cloud. Đang chạy ở chế độ offline.');
-      // Load from cache
+      // Load from cache + pending queue
       try {
         const cached = localStorage.getItem('dk_chat_notes_cache');
-        if (cached) {
-          setMessages(JSON.parse(cached));
+        const cachedList: ChatNoteMessage[] = cached ? JSON.parse(cached) : [];
+        const pending = readPendingQueue();
+        const seen = new Set(cachedList.map((m) => m.id));
+        const combined = [...cachedList, ...pending.filter((m) => m?.id && !seen.has(m.id))].sort(
+          (a, b) => (a.timestamp || 0) - (b.timestamp || 0)
+        );
+        if (combined.length > 0) {
+          setMessages(combined);
         }
       } catch (e) {
         console.error('Failed to parse cached chat notes:', e);
@@ -269,10 +320,14 @@ export default function ChatNoteTab({
       senderPhoto: currentUser.photoURL || '',
       timestamp: Date.now(),
       isPinned: false,
-      fileUrl: attachedFile?.dataUrl || undefined,
-      fileName: attachedFile?.name || undefined,
-      fileSize: attachedFile?.size || undefined,
-      fileType: attachedFile?.type || undefined
+      ...(attachedFile
+        ? {
+            fileUrl: attachedFile.dataUrl,
+            fileName: attachedFile.name,
+            fileSize: attachedFile.size,
+            fileType: attachedFile.type
+          }
+        : {})
     };
 
     // Optimistic UI state update
@@ -280,16 +335,20 @@ export default function ChatNoteTab({
     setInputText('');
     setAttachedFile(null);
 
-    // Save to Firestore with LocalStorage cache fallback
+    // Save to Firestore with LocalStorage cache & pending retry queue fallback
     try {
       const docRef = doc(db, 'qms_chat_notes', messageId);
-      await setDoc(docRef, newMessage);
+      await setDoc(docRef, sanitizeFirestorePayload(newMessage));
     } catch (err) {
       console.error('Failed to save message to cloud:', err);
-      // Fallback: save to LocalStorage cache and mark as unsynced
+      // Fallback: save to LocalStorage cache and queue for automatic replay on reconnect
       try {
+        const pending = readPendingQueue().filter((m) => m.id !== newMessage.id);
+        pending.push(newMessage);
+        writePendingQueue(pending);
+
         const cached = localStorage.getItem('dk_chat_notes_cache') || '[]';
-        const msgs = JSON.parse(cached);
+        const msgs = JSON.parse(cached).filter((m: any) => m.id !== newMessage.id);
         msgs.push(newMessage);
         localStorage.setItem('dk_chat_notes_cache', JSON.stringify(msgs));
       } catch (e) {
@@ -300,21 +359,30 @@ export default function ChatNoteTab({
 
   // Pin / Unpin message
   const handleTogglePin = async (msg: ChatNoteMessage) => {
-    const updatedMsg = {
+    const nextPinned = !msg.isPinned;
+    const updatedMsg: ChatNoteMessage = {
       ...msg,
-      isPinned: !msg.isPinned,
-      pinnedBy: !msg.isPinned ? currentUser.name : undefined
+      isPinned: nextPinned
     };
+    if (nextPinned) {
+      updatedMsg.pinnedBy = currentUser.name;
+    } else {
+      delete (updatedMsg as any).pinnedBy;
+    }
 
     // Update locally first
     setMessages(prev => prev.map(m => m.id === msg.id ? updatedMsg : m));
 
     try {
       const docRef = doc(db, 'qms_chat_notes', msg.id);
-      await setDoc(docRef, updatedMsg);
+      await setDoc(docRef, sanitizeFirestorePayload(updatedMsg));
     } catch (err) {
       console.error('Failed to pin message on cloud:', err);
       try {
+        const pending = readPendingQueue();
+        if (pending.some((m) => m.id === msg.id)) {
+          writePendingQueue(pending.map((m) => (m.id === msg.id ? updatedMsg : m)));
+        }
         const cached = localStorage.getItem('dk_chat_notes_cache') || '[]';
         const msgs = JSON.parse(cached).map((m: any) => m.id === msg.id ? updatedMsg : m);
         localStorage.setItem('dk_chat_notes_cache', JSON.stringify(msgs));
@@ -326,8 +394,12 @@ export default function ChatNoteTab({
   const handleDeleteMessage = async (msgId: string) => {
     if (!window.confirm('Anh có chắc muốn xoá tin nhắn/ghi chú này không?')) return;
 
-    // Remove locally
+    // Remove locally & from pending queue
     setMessages(prev => prev.filter(m => m.id !== msgId));
+    const pending = readPendingQueue();
+    if (pending.some((m) => m.id === msgId)) {
+      writePendingQueue(pending.filter((m) => m.id !== msgId));
+    }
 
     try {
       const docRef = doc(db, 'qms_chat_notes', msgId);

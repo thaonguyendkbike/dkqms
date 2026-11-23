@@ -2060,6 +2060,131 @@ export function App() {
   const lastKnownChunkCounts = useRef<Record<string, number>>({});
   const lastKnownOqcCloudDeletedIds = useRef<string[]>([]);
   const hasCompletedInitialCloudLoad = useRef<boolean>(false);
+  const syncRetryTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const MAX_FIRESTORE_SAFE_CHUNK_BYTES = 700000;
+
+  const getApproxUtf8Bytes = (val: any): number => {
+    try {
+      const str = typeof val === 'string' ? val : JSON.stringify(val);
+      if (!str) return 0;
+      return typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(str).length : str.length * 2;
+    } catch {
+      return 0;
+    }
+  };
+
+  // Chia mảng dữ liệu lớn thành các chunk an toàn (<= 700KB và <= maxItemsPerChunk) để không bao giờ vượt ngưỡng 1MB của Firestore
+  const splitArrayIntoByteChunks = (
+    items: any[],
+    maxBytes = MAX_FIRESTORE_SAFE_CHUNK_BYTES,
+    maxItemsPerChunk = 500
+  ): any[][] => {
+    if (!Array.isArray(items) || items.length === 0) return [[]];
+    const result: any[][] = [];
+    for (let i = 0; i < items.length; i += maxItemsPerChunk) {
+      const slice = items.slice(i, i + maxItemsPerChunk);
+      const sliceBytes = getApproxUtf8Bytes(sanitizeFirestorePayload(slice));
+      if (sliceBytes <= maxBytes || slice.length <= 1) {
+        result.push(slice);
+      } else {
+        let currentChunk: any[] = [];
+        let currentBytes = 2; // "[]"
+        for (const item of slice) {
+          const itemBytes = getApproxUtf8Bytes(sanitizeFirestorePayload(item)) + 1;
+          if (currentChunk.length > 0 && (currentBytes + itemBytes > maxBytes || currentChunk.length >= maxItemsPerChunk)) {
+            result.push(currentChunk);
+            currentChunk = [item];
+            currentBytes = 2 + itemBytes;
+          } else {
+            currentChunk.push(item);
+            currentBytes += itemBytes;
+          }
+        }
+        if (currentChunk.length > 0) {
+          result.push(currentChunk);
+        }
+      }
+    }
+    return result.length > 0 ? result : [[]];
+  };
+
+  // Trình đọc hợp nhất tài liệu đơn hoặc tài liệu phân mảnh (isChunked: true) cho MỌI phân hệ (Fail-Closed nếu thiếu bất kỳ chunk nào)
+  const assembleCloudKeyData = async (
+    key: string,
+    docData: any,
+    rawDocMap?: Record<string, any>
+  ): Promise<{ data: any; failed: boolean; isChunked: boolean }> => {
+    if (!docData || typeof docData !== 'object') {
+      return { data: null, failed: false, isChunked: false };
+    }
+    if (docData.isChunked === true) {
+      const chunkCount = Number(docData.chunkCount) || 0;
+      if (chunkCount <= 0) {
+        lastKnownChunkCounts.current[key] = 0;
+        const inlineArr = Array.isArray(docData.data) ? restoreFirestorePayload(docData.data) : [];
+        return { data: inlineArr, failed: false, isChunked: true };
+      }
+
+      const chunkByIdx = new Map<number, any[]>();
+      const missingIndices: number[] = [];
+
+      for (let i = 0; i < chunkCount; i++) {
+        const chunkKey = `${key}_chunk_${i}`;
+        const cachedChunk = rawDocMap ? rawDocMap[chunkKey] : undefined;
+        if (cachedChunk && Array.isArray(cachedChunk.data)) {
+          chunkByIdx.set(i, cachedChunk.data);
+        } else {
+          missingIndices.push(i);
+        }
+      }
+
+      if (missingIndices.length > 0) {
+        try {
+          const proms = missingIndices.map((cIdx) => getDoc(doc(db, 'dk_db_sync', `${key}_chunk_${cIdx}`)));
+          const results = await Promise.allSettled(proms);
+          for (let idx = 0; idx < results.length; idx++) {
+            const cIdx = missingIndices[idx];
+            const res = results[idx];
+            if (res.status === 'fulfilled' && res.value.exists()) {
+              const cd = res.value.data();
+              if (cd && Array.isArray(cd.data)) {
+                chunkByIdx.set(cIdx, cd.data);
+              } else {
+                console.warn(`[Chunk Reader Fail-Closed]: Chunk ${cIdx} của '${key}' không hợp lệ.`);
+                return { data: null, failed: true, isChunked: true };
+              }
+            } else {
+              console.warn(`[Chunk Reader Fail-Closed]: Không thể tải chunk ${cIdx}/${chunkCount} cho '${key}'.`);
+              return { data: null, failed: true, isChunked: true };
+            }
+          }
+        } catch (err) {
+          console.warn(`[Chunk Reader Fail-Closed]: Lỗi mạng khi tải chunks cho '${key}':`, err);
+          return { data: null, failed: true, isChunked: true };
+        }
+      }
+
+      let assembled: any[] = [];
+      for (let i = 0; i < chunkCount; i++) {
+        const part = chunkByIdx.get(i);
+        if (!part) {
+          return { data: null, failed: true, isChunked: true };
+        }
+        lastSyncedChunkHashes.current[`${key}_chunk_${i}`] = JSON.stringify(part);
+        assembled = assembled.concat(part);
+      }
+      lastKnownChunkCounts.current[key] = chunkCount;
+      return { data: restoreFirestorePayload(assembled), failed: false, isChunked: true };
+    }
+
+    if (docData.data !== undefined) {
+      lastKnownChunkCounts.current[key] = 0;
+      return { data: restoreFirestorePayload(docData.data), failed: false, isChunked: false };
+    }
+
+    return { data: null, failed: false, isChunked: false };
+  };
 
   // Hàm chuẩn hóa thứ tự thuộc tính của bản ghi OQC trước khi băm (hash) và chia chunk 500 xe,
   // đảm bảo chỉ những chunk thực sự có thay đổi mới được đẩy lên Firestore (1 chunk thay vì 72 chunks)
@@ -2148,6 +2273,15 @@ export function App() {
     'dk_maintenance_logs',
     'dk_equipment_incidents',
     'dk_fabrication_jobs'
+  ];
+
+  const COMPONENT_EXTERNAL_SYNC_KEYS = [
+    'dk_qms_app_showcase_v1',
+    'dk_qms_products_v2',
+    'dk_qms_standards_custom_v1',
+    'dk_qms_component_standards_link',
+    'dk_qms_flow_steps_v2',
+    'dk_custom_defect_analyses'
   ];
 
   const getItemId = (item: any, key: string, index: number): string => {
@@ -2772,62 +2906,44 @@ export function App() {
       if (method === 'cloud') {
         console.log(`[Conflict Resolution]: Bỏ qua thay đổi cục bộ của '${key}' và tải mới hoàn toàn từ Cloud.`);
         const isSubcollection = SUBCOLLECTION_KEYS.includes(key);
-        const isChunked = CHUNKED_KEYS.includes(key);
         let serverRecords: any[] = [];
+        const docRef = doc(db, 'dk_db_sync', key);
+        const docSnap = await getDoc(docRef);
+        const docData = docSnap.exists() ? docSnap.data() : null;
 
-        if (isChunked) {
-          const docRef = doc(db, 'dk_db_sync', key);
-          const docSnap = await getDoc(docRef);
-          const docData = docSnap.data();
-          if (docData && docData.isChunked && docData.chunkCount) {
-            const chunkPromises = [];
-            for (let i = 0; i < docData.chunkCount; i++) {
-              chunkPromises.push(getDoc(doc(db, 'dk_db_sync', `${key}_chunk_${i}`)));
+        if (docData) {
+          const assembledRes = await assembleCloudKeyData(key, docData);
+          if (assembledRes.failed) {
+            alert(`Không thể tải đủ các gói dữ liệu (chunks) từ Cloud cho phân hệ '${key}'. Vui lòng thử lại khi mạng ổn định.`);
+            return;
+          }
+          if (Array.isArray(assembledRes.data)) {
+            serverRecords = key === 'dk_oqc_records' ? deduplicateOqcRecords(assembledRes.data) : assembledRes.data;
+          }
+        }
+        if (isSubcollection && serverRecords.length === 0 && !docData) {
+          const subCollectionRef = collection(db, 'dk_db_sync', key, 'records');
+          const querySnap = await getDocs(subCollectionRef);
+          querySnap.forEach((recSnap) => {
+            const d = recSnap.data();
+            if (d) {
+              d.id = recSnap.id;
+              serverRecords.push(restoreFirestorePayload(d));
             }
-            const chunkSnaps = await Promise.all(chunkPromises);
-            let assembled: any[] = [];
-            chunkSnaps.forEach(cs => {
-              const cd = cs.data();
-              if (cd && Array.isArray(cd.data)) assembled = assembled.concat(cd.data);
-            });
-            serverRecords = key === 'dk_oqc_records' ? deduplicateOqcRecords(assembled) : assembled;
-          } else if (docData && Array.isArray(docData.data)) {
-            serverRecords = docData.data;
-          }
-        } else if (isSubcollection) {
-          const docRef = doc(db, 'dk_db_sync', key);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists() && Array.isArray(docSnap.data()?.data)) {
-            serverRecords = restoreFirestorePayload(docSnap.data().data);
-          } else {
-            const subCollectionRef = collection(db, 'dk_db_sync', key, 'records');
-            const querySnap = await getDocs(subCollectionRef);
-            querySnap.forEach((recSnap) => {
-              const d = recSnap.data();
-              if (d) {
-                d.id = recSnap.id;
-                serverRecords.push(restoreFirestorePayload(d));
-              }
-            });
-          }
-
+          });
+        }
+        if (isSubcollection) {
           if (key === 'dk_daily_logs') {
             serverRecords = sanitizeDailyLogs(serverRecords);
           } else if (key === 'dk_defects') {
             serverRecords = sanitizeDefects(serverRecords);
-          }
-        } else {
-          const docRef = doc(db, 'dk_db_sync', key);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists() && docSnap.data().data !== undefined) {
-            serverRecords = restoreFirestorePayload(docSnap.data().data);
           }
         }
 
         const serialized = JSON.stringify(serverRecords);
         lastSyncedValues.current[key] = serialized;
         lastSeenValues.current[key] = serialized;
-        localStorage.setItem(key, serialized);
+        safeStorage.setItem(key, serialized);
         localStorage.setItem(`${key}_is_dirty`, 'false');
         localStorage.setItem(`${key}_deleted_ids`, JSON.stringify([]));
         localStorage.setItem(`${key}_last_synced_at`, new Date().toISOString());
@@ -2865,7 +2981,7 @@ export function App() {
 
       } else if (method === 'local') {
         console.log(`[Conflict Resolution]: Ghi đè dữ liệu cục bộ của '${key}' lên Cloud.`);
-        const localSaved = localStorage.getItem(key);
+        const localSaved = safeStorage.getItem(key) || localStorage.getItem(key);
         if (localSaved) {
           const parsed = JSON.parse(localSaved);
           pendingSyncBuffer.current[key] = parsed;
@@ -2878,59 +2994,41 @@ export function App() {
       } else if (method === 'merge') {
         console.log(`[Conflict Resolution]: Hợp nhất thông minh dữ liệu giữa local và Cloud cho '${key}'.`);
         const isSubcollection = SUBCOLLECTION_KEYS.includes(key);
-        const isChunked = CHUNKED_KEYS.includes(key);
         let serverRecords: any[] = [];
-        if (isChunked) {
-          const docRef = doc(db, 'dk_db_sync', key);
-          const docSnap = await getDoc(docRef);
-          const docData = docSnap.data();
-          if (docData && docData.isChunked && docData.chunkCount) {
-            const chunkPromises = [];
-            for (let i = 0; i < docData.chunkCount; i++) {
-              chunkPromises.push(getDoc(doc(db, 'dk_db_sync', `${key}_chunk_${i}`)));
-            }
-            const chunkSnaps = await Promise.all(chunkPromises);
-            let assembled: any[] = [];
-            chunkSnaps.forEach(cs => {
-              const cd = cs.data();
-              if (cd && Array.isArray(cd.data)) assembled = assembled.concat(cd.data);
-            });
-            serverRecords = key === 'dk_oqc_records' ? deduplicateOqcRecords(assembled) : assembled;
-          } else if (docData && Array.isArray(docData.data)) {
-            serverRecords = docData.data;
+        const docRef = doc(db, 'dk_db_sync', key);
+        const docSnap = await getDoc(docRef);
+        const docData = docSnap.exists() ? docSnap.data() : null;
+
+        if (docData) {
+          const assembledRes = await assembleCloudKeyData(key, docData);
+          if (assembledRes.failed) {
+            alert(`Không thể tải đủ các gói dữ liệu (chunks) từ Cloud cho phân hệ '${key}'. Vui lòng thử lại khi mạng ổn định.`);
+            return;
           }
-        } else if (isSubcollection) {
-          const docRef = doc(db, 'dk_db_sync', key);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists() && Array.isArray(docSnap.data()?.data)) {
-            serverRecords = restoreFirestorePayload(docSnap.data().data);
-          } else {
-            const subCollectionRef = collection(db, 'dk_db_sync', key, 'records');
-            const querySnap = await getDocs(subCollectionRef);
-            querySnap.forEach((recSnap) => {
-              const d = recSnap.data();
-              if (d) {
-                d.id = recSnap.id;
-                serverRecords.push(restoreFirestorePayload(d));
-              }
-            });
-          }
-        } else {
-          const docRef = doc(db, 'dk_db_sync', key);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists() && docSnap.data().data !== undefined) {
-            serverRecords = restoreFirestorePayload(docSnap.data().data);
+          if (Array.isArray(assembledRes.data)) {
+            serverRecords = key === 'dk_oqc_records' ? deduplicateOqcRecords(assembledRes.data) : assembledRes.data;
           }
         }
+        if (isSubcollection && serverRecords.length === 0 && !docData) {
+          const subCollectionRef = collection(db, 'dk_db_sync', key, 'records');
+          const querySnap = await getDocs(subCollectionRef);
+          querySnap.forEach((recSnap) => {
+            const d = recSnap.data();
+            if (d) {
+              d.id = recSnap.id;
+              serverRecords.push(restoreFirestorePayload(d));
+            }
+          });
+        }
 
-        const localSaved = localStorage.getItem(key);
+        const localSaved = safeStorage.getItem(key) || localStorage.getItem(key);
         let localRecords = localSaved ? JSON.parse(localSaved) : [];
         if (!Array.isArray(localRecords)) localRecords = [];
 
         let mergedList = smartMergeArrays(serverRecords, localRecords, key);
 
         const serialized = JSON.stringify(mergedList);
-        localStorage.setItem(key, serialized);
+        safeStorage.setItem(key, serialized);
         localStorage.setItem(`${key}_is_dirty`, 'true');
         localDirtyKeys.current.add(key);
 
@@ -3134,19 +3232,34 @@ export function App() {
         const keyOps: { type: 'set' | 'delete'; ref: any; data?: any; chunkHashEntry?: { chunkKey: string; chunkHash: string } }[] = [];
         let totalChunksForKey = 0;
 
-        if (CHUNKED_KEYS.includes(key)) {
-          // Process dataset into chunked documents (500 records/chunk for OQC, 8 records/chunk for Part Evaluations with images)
-          const rawList = Array.isArray(val) ? val : [];
+        let finalVal = val;
+        if (!CHUNKED_KEYS.includes(key) && Array.isArray(val) && lastSyncedValues.current[key]) {
+          try {
+            const baseline = JSON.parse(lastSyncedValues.current[key]);
+            if (Array.isArray(baseline) && baseline.length > 0) {
+              finalVal = smartMergeArrays(baseline, val, key);
+            }
+          } catch (e) { }
+        }
+
+        const shouldWriteChunked =
+          CHUNKED_KEYS.includes(key) ||
+          (Array.isArray(finalVal) && getApproxUtf8Bytes(sanitizeFirestorePayload(finalVal)) > MAX_FIRESTORE_SAFE_CHUNK_BYTES);
+
+        if (shouldWriteChunked) {
+          // Process dataset into byte-bounded chunked documents (<= 700KB per chunk, bypassing 1MB single-doc limit)
+          const rawList = Array.isArray(finalVal) ? finalVal : [];
           const currentList = key === 'dk_oqc_records' ? rawList.map(minifyOqcChunkRecord) : rawList;
           lastLocalWriteTimestamps.current[key] = timestamp;
           serverTimestamps.current[key] = timestamp;
 
-          const CHUNK_SIZE = key === 'dk_part_evaluations' ? 8 : 500;
-          const totalChunks = Math.ceil(currentList.length / CHUNK_SIZE) || 1;
+          const maxItemsPerChunk = key === 'dk_part_evaluations' ? 8 : (key === 'dk_oqc_records' ? 500 : 250);
+          const chunks = splitArrayIntoByteChunks(currentList, MAX_FIRESTORE_SAFE_CHUNK_BYTES, maxItemsPerChunk);
+          const totalChunks = chunks.length || 1;
           totalChunksForKey = totalChunks;
 
           for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
-            const chunkData = currentList.slice(cIdx * CHUNK_SIZE, (cIdx + 1) * CHUNK_SIZE);
+            const chunkData = chunks[cIdx] || [];
             const chunkHash = JSON.stringify(chunkData);
             const chunkKey = `${key}_chunk_${cIdx}`;
 
@@ -3201,19 +3314,20 @@ export function App() {
 
           console.log(`[Batch Sync Chunked] Key: ${key}. Split ${currentList.length} records into ${totalChunks} documents.`);
         } else {
-          // Lưu trữ tài liệu đơn siêu tối ưu cho toàn bộ phân hệ (1 write thay vì hàng ngàn writes)
-          let finalVal = val;
-          if (Array.isArray(val) && lastSyncedValues.current[key]) {
-            try {
-              const baseline = JSON.parse(lastSyncedValues.current[key]);
-              if (Array.isArray(baseline) && baseline.length > 0) {
-                finalVal = smartMergeArrays(baseline, val, key);
-              }
-            } catch (e) { }
+          // Lưu trữ tài liệu đơn siêu tối ưu cho phân hệ <= 700KB (dọn dẹp chunk cũ nếu trước đây từng chia chunk)
+          const prevChunkCount = lastKnownChunkCounts.current[key] || 0;
+          for (let oldIdx = 0; oldIdx < prevChunkCount; oldIdx++) {
+            keyOps.push({
+              type: 'delete',
+              ref: doc(db, 'dk_db_sync', `${key}_chunk_${oldIdx}`),
+              chunkHashEntry: { chunkKey: `${key}_chunk_${oldIdx}`, chunkHash: '' }
+            });
           }
 
           const payload: any = {
             data: finalVal,
+            isChunked: false,
+            chunkCount: 0,
             updatedBy: email,
             updatedAt: timestamp,
             count: Array.isArray(finalVal) ? finalVal.length : 1
@@ -3258,9 +3372,7 @@ export function App() {
             });
           }
 
-          if (CHUNKED_KEYS.includes(key)) {
-            lastKnownChunkCounts.current[key] = totalChunksForKey;
-          }
+          lastKnownChunkCounts.current[key] = totalChunksForKey;
 
           // CẬP NHẬT LOGIC SAFE STORAGE & LOCALSTORAGE: Đã ghi thành công lên Firestore Server -> giải phóng cờ bẩn an toàn
           try {
@@ -3319,6 +3431,9 @@ export function App() {
         } catch (keyErr: any) {
           console.error(`[Debounced Cloud Sync Error for ${key}]:`, keyErr);
           failedKeys.push({ key, err: keyErr });
+          if (pendingSyncBuffer.current[key] === undefined) {
+            pendingSyncBuffer.current[key] = dirtyItems[key];
+          }
           try { localStorage.setItem(`${key}_is_dirty`, 'true'); } catch (e) { }
           if (localDirtyKeys.current) {
             localDirtyKeys.current.add(key);
@@ -3344,6 +3459,13 @@ export function App() {
         if (isQuota) {
           isFirebaseQuotaExceeded.current = true;
           setQuotaExceededModalOpen(true);
+        } else {
+          if (syncRetryTimer.current) clearTimeout(syncRetryTimer.current);
+          syncRetryTimer.current = setTimeout(() => {
+            if (Object.keys(pendingSyncBuffer.current).length > 0 && !isFirebaseQuotaExceeded.current) {
+              triggerCloudSynchronization();
+            }
+          }, 8000);
         }
       } else {
         console.log(`[Batch Cloud Sync]: Đã đồng bộ thành công ${succeededCount} khóa lên Firestore`);
@@ -3363,6 +3485,9 @@ export function App() {
       clearTimeout(safetyTimeout);
       console.error("[Debounced Cloud Sync Error]:", err);
       dirtyKeys.forEach((key) => {
+        if (pendingSyncBuffer.current[key] === undefined) {
+          pendingSyncBuffer.current[key] = dirtyItems[key];
+        }
         try { localStorage.setItem(`${key}_is_dirty`, 'true'); } catch (e) { }
         if (localDirtyKeys.current) {
           localDirtyKeys.current.add(key);
@@ -3371,6 +3496,23 @@ export function App() {
       setSyncStatus('error');
       const errMsg = err?.message || String(err);
       setLastSyncErrorMsg(errMsg);
+      if (syncRetryTimer.current) clearTimeout(syncRetryTimer.current);
+      syncRetryTimer.current = setTimeout(() => {
+        if (Object.keys(pendingSyncBuffer.current).length > 0 && !isFirebaseQuotaExceeded.current) {
+          triggerCloudSynchronization();
+        }
+      }, 8000);
+    }
+  };
+
+  const parseStoredSyncValue = (key: string, raw: string): any => {
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+      if (key === 'dk_qms_component_standards_link') {
+        return raw.trim();
+      }
+      throw e;
     }
   };
 
@@ -3391,7 +3533,8 @@ export function App() {
         'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
         'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions',
         'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records', 'dk_ptsp_models',
-        'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations'
+        'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations',
+        ...COMPONENT_EXTERNAL_SYNC_KEYS
       ]);
       const dirtyKeysList: string[] = [];
       try {
@@ -3402,10 +3545,15 @@ export function App() {
             let hasUnsyncedData = false;
             if (!isExplicitlyDirty && hasCompletedInitialCloudLoad.current && SYNCABLE_STARTUP_KEYS.has(key) && localSaved) {
               try {
-                const parsed = JSON.parse(localSaved);
-                if (Array.isArray(parsed) && parsed.length > 0) {
+                const parsed = parseStoredSyncValue(key, localSaved);
+                const hasNonEmptyLocal = Array.isArray(parsed)
+                  ? parsed.length > 0
+                  : (typeof parsed === 'string'
+                    ? parsed.trim().length > 0
+                    : Boolean(parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0));
+                if (hasNonEmptyLocal) {
                   const baseline = lastSyncedValues.current[key];
-                  if (!baseline || baseline === '[]' || baseline === 'null') {
+                  if (!baseline || baseline === '[]' || baseline === '{}' || baseline === '""' || baseline === 'null') {
                     hasUnsyncedData = true;
                   }
                 }
@@ -3427,7 +3575,7 @@ export function App() {
           const localSaved = safeStorage.getItem(key) || localStorage.getItem(key);
           if (localSaved) {
             try {
-              const parsed = JSON.parse(localSaved);
+              const parsed = parseStoredSyncValue(key, localSaved);
               pendingSyncBuffer.current[key] = parsed;
             } catch (e) { }
           }
@@ -3632,14 +3780,32 @@ export function App() {
 
       let localItems: any[] = [];
       let serverItems: any[] = [];
+      let isNonArrayPayload = false;
       try {
-        localItems = JSON.parse(localStr);
-        if (!Array.isArray(localItems)) localItems = [];
+        const parsedLocal = parseStoredSyncValue(key, localStr);
+        if (Array.isArray(parsedLocal)) {
+          localItems = parsedLocal;
+        } else if (parsedLocal !== null && parsedLocal !== undefined) {
+          isNonArrayPayload = true;
+        }
       } catch (e) { }
       try {
-        serverItems = JSON.parse(serverStr);
-        if (!Array.isArray(serverItems)) serverItems = [];
+        const parsedServer = parseStoredSyncValue(key, serverStr);
+        if (Array.isArray(parsedServer)) {
+          serverItems = parsedServer;
+        }
       } catch (e) { }
+
+      if (isNonArrayPayload) {
+        return {
+          key,
+          label,
+          count: localStr !== serverStr ? 1 : 0,
+          items: localStr !== serverStr
+            ? [{ id: key, type: 'modified' as const, displayTitle: label, details: 'Dữ liệu cấu hình/biểu mẫu đã thay đổi cục bộ, đang chờ đồng bộ Cloud.', date: '' }]
+            : []
+        };
+      }
 
       const serverMap = new Map();
       serverItems.forEach((item, idx) => {
@@ -3734,6 +3900,23 @@ export function App() {
     }).filter(group => group.count > 0);
   };
 
+  const getDirtyModuleLabels = (): string[] => {
+    const labels = new Set<string>();
+    try {
+      getUnsyncedChanges().forEach((g) => {
+        if (g && g.label) labels.add(String(g.label));
+      });
+      safeStorage.getAllKeys().forEach((k) => {
+        if (k.endsWith('_is_dirty') && localStorage.getItem(k) === 'true') {
+          const baseKey = k.replace('_is_dirty', '');
+          const matched = getUnsyncedChanges().find((g) => g.key === baseKey);
+          labels.add(matched?.label || baseKey);
+        }
+      });
+    } catch (e) { }
+    return Array.from(labels);
+  };
+
   // Hàm kích hoạt thử lại đồng bộ thủ công dành cho trường hợp lỗi
   const handleManualSyncRetry = () => {
     isFirebaseQuotaExceeded.current = false;
@@ -3761,7 +3944,7 @@ export function App() {
       const val = safeStorage.getItem(key) || localStorage.getItem(key);
       if (val) {
         try {
-          pendingSyncBuffer.current[key] = JSON.parse(val);
+          pendingSyncBuffer.current[key] = parseStoredSyncValue(key, val);
           localDirtyKeys.current.add(key); // Thêm vào bộ nhớ bẩn của tab hiện tại
         } catch (err) { }
       }
@@ -3846,7 +4029,8 @@ export function App() {
           'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
           'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions',
           'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records', 'dk_ptsp_models',
-          'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations'
+          'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations',
+          ...COMPONENT_EXTERNAL_SYNC_KEYS
         ];
         defaultKeys.forEach(dk => {
           if (!localKeys.includes(dk)) localKeys.push(dk);
@@ -3867,7 +4051,7 @@ export function App() {
 
         let parsed: any = null;
         try {
-          parsed = JSON.parse(rawStored);
+          parsed = parseStoredSyncValue(key, rawStored);
         } catch (e) {
           return;
         }
@@ -3876,14 +4060,19 @@ export function App() {
         const keyOps: { type: 'set' | 'delete'; ref: any; data?: any; chunkHashEntry?: { chunkKey: string; chunkHash: string } }[] = [];
         let totalChunks = 0;
 
-        if (CHUNKED_KEYS.includes(key)) {
+        const shouldForceChunk =
+          CHUNKED_KEYS.includes(key) ||
+          (Array.isArray(parsed) && getApproxUtf8Bytes(sanitizeFirestorePayload(parsed)) > MAX_FIRESTORE_SAFE_CHUNK_BYTES);
+
+        if (shouldForceChunk) {
           const rawList = Array.isArray(parsed) ? parsed : [];
           const currentList = key === 'dk_oqc_records' ? rawList.map(minifyOqcChunkRecord) : rawList;
-          const CHUNK_SIZE = key === 'dk_part_evaluations' ? 8 : 500;
-          totalChunks = Math.ceil(currentList.length / CHUNK_SIZE) || 1;
+          const maxItemsPerChunk = key === 'dk_part_evaluations' ? 8 : (key === 'dk_oqc_records' ? 500 : 250);
+          const chunks = splitArrayIntoByteChunks(currentList, MAX_FIRESTORE_SAFE_CHUNK_BYTES, maxItemsPerChunk);
+          totalChunks = chunks.length || 1;
 
           for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
-            const chunkData = currentList.slice(cIdx * CHUNK_SIZE, (cIdx + 1) * CHUNK_SIZE);
+            const chunkData = chunks[cIdx] || [];
             const chunkKey = `${key}_chunk_${cIdx}`;
             const chunkHash = JSON.stringify(chunkData);
             const chunkRef = doc(db, 'dk_db_sync', chunkKey);
@@ -3928,9 +4117,19 @@ export function App() {
             }
           });
         } else {
-          // Xử lý các tài liệu đơn cấu hình chuẩn của hệ thống (Siêu tối ưu 1 write)
+          // Xử lý các tài liệu đơn <= 700KB (dọn dẹp chunk cũ nếu trước đây từng chia chunk)
+          const prevChunkCount = lastKnownChunkCounts.current[key] || 0;
+          for (let oldIdx = 0; oldIdx < prevChunkCount; oldIdx++) {
+            keyOps.push({
+              type: 'delete',
+              ref: doc(db, 'dk_db_sync', `${key}_chunk_${oldIdx}`),
+              chunkHashEntry: { chunkKey: `${key}_chunk_${oldIdx}`, chunkHash: '' }
+            });
+          }
           const payload: any = {
             data: parsed,
+            isChunked: false,
+            chunkCount: 0,
             updatedBy: email,
             updatedAt: timestamp,
             forcedSync: true
@@ -4048,9 +4247,7 @@ export function App() {
           if (localDirtyKeys.current) localDirtyKeys.current.delete(group.key);
           lastSyncedValues.current[group.key] = group.serializedRaw;
           lastSeenValues.current[group.key] = group.serializedRaw;
-          if (CHUNKED_KEYS.includes(group.key)) {
-            lastKnownChunkCounts.current[group.key] = group.totalChunks;
-          }
+          lastKnownChunkCounts.current[group.key] = group.totalChunks;
           succeededKeys.push(group.key);
         } catch (groupErr: any) {
           console.error(`[Force Sync Error for ${group.key}]:`, groupErr);
@@ -4438,7 +4635,8 @@ export function App() {
           'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
           'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions',
           'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records',
-          'dk_ptsp_models', 'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations'
+          'dk_ptsp_models', 'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations',
+          ...COMPONENT_EXTERNAL_SYNC_KEYS
         ];
 
         // Thử lấy toàn bộ qua getDocs trước
@@ -4489,80 +4687,17 @@ export function App() {
 
           const docData = rawDocMap[key];
           if (docData) {
+            const assembledRes = await assembleCloudKeyData(key, docData, rawDocMap);
             let rawData: any = null;
-
-            if (docData.isChunked === true) {
-              const chunkCount = docData.chunkCount || 0;
-              let assembledArray: any[] = [];
-              const missingChunkIndices: number[] = [];
-
-              for (let i = 0; i < chunkCount; i++) {
-                const chunkKey = `${key}_chunk_${i}`;
-                const chunkDoc = rawDocMap[chunkKey];
-                if (chunkDoc && Array.isArray(chunkDoc.data)) {
-                  assembledArray = assembledArray.concat(chunkDoc.data);
-                } else {
-                  missingChunkIndices.push(i);
-                }
+            if (assembledRes.failed) {
+              console.warn(`[Chunk Assembly Fail-Closed]: Thiếu chunk cho '${key}'. Giữ nguyên dữ liệu cục bộ, KHÔNG ghi đè một phần và KHÔNG đẩy ngược lên Cloud.`);
+              failedCloudReadKeys.add(key);
+              rawData = null;
+            } else {
+              rawData = assembledRes.data;
+              if (assembledRes.isChunked && Array.isArray(rawData)) {
+                console.log(`[Chunk Assembly]: Đã lắp ráp thành công mảng ${key} gồm ${rawData.length} bản ghi (${docData.chunkCount || 0} chunks).`);
               }
-
-              // Nếu có bất kỳ chunk nào thiếu từ getDocs, fetch trực tiếp đúng các chunk thiếu và chỉ chấp nhận khi đủ 100% chunks!
-              let allChunksComplete = missingChunkIndices.length === 0;
-              if (missingChunkIndices.length > 0 && chunkCount > 0) {
-                try {
-                  console.log(`[Chunk Assembly Fallback] Đang tải trực tiếp ${missingChunkIndices.length}/${chunkCount} chunks cho ${key}...`);
-                  const chunkProms = missingChunkIndices.map((c) => getDoc(doc(db, 'dk_db_sync', `${key}_chunk_${c}`)));
-                  const chunkRes = await Promise.allSettled(chunkProms);
-                  const chunkByIdx = new Map<number, any[]>();
-                  let failedFallback = false;
-                  chunkRes.forEach((res, idx) => {
-                    const cIdx = missingChunkIndices[idx];
-                    if (res.status === 'fulfilled' && (res.value as any).exists()) {
-                      const cd = (res.value as any).data();
-                      if (cd && Array.isArray(cd.data)) {
-                        chunkByIdx.set(cIdx, cd.data);
-                      } else {
-                        failedFallback = true;
-                      }
-                    } else {
-                      failedFallback = true;
-                    }
-                  });
-
-                  if (!failedFallback) {
-                    assembledArray = [];
-                    allChunksComplete = true;
-                    for (let i = 0; i < chunkCount; i++) {
-                      const chunkDoc = rawDocMap[`${key}_chunk_${i}`];
-                      if (chunkDoc && Array.isArray(chunkDoc.data)) {
-                        assembledArray = assembledArray.concat(chunkDoc.data);
-                      } else if (chunkByIdx.has(i)) {
-                        assembledArray = assembledArray.concat(chunkByIdx.get(i)!);
-                      } else {
-                        allChunksComplete = false;
-                        break;
-                      }
-                    }
-                  } else {
-                    allChunksComplete = false;
-                  }
-                } catch (err) {
-                  allChunksComplete = false;
-                  console.error(`[Chunk Assembly Fallback Error] for ${key}:`, err);
-                }
-              }
-
-              if (chunkCount > 0 && !allChunksComplete) {
-                console.warn(`[Chunk Assembly Fail-Closed]: Thiếu chunk cho '${key}' (cần ${chunkCount}). Giữ nguyên dữ liệu cục bộ, KHÔNG ghi đè một phần và KHÔNG đẩy ngược lên Cloud.`);
-                failedCloudReadKeys.add(key);
-                rawData = null;
-              } else {
-                lastKnownChunkCounts.current[key] = chunkCount;
-                rawData = restoreFirestorePayload(assembledArray);
-                console.log(`[Chunk Assembly]: Đã lắp ráp thành công mảng ${key} gồm ${assembledArray.length} bản ghi (${chunkCount} chunks).`);
-              }
-            } else if (docData.data !== undefined) {
-              rawData = restoreFirestorePayload(docData.data);
             }
 
             if (rawData !== null) {
@@ -4614,16 +4749,25 @@ export function App() {
       ALL_RECONCILE_KEYS.forEach((key) => {
         // Tuyệt đối KHÔNG coi Cloud là rỗng nếu quá trình đọc hoặc lắp ráp chunk của khóa này bị lỗi
         if (outerFirestoreLoadFailed || failedCloudReadKeys.has(key)) return;
-        if (CHUNKED_KEYS.includes(key) && Boolean(rawDocMap[key])) return;
+        if ((CHUNKED_KEYS.includes(key) || Boolean(rawDocMap[key]?.isChunked)) && Boolean(rawDocMap[key])) return;
 
         const serverVal = serverData[key];
-        const isServerEmpty = serverVal === undefined || serverVal === null || (Array.isArray(serverVal) && serverVal.length === 0);
+        const isServerEmpty =
+          serverVal === undefined ||
+          serverVal === null ||
+          (Array.isArray(serverVal) && serverVal.length === 0) ||
+          (typeof serverVal === 'string' && serverVal.trim().length === 0);
         if (isServerEmpty) {
           const localSaved = safeStorage.getItem(key) || localStorage.getItem(key);
           if (localSaved) {
             try {
-              const parsedLocal = JSON.parse(localSaved);
-              if (parsedLocal && (!Array.isArray(parsedLocal) || parsedLocal.length > 0)) {
+              const parsedLocal = parseStoredSyncValue(key, localSaved);
+              const hasNonEmptyLocal = Array.isArray(parsedLocal)
+                ? parsedLocal.length > 0
+                : (typeof parsedLocal === 'string'
+                  ? parsedLocal.trim().length > 0
+                  : Boolean(parsedLocal && typeof parsedLocal === 'object' && Object.keys(parsedLocal).length > 0));
+              if (hasNonEmptyLocal) {
                 serverData[key] = parsedLocal;
                 if (SUBCOLLECTION_KEYS.includes(key)) {
                   legacyRootData[key] = parsedLocal;
@@ -4685,8 +4829,41 @@ export function App() {
           lastSeenValues.current['dk_staff'] = cleanedStaffStr;
         }
       }
-      if (serverData.dk_kpis !== undefined) setKpis(serverData.dk_kpis);
-      if (serverData.dk_suppliers !== undefined) {
+      // Helper bảo vệ dữ liệu bẩn (isDirty) và hợp nhất thông minh cho mọi mảng phân hệ khi khởi động
+      const resolveStartupArrayState = (
+        key: string,
+        serverArr: any[],
+        transform?: (arr: any[]) => any[]
+      ): any[] => {
+        const isDirty = localDirtyKeys.current.has(key) || localStorage.getItem(`${key}_is_dirty`) === 'true';
+        const cleanServer = Array.isArray(serverArr) ? (transform ? transform(serverArr) : serverArr) : [];
+        if (isDirty) {
+          const localSaved = safeStorage.getItem(key) || localStorage.getItem(key);
+          if (localSaved) {
+            try {
+              const parsedLocal = JSON.parse(localSaved);
+              if (Array.isArray(parsedLocal) && parsedLocal.length > 0) {
+                const rawMerged = smartMergeArrays(cleanServer, parsedLocal, key);
+                const finalMerged = transform ? transform(rawMerged) : rawMerged;
+                const mergedSerialized = JSON.stringify(finalMerged);
+                lastSyncedValues.current[key] = JSON.stringify(cleanServer);
+                lastSeenValues.current[key] = mergedSerialized;
+                safeStorage.setItem(key, mergedSerialized);
+                pendingSyncBuffer.current[key] = finalMerged;
+                if (localDirtyKeys.current) localDirtyKeys.current.add(key);
+                return finalMerged;
+              }
+            } catch (e) { }
+          }
+        }
+        const cleanSerialized = JSON.stringify(cleanServer);
+        lastSyncedValues.current[key] = cleanSerialized;
+        lastSeenValues.current[key] = cleanSerialized;
+        safeStorage.setItem(key, cleanSerialized);
+        return cleanServer;
+      };
+
+      const sanitizeSupplierAddresses = (supList: any[]): any[] => {
         const addressKeywords = [
           'đường', 'phố', 'quận', 'huyện', 'tỉnh', 'tp', 'thành phố', 'hà nội', 'hải phòng',
           'khu công nghiệp', 'kcn', 'phòng', 'lô', 'cụm', 'số', 'ấp', 'xã', 'thị', 'đà nẵng',
@@ -4695,8 +4872,8 @@ export function App() {
           'bình dương', 'đồng nai', 'long an', 'vĩnh long', 'cần thơ', 'khánh hòa', 'lâm đồng',
           'bà rịa', 'vũng tàu', 'hồ chí minh', 'sài gòn'
         ];
-        const cleanedSuppliers = serverData.dk_suppliers.map((sup: any) => {
-          const comp = (sup.ComponentType || '').trim();
+        return (Array.isArray(supList) ? supList : []).map((sup: any) => {
+          const comp = (sup?.ComponentType || '').trim();
           const lowerComp = comp.toLowerCase();
           const hasAddressKeyword = addressKeywords.some(kw => lowerComp.includes(kw));
           if (hasAddressKeyword) {
@@ -4708,84 +4885,48 @@ export function App() {
           }
           return sup;
         });
-        setSuppliers(cleanedSuppliers);
+      };
+
+      if (serverData.dk_kpis !== undefined && Array.isArray(serverData.dk_kpis)) {
+        setKpis(resolveStartupArrayState('dk_kpis', serverData.dk_kpis));
+      }
+      if (serverData.dk_suppliers !== undefined && Array.isArray(serverData.dk_suppliers)) {
+        setSuppliers(resolveStartupArrayState('dk_suppliers', serverData.dk_suppliers, sanitizeSupplierAddresses));
       } else {
-        // Fallback: trigger local cleanup if serverData.dk_suppliers is undefined but we have local state
-        const addressKeywords = [
-          'đường', 'phố', 'quận', 'huyện', 'tỉnh', 'tp', 'thành phố', 'hà nội', 'hải phòng',
-          'khu công nghiệp', 'kcn', 'phòng', 'lô', 'cụm', 'số', 'ấp', 'xã', 'thị', 'đà nẵng',
-          'bắc ninh', 'bắc giang', 'hà nam', 'hưng yên', 'hải dương', 'vĩnh phúc', 'thái nguyên',
-          'nam định', 'ninh bình', 'thái bình', 'quảng ninh', 'thanh hóa', 'nghệ an', 'hà tĩnh',
-          'bình dương', 'đồng nai', 'long an', 'vĩnh long', 'cần thơ', 'khánh hòa', 'lâm đồng',
-          'bà rịa', 'vũng tàu', 'hồ chí minh', 'sài gòn'
-        ];
-        const saved = localStorage.getItem('dk_suppliers');
+        const saved = safeStorage.getItem('dk_suppliers') || localStorage.getItem('dk_suppliers');
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
-            let changed = false;
-            const cleaned = parsed.map((sup: any) => {
-              const comp = (sup.ComponentType || '').trim();
-              const lowerComp = comp.toLowerCase();
-              const hasAddressKeyword = addressKeywords.some(kw => lowerComp.includes(kw));
-              if (hasAddressKeyword) {
-                changed = true;
-                return {
-                  ...sup,
-                  ComponentType: sup.address || 'Không xác định',
-                  address: sup.ComponentType
-                };
+            if (Array.isArray(parsed)) {
+              const cleaned = sanitizeSupplierAddresses(parsed);
+              if (JSON.stringify(cleaned) !== JSON.stringify(parsed)) {
+                setSuppliers(cleaned);
+                safeStorage.setItem('dk_suppliers', JSON.stringify(cleaned));
               }
-              return sup;
-            });
-            if (changed) {
-              setSuppliers(cleaned);
-              localStorage.setItem('dk_suppliers', JSON.stringify(cleaned));
             }
           } catch (err) { }
         }
       }
-      if (serverData.dk_projects !== undefined) setProjects(serverData.dk_projects);
+      if (serverData.dk_projects !== undefined && Array.isArray(serverData.dk_projects)) {
+        setProjects(resolveStartupArrayState('dk_projects', serverData.dk_projects));
+      }
       if (serverData.dk_tasks !== undefined && Array.isArray(serverData.dk_tasks)) {
-        setTasks(serverData.dk_tasks);
-        safeStorage.setItem('dk_tasks', JSON.stringify(serverData.dk_tasks));
+        setTasks(resolveStartupArrayState('dk_tasks', serverData.dk_tasks));
       }
       if (serverData.dk_weekly_plans !== undefined && Array.isArray(serverData.dk_weekly_plans)) {
-        setWeeklyPlans(serverData.dk_weekly_plans);
-        safeStorage.setItem('dk_weekly_plans', JSON.stringify(serverData.dk_weekly_plans));
+        setWeeklyPlans(resolveStartupArrayState('dk_weekly_plans', serverData.dk_weekly_plans));
       }
       if (serverData.dk_monthly_plans !== undefined && Array.isArray(serverData.dk_monthly_plans)) {
-        setMonthlyPlans(serverData.dk_monthly_plans);
-        safeStorage.setItem('dk_monthly_plans', JSON.stringify(serverData.dk_monthly_plans));
+        setMonthlyPlans(resolveStartupArrayState('dk_monthly_plans', serverData.dk_monthly_plans));
       }
       if (serverData.dk_ptsp_tasks !== undefined && Array.isArray(serverData.dk_ptsp_tasks)) {
-        const resequenced = resequencePtspTasks(serverData.dk_ptsp_tasks);
-        setPtspTasks(resequenced);
-        safeStorage.setItem('dk_ptsp_tasks', JSON.stringify(resequenced));
+        setPtspTasks(resolveStartupArrayState('dk_ptsp_tasks', serverData.dk_ptsp_tasks, resequencePtspTasks));
       }
-      const isCapasDirty = localStorage.getItem('dk_capas_is_dirty') === 'true';
       if (serverData.dk_capas !== undefined && Array.isArray(serverData.dk_capas)) {
-        if (!isCapasDirty) {
-          setCapas(serverData.dk_capas);
-          safeStorage.setItem('dk_capas', JSON.stringify(serverData.dk_capas));
-        } else {
-          console.log("[Startup Protection]: dk_capas đang có dữ liệu cục bộ chưa đồng bộ hoặc vừa khôi phục. Bảo toàn và xếp hàng đẩy lên Cloud.");
-          const localSaved = safeStorage.getItem('dk_capas') || localStorage.getItem('dk_capas');
-          if (localSaved) {
-            try {
-              const parsed = JSON.parse(localSaved);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                setCapas(parsed);
-                pendingSyncBuffer.current['dk_capas'] = parsed;
-              }
-            } catch (e) { }
-          }
-        }
+        setCapas(resolveStartupArrayState('dk_capas', serverData.dk_capas));
       }
-      const isEcosDirty = localStorage.getItem('dk_ecos_is_dirty') === 'true';
-      if (serverData.dk_ecos !== undefined && Array.isArray(serverData.dk_ecos) && !isEcosDirty) {
-        setEcos(serverData.dk_ecos);
-        safeStorage.setItem('dk_ecos', JSON.stringify(serverData.dk_ecos));
+      if (serverData.dk_ecos !== undefined && Array.isArray(serverData.dk_ecos)) {
+        setEcos(resolveStartupArrayState('dk_ecos', serverData.dk_ecos));
       }
       if (serverData.dk_daily_logs !== undefined && Array.isArray(serverData.dk_daily_logs)) {
         const localSaved = safeStorage.getItem('dk_daily_logs') || localStorage.getItem('dk_daily_logs');
@@ -4808,54 +4949,42 @@ export function App() {
         }
       }
       if (serverData.dk_iqc_records !== undefined && Array.isArray(serverData.dk_iqc_records)) {
-        setIqcRecords(serverData.dk_iqc_records);
-        safeStorage.setItem('dk_iqc_records', JSON.stringify(serverData.dk_iqc_records));
+        setIqcRecords(resolveStartupArrayState('dk_iqc_records', serverData.dk_iqc_records));
       }
       if (serverData.dk_pqc_records !== undefined && Array.isArray(serverData.dk_pqc_records)) {
-        setPqcRecords(serverData.dk_pqc_records);
-        safeStorage.setItem('dk_pqc_records', JSON.stringify(serverData.dk_pqc_records));
+        setPqcRecords(resolveStartupArrayState('dk_pqc_records', serverData.dk_pqc_records));
       }
-      const isActionsDirty = localStorage.getItem('dk_improvement_actions_is_dirty') === 'true';
-      if (serverData.dk_improvement_actions !== undefined && Array.isArray(serverData.dk_improvement_actions) && !isActionsDirty) {
-        setImprovementActions(serverData.dk_improvement_actions);
-        safeStorage.setItem('dk_improvement_actions', JSON.stringify(serverData.dk_improvement_actions));
+      if (serverData.dk_improvement_actions !== undefined && Array.isArray(serverData.dk_improvement_actions)) {
+        setImprovementActions(resolveStartupArrayState('dk_improvement_actions', serverData.dk_improvement_actions));
       }
-      const isDefectsDirty = localStorage.getItem('dk_defects_is_dirty') === 'true';
-      if (serverData.dk_defects !== undefined && Array.isArray(serverData.dk_defects) && !isDefectsDirty) {
-        setDefects(serverData.dk_defects);
-        safeStorage.setItem('dk_defects', JSON.stringify(serverData.dk_defects));
+      if (serverData.dk_defects !== undefined && Array.isArray(serverData.dk_defects)) {
+        setDefects(resolveStartupArrayState('dk_defects', serverData.dk_defects, sanitizeDefects));
       }
-      const isPartEvalsDirty = localStorage.getItem('dk_part_evaluations_is_dirty') === 'true';
-      if (serverData.dk_part_evaluations !== undefined && Array.isArray(serverData.dk_part_evaluations) && !isPartEvalsDirty) {
-        setPartEvaluations(serverData.dk_part_evaluations);
-        safeStorage.setItem('dk_part_evaluations', JSON.stringify(serverData.dk_part_evaluations));
+      if (serverData.dk_part_evaluations !== undefined && Array.isArray(serverData.dk_part_evaluations)) {
+        setPartEvaluations(resolveStartupArrayState('dk_part_evaluations', serverData.dk_part_evaluations));
       }
-      const isReportNotesDirty = localStorage.getItem('dk_report_notes_is_dirty') === 'true';
-      if (serverData.dk_report_notes !== undefined && Array.isArray(serverData.dk_report_notes) && !isReportNotesDirty) {
-        setReportNotes(serverData.dk_report_notes);
-        safeStorage.setItem('dk_report_notes', JSON.stringify(serverData.dk_report_notes));
+      if (serverData.dk_report_notes !== undefined && Array.isArray(serverData.dk_report_notes)) {
+        setReportNotes(resolveStartupArrayState('dk_report_notes', serverData.dk_report_notes));
       }
-      const isQmsBmDirty = localStorage.getItem('dk_qms_bm_records_is_dirty') === 'true';
-      if (serverData.dk_qms_bm_records !== undefined && Array.isArray(serverData.dk_qms_bm_records) && !isQmsBmDirty) {
-        setQmsBmRecords(serverData.dk_qms_bm_records);
-        safeStorage.setItem('dk_qms_bm_records', JSON.stringify(serverData.dk_qms_bm_records));
+      if (serverData.dk_qms_bm_records !== undefined && Array.isArray(serverData.dk_qms_bm_records)) {
+        setQmsBmRecords(resolveStartupArrayState('dk_qms_bm_records', serverData.dk_qms_bm_records));
       }
-      const isCopqsDirty = localStorage.getItem('dk_copqs_is_dirty') === 'true';
-      if (serverData.dk_copqs !== undefined && Array.isArray(serverData.dk_copqs) && !isCopqsDirty) {
-        setCopqs(serverData.dk_copqs);
-        safeStorage.setItem('dk_copqs', JSON.stringify(serverData.dk_copqs));
+      if (serverData.dk_copqs !== undefined && Array.isArray(serverData.dk_copqs)) {
+        setCopqs(resolveStartupArrayState('dk_copqs', serverData.dk_copqs));
       }
-      const isPtspModelsDirty = localStorage.getItem('dk_ptsp_models_is_dirty') === 'true';
-      if (serverData.dk_ptsp_models !== undefined && Array.isArray(serverData.dk_ptsp_models) && !isPtspModelsDirty) {
-        setPtspModels(serverData.dk_ptsp_models);
-        safeStorage.setItem('dk_ptsp_models', JSON.stringify(serverData.dk_ptsp_models));
+      if (serverData.dk_ptsp_models !== undefined && Array.isArray(serverData.dk_ptsp_models)) {
+        setPtspModels(resolveStartupArrayState('dk_ptsp_models', serverData.dk_ptsp_models));
       }
       if (serverData.dk_staff_kpi_evaluations !== undefined && typeof serverData.dk_staff_kpi_evaluations === 'object' && !Array.isArray(serverData.dk_staff_kpi_evaluations) && localStorage.getItem('dk_staff_kpi_evaluations_is_dirty') !== 'true') {
         setStaffKpiEvaluations(serverData.dk_staff_kpi_evaluations);
         safeStorage.setItem('dk_staff_kpi_evaluations', JSON.stringify(serverData.dk_staff_kpi_evaluations));
       }
-      if (serverData.dk_fmea !== undefined) setFmea(serverData.dk_fmea);
-      if (serverData.dk_custom_forms !== undefined) setCustomForms(serverData.dk_custom_forms);
+      if (serverData.dk_fmea !== undefined && Array.isArray(serverData.dk_fmea)) {
+        setFmea(resolveStartupArrayState('dk_fmea', serverData.dk_fmea));
+      }
+      if (serverData.dk_custom_forms !== undefined && Array.isArray(serverData.dk_custom_forms)) {
+        setCustomForms(resolveStartupArrayState('dk_custom_forms', serverData.dk_custom_forms));
+      }
       const isModelsDirty = localStorage.getItem('dk_models_is_dirty') === 'true';
       if (serverData.dk_models !== undefined && Array.isArray(serverData.dk_models)) {
         const localSaved = safeStorage.getItem('dk_models') || localStorage.getItem('dk_models');
@@ -4876,7 +5005,9 @@ export function App() {
           syncToServer('dk_models', merged);
         }
       }
-      if (serverData.dk_dealers !== undefined && Array.isArray(serverData.dk_dealers)) setDealers(serverData.dk_dealers);
+      if (serverData.dk_dealers !== undefined && Array.isArray(serverData.dk_dealers)) {
+        setDealers(resolveStartupArrayState('dk_dealers', serverData.dk_dealers));
+      }
       if (serverData.dk_equipments !== undefined && localStorage.getItem('dk_equipments_is_dirty') !== 'true') {
         const cleaned = ensureUniqueIds(serverData.dk_equipments, 'EQP');
         const cleanedSerialized = JSON.stringify(cleaned);
@@ -4909,17 +5040,14 @@ export function App() {
         lastSyncedValues.current['dk_fabrication_jobs'] = cleanedSerialized;
         lastSeenValues.current['dk_fabrication_jobs'] = cleanedSerialized;
       }
-      if (serverData.dk_qc_detailed_tasks !== undefined && localStorage.getItem('dk_qc_detailed_tasks_is_dirty') !== 'true') {
-        setQcDetailedTasks(serverData.dk_qc_detailed_tasks);
-        safeStorage.setItem('dk_qc_detailed_tasks', JSON.stringify(serverData.dk_qc_detailed_tasks));
+      if (serverData.dk_qc_detailed_tasks !== undefined && Array.isArray(serverData.dk_qc_detailed_tasks)) {
+        setQcDetailedTasks(resolveStartupArrayState('dk_qc_detailed_tasks', serverData.dk_qc_detailed_tasks));
       }
-      if (serverData.dk_oqc_color_changes !== undefined && Array.isArray(serverData.dk_oqc_color_changes) && localStorage.getItem('dk_oqc_color_changes_is_dirty') !== 'true') {
-        setOqcColorChanges(serverData.dk_oqc_color_changes);
-        safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(serverData.dk_oqc_color_changes));
+      if (serverData.dk_oqc_color_changes !== undefined && Array.isArray(serverData.dk_oqc_color_changes)) {
+        setOqcColorChanges(resolveStartupArrayState('dk_oqc_color_changes', serverData.dk_oqc_color_changes));
       }
-      if (serverData.dk_supplier_production_audits !== undefined && Array.isArray(serverData.dk_supplier_production_audits) && localStorage.getItem('dk_supplier_production_audits_is_dirty') !== 'true') {
-        setSupplierProductionAudits(serverData.dk_supplier_production_audits);
-        safeStorage.setItem('dk_supplier_production_audits', JSON.stringify(serverData.dk_supplier_production_audits));
+      if (serverData.dk_supplier_production_audits !== undefined && Array.isArray(serverData.dk_supplier_production_audits)) {
+        setSupplierProductionAudits(resolveStartupArrayState('dk_supplier_production_audits', serverData.dk_supplier_production_audits));
       }
       if (serverData.dk_oqc_records !== undefined && Array.isArray(serverData.dk_oqc_records)) {
         const isOqcDirty = localDirtyKeys.current.has('dk_oqc_records') || localStorage.getItem('dk_oqc_records_is_dirty') === 'true';
@@ -4974,11 +5102,23 @@ export function App() {
           window.dispatchEvent(new CustomEvent('dk_oqc_part_codes_updated', { detail: partCodesList }));
         }
       }
-      const isHandoverDirty = localStorage.getItem('dk_oqc_handover_list_is_dirty') === 'true';
-      if (serverData.dk_oqc_handover_list !== undefined && !isHandoverDirty) {
-        safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(serverData.dk_oqc_handover_list));
-        setOqcHandoverList(serverData.dk_oqc_handover_list);
+      if (serverData.dk_oqc_handover_list !== undefined && Array.isArray(serverData.dk_oqc_handover_list)) {
+        setOqcHandoverList(resolveStartupArrayState('dk_oqc_handover_list', serverData.dk_oqc_handover_list));
       }
+
+      COMPONENT_EXTERNAL_SYNC_KEYS.forEach((extKey) => {
+        if (localStorage.getItem(`${extKey}_is_dirty`) === 'true') return;
+        if (serverData[extKey] !== undefined) {
+          try {
+            const serialized = JSON.stringify(serverData[extKey]);
+            safeStorage.setItem(extKey, serialized);
+            try { localStorage.setItem(extKey, serialized); } catch (e) { }
+            lastSyncedValues.current[extKey] = serialized;
+            lastSeenValues.current[extKey] = serialized;
+            window.dispatchEvent(new CustomEvent('dk_local_module_remote_sync', { detail: { key: extKey, data: serverData[extKey] } }));
+          } catch (e) { }
+        }
+      });
 
       // Sync plans and special matrices (IQC/PQC/OQC) from Firestore to LocalStorage on startup
       const planningKeys = [
@@ -5040,7 +5180,7 @@ export function App() {
 
       SUBCOLLECTION_KEYS.forEach((key) => {
         const docRef = doc(db, 'dk_db_sync', key);
-        const unsub = onSnapshot(docRef, (docSnap) => {
+        const unsub = onSnapshot(docRef, async (docSnap) => {
           const docData = docSnap.exists() ? docSnap.data() : null;
           const serverTime = docData?.updatedAt;
 
@@ -5059,12 +5199,22 @@ export function App() {
           }
 
           let list: any[] = [];
-          if (docData && Array.isArray(docData.data)) {
-            list = restoreFirestorePayload(docData.data);
+          let hasExplicitServerPayload = false;
+          if (docData) {
+            const assembledRes = await assembleCloudKeyData(key, docData);
+            if (assembledRes.failed) {
+              console.warn(`[Subcollection onSnapshot Fail-Closed]: Bỏ qua cập nhật ${key} vì tải thiếu chunk.`);
+              markListenerInitialized(key);
+              return;
+            }
+            if (Array.isArray(assembledRes.data)) {
+              list = assembledRes.data;
+              hasExplicitServerPayload = true;
+            }
           }
 
           let finalDisplayData = list;
-          if (list.length === 0) {
+          if (list.length === 0 && !hasExplicitServerPayload) {
             const rootFallback = serverData[key] || legacyRootData[key];
             if (Array.isArray(rootFallback) && rootFallback.length > 0) {
               finalDisplayData = rootFallback;
@@ -5102,6 +5252,15 @@ export function App() {
               finalDisplayData = smartMergeArrays(list, parsedLocal, key);
               if (key === 'dk_daily_logs' && Array.isArray(finalDisplayData)) {
                 finalDisplayData = pruneRemotelyDeletedDailyLogs(finalDisplayData, list);
+              } else if (hasExplicitServerPayload && Array.isArray(finalDisplayData)) {
+                const knownServerIds = readSubcollectionKnownServerIds(key);
+                if (knownServerIds.size > 0) {
+                  const currentServerIds = new Set(list.map((item: any, idx: number) => getItemId(item, key, idx)));
+                  finalDisplayData = finalDisplayData.filter((item: any, idx: number) => {
+                    const itemId = getItemId(item, key, idx);
+                    return currentServerIds.has(itemId) || !knownServerIds.has(itemId);
+                  });
+                }
               }
             } catch (e) {
               console.error(`[Smart Merge Error] for ${key}:`, e);
@@ -5197,7 +5356,7 @@ export function App() {
           const serialized = JSON.stringify(finalDisplayData);
           lastSyncedValues.current[key] = JSON.stringify(sanitizedServerList); // Use sanitized server snapshot as sync baseline
           lastSeenValues.current[key] = serialized;
-          if (finalDisplayData.length > 0) {
+          if (finalDisplayData.length > 0 || (hasExplicitServerPayload && !isDirty)) {
             safeStorage.setItem(key, serialized);
             const st = serverTimestamps.current[key] || new Date().toISOString();
             localStorage.setItem(`${key}_last_synced_at`, st);
@@ -5528,17 +5687,28 @@ export function App() {
         'dk_maintenance_logs',
         'dk_equipment_incidents',
         'dk_fabrication_jobs',
+        'dk_suppliers',
+        'dk_dealers',
+        'dk_projects',
+        'dk_custom_forms',
+        'dk_custom_pqc_items',
+        'dk_pqc_saved_history_templates',
+        'dk_custom_fpy_targets',
+        'dk_custom_sqc_items',
+        'dk_custom_iqc_notes',
+        'dk_iqc_saved_notes',
         'dk_weekly_assemblies_all',
         'dk_monthly_assemblies_all',
         'dk_weekly_supplies_all',
         'dk_monthly_supplies_all',
         'dk_weekly_timelines_all',
-        'dk_monthly_timelines_all'
+        'dk_monthly_timelines_all',
+        ...COMPONENT_EXTERNAL_SYNC_KEYS
       ];
 
       STANDARD_DOC_SYNC_KEYS.forEach((key) => {
         const docRef = doc(db, 'dk_db_sync', key);
-        const unsub = onSnapshot(docRef, (docSnap) => {
+        const unsub = onSnapshot(docRef, async (docSnap) => {
           if (!docSnap.exists()) return;
           const metaData = docSnap.data();
           const serverTime = metaData?.updatedAt;
@@ -5556,13 +5726,39 @@ export function App() {
             return;
           }
 
-          const isPlanningDict = key.startsWith('dk_weekly_') || key.startsWith('dk_monthly_');
-          if (isPlanningDict) {
-            const dict = metaData?.data && typeof metaData.data === 'object' && !Array.isArray(metaData.data)
-              ? restoreFirestorePayload(metaData.data)
-              : null;
-            if (!dict) return;
-            const serialized = JSON.stringify(dict);
+          const assembledRes = await assembleCloudKeyData(key, metaData);
+          if (assembledRes.failed) {
+            console.warn(`[Standard Doc onSnapshot Fail-Closed]: Bỏ qua cập nhật ${key} vì tải thiếu chunk.`);
+            return;
+          }
+          const cloudData = assembledRes.data;
+
+          if (COMPONENT_EXTERNAL_SYNC_KEYS.includes(key)) {
+            if (cloudData === null || cloudData === undefined) return;
+            const serialized = JSON.stringify(cloudData);
+            safeStorage.setItem(key, serialized);
+            try { localStorage.setItem(key, serialized); } catch (e) { }
+            isRemoteUpdateRef.current[key] = true;
+            lastSyncedValues.current[key] = serialized;
+            lastSeenValues.current[key] = serialized;
+            if (serverTime) serverTimestamps.current[key] = serverTime;
+            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
+            window.dispatchEvent(new CustomEvent('dk_local_module_remote_sync', { detail: { key, data: cloudData } }));
+            return;
+          }
+
+          const isPlanningReloadKey =
+            key.startsWith('dk_weekly_') ||
+            key.startsWith('dk_monthly_') ||
+            key === 'dk_custom_pqc_items' ||
+            key === 'dk_pqc_saved_history_templates' ||
+            key === 'dk_custom_fpy_targets' ||
+            key === 'dk_custom_sqc_items' ||
+            key === 'dk_custom_iqc_notes' ||
+            key === 'dk_iqc_saved_notes';
+          if (isPlanningReloadKey) {
+            if (cloudData === null || cloudData === undefined) return;
+            const serialized = JSON.stringify(cloudData);
             safeStorage.setItem(key, serialized);
             try { localStorage.setItem(key, serialized); } catch (e) { }
             isRemoteUpdateRef.current[key] = true;
@@ -5574,8 +5770,8 @@ export function App() {
             return;
           }
           if (key === 'dk_staff_kpi_evaluations') {
-            const dict = metaData?.data && typeof metaData.data === 'object' && !Array.isArray(metaData.data)
-              ? restoreFirestorePayload(metaData.data)
+            const dict = cloudData && typeof cloudData === 'object' && !Array.isArray(cloudData)
+              ? cloudData
               : null;
             if (!dict) return;
             const serialized = JSON.stringify(dict);
@@ -5589,7 +5785,7 @@ export function App() {
             setStaffKpiEvaluations(dict);
             return;
           }
-          const list = Array.isArray(metaData?.data) ? restoreFirestorePayload(metaData.data) : [];
+          const list = Array.isArray(cloudData) ? cloudData : [];
           if (key === 'dk_oqc_color_changes' && list.length === 0) {
             try {
               const currentLocal = JSON.parse(localStorage.getItem(key) || '[]');
@@ -5654,6 +5850,14 @@ export function App() {
             setEquipmentIncidents(finalList);
           } else if (key === 'dk_fabrication_jobs') {
             setFabricationJobs(finalList);
+          } else if (key === 'dk_suppliers') {
+            setSuppliers(finalList);
+          } else if (key === 'dk_dealers') {
+            setDealers(finalList);
+          } else if (key === 'dk_projects') {
+            setProjects(finalList);
+          } else if (key === 'dk_custom_forms') {
+            setCustomForms(finalList);
           } else if (key === 'dk_oqc_part_codes') {
             if (list.length > 0) {
               window.dispatchEvent(new CustomEvent('dk_oqc_part_codes_updated', { detail: list }));
@@ -8785,9 +8989,14 @@ export function App() {
             }
           } catch (e) { }
         }
+        const serialized = JSON.stringify(d.data);
+        lastSyncedValues.current['dk_oqc_color_changes'] = serialized;
+        lastSeenValues.current['dk_oqc_color_changes'] = serialized;
+        isRemoteUpdateRef.current['dk_oqc_color_changes'] = true;
+        setTimeout(() => { isRemoteUpdateRef.current['dk_oqc_color_changes'] = false; }, 1500);
         setOqcColorChanges(d.data);
-        safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(d.data));
-        try { localStorage.setItem('dk_oqc_color_changes', JSON.stringify(d.data)); } catch (e) { }
+        safeStorage.setItem('dk_oqc_color_changes', serialized);
+        try { localStorage.setItem('dk_oqc_color_changes', serialized); } catch (e) { }
       }
     }).catch(err => {
       console.warn("[Global Color Change Fetch Notice]:", err?.message || err);
@@ -8811,9 +9020,14 @@ export function App() {
             }
           } catch (e) { }
         }
+        const serialized = JSON.stringify(d.data);
+        lastSyncedValues.current['dk_oqc_color_changes'] = serialized;
+        lastSeenValues.current['dk_oqc_color_changes'] = serialized;
+        isRemoteUpdateRef.current['dk_oqc_color_changes'] = true;
+        setTimeout(() => { isRemoteUpdateRef.current['dk_oqc_color_changes'] = false; }, 1500);
         setOqcColorChanges(d.data);
-        safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(d.data));
-        try { localStorage.setItem('dk_oqc_color_changes', JSON.stringify(d.data)); } catch (e) { }
+        safeStorage.setItem('dk_oqc_color_changes', serialized);
+        try { localStorage.setItem('dk_oqc_color_changes', serialized); } catch (e) { }
         try { window.dispatchEvent(new CustomEvent('dk_color_changes_updated', { detail: d.data })); } catch (e) { }
       }
     }, (err) => {
@@ -8912,29 +9126,45 @@ export function App() {
     }
   }, [syncLoaded]);
 
-  useEffect(() => {
-    if (localStorage.getItem('dk_supplier_production_audits_is_dirty') === 'true') {
-      syncToServer('dk_supplier_production_audits', supplierProductionAudits);
+  // Tự động lưu vào safeStorage, gắn cờ _is_dirty và đẩy lên Cloud ngay cả khi hàm xử lý UI chỉ gọi setState(...)
+  const persistAndSyncStateIfChanged = (key: string, val: any) => {
+    const serialized = JSON.stringify(val);
+    if (initialStateValues.current[key] === undefined) {
+      initialStateValues.current[key] = serialized;
     }
+    if (isRemoteUpdateRef.current[key]) {
+      return;
+    }
+    const isExplicitlyDirty = localStorage.getItem(`${key}_is_dirty`) === 'true';
+    const baseline = lastSeenValues.current[key] ?? lastSyncedValues.current[key] ?? initialStateValues.current[key];
+    if (!isExplicitlyDirty && baseline !== undefined && serialized === baseline) {
+      return;
+    }
+    safeStorage.setItem(key, serialized);
+    if (!isExplicitlyDirty && serialized !== baseline) {
+      try { localStorage.setItem(`${key}_is_dirty`, 'true'); } catch (e) { }
+      if (localDirtyKeys.current) localDirtyKeys.current.add(key);
+    }
+    if (localStorage.getItem(`${key}_is_dirty`) === 'true') {
+      syncToServer(key, val);
+    }
+  };
+
+  useEffect(() => {
+    persistAndSyncStateIfChanged('dk_supplier_production_audits', supplierProductionAudits);
   }, [supplierProductionAudits]);
 
   // Persists all QMS lists to central server when state changes
   useEffect(() => {
-    if (localStorage.getItem('dk_tasks_is_dirty') === 'true') {
-      syncToServer('dk_tasks', tasks);
-    }
+    persistAndSyncStateIfChanged('dk_tasks', tasks);
   }, [tasks]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_kpis_is_dirty') === 'true') {
-      syncToServer('dk_kpis', kpis);
-    }
+    persistAndSyncStateIfChanged('dk_kpis', kpis);
   }, [kpis]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_staff_kpi_evaluations_is_dirty') === 'true') {
-      syncToServer('dk_staff_kpi_evaluations', staffKpiEvaluations);
-    }
+    persistAndSyncStateIfChanged('dk_staff_kpi_evaluations', staffKpiEvaluations);
   }, [staffKpiEvaluations]);
 
   // Auto-correct any suppliers that accidentally had address in ComponentType on startup or state updates
@@ -8965,6 +9195,9 @@ export function App() {
       });
       if (needsFix) {
         hasAutoCorrectedSuppliersOnLoad.current = true;
+        const fixedSerialized = JSON.stringify(fixed);
+        safeStorage.setItem('dk_suppliers', fixedSerialized);
+        lastSeenValues.current['dk_suppliers'] = fixedSerialized;
         setSuppliers(fixed);
         console.log("Auto-corrected supplier address/component fields for anh Thao.");
       }
@@ -8972,87 +9205,59 @@ export function App() {
   }, [syncLoaded, suppliers]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_suppliers_is_dirty') === 'true') {
-      syncToServer('dk_suppliers', suppliers);
-    }
+    persistAndSyncStateIfChanged('dk_suppliers', suppliers);
   }, [suppliers]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_capas_is_dirty') === 'true') {
-      syncToServer('dk_capas', capas);
-    }
+    persistAndSyncStateIfChanged('dk_capas', capas);
   }, [capas]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_projects_is_dirty') === 'true') {
-      syncToServer('dk_projects', projects);
-    }
+    persistAndSyncStateIfChanged('dk_projects', projects);
   }, [projects]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_ptsp_tasks_is_dirty') === 'true') {
-      syncToServer('dk_ptsp_tasks', ptspTasks);
-    }
+    persistAndSyncStateIfChanged('dk_ptsp_tasks', ptspTasks);
   }, [ptspTasks]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_defects_is_dirty') === 'true') {
-      syncToServer('dk_defects', defects);
-    }
+    persistAndSyncStateIfChanged('dk_defects', defects);
   }, [defects]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_part_evaluations_is_dirty') === 'true') {
-      syncToServer('dk_part_evaluations', partEvaluations);
-    }
+    persistAndSyncStateIfChanged('dk_part_evaluations', partEvaluations);
   }, [partEvaluations]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_report_notes_is_dirty') === 'true') {
-      syncToServer('dk_report_notes', reportNotes);
-    }
+    persistAndSyncStateIfChanged('dk_report_notes', reportNotes);
   }, [reportNotes]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_qms_bm_records_is_dirty') === 'true') {
-      syncToServer('dk_qms_bm_records', qmsBmRecords);
-    }
+    persistAndSyncStateIfChanged('dk_qms_bm_records', qmsBmRecords);
   }, [qmsBmRecords]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_ecos_is_dirty') === 'true') {
-      syncToServer('dk_ecos', ecos);
-    }
+    persistAndSyncStateIfChanged('dk_ecos', ecos);
   }, [ecos]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_improvement_actions_is_dirty') === 'true') {
-      syncToServer('dk_improvement_actions', improvementActions);
-    }
+    persistAndSyncStateIfChanged('dk_improvement_actions', improvementActions);
   }, [improvementActions]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_copqs_is_dirty') === 'true') {
-      syncToServer('dk_copqs', copqs);
-    }
+    persistAndSyncStateIfChanged('dk_copqs', copqs);
   }, [copqs]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_ptsp_models_is_dirty') === 'true') {
-      syncToServer('dk_ptsp_models', ptspModels);
-    }
+    persistAndSyncStateIfChanged('dk_ptsp_models', ptspModels);
   }, [ptspModels]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_fmea_is_dirty') === 'true') {
-      syncToServer('dk_fmea', fmea);
-    }
+    persistAndSyncStateIfChanged('dk_fmea', fmea);
   }, [fmea]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_custom_forms_is_dirty') === 'true') {
-      syncToServer('dk_custom_forms', customForms);
-    }
+    persistAndSyncStateIfChanged('dk_custom_forms', customForms);
   }, [customForms]);
 
   useEffect(() => {
@@ -9070,15 +9275,11 @@ export function App() {
   }, [models]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_dealers_is_dirty') === 'true') {
-      syncToServer('dk_dealers', dealers);
-    }
+    persistAndSyncStateIfChanged('dk_dealers', dealers);
   }, [dealers]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_daily_logs_is_dirty') === 'true') {
-      syncToServer('dk_daily_logs', dailyLogs);
-    }
+    persistAndSyncStateIfChanged('dk_daily_logs', dailyLogs);
   }, [dailyLogs]);
 
   useEffect(() => {
@@ -9110,17 +9311,11 @@ export function App() {
   }, [fabricationJobs]);
 
   useEffect(() => {
-    safeStorage.setItem('dk_iqc_records', JSON.stringify(iqcRecords));
-    if (localStorage.getItem('dk_iqc_records_is_dirty') === 'true') {
-      syncToServer('dk_iqc_records', iqcRecords);
-    }
+    persistAndSyncStateIfChanged('dk_iqc_records', iqcRecords);
   }, [iqcRecords]);
 
   useEffect(() => {
-    safeStorage.setItem('dk_pqc_records', JSON.stringify(pqcRecords));
-    if (localStorage.getItem('dk_pqc_records_is_dirty') === 'true') {
-      syncToServer('dk_pqc_records', pqcRecords);
-    }
+    persistAndSyncStateIfChanged('dk_pqc_records', pqcRecords);
   }, [pqcRecords]);
 
   useEffect(() => {
@@ -9261,21 +9456,15 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_qc_detailed_tasks_is_dirty') === 'true') {
-      syncToServer('dk_qc_detailed_tasks', qcDetailedTasks);
-    }
+    persistAndSyncStateIfChanged('dk_qc_detailed_tasks', qcDetailedTasks);
   }, [qcDetailedTasks]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_weekly_plans_is_dirty') === 'true') {
-      syncToServer('dk_weekly_plans', weeklyPlans);
-    }
+    persistAndSyncStateIfChanged('dk_weekly_plans', weeklyPlans);
   }, [weeklyPlans]);
 
   useEffect(() => {
-    if (localStorage.getItem('dk_monthly_plans_is_dirty') === 'true') {
-      syncToServer('dk_monthly_plans', monthlyPlans);
-    }
+    persistAndSyncStateIfChanged('dk_monthly_plans', monthlyPlans);
   }, [monthlyPlans]);
 
   // Dynamic linkage of Supplier PPM evaluations and statistics based on live IQC records
@@ -14193,7 +14382,19 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 type="button"
                 onClick={async () => {
                   try {
-                    localStorage.clear();
+                    if (Object.keys(pendingSyncBuffer.current).length > 0 || getDirtyModuleLabels().length > 0) {
+                      await triggerCloudSynchronization();
+                    }
+                    const remainingDirtyLabels = getDirtyModuleLabels();
+                    if (remainingDirtyLabels.length > 0) {
+                      const proceed = window.confirm(
+                        `⚠️ CẢNH BÁO DỮ LIỆU CHƯA ĐỒNG BỘ:\nHiện còn ${remainingDirtyLabels.length} phân hệ (${remainingDirtyLabels.join(', ')}) chưa đồng bộ lên Cloud.\n\nAnh có muốn đăng xuất nhưng GIỮ NGUYÊN dữ liệu cục bộ để không bị mất dữ liệu không?`
+                      );
+                      if (!proceed) return;
+                      localStorage.removeItem('dk_current_user');
+                    } else {
+                      localStorage.clear();
+                    }
                     await signOut(auth);
                     alert("Đã đăng xuất tài khoản Google thành công.");
                   } catch (error: any) {
@@ -15455,14 +15656,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                                 setNewCapaImage(compressed);
                                               }
                                             } catch (err) {
-                                              const r = new FileReader();
-                                              r.onloadend = () => {
-                                                if (r.result) {
-                                                  setNewCapaImages(prev => [...prev, r.result as string]);
-                                                  setNewCapaImage(r.result as string);
-                                                }
-                                              };
-                                              r.readAsDataURL(file);
+                                              console.error("[CAPA Image Compression Error]:", err);
+                                              alert("Không thể nén ảnh đính kèm dưới 30KB. Vui lòng chọn tệp ảnh hợp lệ khác.");
                                             }
                                           }
                                         }
@@ -26040,7 +26235,19 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   onClick={async () => {
                     if (confirm("Anh có chắc chắn muốn đăng xuất tài khoản Google hiện tại?")) {
                       try {
-                        localStorage.clear();
+                        if (Object.keys(pendingSyncBuffer.current).length > 0 || getDirtyModuleLabels().length > 0) {
+                          await triggerCloudSynchronization();
+                        }
+                        const remainingDirtyLabels = getDirtyModuleLabels();
+                        if (remainingDirtyLabels.length > 0) {
+                          const proceed = window.confirm(
+                            `⚠️ CẢNH BÁO DỮ LIỆU CHƯA ĐỒNG BỘ:\nHiện còn ${remainingDirtyLabels.length} phân hệ (${remainingDirtyLabels.join(', ')}) chưa đồng bộ lên Cloud.\n\nAnh có muốn đăng xuất nhưng GIỮ NGUYÊN dữ liệu cục bộ để không bị mất dữ liệu không?`
+                          );
+                          if (!proceed) return;
+                          localStorage.removeItem('dk_current_user');
+                        } else {
+                          localStorage.clear();
+                        }
                         await signOut(auth);
                         setShowIdentityModal(false);
                       } catch (e) {

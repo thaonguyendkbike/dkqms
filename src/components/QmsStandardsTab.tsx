@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   BookOpen,
   Car,
@@ -767,6 +767,20 @@ function loadSavedStandards(): SavedStandardsPayload | null {
   }
 }
 
+function parseSavedPartsLink(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const trimmed = String(raw).trim();
+  if (trimmed.startsWith('"') || trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === 'string') return parsed.trim();
+    } catch {
+      // fall through to raw string
+    }
+  }
+  return trimmed;
+}
+
 const SAMPLE_GROUP_TITLES: Record<'I' | 'II' | 'III' | 'IV', string> = {
   I: 'I. Ngoại quan',
   II: 'II. Hệ thống điện',
@@ -783,7 +797,7 @@ export default function QmsStandardsTab({ readOnly = false }: { readOnly?: boole
   const [section, setSection] = useState<StandardMainSection>('sample_eval');
   const [vehicleSub, setVehicleSub] = useState<VehicleSubFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [partsLink, setPartsLink] = useState<string>(() => safeStorage.getItem(COMPONENT_LINK_STORAGE_KEY) || '');
+  const [partsLink, setPartsLink] = useState<string>(() => parseSavedPartsLink(safeStorage.getItem(COMPONENT_LINK_STORAGE_KEY)));
   const [editingLink, setEditingLink] = useState(false);
   const [draftLink, setDraftLink] = useState(partsLink);
 
@@ -794,6 +808,25 @@ export default function QmsStandardsTab({ readOnly = false }: { readOnly?: boole
   const [hasCustomEdits, setHasCustomEdits] = useState<boolean>(() => Boolean(initialSaved));
   const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
 
+  useEffect(() => {
+    const handleRemoteSync = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.key === STANDARDS_DATA_STORAGE_KEY && detail.data && typeof detail.data === 'object') {
+        const payload = detail.data as SavedStandardsPayload;
+        if (Array.isArray(payload.sampleRows)) setSampleRows(payload.sampleRows);
+        if (Array.isArray(payload.vehicleABRows)) setVehicleABRows(payload.vehicleABRows);
+        if (Array.isArray(payload.vehicleCDRows)) setVehicleCDRows(payload.vehicleCDRows);
+        setHasCustomEdits(true);
+      } else if (detail?.key === COMPONENT_LINK_STORAGE_KEY && typeof detail.data === 'string') {
+        const normalizedLink = parseSavedPartsLink(detail.data);
+        setPartsLink(normalizedLink);
+        setDraftLink(normalizedLink);
+      }
+    };
+    window.addEventListener('dk_local_module_remote_sync', handleRemoteSync);
+    return () => window.removeEventListener('dk_local_module_remote_sync', handleRemoteSync);
+  }, []);
+
   const persistStandards = (
     nextSample: SampleEvalRow[],
     nextAB: VehicleGuideABRow[],
@@ -803,10 +836,13 @@ export default function QmsStandardsTab({ readOnly = false }: { readOnly?: boole
     setVehicleABRows(nextAB);
     setVehicleCDRows(nextCD);
     setHasCustomEdits(true);
-    safeStorage.setItem(
-      STANDARDS_DATA_STORAGE_KEY,
-      JSON.stringify({ sampleRows: nextSample, vehicleABRows: nextAB, vehicleCDRows: nextCD })
-    );
+    const payload: SavedStandardsPayload = { sampleRows: nextSample, vehicleABRows: nextAB, vehicleCDRows: nextCD };
+    safeStorage.setItem(STANDARDS_DATA_STORAGE_KEY, JSON.stringify(payload));
+    safeStorage.setItem(`${STANDARDS_DATA_STORAGE_KEY}_is_dirty`, 'true');
+    try {
+      window.localStorage.setItem(`${STANDARDS_DATA_STORAGE_KEY}_is_dirty`, 'true');
+    } catch {}
+    (window as any).syncToServer?.(STANDARDS_DATA_STORAGE_KEY, payload);
   };
 
   const handleResetDefault = () => {
@@ -815,7 +851,17 @@ export default function QmsStandardsTab({ readOnly = false }: { readOnly?: boole
     setVehicleABRows(VEHICLE_GUIDE_AB_ROWS);
     setVehicleCDRows(VEHICLE_GUIDE_CD_ROWS);
     setHasCustomEdits(false);
-    safeStorage.removeItem(STANDARDS_DATA_STORAGE_KEY);
+    const defaultPayload: SavedStandardsPayload = {
+      sampleRows: SAMPLE_EVAL_ROWS,
+      vehicleABRows: VEHICLE_GUIDE_AB_ROWS,
+      vehicleCDRows: VEHICLE_GUIDE_CD_ROWS
+    };
+    safeStorage.setItem(STANDARDS_DATA_STORAGE_KEY, JSON.stringify(defaultPayload));
+    safeStorage.setItem(`${STANDARDS_DATA_STORAGE_KEY}_is_dirty`, 'true');
+    try {
+      window.localStorage.setItem(`${STANDARDS_DATA_STORAGE_KEY}_is_dirty`, 'true');
+    } catch {}
+    (window as any).syncToServer?.(STANDARDS_DATA_STORAGE_KEY, defaultPayload);
   };
 
   const q = searchQuery.trim().toLowerCase();
@@ -962,7 +1008,12 @@ export default function QmsStandardsTab({ readOnly = false }: { readOnly?: boole
     e.preventDefault();
     const cleaned = draftLink.trim();
     setPartsLink(cleaned);
-    safeStorage.setItem(COMPONENT_LINK_STORAGE_KEY, cleaned);
+    safeStorage.setItem(COMPONENT_LINK_STORAGE_KEY, JSON.stringify(cleaned));
+    safeStorage.setItem(`${COMPONENT_LINK_STORAGE_KEY}_is_dirty`, 'true');
+    try {
+      window.localStorage.setItem(`${COMPONENT_LINK_STORAGE_KEY}_is_dirty`, 'true');
+    } catch {}
+    (window as any).syncToServer?.(COMPONENT_LINK_STORAGE_KEY, cleaned);
     setEditingLink(false);
   };
 

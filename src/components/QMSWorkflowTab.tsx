@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   ShieldCheck, 
   Clock, 
@@ -28,6 +28,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { safeStorage } from '../safeStorage';
 
 // Shared interfaces for data display
 interface IQCRecord {
@@ -311,7 +312,7 @@ export default function QMSWorkflowTab({
 
   // Load qaSteps from localStorage or fallback
   const [qaSteps, setQaSteps] = useState(() => {
-    const saved = localStorage.getItem('dk_qms_flow_steps_v2');
+    const saved = safeStorage.getItem('dk_qms_flow_steps_v2') || localStorage.getItem('dk_qms_flow_steps_v2');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -322,6 +323,17 @@ export default function QMSWorkflowTab({
     return INITIAL_QA_STEPS;
   });
 
+  useEffect(() => {
+    const handleRemoteSync = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.key === 'dk_qms_flow_steps_v2' && Array.isArray(detail.data) && detail.data.length > 0) {
+        setQaSteps(detail.data);
+      }
+    };
+    window.addEventListener('dk_local_module_remote_sync', handleRemoteSync);
+    return () => window.removeEventListener('dk_local_module_remote_sync', handleRemoteSync);
+  }, []);
+
   const [isEditingStep, setIsEditingStep] = useState(false);
   const [editStepForm, setEditStepForm] = useState<any>(null);
 
@@ -330,18 +342,28 @@ export default function QMSWorkflowTab({
     setIsEditingStep(true);
   };
 
+  const persistFlowSteps = (nextSteps: any[]) => {
+    setQaSteps(nextSteps);
+    const serialized = JSON.stringify(nextSteps);
+    safeStorage.setItem('dk_qms_flow_steps_v2', serialized);
+    safeStorage.setItem('dk_qms_flow_steps_v2_is_dirty', 'true');
+    try {
+      localStorage.setItem('dk_qms_flow_steps_v2', serialized);
+      localStorage.setItem('dk_qms_flow_steps_v2_is_dirty', 'true');
+    } catch (e) {}
+    (window as any).syncToServer?.('dk_qms_flow_steps_v2', nextSteps);
+  };
+
   const handleSaveStep = (e: React.FormEvent) => {
     e.preventDefault();
     const updated = qaSteps.map((s: any) => s.id === editStepForm.id ? editStepForm : s);
-    setQaSteps(updated);
-    localStorage.setItem('dk_qms_flow_steps_v2', JSON.stringify(updated));
+    persistFlowSteps(updated);
     setIsEditingStep(false);
   };
 
   const handleResetSteps = () => {
     if (window.confirm('Bạn có chắc chắn muốn khôi phục thiết kế chu trình QMS gốc từ hệ thống?')) {
-      setQaSteps(INITIAL_QA_STEPS);
-      localStorage.setItem('dk_qms_flow_steps_v2', JSON.stringify(INITIAL_QA_STEPS));
+      persistFlowSteps(INITIAL_QA_STEPS);
       setIsEditingStep(false);
     }
   };
