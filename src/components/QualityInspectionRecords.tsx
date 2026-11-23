@@ -5945,8 +5945,15 @@ const handleStartEditOqc = (record: OQCRecord, groupIds: string[]) => {
     if (
       firstLow.startsWith('công ty tnhh xe điện dk việt nhật') ||
       firstLow.startsWith('dkbike - xe cho cả gia đình') ||
+      firstLow.startsWith('dkbike — xe cho cả gia đình') ||
       firstLow.startsWith('báo cáo dữ liệu kiểm tra chất lượng thành phẩm') ||
+      firstLow.startsWith('sản xuất & chất lượng') ||
+      firstLow.startsWith('xuất lúc:') ||
       firstLow.startsWith('phạm vi:') ||
+      firstLow.startsWith('1. kiểm tra đầu vào') ||
+      firstLow.startsWith('2. kiểm soát quá trình') ||
+      firstLow.startsWith('3. xe lỗi thành phẩm') ||
+      firstLow.startsWith('không phát sinh dữ liệu trong kỳ') ||
       joinedLow.includes('công ty tnhh xe điện dk việt nhật - phòng quản lý chất lượng') ||
       joinedLow.includes('hệ thống quản lý chất lượng dk qms') ||
       joinedLow.includes('báo cáo dữ liệu kiểm tra chất lượng thành phẩm (oqc / kcs)')
@@ -5956,6 +5963,13 @@ const handleStartEditOqc = (record: OQCRecord, groupIds: string[]) => {
     return false;
   };
 
+  const normalizeOqcImportedLsx = (rawLsx: string): string => {
+    const t = (rawLsx || '').trim();
+    const m = t.match(/^20(\d{2})0?(\d{3})$/);
+    if (m) return `${m[1]}-${m[2]}`;
+    return t;
+  };
+
   const isOqcHeaderCols = (cols: string[]): boolean => {
     let matches = 0;
     cols.forEach(col => {
@@ -5963,6 +5977,8 @@ const handleStartEditOqc = (record: OQCRecord, groupIds: string[]) => {
       if (
         l === 'stt' ||
         l.includes('mã quy cách') ||
+        l.includes('mã mặt hàng') ||
+        l === 'mã số' ||
         l.includes('số sêri') ||
         l.includes('số seri') ||
         l === 'sêri' ||
@@ -5970,19 +5986,28 @@ const handleStartEditOqc = (record: OQCRecord, groupIds: string[]) => {
         l.includes('số khung') ||
         l.includes('số động cơ') ||
         l.includes('dòng xe') ||
+        l.includes('tên đăng kiểm') ||
+        l === 'màu' ||
         l === 'màu xe' ||
         l === 'màu sắc' ||
         l.includes('lệnh sản xuất') ||
+        l.includes('số lệnh sản xuất') ||
         l === 'lsx' ||
         l.includes('kcs / trạng thái') ||
+        l === 'kết quả' ||
         l === 'tình trạng' ||
         l.includes('chi tiết lỗi') ||
+        l.includes('mô tả lỗi') ||
         l === 'số lỗi' ||
         l.includes('nguyên nhân') ||
+        l.includes('nguồn gốc lỗi') ||
         l.includes('phương án xử lý') ||
+        l === 'xử lý' ||
         l.includes('người kiểm tra') ||
         l === 'giờ kiểm' ||
         l === 'ngày kiểm' ||
+        l === 'ngày sản xuất' ||
+        l === 'ngày' ||
         l === 'sllr'
       ) {
         matches++;
@@ -6312,6 +6337,8 @@ const handleImportOqcSubmit = (e: FormEvent) => {
         const cleanCol = col.replace(/\u00a0/g, ' ').trim().toLowerCase();
         if (cleanCol === 'stt' || cleanCol === 'no' || cleanCol === '#') {
           return;
+        } else if (cleanCol === 'số khung/serial' || cleanCol === 'số khung / serial' || cleanCol === 'mã số') {
+          serialNoColIdx = idx;
         } else if (cleanCol.includes('khung') || cleanCol.includes('chassis') || cleanCol.includes('vin')) {
           chassisNoColIdx = idx;
         } else if (cleanCol.includes('động cơ') || cleanCol.includes('dong co') || cleanCol.includes('số máy') || cleanCol.includes('engine') || cleanCol.includes('motor')) {
@@ -6321,13 +6348,13 @@ const handleImportOqcSubmit = (e: FormEvent) => {
           cleanCol === 'serial' || cleanCol === 'serial no' || cleanCol === 'số serial' || cleanCol.startsWith('số sê') || cleanCol.startsWith('số se') || cleanCol.includes('seri tem')
         ) {
           serialNoColIdx = idx;
-        } else if (cleanCol.includes('mã quy') || cleanCol.includes('mã qc') || cleanCol.includes('mã tem') || cleanCol === 'mã' || cleanCol.includes('part')) {
+        } else if (cleanCol.includes('mã quy') || cleanCol.includes('mã mặt hàng') || cleanCol.includes('mã qc') || cleanCol.includes('mã tem') || cleanCol === 'mã' || cleanCol.includes('part')) {
           partCodeColIdx = idx;
         } else if (cleanCol === 'màu xe' || cleanCol === 'màu' || cleanCol.includes('màu sắc') || cleanCol.includes('sơn') || cleanCol.includes('color')) {
           colorColIdx = idx;
-        } else if (cleanCol === 'model' || cleanCol === 'mẫu xe' || cleanCol.includes('dòng xe') || cleanCol.includes('tên xe')) {
+        } else if (cleanCol === 'model' || cleanCol === 'mẫu xe' || cleanCol.includes('dòng xe') || cleanCol.includes('tên xe') || cleanCol.includes('tên đăng kiểm')) {
           modelColIdx = idx;
-        } else if (cleanCol.includes('tình trạng') || cleanCol.includes('trạng thái') || cleanCol === 'status' || cleanCol === 'kcs') {
+        } else if (cleanCol.includes('tình trạng') || cleanCol.includes('trạng thái') || cleanCol === 'kết quả' || cleanCol === 'status' || cleanCol === 'kcs') {
           statusColIdx = idx;
         } else if (cleanCol === 'đạt' || cleanCol === 'có đạt' || cleanCol === 'pass' || cleanCol === 'kết quả đạt' || cleanCol === 'ok') {
           passColIdx = idx;
@@ -6335,9 +6362,9 @@ const handleImportOqcSubmit = (e: FormEvent) => {
           failedCountColIdx = idx;
         } else if (cleanCol.includes('chi tiết nguyên nhân') || cleanCol.includes('nguyên nhân 2')) {
           causeColIdx2 = idx;
-        } else if (cleanCol.includes('nguyên nhân') || cleanCol.includes('root cause') || cleanCol.includes('lý do')) {
+        } else if (cleanCol.includes('nguyên nhân') || cleanCol.includes('nguồn gốc lỗi') || cleanCol.includes('root cause') || cleanCol.includes('lý do')) {
           causeColIdx1 = idx;
-        } else if (cleanCol.includes('chi tiết lỗi') || cleanCol.includes('nội dung lỗi') || cleanCol.includes('khuyết tật') || cleanCol.includes('tên lỗi') || cleanCol === 'lỗi' || cleanCol.includes('defect')) {
+        } else if (cleanCol.includes('chi tiết lỗi') || cleanCol.includes('mô tả lỗi') || cleanCol.includes('nội dung lỗi') || cleanCol.includes('khuyết tật') || cleanCol.includes('tên lỗi') || cleanCol === 'lỗi' || cleanCol.includes('defect')) {
           defectColIdx = idx;
         } else if (cleanCol.includes('phương án xử lý') || cleanCol.includes('hướng xử lý') || cleanCol.includes('xử lý') || cleanCol.includes('treatment')) {
           treatmentColIdx = idx;
@@ -6347,7 +6374,7 @@ const handleImportOqcSubmit = (e: FormEvent) => {
           lsxColIdx = idx;
         } else if (cleanCol.includes('giờ kiểm') || cleanCol === 'giờ' || cleanCol === 'thời gian' || cleanCol.includes('time')) {
           checkTimeColIdx = idx;
-        } else if (cleanCol.includes('ngày kiểm') || cleanCol.includes('ngày kcs') || cleanCol.includes('ngày/tháng') || cleanCol === 'date' || cleanCol.includes('ngày tháng')) {
+        } else if (cleanCol.includes('ngày kiểm') || cleanCol.includes('ngày sản xuất') || cleanCol.includes('ngày kcs') || cleanCol.includes('ngày/tháng') || cleanCol === 'date' || cleanCol.includes('ngày tháng') || (cleanCol === 'ngày' && idx === 0)) {
           fullDateColIdx = idx;
         } else if (cleanCol === 'ngày' && idx >= 2) {
           dColIdx = idx;
@@ -6447,10 +6474,15 @@ const handleImportOqcSubmit = (e: FormEvent) => {
         serialNoVal = `XE-${i + 1}-${Date.now().toString(36)}`;
       }
 
+      if (/^FRM-\d+$/i.test(serialNoVal)) {
+        skippedCount++;
+        continue;
+      }
+
       let partCodeVal = rawPartCode || '';
       let chassisNoVal = rawChassisCol;
       let engineNoVal = rawEngineCol;
-      let lsxVal = (rawLsxCol || '').trim();
+      let lsxVal = normalizeOqcImportedLsx((rawLsxCol || '').trim());
       if (isLsxEmpty(lsxVal) && oqcImportDefaultLsx.trim()) {
         lsxVal = oqcImportDefaultLsx.trim();
       }
@@ -6596,6 +6628,14 @@ const handleImportOqcSubmit = (e: FormEvent) => {
               const dayVal = String(parseInt(dateMatch[1], 10) || 1).padStart(2, '0');
               monthVal = parseInt(dateMatch[2], 10) || defaultMonth;
               yearVal = parseInt(dateMatch[3], 10) || defaultYear;
+              dateVal = `${dayVal}/${String(monthVal).padStart(2, '0')}/${yearVal}`;
+            }
+          } else {
+            const compactMatch = rawDateStr.trim().match(/^(\d{2})(\d{2})(\d{4})$/);
+            if (compactMatch) {
+              const dayVal = compactMatch[1];
+              monthVal = parseInt(compactMatch[2], 10) || defaultMonth;
+              yearVal = parseInt(compactMatch[3], 10) || defaultYear;
               dateVal = `${dayVal}/${String(monthVal).padStart(2, '0')}/${yearVal}`;
             }
           }
@@ -14374,7 +14414,9 @@ return (
                     const clean = col.replace(/\u00a0/g, ' ').trim().toLowerCase();
                     if (clean === 'stt' || clean === 'no' || clean === '#') {
                       return;
-                    } else if (clean.includes('mã quy cách') || clean.includes('mã qc') || clean.includes('mã tem') || clean === 'mã' || clean.includes('part')) {
+                    } else if (clean === 'số khung/serial' || clean === 'số khung / serial' || clean === 'mã số') {
+                      serialNoIdx = idx;
+                    } else if (clean.includes('mã quy cách') || clean.includes('mã mặt hàng') || clean.includes('mã qc') || clean.includes('mã tem') || clean === 'mã' || clean.includes('part')) {
                       partCodeIdx = idx;
                     } else if (clean.includes('seri tem') || clean.includes('số sêri') || clean.includes('số seri') || clean === 'seri' || clean === 'serial' || clean === 'sêri') {
                       serialNoIdx = idx;
@@ -14384,11 +14426,11 @@ return (
                       engineNoIdx = idx;
                     } else if (clean.includes('màu') || clean.includes('màu xe') || clean.includes('màu sắc') || clean.includes('color')) {
                       colorIdx = idx;
-                    } else if (clean.includes('model') || clean.includes('dòng xe') || clean.includes('mẫu')) {
+                    } else if (clean.includes('model') || clean.includes('dòng xe') || clean.includes('mẫu') || clean.includes('tên đăng kiểm')) {
                       modelIdx = idx;
                     } else if (clean.includes('lsx') || clean.includes('lệnh sản xuất') || clean.includes('lệnh')) {
                       lsxIdx = idx;
-                    } else if (clean.includes('tình trạng') || clean.includes('trạng thái') || clean.includes('status') || clean === 'kcs') {
+                    } else if (clean.includes('tình trạng') || clean.includes('trạng thái') || clean === 'kết quả' || clean.includes('status') || clean === 'kcs') {
                       statusIdx = idx;
                     } else if (clean === 'đạt' || clean === 'pass') {
                       passFlagIdx = idx;
@@ -14396,9 +14438,9 @@ return (
                       failedCountIdx = idx;
                     } else if (clean.includes('chi tiết nguyên nhân')) {
                       causeDetailIdx = idx;
-                    } else if (clean === 'nguyên nhân' || clean.includes('nguyên nhân')) {
+                    } else if (clean === 'nguyên nhân' || clean.includes('nguyên nhân') || clean.includes('nguồn gốc lỗi')) {
                       causeIdx = idx;
-                    } else if (clean.includes('chi tiết lỗi') || clean.includes('lỗi') || clean.includes('defect')) {
+                    } else if (clean.includes('chi tiết lỗi') || clean.includes('mô tả lỗi') || clean.includes('lỗi') || clean.includes('defect')) {
                       defectIdx = idx;
                     } else if (clean.includes('phương án xử lý') || clean.includes('hướng xử lý') || clean.includes('xử lý') || clean.includes('treatment')) {
                       treatmentIdx = idx;
@@ -14406,9 +14448,9 @@ return (
                       checkedByIdx = idx;
                     } else if (clean.includes('giờ') || clean.includes('thời gian') || clean.includes('time')) {
                       timeIdx = idx;
-                    } else if (clean.includes('ngày kiểm') || clean.includes('ngày kcs') || clean.includes('ngày/tháng') || clean === 'date' || clean.includes('ngày tháng')) {
+                    } else if (clean.includes('ngày kiểm') || clean.includes('ngày sản xuất') || clean.includes('ngày kcs') || clean.includes('ngày/tháng') || clean === 'date' || clean.includes('ngày tháng') || (clean === 'ngày' && idx === 0)) {
                       fullDateIdx = idx;
-                    } else if (clean === 'ngày' || clean.includes('ngày')) {
+                    } else if (clean === 'ngày' && idx >= 2) {
                       dayIdx = idx;
                     } else if (clean === 'tháng') {
                       monthIdx = idx;
@@ -14502,12 +14544,12 @@ return (
                   let rawModelFromCol = cleanOqcReportPlaceholder(modelIdx !== -1 && cols[modelIdx] !== undefined ? cols[modelIdx] : '');
                   let colorVal = cleanOqcReportPlaceholder(colorIdx !== -1 && cols[colorIdx] !== undefined ? cols[colorIdx] : '');
                   let rawLsxFromCol = cleanOqcReportPlaceholder(lsxIdx !== -1 && cols[lsxIdx] !== undefined ? cols[lsxIdx] : '');
-                  let lsxVal = (!isLsxEmpty(rawLsxFromCol) ? rawLsxFromCol : defaultLsx).trim();
+                  let lsxVal = normalizeOqcImportedLsx((!isLsxEmpty(rawLsxFromCol) ? rawLsxFromCol : defaultLsx).trim());
 
                   if (!serialNoVal && chassisNoVal) {
                     serialNoVal = chassisNoVal;
                   }
-                  if (!serialNoVal) continue;
+                  if (!serialNoVal || /^FRM-\d+$/i.test(serialNoVal)) continue;
 
                   // --- TỰ ĐỘNG TRA CỨU MODEL VÀ MÀU SẮC TỪ BẢNG MÃ XE (OQC PART CODES) ---
                   let modelVal = rawModelFromCol;
@@ -14602,8 +14644,14 @@ return (
                     yVal = todayYear;
 
                     if (rawFullDate) {
+                      const compactMatch = rawFullDate.match(/^(\d{2})(\d{2})(\d{4})$/);
                       const dateMatch = rawFullDate.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/) || rawFullDate.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-                      if (dateMatch) {
+                      if (compactMatch) {
+                        const dStr = compactMatch[1];
+                        mVal = parseInt(compactMatch[2], 10) || todayMonth;
+                        yVal = parseInt(compactMatch[3], 10) || todayYear;
+                        dateVal = `${dStr}/${String(mVal).padStart(2, '0')}/${yVal}`;
+                      } else if (dateMatch) {
                         if (dateMatch[1].length === 4) {
                           yVal = parseInt(dateMatch[1], 10) || todayYear;
                           mVal = parseInt(dateMatch[2], 10) || todayMonth;

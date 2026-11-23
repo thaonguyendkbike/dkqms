@@ -10,6 +10,7 @@ import { exportIqcRecordToExcel, getAqlGroupName } from './utils/iqcLineItems';
 import { getLocalYmd, parseFlexibleDate, getWeekAndMonthFromDate as getWeekAndMonthFromDateUtil } from './utils/dateUtils';
 import { ReportsHub } from './reports/ReportsHub';
 import { RECOVERED_OQC_NOV2026_RECORDS, RECOVERED_OQC_NOV2026_VERSION } from './data/oqcRecoveredNov2026';
+import { RECOVERED_OQC_LATE_NOV2026_RECORDS, RECOVERED_OQC_LATE_NOV2026_VERSION } from './data/oqcRecoveredLateNov2026';
 import XLSXStyle from 'xlsx-js-style';
 import {
   BarChart,
@@ -2552,46 +2553,79 @@ export function App() {
   };
 
   // =========================================================================
-  // KHÔI PHỤC TỰ ĐỘNG 2,742 XE OQC / KCS TỪ BÁO CÁO BACKUP CỦA ANH THAO (LSX 26-326 -> 26-374)
+  // KHÔI PHỤC TỰ ĐỘNG DỮ LIỆU OQC / KCS TỪ BÁO CÁO BACKUP CỦA ANH THAO
+  // (2,742 xe đợt 1 + 656 bản ghi từ Backup.zip & file Lỗi tháng 11)
   // =========================================================================
   const RECOVERED_OQC_NOV2026_APPLIED_KEY = 'dk_oqc_recovered_nov2026_applied';
+  const RECOVERED_OQC_LATE_NOV2026_APPLIED_KEY = 'dk_oqc_recovered_late_nov2026_applied';
 
   const mergeRecoveredOqcNov2026Records = (
     currentList: OQCRecord[]
   ): { list: OQCRecord[]; changed: boolean } => {
-    if (!Array.isArray(RECOVERED_OQC_NOV2026_RECORDS) || RECOVERED_OQC_NOV2026_RECORDS.length === 0) {
+    const baseBatch = Array.isArray(RECOVERED_OQC_NOV2026_RECORDS) ? RECOVERED_OQC_NOV2026_RECORDS : [];
+    const lateBatch = Array.isArray(RECOVERED_OQC_LATE_NOV2026_RECORDS) ? RECOVERED_OQC_LATE_NOV2026_RECORDS : [];
+    const combinedRecovered: OQCRecord[] = [...lateBatch, ...baseBatch];
+    if (combinedRecovered.length === 0) {
       return { list: Array.isArray(currentList) ? currentList : [], changed: false };
     }
 
-    const alreadyApplied = safeStorage.getItem(RECOVERED_OQC_NOV2026_APPLIED_KEY) === RECOVERED_OQC_NOV2026_VERSION;
-    const recoveredIdsSet = new Set<string>();
-    RECOVERED_OQC_NOV2026_RECORDS.forEach((rec) => {
-      if (!rec) return;
-      if (rec.id) recoveredIdsSet.add(String(rec.id).trim());
-      const cid = getOqcCanonicalId(rec.serialNo);
-      if (cid) recoveredIdsSet.add(cid);
-      const rawSerial = String(rec.serialNo || '').trim().toUpperCase();
-      if (rawSerial) recoveredIdsSet.add(rawSerial);
-    });
+    const alreadyAppliedBase = safeStorage.getItem(RECOVERED_OQC_NOV2026_APPLIED_KEY) === RECOVERED_OQC_NOV2026_VERSION;
+    const alreadyAppliedLate = safeStorage.getItem(RECOVERED_OQC_LATE_NOV2026_APPLIED_KEY) === RECOVERED_OQC_LATE_NOV2026_VERSION;
 
-    const RECOVERED_BACKUP_TS_MS = Date.parse('2026-11-23T12:25:00.000Z') || 1795436700000;
+    const collectBatchIds = (batch: OQCRecord[]) => {
+      const ids = new Set<string>();
+      batch.forEach((rec) => {
+        if (!rec) return;
+        if (rec.id) ids.add(String(rec.id).trim());
+        const cid = getOqcCanonicalId(rec);
+        if (cid) ids.add(cid);
+        const rawSerial = String(rec.serialNo || '').trim().toUpperCase();
+        if (rawSerial) ids.add(rawSerial);
+      });
+      return ids;
+    };
+
+    const baseIdsSet = collectBatchIds(baseBatch);
+    const lateIdsSet = collectBatchIds(lateBatch);
+    const RECOVERED_BASE_TS_MS = Date.parse('2026-11-23T12:25:00.000Z') || 1795436700000;
+    const RECOVERED_LATE_TS_MS = Date.parse('2026-11-23T13:38:00.000Z') || 1795441080000;
+
+    const getBatchCutoffForId = (id: string): number => {
+      if (lateIdsSet.has(id)) return RECOVERED_LATE_TS_MS;
+      if (baseIdsSet.has(id)) return RECOVERED_BASE_TS_MS;
+      return 0;
+    };
+
     try {
       const tombstoneMap = readOqcTombstoneMap();
       let tombstoneModified = false;
-      recoveredIdsSet.forEach((id) => {
-        if (tombstoneMap[id] !== undefined && tombstoneMap[id] <= RECOVERED_BACKUP_TS_MS + 5000) {
-          delete tombstoneMap[id];
-          tombstoneModified = true;
-        }
-      });
+      const checkAndScrub = (ids: Set<string>, cutoffMs: number) => {
+        ids.forEach((id) => {
+          if (tombstoneMap[id] !== undefined && tombstoneMap[id] <= cutoffMs + 5000) {
+            delete tombstoneMap[id];
+            tombstoneModified = true;
+          }
+        });
+      };
+      checkAndScrub(baseIdsSet, RECOVERED_BASE_TS_MS);
+      checkAndScrub(lateIdsSet, RECOVERED_LATE_TS_MS);
       if (tombstoneModified) {
         writeOqcTombstoneMap(tombstoneMap);
-      } else if (!alreadyApplied) {
+      }
+
+      if (!alreadyAppliedBase || !alreadyAppliedLate) {
         const remoteDel = readOqcIdSet(OQC_REMOTE_DELETED_IDS_KEY);
         let remoteModified = false;
-        recoveredIdsSet.forEach((id) => {
-          if (remoteDel.delete(id)) remoteModified = true;
-        });
+        if (!alreadyAppliedBase) {
+          baseIdsSet.forEach((id) => {
+            if (remoteDel.delete(id)) remoteModified = true;
+          });
+        }
+        if (!alreadyAppliedLate) {
+          lateIdsSet.forEach((id) => {
+            if (remoteDel.delete(id)) remoteModified = true;
+          });
+        }
         if (remoteModified) {
           safeStorage.setItem(OQC_REMOTE_DELETED_IDS_KEY, JSON.stringify(Array.from(remoteDel)));
         }
@@ -2603,7 +2637,9 @@ export function App() {
         if (Array.isArray(localDelArr)) {
           const filteredLocalDel = localDelArr.filter((x: any) => {
             const s = String(x || '').trim();
-            return !recoveredIdsSet.has(s) || (tombstoneMap[s] && tombstoneMap[s] > RECOVERED_BACKUP_TS_MS + 5000);
+            const cutoff = getBatchCutoffForId(s);
+            if (!cutoff) return true;
+            return Boolean(tombstoneMap[s] && tombstoneMap[s] > cutoff + 5000);
           });
           if (filteredLocalDel.length !== localDelArr.length) {
             localStorage.setItem('dk_oqc_records_deleted_ids', JSON.stringify(filteredLocalDel));
@@ -2613,7 +2649,9 @@ export function App() {
       if (lastKnownOqcCloudDeletedIds.current.length > 0) {
         lastKnownOqcCloudDeletedIds.current = lastKnownOqcCloudDeletedIds.current.filter((id) => {
           const s = String(id || '').trim();
-          return !recoveredIdsSet.has(s) || (tombstoneMap[s] && tombstoneMap[s] > RECOVERED_BACKUP_TS_MS + 5000);
+          const cutoff = getBatchCutoffForId(s);
+          if (!cutoff) return true;
+          return Boolean(tombstoneMap[s] && tombstoneMap[s] > cutoff + 5000);
         });
       }
     } catch (e) {
@@ -2633,85 +2671,107 @@ export function App() {
     let changed = false;
     const newlyRecovered: OQCRecord[] = [];
 
-    RECOVERED_OQC_NOV2026_RECORDS.forEach((rec) => {
-      if (!rec || !rec.serialNo) return;
-      const normSerial = rec.serialNo.trim().toUpperCase();
-      if (!normSerial) return;
+    const applyBatch = (batch: OQCRecord[], isBatchAlreadyApplied: boolean, allowDefectUpgradeFromPass: boolean) => {
+      batch.forEach((rec) => {
+        if (!rec || !rec.serialNo) return;
+        const normSerial = rec.serialNo.trim().toUpperCase();
+        if (!normSerial) return;
 
-      const existingIdx = serialToIndex.get(normSerial);
-      if (existingIdx === undefined) {
-        if (alreadyApplied && isOqcRecordTombstoned(rec, tombstoneMap)) {
-          return;
-        }
-        newlyRecovered.push({ ...rec });
-        changed = true;
-      } else {
-        const existing = baseList[existingIdx];
-        if (!existing) return;
+        const existingIdx = serialToIndex.get(normSerial);
+        if (existingIdx === undefined) {
+          if (isBatchAlreadyApplied && isOqcRecordTombstoned(rec, tombstoneMap)) {
+            return;
+          }
+          serialToIndex.set(normSerial, -1 - newlyRecovered.length);
+          newlyRecovered.push({ ...rec });
+          changed = true;
+        } else {
+          const existing = existingIdx >= 0 ? baseList[existingIdx] : newlyRecovered[-1 - existingIdx];
+          if (!existing) return;
 
-        let itemChanged = false;
-        const nextItem: OQCRecord = { ...existing };
+          let itemChanged = false;
+          const nextItem: OQCRecord = { ...existing };
 
-        const fillStringField = (field: keyof OQCRecord, badValues: string[] = ['--', '--:--', 'Chưa có LSX']) => {
-          const recVal = String((rec as any)[field] || '').trim();
-          const curVal = String((nextItem as any)[field] || '').trim();
-          if (recVal && (!curVal || badValues.includes(curVal))) {
-            (nextItem as any)[field] = (rec as any)[field];
+          const fillStringField = (field: keyof OQCRecord, badValues: string[] = ['--', '--:--', 'Chưa có LSX']) => {
+            const recVal = String((rec as any)[field] || '').trim();
+            const curVal = String((nextItem as any)[field] || '').trim();
+            if (recVal && (!curVal || badValues.includes(curVal))) {
+              (nextItem as any)[field] = (rec as any)[field];
+              itemChanged = true;
+            }
+          };
+
+          fillStringField('chassisNo');
+          fillStringField('engineNo');
+          fillStringField('checkedBy');
+          fillStringField('defectDetail');
+          fillStringField('rootCause');
+          fillStringField('treatment');
+          fillStringField('lsx');
+          fillStringField('partCode');
+          fillStringField('model');
+          fillStringField('color');
+          fillStringField('checkTime');
+          fillStringField('date');
+
+          const curStatus = String(nextItem.status || '').trim();
+          const recStatus = String(rec.status || '').trim();
+          const shouldUpgradePending =
+            (curStatus === '' || curStatus === 'Chưa kiểm tra') &&
+            (recStatus === 'Đạt' || recStatus === 'Lỗi');
+          const shouldUpgradeDefect =
+            allowDefectUpgradeFromPass &&
+            recStatus === 'Lỗi' &&
+            Boolean(rec.defectDetail) &&
+            (curStatus !== 'Lỗi' || !String(nextItem.defectDetail || '').trim());
+
+          if (shouldUpgradePending || shouldUpgradeDefect) {
+            nextItem.status = rec.status;
+            nextItem.passFlag = rec.passFlag;
+            nextItem.failedCount = rec.failedCount;
+            nextItem.totalLlr = rec.totalLlr;
+            if (rec.defectDetail) nextItem.defectDetail = rec.defectDetail;
+            if (rec.rootCause) nextItem.rootCause = rec.rootCause;
+            if (rec.treatment) nextItem.treatment = rec.treatment;
+            if (rec.checkedBy) nextItem.checkedBy = rec.checkedBy;
+            if (rec.checkTime) nextItem.checkTime = rec.checkTime;
+            if (rec.date) {
+              nextItem.date = rec.date;
+              nextItem.month = rec.month;
+              nextItem.year = rec.year;
+            }
             itemChanged = true;
           }
-        };
 
-        fillStringField('chassisNo');
-        fillStringField('engineNo');
-        fillStringField('checkedBy');
-        fillStringField('defectDetail');
-        fillStringField('rootCause');
-        fillStringField('treatment');
-        fillStringField('lsx');
-        fillStringField('partCode');
-        fillStringField('model');
-        fillStringField('color');
-        fillStringField('checkTime');
-        fillStringField('date');
-
-        const curStatus = String(nextItem.status || '').trim();
-        const recStatus = String(rec.status || '').trim();
-        if (
-          (curStatus === '' || curStatus === 'Chưa kiểm tra') &&
-          (recStatus === 'Đạt' || recStatus === 'Lỗi')
-        ) {
-          nextItem.status = rec.status;
-          nextItem.passFlag = rec.passFlag;
-          nextItem.failedCount = rec.failedCount;
-          nextItem.totalLlr = rec.totalLlr;
-          if (rec.defectDetail) nextItem.defectDetail = rec.defectDetail;
-          if (rec.rootCause) nextItem.rootCause = rec.rootCause;
-          if (rec.treatment) nextItem.treatment = rec.treatment;
-          if (rec.checkedBy) nextItem.checkedBy = rec.checkedBy;
-          if (rec.checkTime) nextItem.checkTime = rec.checkTime;
-          if (rec.date) {
-            nextItem.date = rec.date;
-            nextItem.month = rec.month;
-            nextItem.year = rec.year;
+          if (itemChanged) {
+            nextItem.updatedAt = rec.updatedAt || nextItem.updatedAt || new Date().toISOString();
+            if (existingIdx >= 0) {
+              baseList[existingIdx] = nextItem;
+            } else {
+              newlyRecovered[-1 - existingIdx] = nextItem;
+            }
+            changed = true;
           }
-          itemChanged = true;
         }
+      });
+    };
 
-        if (itemChanged) {
-          nextItem.updatedAt = rec.updatedAt || nextItem.updatedAt || new Date().toISOString();
-          baseList[existingIdx] = nextItem;
-          changed = true;
-        }
+    // Nạp đợt 1 (2,742 xe) trước, sau đó nạp & cập nhật đợt 2 (656 bản ghi Backup.zip + file Lỗi tháng 11)
+    applyBatch(baseBatch, alreadyAppliedBase, false);
+    applyBatch(lateBatch, alreadyAppliedLate, !alreadyAppliedLate);
+
+    if (safeStorage.isReady() || baseList.length > 500) {
+      if (!alreadyAppliedBase) {
+        safeStorage.setItem(RECOVERED_OQC_NOV2026_APPLIED_KEY, RECOVERED_OQC_NOV2026_VERSION);
       }
-    });
-
-    if (!alreadyApplied && (safeStorage.isReady() || baseList.length > 500)) {
-      safeStorage.setItem(RECOVERED_OQC_NOV2026_APPLIED_KEY, RECOVERED_OQC_NOV2026_VERSION);
+      if (!alreadyAppliedLate) {
+        safeStorage.setItem(RECOVERED_OQC_LATE_NOV2026_APPLIED_KEY, RECOVERED_OQC_LATE_NOV2026_VERSION);
+      }
     }
 
     if (newlyRecovered.length > 0) {
       const mergedList = deduplicateOqcRecords([...newlyRecovered, ...baseList]);
-      console.log(`[OQC Nov2026 Recovery]: Đã khôi phục ${newlyRecovered.length} xe thiếu và làm giàu dữ liệu -> tổng ${mergedList.length} xe.`);
+      console.log(`[OQC Recovery]: Đã khôi phục ${newlyRecovered.length} xe thiếu và làm giàu dữ liệu -> tổng ${mergedList.length} xe.`);
       return { list: mergedList, changed: true };
     }
     if (changed) {
@@ -5233,12 +5293,12 @@ export function App() {
           serverDeletedAtMs <= recoveredBackupTsMs + 5000;
         const recoveredIdSetForFilter = shouldScrubRecoveredFromServerDeleted
           ? new Set<string>(
-              RECOVERED_OQC_NOV2026_RECORDS.flatMap((r) => [
-                String(r.id || '').trim(),
-                getOqcCanonicalId(r.serialNo),
-                String(r.serialNo || '').trim().toUpperCase()
-              ]).filter(Boolean)
-            )
+            RECOVERED_OQC_NOV2026_RECORDS.flatMap((r) => [
+              String(r.id || '').trim(),
+              getOqcCanonicalId(r.serialNo),
+              String(r.serialNo || '').trim().toUpperCase()
+            ]).filter(Boolean)
+          )
           : null;
         const rawServerDeletedIds = Array.isArray(oqcMetaDoc?.deletedIds) ? oqcMetaDoc.deletedIds.map(String) : [];
         const serverDeletedIds = recoveredIdSetForFilter
