@@ -69,6 +69,7 @@ import {
 } from '../services/bomStorageService';
 import { LarkBomSyncModal } from './LarkBomSyncModal';
 import { BomStatsTab } from './BomStatsTab';
+import { CameraCaptureModal } from './CameraCaptureModal';
 
 interface PartsBomCenterProps {
   readOnly?: boolean;
@@ -315,6 +316,12 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
   } | null>(null);
   const [importingExcel, setImportingExcel] = useState(false);
   const [larkSyncModalOpen, setLarkSyncModalOpen] = useState(false);
+  const [cameraCaptureTarget, setCameraCaptureTarget] = useState<
+    | { mode: 'form' }
+    | { mode: 'quick_part'; part: BomPartMasterItem; alsoSyncViewForm?: boolean }
+    | null
+  >(null);
+  const [cameraSaving, setCameraSaving] = useState(false);
 
   // Lightbox Zoom
   const [lightboxState, setLightboxState] = useState<{
@@ -941,6 +948,75 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
     }));
     if (target?.path && !isStoragePathShared(target.path, editingPartId)) {
       await deleteBomImageFromStorage(target.path);
+    }
+  };
+
+  const handleConfirmCameraCapture = async (
+    shots: Array<{ file: File; caption: string }>
+  ) => {
+    if (!cameraCaptureTarget || shots.length === 0 || readOnly) return;
+
+    const targetCode =
+      cameraCaptureTarget.mode === 'form'
+        ? partForm.partCode.trim().toUpperCase()
+        : cameraCaptureTarget.part.partCode.trim().toUpperCase();
+
+    if (!targetCode) {
+      showToast('Vui lòng nhập "Mã mặt hàng" trước khi chụp ảnh!', 'error');
+      return;
+    }
+
+    setCameraSaving(true);
+    try {
+      const safeFolder = `parts/${toSafeDocId(targetCode)}`;
+      const nowIso = new Date().toISOString();
+      const uploadedItems: BomPartImageItem[] = [];
+
+      for (const shot of shots) {
+        const { url, path } = await uploadBomImageToStorage(shot.file, safeFolder, targetCode);
+        uploadedItems.push({
+          id: `IMG_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          url,
+          path,
+          caption: shot.caption || '',
+          updatedAt: nowIso
+        });
+      }
+
+      if (cameraCaptureTarget.mode === 'form') {
+        if (partForm.imageMode === 'single') {
+          for (const oldImg of partForm.images) {
+            if (oldImg.path && !isStoragePathShared(oldImg.path, editingPartId)) {
+              await deleteBomImageFromStorage(oldImg.path);
+            }
+          }
+          setPartForm((prev) => ({ ...prev, images: [uploadedItems[0]] }));
+        } else {
+          setPartForm((prev) => ({ ...prev, images: [...prev.images, ...uploadedItems] }));
+        }
+        showToast(`Đã chụp và tải lên ${uploadedItems.length} ảnh cho ${targetCode} (hãy bấm Lưu).`, 'success');
+      } else {
+        const existingPart = cameraCaptureTarget.part;
+        const mergedImages = [...(existingPart.images || []), ...uploadedItems];
+        const nextPart: BomPartMasterItem = {
+          ...existingPart,
+          images: mergedImages,
+          updatedAt: nowIso,
+          updatedBy: currentUserName
+        };
+        await saveBomPartRecord(nextPart);
+        if (cameraCaptureTarget.alsoSyncViewForm) {
+          setPartForm((prev) => ({ ...prev, images: mergedImages }));
+        }
+        showToast(`Đã chụp & lưu ngay ${uploadedItems.length} ảnh cho mã ${targetCode}.`, 'success');
+      }
+
+      setCameraCaptureTarget(null);
+    } catch (err: any) {
+      console.error('[Camera Capture Upload Error]:', err);
+      showToast(`Lỗi lưu ảnh chụp: ${err?.message || 'Kiểm tra kết nối Firebase Storage'}`, 'error');
+    } finally {
+      setCameraSaving(false);
     }
   };
 
@@ -2308,11 +2384,21 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                                   <>
                                     <button
                                       type="button"
-                                      onClick={() => openPartModalForEdit(part)}
-                                      className="p-1.5 rounded-lg bg-slate-100 text-slate-700 cursor-pointer"
-                                      title="Sửa linh kiện & ảnh"
+                                      onClick={() =>
+                                        setCameraCaptureTarget({ mode: 'quick_part', part })
+                                      }
+                                      className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 cursor-pointer"
+                                      title="Chụp ảnh trực tiếp & lưu ngay"
                                     >
                                       <Camera className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openPartModalForEdit(part)}
+                                      className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700 cursor-pointer"
+                                      title="Sửa thông tin & ảnh linh kiện"
+                                    >
+                                      <ImageIcon className="w-3.5 h-3.5" />
                                     </button>
                                     <button
                                       type="button"
@@ -2513,11 +2599,21 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                                     <>
                                       <button
                                         type="button"
+                                        onClick={() =>
+                                          setCameraCaptureTarget({ mode: 'quick_part', part })
+                                        }
+                                        className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 cursor-pointer"
+                                        title="Chụp ảnh trực tiếp & lưu ngay"
+                                      >
+                                        <Camera className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
                                         onClick={() => openPartModalForEdit(part)}
                                         className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 cursor-pointer"
                                         title="Sửa thông tin & ảnh linh kiện gốc"
                                       >
-                                        <Camera className="w-3.5 h-3.5" />
+                                        <ImageIcon className="w-3.5 h-3.5" />
                                       </button>
                                       <button
                                         type="button"
@@ -2873,14 +2969,26 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                                 Chi tiết
                               </button>
                               {!readOnly && (
-                                <button
-                                  type="button"
-                                  onClick={() => openPartModalForEdit(part)}
-                                  className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
-                                  title="Chỉnh sửa linh kiện"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setCameraCaptureTarget({ mode: 'quick_part', part })
+                                    }
+                                    className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 cursor-pointer"
+                                    title="Chụp ảnh trực tiếp & lưu ngay"
+                                  >
+                                    <Camera className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openPartModalForEdit(part)}
+                                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                                    title="Chỉnh sửa linh kiện"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
                               )}
                             </div>
                           </div>
@@ -2996,14 +3104,26 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                                 Xem
                               </button>
                               {!readOnly && (
-                                <button
-                                  type="button"
-                                  onClick={() => openPartModalForEdit(part)}
-                                  className="p-1.5 rounded-lg bg-slate-100 text-slate-700 cursor-pointer"
-                                  title="Chỉnh sửa linh kiện"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setCameraCaptureTarget({ mode: 'quick_part', part })
+                                    }
+                                    className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 cursor-pointer"
+                                    title="Chụp ảnh trực tiếp & lưu ngay"
+                                  >
+                                    <Camera className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openPartModalForEdit(part)}
+                                    className="p-1.5 rounded-lg bg-slate-100 text-slate-700 cursor-pointer"
+                                    title="Chỉnh sửa linh kiện"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
                               )}
                             </div>
                           </div>
@@ -3163,14 +3283,26 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                                   Chi tiết
                                 </button>
                                 {!readOnly && (
-                                  <button
-                                    type="button"
-                                    onClick={() => openPartModalForEdit(part)}
-                                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
-                                    title="Chỉnh sửa linh kiện"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5" />
-                                  </button>
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setCameraCaptureTarget({ mode: 'quick_part', part })
+                                      }
+                                      className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 cursor-pointer"
+                                      title="Chụp ảnh trực tiếp & lưu ngay"
+                                    >
+                                      <Camera className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => openPartModalForEdit(part)}
+                                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                                      title="Chỉnh sửa linh kiện"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </td>
@@ -3393,14 +3525,32 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                                 Chưa có hình ảnh cho mã linh kiện này
                               </p>
                               {!readOnly && (
-                                <button
-                                  type="button"
-                                  onClick={() => setPartModalMode('edit')}
-                                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
-                                >
-                                  <Camera className="w-3.5 h-3.5" />
-                                  Tải ảnh lên ngay
-                                </button>
+                                <div className="flex flex-wrap items-center justify-center gap-2">
+                                  {currentPartObj && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setCameraCaptureTarget({
+                                          mode: 'quick_part',
+                                          part: currentPartObj,
+                                          alsoSyncViewForm: true
+                                        })
+                                      }
+                                      className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                    >
+                                      <Camera className="w-3.5 h-3.5" />
+                                      Chụp ảnh ngay
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => setPartModalMode('edit')}
+                                    className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
+                                  >
+                                    <Upload className="w-3.5 h-3.5" />
+                                    Tải từ máy
+                                  </button>
+                                </div>
                               )}
                             </div>
                           )}
@@ -3618,14 +3768,32 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                     {/* Footer View */}
                     <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
                       {!readOnly ? (
-                        <button
-                          type="button"
-                          onClick={() => setPartModalMode('edit')}
-                          className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                          Sửa / Ảnh
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {currentPartObj && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCameraCaptureTarget({
+                                  mode: 'quick_part',
+                                  part: currentPartObj,
+                                  alsoSyncViewForm: true
+                                })
+                              }
+                              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                            >
+                              <Camera className="w-3.5 h-3.5" />
+                              Chụp ảnh
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setPartModalMode('edit')}
+                            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold inline-flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            Sửa / Ảnh
+                          </button>
+                        </div>
                       ) : (
                         <div />
                       )}
@@ -3684,6 +3852,22 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
 
                         <button
                           type="button"
+                          disabled={partImagesUploading || cameraSaving}
+                          onClick={() => {
+                            if (!partForm.partCode.trim()) {
+                              showToast('Anh vui lòng nhập "Mã mặt hàng" trước khi chụp ảnh nhé!', 'error');
+                              return;
+                            }
+                            setCameraCaptureTarget({ mode: 'form' });
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                          Chụp ảnh
+                        </button>
+
+                        <button
+                          type="button"
                           disabled={partImagesUploading}
                           onClick={() => partImageInputRef.current?.click()}
                           className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 cursor-pointer"
@@ -3691,9 +3875,9 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                           {partImagesUploading ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           ) : (
-                            <Camera className="w-3.5 h-3.5" />
+                            <Upload className="w-3.5 h-3.5" />
                           )}
-                          {partForm.imageMode === 'single' ? 'Chọn 1 ảnh' : 'Thêm ảnh (chọn nhiều)'}
+                          {partForm.imageMode === 'single' ? 'Chọn 1 ảnh' : 'Chọn từ máy'}
                         </button>
                       </div>
                     )}
@@ -4525,6 +4709,28 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
           </div>
         </div>
       )}
+      {/* MODAL CHỤP ẢNH TRỰC TIẾP TỪ CAMERA APP */}
+      <CameraCaptureModal
+        open={Boolean(cameraCaptureTarget)}
+        title={
+          cameraCaptureTarget?.mode === 'form'
+            ? `Chụp ảnh: ${partForm.partCode || 'Linh kiện mới'}`
+            : cameraCaptureTarget?.mode === 'quick_part'
+              ? `Chụp ảnh: ${cameraCaptureTarget.part.partCode} - ${cameraCaptureTarget.part.partName}`
+              : 'Chụp ảnh linh kiện'
+        }
+        multiple={
+          cameraCaptureTarget?.mode === 'form'
+            ? partForm.imageMode === 'multi'
+            : (cameraCaptureTarget?.part.imageMode || 'multi') === 'multi'
+        }
+        saving={cameraSaving}
+        onClose={() => {
+          if (!cameraSaving) setCameraCaptureTarget(null);
+        }}
+        onConfirmFiles={handleConfirmCameraCapture}
+      />
+
       {/* MODAL ĐỒNG BỘ ẢNH HÀNG LOẠT TỪ LARK BASE */}
       <LarkBomSyncModal
         open={larkSyncModalOpen}
