@@ -1986,7 +1986,7 @@ export function App() {
   if (!localDirtyKeys.current) {
     const s = new Set<string>();
     try {
-      Object.keys(localStorage).forEach((key) => {
+      safeStorage.getAllKeys().forEach((key) => {
         if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
           s.add(key.replace('_is_dirty', ''));
         }
@@ -3080,14 +3080,28 @@ export function App() {
   // pushing any offline changes securely to the cloud, excluding active conflict keys.
   useEffect(() => {
     if (syncLoaded && auth.currentUser) {
+      const SYNCABLE_STARTUP_KEYS = new Set([
+        'dk_tasks', 'dk_kpis', 'dk_suppliers', 'dk_capas', 'dk_projects', 'dk_ptsp_tasks',
+        'dk_defects', 'dk_ecos', 'dk_copqs', 'dk_fmea', 'dk_custom_forms', 'dk_staff',
+        'dk_models', 'dk_dealers', 'dk_daily_logs', 'dk_equipments', 'dk_maintenance_logs',
+        'dk_equipment_incidents', 'dk_fabrication_jobs', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
+        'dk_oqc_handover_list', 'dk_oqc_color_changes', 'dk_oqc_part_codes', 'dk_supplier_production_audits',
+        'dk_weekly_plans', 'dk_monthly_plans', 'dk_weekly_assemblies_all', 'dk_monthly_assemblies_all',
+        'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
+        'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
+        'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
+        'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions',
+        'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records', 'dk_ptsp_models',
+        'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations'
+      ]);
       const dirtyKeysList: string[] = [];
       try {
-        Object.keys(localStorage).forEach((key) => {
+        safeStorage.getAllKeys().forEach((key) => {
           if (key.startsWith('dk_') && !key.endsWith('_is_dirty') && !key.endsWith('_last_synced_at') && !key.endsWith('_deleted_ids') && key !== 'dk_current_user') {
             const isExplicitlyDirty = localStorage.getItem(`${key}_is_dirty`) === 'true';
             const localSaved = safeStorage.getItem(key) || localStorage.getItem(key);
             let hasUnsyncedData = false;
-            if (localSaved) {
+            if (!isExplicitlyDirty && SYNCABLE_STARTUP_KEYS.has(key) && localSaved) {
               try {
                 const parsed = JSON.parse(localSaved);
                 if (Array.isArray(parsed) && parsed.length > 0) {
@@ -3259,7 +3273,7 @@ export function App() {
   const getUnsyncedChanges = () => {
     const dirtyKeysList: string[] = [];
     try {
-      Object.keys(localStorage).forEach((key) => {
+      safeStorage.getAllKeys().forEach((key) => {
         if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
           dirtyKeysList.push(key.replace('_is_dirty', ''));
         }
@@ -3289,6 +3303,7 @@ export function App() {
       'dk_suppliers': 'Danh sách Nhà cung cấp',
       'dk_dealers': 'Danh sách Đại lý',
       'dk_models': 'Danh mục Dòng xe / Model',
+      'dk_oqc_part_codes': 'Bảng mã xe & Màu sắc OQC',
       'dk_equipments': 'Danh mục Thiết bị & CCDC (BM-KTTD-02)',
       'dk_maintenance_logs': 'Nhật ký Hiệu chuẩn & Bảo dưỡng thiết bị',
       'dk_equipment_incidents': 'Sự cố & Đình chỉ Thiết bị',
@@ -3411,7 +3426,7 @@ export function App() {
     localStorage.setItem('dk_firebase_quota_exceeded', 'false');
     const localDirtyKeysList: string[] = [];
     try {
-      Object.keys(localStorage).forEach((key) => {
+      safeStorage.getAllKeys().forEach((key) => {
         if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
           localDirtyKeysList.push(key.replace('_is_dirty', ''));
         }
@@ -3429,7 +3444,7 @@ export function App() {
 
     console.log("[Manual Sync]: Bắt đầu đồng bộ cưỡng bức các khóa bẩn:", localDirtyKeysList);
     localDirtyKeysList.forEach((key) => {
-      const val = localStorage.getItem(key);
+      const val = safeStorage.getItem(key) || localStorage.getItem(key);
       if (val) {
         try {
           pendingSyncBuffer.current[key] = JSON.parse(val);
@@ -3446,7 +3461,7 @@ export function App() {
     // Thu thập các khóa bẩn đang chờ đồng bộ
     const dirtyKeys: string[] = [];
     try {
-      Object.keys(localStorage).forEach((key) => {
+      safeStorage.getAllKeys().forEach((key) => {
         if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
           dirtyKeys.push(key.replace('_is_dirty', ''));
         }
@@ -3697,7 +3712,7 @@ export function App() {
     }
     setForcingSync(true);
     try {
-      Object.keys(localStorage).forEach((key) => {
+      safeStorage.getAllKeys().forEach((key) => {
         if (key.endsWith('_is_dirty')) {
           localStorage.setItem(key, 'false');
         }
@@ -3758,7 +3773,7 @@ export function App() {
   useEffect(() => {
     // Scan localStorage for any keys marked as dirty from a previous offline session
     try {
-      Object.keys(localStorage).forEach((key) => {
+      safeStorage.getAllKeys().forEach((key) => {
         if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
           const baseKey = key.replace('_is_dirty', '');
           localDirtyKeys.current.add(baseKey);
@@ -4349,7 +4364,16 @@ export function App() {
         setOqcRecords(deduped);
       }
       if (serverData.dk_oqc_part_codes !== undefined) {
-        safeStorage.setItem('dk_oqc_part_codes', JSON.stringify(serverData.dk_oqc_part_codes));
+        const partCodesList = Array.isArray(serverData.dk_oqc_part_codes) ? serverData.dk_oqc_part_codes : [];
+        if (partCodesList.length > 0) {
+          const serializedPartCodes = JSON.stringify(partCodesList);
+          safeStorage.setItem('dk_oqc_part_codes', serializedPartCodes);
+          if (localStorage.getItem('dk_oqc_part_codes_is_dirty') !== 'true') {
+            lastSyncedValues.current['dk_oqc_part_codes'] = serializedPartCodes;
+            lastSeenValues.current['dk_oqc_part_codes'] = serializedPartCodes;
+          }
+          window.dispatchEvent(new CustomEvent('dk_oqc_part_codes_updated', { detail: partCodesList }));
+        }
       }
       const isHandoverDirty = localStorage.getItem('dk_oqc_handover_list_is_dirty') === 'true';
       if (serverData.dk_oqc_handover_list !== undefined && !isHandoverDirty) {
@@ -4979,6 +5003,9 @@ export function App() {
             setFabricationJobs(finalList);
           } else if (key === 'dk_oqc_part_codes') {
             if (list.length > 0) {
+              const serializedPartCodes = JSON.stringify(list);
+              lastSyncedValues.current['dk_oqc_part_codes'] = serializedPartCodes;
+              lastSeenValues.current['dk_oqc_part_codes'] = serializedPartCodes;
               window.dispatchEvent(new CustomEvent('dk_oqc_part_codes_updated', { detail: list }));
             }
           }
@@ -5665,7 +5692,7 @@ export function App() {
       if (isAuth) {
         let hasDirty = false;
         try {
-          Object.keys(localStorage).forEach((key) => {
+          safeStorage.getAllKeys().forEach((key) => {
             if (key.endsWith('_is_dirty') && localStorage.getItem(key) === 'true') {
               hasDirty = true;
             }
