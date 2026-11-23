@@ -2063,6 +2063,7 @@ export function App() {
   const lastSyncedChunkHashes = useRef<Record<string, string>>({});
   const lastKnownChunkCounts = useRef<Record<string, number>>({});
   const lastKnownOqcCloudDeletedIds = useRef<string[]>([]);
+  const lastKnownCloudOqcCount = useRef<number>(0);
   const hasCompletedInitialCloudLoad = useRef<boolean>(false);
   const syncRetryTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -2428,7 +2429,8 @@ export function App() {
           : Date.now();
       let changed = false;
 
-      if (Array.isArray(serverDeletedIds)) {
+      // Guard against poisoned bulk deletedIds (> 500 entries) from concurrent-sync bugs
+      if (Array.isArray(serverDeletedIds) && serverDeletedIds.length <= 500) {
         serverDeletedIds.forEach((delId) => {
           const s = String(delId || '').trim();
           if (s && (!tombstoneMap[s] || effectiveDeletedAtMs > tombstoneMap[s])) {
@@ -2436,14 +2438,15 @@ export function App() {
             changed = true;
           }
         });
+      } else if (Array.isArray(serverDeletedIds) && serverDeletedIds.length > 500) {
+        // Scrub any previously poisoned tombstones if a >500 poisoned deletedIds list was detected
+        Object.keys(tombstoneMap).forEach((k) => {
+          if (tombstoneMap[k] <= Date.parse('2026-11-23T16:30:00.000Z')) {
+            delete tombstoneMap[k];
+            changed = true;
+          }
+        });
       }
-
-      prevKnown.forEach((id) => {
-        if (!currentSet.has(id) && (!tombstoneMap[id] || effectiveDeletedAtMs > tombstoneMap[id])) {
-          tombstoneMap[id] = effectiveDeletedAtMs;
-          changed = true;
-        }
-      });
 
       // Only erase a tombstone if the incoming Cloud record is strictly newer (> deletedAtMs + 5s buffer)
       serverList.forEach((item) => {
@@ -2524,10 +2527,17 @@ export function App() {
         }
       });
 
-      const deletedSet = new Set<string>(Object.keys(tombstoneMap));
-      lastKnownOqcCloudDeletedIds.current.forEach((d) => {
-        if (d) deletedSet.add(String(d));
-      });
+      // Only broadcast explicit user deletions (never dump >500 poisoned snapshot-diff tombstones to Cloud)
+      const deletedSet = new Set<string>();
+      const tombstoneKeys = Object.keys(tombstoneMap);
+      if (tombstoneKeys.length <= 500) {
+        tombstoneKeys.forEach((k) => deletedSet.add(k));
+      }
+      if (lastKnownOqcCloudDeletedIds.current.length <= 500) {
+        lastKnownOqcCloudDeletedIds.current.forEach((d) => {
+          if (d) deletedSet.add(String(d));
+        });
+      }
       try {
         const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
         const localDelArr = localDelRaw ? JSON.parse(localDelRaw) : [];
@@ -3514,6 +3524,10 @@ export function App() {
         if (shouldWriteChunked) {
           // Process dataset into byte-bounded chunked documents (<= 700KB per chunk, bypassing 1MB single-doc limit)
           const rawList = Array.isArray(finalVal) ? finalVal : [];
+          if (key === 'dk_oqc_records' && lastKnownCloudOqcCount.current > 1000 && rawList.length < lastKnownCloudOqcCount.current - 500) {
+            console.warn(`[OQC Mass-Shrink Guard]: Chặn ghi đè ${rawList.length} bản ghi lên Cloud (Cloud đang có ${lastKnownCloudOqcCount.current}).`);
+            continue;
+          }
           const currentList = key === 'dk_oqc_records' ? rawList.map(minifyOqcChunkRecord) : rawList;
           lastLocalWriteTimestamps.current[key] = timestamp;
           serverTimestamps.current[key] = timestamp;
@@ -5335,10 +5349,14 @@ export function App() {
           )
           : null;
         const rawServerDeletedIds = Array.isArray(oqcMetaDoc?.deletedIds) ? oqcMetaDoc.deletedIds.map(String) : [];
+        const safeServerDeletedIds = rawServerDeletedIds.length > 500 ? [] : rawServerDeletedIds;
         const serverDeletedIds = recoveredIdSetForFilter
-          ? rawServerDeletedIds.filter((id) => !recoveredIdSetForFilter.has(String(id || '').trim()))
-          : rawServerDeletedIds;
+          ? safeServerDeletedIds.filter((id) => !recoveredIdSetForFilter.has(String(id || '').trim()))
+          : safeServerDeletedIds;
         lastKnownOqcCloudDeletedIds.current = serverDeletedIds;
+        if (rawServerOqcList.length > lastKnownCloudOqcCount.current) {
+          lastKnownCloudOqcCount.current = rawServerOqcList.length;
+        }
 
         // Register Cloud snapshot & deletedIds tombstones BEFORE merging or filtering (never erases newer tombstones)
         registerOqcServerSnapshot(rawServerOqcList, serverDeletedIds, serverDeletedAtMs);
@@ -5820,11 +5838,15 @@ export function App() {
 
           assembledList = restoreFirestorePayload(assembledList);
 
-          const oqcServerDeletedIds = key === 'dk_oqc_records' && Array.isArray(metaData?.deletedIds)
+          const rawOqcServerDeletedIds = key === 'dk_oqc_records' && Array.isArray(metaData?.deletedIds)
             ? metaData.deletedIds.map((x: any) => String(x))
             : [];
+          const oqcServerDeletedIds = rawOqcServerDeletedIds.length > 500 ? [] : rawOqcServerDeletedIds;
           if (key === 'dk_oqc_records') {
             assembledList = deduplicateOqcRecords(assembledList);
+            if (assembledList.length > lastKnownCloudOqcCount.current) {
+              lastKnownCloudOqcCount.current = assembledList.length;
+            }
             lastKnownOqcCloudDeletedIds.current = oqcServerDeletedIds;
             const serverDeletedAtMs = serverTime ? (Date.parse(serverTime) || Date.now()) : Date.now();
             registerOqcServerSnapshot(assembledList, oqcServerDeletedIds, serverDeletedAtMs);
@@ -9664,7 +9686,7 @@ export function App() {
 
     const timer = setTimeout(() => {
       safeStorage.setItem('dk_oqc_records', JSON.stringify(oqcRecords));
-      if (localStorage.getItem('dk_oqc_records_is_dirty') === 'true') {
+      if (localStorage.getItem('dk_oqc_records_is_dirty') === 'true' && hasCompletedInitialCloudLoad.current) {
         syncToServer('dk_oqc_records', oqcRecords);
       }
     }, 500);
