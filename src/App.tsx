@@ -11,6 +11,7 @@ import { getLocalYmd, parseFlexibleDate, getWeekAndMonthFromDate as getWeekAndMo
 import { ReportsHub } from './reports/ReportsHub';
 import { RECOVERED_OQC_NOV2026_RECORDS, RECOVERED_OQC_NOV2026_VERSION } from './data/oqcRecoveredNov2026';
 import { RECOVERED_OQC_LATE_NOV2026_RECORDS, RECOVERED_OQC_LATE_NOV2026_VERSION } from './data/oqcRecoveredLateNov2026';
+import { RECOVERED_OQC_AUG_SEP_2026_RECORDS, RECOVERED_OQC_AUG_SEP_2026_VERSION } from './data/oqcRecoveredAugSep2026';
 import XLSXStyle from 'xlsx-js-style';
 import {
   BarChart,
@@ -2554,23 +2555,26 @@ export function App() {
 
   // =========================================================================
   // KHÔI PHỤC TỰ ĐỘNG DỮ LIỆU OQC / KCS TỪ BÁO CÁO BACKUP CỦA ANH THAO
-  // (2,742 xe đợt 1 + 656 bản ghi từ Backup.zip & file Lỗi tháng 11)
+  // (2,742 xe đợt 1 + 656 bản ghi đợt 2 + 1,292 xe 20 lệnh tháng 8-9/2026)
   // =========================================================================
   const RECOVERED_OQC_NOV2026_APPLIED_KEY = 'dk_oqc_recovered_nov2026_applied';
   const RECOVERED_OQC_LATE_NOV2026_APPLIED_KEY = 'dk_oqc_recovered_late_nov2026_applied';
+  const RECOVERED_OQC_AUG_SEP_2026_APPLIED_KEY = 'dk_oqc_recovered_aug_sep_2026_applied';
 
   const mergeRecoveredOqcNov2026Records = (
     currentList: OQCRecord[]
   ): { list: OQCRecord[]; changed: boolean } => {
     const baseBatch = Array.isArray(RECOVERED_OQC_NOV2026_RECORDS) ? RECOVERED_OQC_NOV2026_RECORDS : [];
     const lateBatch = Array.isArray(RECOVERED_OQC_LATE_NOV2026_RECORDS) ? RECOVERED_OQC_LATE_NOV2026_RECORDS : [];
-    const combinedRecovered: OQCRecord[] = [...lateBatch, ...baseBatch];
+    const augSepBatch = Array.isArray(RECOVERED_OQC_AUG_SEP_2026_RECORDS) ? RECOVERED_OQC_AUG_SEP_2026_RECORDS : [];
+    const combinedRecovered: OQCRecord[] = [...augSepBatch, ...lateBatch, ...baseBatch];
     if (combinedRecovered.length === 0) {
       return { list: Array.isArray(currentList) ? currentList : [], changed: false };
     }
 
     const alreadyAppliedBase = safeStorage.getItem(RECOVERED_OQC_NOV2026_APPLIED_KEY) === RECOVERED_OQC_NOV2026_VERSION;
     const alreadyAppliedLate = safeStorage.getItem(RECOVERED_OQC_LATE_NOV2026_APPLIED_KEY) === RECOVERED_OQC_LATE_NOV2026_VERSION;
+    const alreadyAppliedAugSep = safeStorage.getItem(RECOVERED_OQC_AUG_SEP_2026_APPLIED_KEY) === RECOVERED_OQC_AUG_SEP_2026_VERSION;
 
     const collectBatchIds = (batch: OQCRecord[]) => {
       const ids = new Set<string>();
@@ -2587,10 +2591,13 @@ export function App() {
 
     const baseIdsSet = collectBatchIds(baseBatch);
     const lateIdsSet = collectBatchIds(lateBatch);
+    const augSepIdsSet = collectBatchIds(augSepBatch);
     const RECOVERED_BASE_TS_MS = Date.parse('2026-11-23T12:25:00.000Z') || 1795436700000;
     const RECOVERED_LATE_TS_MS = Date.parse('2026-11-23T13:38:00.000Z') || 1795441080000;
+    const RECOVERED_AUG_SEP_TS_MS = Date.parse('2026-11-23T15:00:00.000Z') || 1795446000000;
 
     const getBatchCutoffForId = (id: string): number => {
+      if (augSepIdsSet.has(id)) return RECOVERED_AUG_SEP_TS_MS;
       if (lateIdsSet.has(id)) return RECOVERED_LATE_TS_MS;
       if (baseIdsSet.has(id)) return RECOVERED_BASE_TS_MS;
       return 0;
@@ -2609,11 +2616,12 @@ export function App() {
       };
       checkAndScrub(baseIdsSet, RECOVERED_BASE_TS_MS);
       checkAndScrub(lateIdsSet, RECOVERED_LATE_TS_MS);
+      checkAndScrub(augSepIdsSet, RECOVERED_AUG_SEP_TS_MS);
       if (tombstoneModified) {
         writeOqcTombstoneMap(tombstoneMap);
       }
 
-      if (!alreadyAppliedBase || !alreadyAppliedLate) {
+      if (!alreadyAppliedBase || !alreadyAppliedLate || !alreadyAppliedAugSep) {
         const remoteDel = readOqcIdSet(OQC_REMOTE_DELETED_IDS_KEY);
         let remoteModified = false;
         if (!alreadyAppliedBase) {
@@ -2623,6 +2631,11 @@ export function App() {
         }
         if (!alreadyAppliedLate) {
           lateIdsSet.forEach((id) => {
+            if (remoteDel.delete(id)) remoteModified = true;
+          });
+        }
+        if (!alreadyAppliedAugSep) {
+          augSepIdsSet.forEach((id) => {
             if (remoteDel.delete(id)) remoteModified = true;
           });
         }
@@ -2756,9 +2769,10 @@ export function App() {
       });
     };
 
-    // Nạp đợt 1 (2,742 xe) trước, sau đó nạp & cập nhật đợt 2 (656 bản ghi Backup.zip + file Lỗi tháng 11)
+    // Nạp đợt 1 (2,742 xe) trước, sau đó nạp đợt 2 (656 bản ghi), và đợt 3 (1,292 xe 20 lệnh tháng 8-9/2026)
     applyBatch(baseBatch, alreadyAppliedBase, false);
     applyBatch(lateBatch, alreadyAppliedLate, !alreadyAppliedLate);
+    applyBatch(augSepBatch, alreadyAppliedAugSep, false);
 
     if (safeStorage.isReady() || baseList.length > 500) {
       if (!alreadyAppliedBase) {
@@ -2766,6 +2780,9 @@ export function App() {
       }
       if (!alreadyAppliedLate) {
         safeStorage.setItem(RECOVERED_OQC_LATE_NOV2026_APPLIED_KEY, RECOVERED_OQC_LATE_NOV2026_VERSION);
+      }
+      if (!alreadyAppliedAugSep) {
+        safeStorage.setItem(RECOVERED_OQC_AUG_SEP_2026_APPLIED_KEY, RECOVERED_OQC_AUG_SEP_2026_VERSION);
       }
     }
 
