@@ -21,7 +21,7 @@ export const INITIAL_EMPLOYEES: Employee[] = [
   { id: 'STF-04', name: 'Đoàn Anh Hùng', role: 'Chuyên viên kiểm tra, xử lý linh kiện đầu vào DK, đầu vào dây chuyền', email: 'anhhung.doan@dkbike.vn', permission: 'view' },
   { id: 'STF-05', name: 'Liễu Tùng Lâm', role: 'Sát hạch viên, nhân viên kiểm thử OQC (OQC Quality Assurance)', email: 'tunglam.lieu@dkbike.vn', permission: 'view' },
   { id: 'STF-06', name: 'Lành Xuân Hải', role: 'Sát hạch viên, nhân viên kiểm thử OQC (OQC Quality Assurance)', email: 'lanhxuanhai1990@gmail.com', permission: 'edit' },
-  { id: 'STF-15', name: 'Trần Thế Quảng', role: 'Nhân viên kỹ thuật', email: 'thequang.tran@dkbike.vn', permission: 'edit' }
+  { id: 'STF-15', name: 'Trần Thế Quảng', role: 'Nhân viên kỹ thuật', email: 'tranquangls1308@gmail.com', permission: 'edit' }
 ];
 export const INITIAL_SUPPLIERS: Supplier[] = [];
 export const INITIAL_PROJECTS: Project[] = [];

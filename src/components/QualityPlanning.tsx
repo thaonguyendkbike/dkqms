@@ -53,7 +53,7 @@ const DEFAULT_STAFF: QualityStaff[] = [
   { id: 'STF-05', name: 'Liễu Tùng Lâm', role: 'Sát hạch viên, nhân viên kiểm thử OQC', email: 'tunglam.lieu@dkbike.vn' },
   { id: 'STF-06', name: 'Lành Xuân Hải', role: 'Sát hạch viên, nhân viên kiểm thử OQC', email: 'xuanhai.lanh@dkbike.vn' },
   { id: 'STF-07', name: 'Nguyễn Văn Diệm', role: 'Kỹ sư giám sát quy trình, kiểm soát SQC/IQC Specialist', email: 'vandiem.nguyen@dkbike.vn' },
-  { id: 'STF-15', name: 'Trần Thế Quảng', role: 'Nhân viên kỹ thuật (QLCL)', email: 'thequang.tran@dkbike.vn' }
+  { id: 'STF-15', name: 'Trần Thế Quảng', role: 'Nhân viên kỹ thuật (QLCL)', email: 'tranquangls1308@gmail.com' }
 ];
 
 // Các model sản xuất thực tế tại nhà máy DKBike
