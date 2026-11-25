@@ -110,3 +110,41 @@ export const INITIAL_OQC_DATA: OQCRecord[] = [];
 
 export const INITIAL_SUPPLIER_AUDITS: SupplierProductionAudit[] = [];
 
+function parsePartCodeUpdatedAtMs(val: unknown): number {
+  const s = String(val || '').trim();
+  if (!s) return 0;
+  const dm = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dm) {
+    return Date.UTC(parseInt(dm[3], 10), parseInt(dm[2], 10) - 1, parseInt(dm[1], 10));
+  }
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** Deduplicate Bảng mã xe by trimmed uppercase partCode, keeping the newest entry. */
+export function deduplicateOqcPartCodes<T extends Record<string, any>>(records: T[]): T[] {
+  if (!Array.isArray(records)) return [];
+  const seen = new Map<string, T>();
+  records.forEach((rawItem, idx) => {
+    if (!rawItem || typeof rawItem !== 'object') return;
+    const item =
+      String(rawItem.model || '').trim().toLowerCase() === 'dk nova' &&
+      /^dk\s+nova\s*x\b/i.test(String(rawItem.nameWithColor || '').trim())
+        ? { ...rawItem, model: 'DK Nova X' }
+        : rawItem;
+    const code = String(item.partCode || item.code || '').trim().toUpperCase();
+    const key = code || `__ID_${String(item.id || idx).trim()}`;
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, item);
+      return;
+    }
+    const existingTs = parsePartCodeUpdatedAtMs(existing.updatedAt);
+    const nextTs = parsePartCodeUpdatedAtMs(item.updatedAt);
+    if (nextTs >= existingTs) {
+      seen.set(key, item);
+    }
+  });
+  return Array.from(seen.values());
+}
+

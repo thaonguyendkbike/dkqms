@@ -60,7 +60,7 @@ import {
   Minimize,
   ExternalLink
 } from 'lucide-react';
-import { IQCRecord, PQCRecord, OQCRecord, OqcColorChangeRecord, OqcPartCodeItem, INITIAL_OQC_PART_CODES } from '../qualityTestData';
+import { IQCRecord, PQCRecord, OQCRecord, OqcColorChangeRecord, OqcPartCodeItem, INITIAL_OQC_PART_CODES, deduplicateOqcPartCodes } from '../qualityTestData';
 import { safeStorage } from '../safeStorage';
 import { trackDeletedId, trackDeletedIdsBatch } from '../App';
 import { compressImageFile } from '../imageCompressor';
@@ -3162,16 +3162,7 @@ export default function QualityInspectionRecords({
 
   // Master Part Codes (Bảng mã xe / Mã quy cách) states
   const normalizeOqcPartCodesList = (list: OqcPartCodeItem[]): OqcPartCodeItem[] =>
-    list.map((item) => {
-      if (
-        item &&
-        String(item.model || '').trim().toLowerCase() === 'dk nova' &&
-        /^dk\s+nova\s*x\b/i.test(String(item.nameWithColor || '').trim())
-      ) {
-        return { ...item, model: 'DK Nova X' };
-      }
-      return item;
-    });
+    deduplicateOqcPartCodes(list);
 
   const [oqcPartCodes, setOqcPartCodes] = useState<OqcPartCodeItem[]>(() => {
     try {
@@ -3185,8 +3176,9 @@ export default function QualityInspectionRecords({
   });
 
   const saveOqcPartCodes = (list: OqcPartCodeItem[]) => {
-    setOqcPartCodes(list);
-    const serialized = JSON.stringify(list);
+    const cleanList = deduplicateOqcPartCodes(list);
+    setOqcPartCodes(cleanList);
+    const serialized = JSON.stringify(cleanList);
     safeStorage.setItem('dk_oqc_part_codes', serialized);
     safeStorage.setItem('dk_oqc_part_codes_is_dirty', 'true');
 
@@ -3196,7 +3188,7 @@ export default function QualityInspectionRecords({
       setDoc(
         docRef,
         sanitizeFirestorePayload({
-          data: list,
+          data: cleanList,
           updatedBy: auth.currentUser?.email || 'QLCL',
           updatedAt: new Date().toISOString()
         })

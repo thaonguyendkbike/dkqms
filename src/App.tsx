@@ -109,7 +109,8 @@ import {
   IQCRecord,
   PQCRecord,
   OQCRecord,
-  OqcColorChangeRecord
+  OqcColorChangeRecord,
+  deduplicateOqcPartCodes
 } from './qualityTestData';
 import {
   PROD_OVERVIEW_TARGETS,
@@ -5441,11 +5442,17 @@ export function App() {
         }
       }
       if (serverData.dk_oqc_part_codes !== undefined) {
-        const partCodesList = Array.isArray(serverData.dk_oqc_part_codes) ? serverData.dk_oqc_part_codes : [];
+        const rawPartCodesList = Array.isArray(serverData.dk_oqc_part_codes) ? serverData.dk_oqc_part_codes : [];
+        const partCodesList = deduplicateOqcPartCodes(rawPartCodesList);
         if (partCodesList.length > 0) {
           const serializedPartCodes = JSON.stringify(partCodesList);
           safeStorage.setItem('dk_oqc_part_codes', serializedPartCodes);
-          if (localStorage.getItem('dk_oqc_part_codes_is_dirty') !== 'true') {
+          if (partCodesList.length < rawPartCodesList.length) {
+            localStorage.setItem('dk_oqc_part_codes_is_dirty', 'true');
+            localDirtyKeys.current.add('dk_oqc_part_codes');
+            pendingSyncBuffer.current['dk_oqc_part_codes'] = partCodesList;
+            syncToServer('dk_oqc_part_codes', partCodesList);
+          } else if (localStorage.getItem('dk_oqc_part_codes_is_dirty') !== 'true') {
             lastSyncedValues.current['dk_oqc_part_codes'] = serializedPartCodes;
             lastSeenValues.current['dk_oqc_part_codes'] = serializedPartCodes;
           }
@@ -6213,8 +6220,12 @@ export function App() {
           } else if (key === 'dk_custom_forms') {
             setCustomForms(finalList);
           } else if (key === 'dk_oqc_part_codes') {
-            if (list.length > 0) {
-              window.dispatchEvent(new CustomEvent('dk_oqc_part_codes_updated', { detail: list }));
+            const dedupedPartCodes = deduplicateOqcPartCodes(list);
+            if (dedupedPartCodes.length > 0) {
+              if (dedupedPartCodes.length < list.length) {
+                safeStorage.setItem('dk_oqc_part_codes', JSON.stringify(dedupedPartCodes));
+              }
+              window.dispatchEvent(new CustomEvent('dk_oqc_part_codes_updated', { detail: dedupedPartCodes }));
             }
           }
         }, (err) => {
