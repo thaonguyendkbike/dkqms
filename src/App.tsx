@@ -14,6 +14,7 @@ import { RECOVERED_OQC_LATE_NOV2026_RECORDS, RECOVERED_OQC_LATE_NOV2026_VERSION 
 import { RECOVERED_OQC_AUG_SEP_2026_RECORDS, RECOVERED_OQC_AUG_SEP_2026_VERSION } from './data/oqcRecoveredAugSep2026';
 import { RECOVERED_OQC_JUN_SEP_2026_RECORDS, RECOVERED_OQC_JUN_SEP_2026_VERSION } from './data/oqcRecoveredJunSep2026';
 import { RECOVERED_OQC_FULL_CSV_2026_RECORDS, RECOVERED_OQC_FULL_CSV_2026_VERSION } from './data/oqcRecoveredFullCsv2026';
+import { RECOVERED_OQC_NOV25_2026_RECORDS, RECOVERED_OQC_NOV25_2026_VERSION } from './data/oqcRecoveredNov25_2026';
 import XLSXStyle from 'xlsx-js-style';
 import {
   BarChart,
@@ -2574,6 +2575,7 @@ export function App() {
   const RECOVERED_OQC_AUG_SEP_2026_APPLIED_KEY = 'dk_oqc_recovered_aug_sep_2026_applied';
   const RECOVERED_OQC_JUN_SEP_2026_APPLIED_KEY = 'dk_oqc_recovered_jun_sep_2026_applied';
   const RECOVERED_OQC_FULL_CSV_2026_APPLIED_KEY = 'dk_oqc_recovered_full_csv_2026_applied';
+  const RECOVERED_OQC_NOV25_2026_APPLIED_KEY = 'dk_oqc_recovered_nov25_2026_applied';
 
   const mergeRecoveredOqcNov2026Records = (
     currentList: OQCRecord[]
@@ -2583,7 +2585,8 @@ export function App() {
     const augSepBatch = Array.isArray(RECOVERED_OQC_AUG_SEP_2026_RECORDS) ? RECOVERED_OQC_AUG_SEP_2026_RECORDS : [];
     const junSepBatch = Array.isArray(RECOVERED_OQC_JUN_SEP_2026_RECORDS) ? RECOVERED_OQC_JUN_SEP_2026_RECORDS : [];
     const fullCsvBatch = Array.isArray(RECOVERED_OQC_FULL_CSV_2026_RECORDS) ? RECOVERED_OQC_FULL_CSV_2026_RECORDS : [];
-    const combinedRecovered: OQCRecord[] = [...fullCsvBatch, ...junSepBatch, ...augSepBatch, ...lateBatch, ...baseBatch];
+    const nov25Batch = Array.isArray(RECOVERED_OQC_NOV25_2026_RECORDS) ? RECOVERED_OQC_NOV25_2026_RECORDS : [];
+    const combinedRecovered: OQCRecord[] = [...nov25Batch, ...fullCsvBatch, ...junSepBatch, ...augSepBatch, ...lateBatch, ...baseBatch];
     if (combinedRecovered.length === 0) {
       return { list: Array.isArray(currentList) ? currentList : [], changed: false };
     }
@@ -2593,6 +2596,7 @@ export function App() {
     const alreadyAppliedAugSep = safeStorage.getItem(RECOVERED_OQC_AUG_SEP_2026_APPLIED_KEY) === RECOVERED_OQC_AUG_SEP_2026_VERSION;
     const alreadyAppliedJunSep = safeStorage.getItem(RECOVERED_OQC_JUN_SEP_2026_APPLIED_KEY) === RECOVERED_OQC_JUN_SEP_2026_VERSION;
     const alreadyAppliedFullCsv = safeStorage.getItem(RECOVERED_OQC_FULL_CSV_2026_APPLIED_KEY) === RECOVERED_OQC_FULL_CSV_2026_VERSION;
+    const alreadyAppliedNov25 = safeStorage.getItem(RECOVERED_OQC_NOV25_2026_APPLIED_KEY) === RECOVERED_OQC_NOV25_2026_VERSION;
 
     const collectBatchIds = (batch: OQCRecord[]) => {
       const ids = new Set<string>();
@@ -2612,13 +2616,16 @@ export function App() {
     const augSepIdsSet = collectBatchIds(augSepBatch);
     const junSepIdsSet = collectBatchIds(junSepBatch);
     const fullCsvIdsSet = collectBatchIds(fullCsvBatch);
+    const nov25IdsSet = collectBatchIds(nov25Batch);
     const RECOVERED_BASE_TS_MS = Date.parse('2026-11-23T16:00:00.000Z') || 1795449600000;
     const RECOVERED_LATE_TS_MS = Date.parse('2026-11-23T16:00:00.000Z') || 1795449600000;
     const RECOVERED_AUG_SEP_TS_MS = Date.parse('2026-11-23T16:00:00.000Z') || 1795449600000;
     const RECOVERED_JUN_SEP_TS_MS = Date.parse('2026-11-23T16:10:00.000Z') || 1795450200000;
     const RECOVERED_FULL_CSV_TS_MS = Date.parse('2026-11-23T17:10:00.000Z') || 1795453800000;
+    const RECOVERED_NOV25_TS_MS = Date.parse('2026-11-25T12:00:00.000Z') || 1795608000000;
 
     const getBatchCutoffForId = (id: string): number => {
+      if (nov25IdsSet.has(id)) return RECOVERED_NOV25_TS_MS;
       if (fullCsvIdsSet.has(id)) return RECOVERED_FULL_CSV_TS_MS;
       if (junSepIdsSet.has(id)) return RECOVERED_JUN_SEP_TS_MS;
       if (augSepIdsSet.has(id)) return RECOVERED_AUG_SEP_TS_MS;
@@ -2643,13 +2650,19 @@ export function App() {
       checkAndScrub(augSepIdsSet, RECOVERED_AUG_SEP_TS_MS);
       checkAndScrub(junSepIdsSet, RECOVERED_JUN_SEP_TS_MS);
       checkAndScrub(fullCsvIdsSet, RECOVERED_FULL_CSV_TS_MS);
+      checkAndScrub(nov25IdsSet, RECOVERED_NOV25_TS_MS);
       if (tombstoneModified) {
         writeOqcTombstoneMap(tombstoneMap);
       }
 
-      if (!alreadyAppliedBase || !alreadyAppliedLate || !alreadyAppliedAugSep || !alreadyAppliedJunSep || !alreadyAppliedFullCsv) {
+      if (!alreadyAppliedBase || !alreadyAppliedLate || !alreadyAppliedAugSep || !alreadyAppliedJunSep || !alreadyAppliedFullCsv || !alreadyAppliedNov25) {
         const remoteDel = readOqcIdSet(OQC_REMOTE_DELETED_IDS_KEY);
         let remoteModified = false;
+        if (!alreadyAppliedNov25) {
+          nov25IdsSet.forEach((id) => {
+            if (remoteDel.delete(id)) remoteModified = true;
+          });
+        }
         if (!alreadyAppliedFullCsv) {
           fullCsvIdsSet.forEach((id) => {
             if (remoteDel.delete(id)) remoteModified = true;
@@ -2805,12 +2818,13 @@ export function App() {
       });
     };
 
-    // Nạp đợt 1 (2,742 xe), đợt 2 (656 bản ghi), đợt 3 (1,292 xe), đợt 4 (2,119 xe), và đợt 5 (6,345 xe từ danhsachsserri.csv)
+    // Nạp đợt 1-5 và đợt 6 (6,179 xe còn thiếu từ danhsachsserri.csv)
     applyBatch(baseBatch, alreadyAppliedBase, false);
     applyBatch(lateBatch, alreadyAppliedLate, false);
     applyBatch(augSepBatch, alreadyAppliedAugSep, false);
     applyBatch(junSepBatch, alreadyAppliedJunSep, false);
     applyBatch(fullCsvBatch, alreadyAppliedFullCsv, false);
+    applyBatch(nov25Batch, alreadyAppliedNov25, false);
 
     if (safeStorage.isReady() || baseList.length > 500) {
       if (!alreadyAppliedBase) {
@@ -2827,6 +2841,9 @@ export function App() {
       }
       if (!alreadyAppliedFullCsv) {
         safeStorage.setItem(RECOVERED_OQC_FULL_CSV_2026_APPLIED_KEY, RECOVERED_OQC_FULL_CSV_2026_VERSION);
+      }
+      if (!alreadyAppliedNov25) {
+        safeStorage.setItem(RECOVERED_OQC_NOV25_2026_APPLIED_KEY, RECOVERED_OQC_NOV25_2026_VERSION);
       }
     }
 
@@ -3918,8 +3935,11 @@ export function App() {
         if (localDirtyKeys.current) {
           localDirtyKeys.current.delete(key);
         }
+        return;
       }
-      return;
+      if (localStorage.getItem(`${key}_is_dirty`) !== 'true') {
+        return;
+      }
     }
 
     // Track the initial mount/state value for each key so we can identify true user-driven changes before sync resolves
@@ -4242,7 +4262,11 @@ export function App() {
         try {
           pendingSyncBuffer.current[key] = parseStoredSyncValue(key, val);
           localDirtyKeys.current.add(key); // Thêm vào bộ nhớ bẩn của tab hiện tại
-        } catch (err) { }
+        } catch (err) {
+          try { localStorage.setItem(`${key}_is_dirty`, 'false'); } catch (e) { }
+        }
+      } else {
+        try { localStorage.setItem(`${key}_is_dirty`, 'false'); } catch (e) { }
       }
     });
 
