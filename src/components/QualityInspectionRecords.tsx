@@ -1823,7 +1823,7 @@ export default function QualityInspectionRecords({
   }, [oqcRecords, setOqcRecords]);
 
   const saveOqcRecordsOptimized = useCallback((updated: OQCRecord[], immediateCloudSync: boolean = false) => {
-    try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
+    try { safeStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
     (window as any).__oqcManagedSaveTs = Date.now();
     latestOqcRecordsRef.current = updated;
 
@@ -1940,7 +1940,7 @@ export default function QualityInspectionRecords({
         pendingOqcSerialOverridesRef.current[cleanSerial] = mergedOverride;
       }
     }
-    try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
+    try { safeStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
     // Lưu tức thì bản ghi thay đổi nhỏ (< 1KB, tốn 0.05ms) qua safeStorage.setItem để bảo vệ 100% khi F5 ngay lập tức
     try {
       safeStorage.setItem('dk_oqc_pending_overrides', JSON.stringify({
@@ -2005,7 +2005,7 @@ export default function QualityInspectionRecords({
     setIqcRecords(updated);
     safeStorage.setItem('dk_iqc_records', JSON.stringify(updated));
     try {
-      localStorage.setItem('dk_iqc_records_is_dirty', 'true');
+      safeStorage.setItem('dk_iqc_records_is_dirty', 'true');
     } catch (e) { }
     if (typeof (window as any).syncToServer === 'function') {
       (window as any).syncToServer('dk_iqc_records', updated);
@@ -2017,7 +2017,7 @@ export default function QualityInspectionRecords({
     setPqcRecords(updated);
     safeStorage.setItem('dk_pqc_records', JSON.stringify(updated));
     try {
-      localStorage.setItem('dk_pqc_records_is_dirty', 'true');
+      safeStorage.setItem('dk_pqc_records_is_dirty', 'true');
     } catch (e) { }
     if (typeof (window as any).syncToServer === 'function') {
       (window as any).syncToServer('dk_pqc_records', updated);
@@ -2372,7 +2372,7 @@ export default function QualityInspectionRecords({
     due: string;
   }>>(() => {
     try {
-      const saved = localStorage.getItem('dk_custom_defect_analyses');
+      const saved = safeStorage.getItem('dk_custom_defect_analyses');
       return saved ? JSON.parse(saved) : {};
     } catch (e) {
       return {};
@@ -2465,35 +2465,13 @@ export default function QualityInspectionRecords({
     setCustomDefectAnalyses(updated);
     safeStorage.setItem('dk_custom_defect_analyses', JSON.stringify(updated));
     safeStorage.setItem('dk_custom_defect_analyses_is_dirty', 'true');
-    try {
-      localStorage.setItem('dk_custom_defect_analyses_is_dirty', 'true');
-    } catch {}
     (window as any).syncToServer?.('dk_custom_defect_analyses', updated);
-
-    // Async server side backup - only sync to Firestore if there is a real Google Firebase login session
-    if (auth.currentUser) {
-      const docRef = doc(db, 'dk_db_sync', 'dk_custom_defect_analyses');
-      setDoc(docRef, sanitizeFirestorePayload({
-        data: updated,
-        updatedBy: auth.currentUser?.email || 'System Public Session',
-        updatedAt: new Date().toISOString()
-      }))
-        .then(() => {
-          safeStorage.setItem('dk_custom_defect_analyses_is_dirty', 'false');
-          try {
-            localStorage.setItem('dk_custom_defect_analyses_is_dirty', 'false');
-          } catch {}
-        })
-        .catch((err: any) => {
-          console.error("Lỗi đồng bộ phân tích lỗi tùy chỉnh lên Cloud Firestore:", err);
-        });
-    }
 
     // Ghi nhận dữ liệu và ban hành hồ sơ CAPA thực tế vào hệ thống CAPA
     let currentCapas: CAPA[] = Array.isArray(capas) && capas.length > 0 ? [...capas] : [];
     if (currentCapas.length === 0) {
       try {
-        const saved = localStorage.getItem('dk_capas');
+        const saved = safeStorage.getItem('dk_capas');
         if (saved) {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed)) currentCapas = parsed;
@@ -2566,17 +2544,6 @@ export default function QualityInspectionRecords({
       (window as any).syncToServer('dk_capas', updatedCapas);
     }
 
-    if (auth.currentUser) {
-      const docRefCapas = doc(db, 'dk_db_sync', 'dk_capas');
-      setDoc(docRefCapas, sanitizeFirestorePayload({
-        data: updatedCapas,
-        updatedBy: auth.currentUser?.email || 'System Public Session',
-        updatedAt: new Date().toISOString()
-      })).catch((err: any) => {
-        console.error("Lỗi đồng bộ CAPA mới lên Cloud Firestore:", err);
-      });
-    }
-
     alert(`Đã lưu Đánh giá và Ban hành Thành công Hồ sơ CAPA ${nextCapaId}!\n- Sai lỗi: ${selectedDashboardDefect.name}\n- Dòng xe: ${selectedDashboardDefect.modelName}\n- Phụ trách xử lý: "${draftOwner}"\n- Dữ liệu đã được ghi thêm vào phân hệ Quản lý CAPA và đồng bộ lên CSDL.`);
     setSelectedDashboardDefect(null);
   };
@@ -2630,7 +2597,7 @@ export default function QualityInspectionRecords({
   // Local state for ignored daily logs in supplier monitoring
   const [ignoredDailyLogStts, setIgnoredDailyLogStts] = useState<number[]>(() => {
     try {
-      const saved = localStorage.getItem('dk_ignored_daily_log_stts');
+      const saved = safeStorage.getItem('dk_ignored_daily_log_stts');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -2667,13 +2634,13 @@ export default function QualityInspectionRecords({
   const handleIgnoreDailyLog = (stt: number) => {
     const updated = [...ignoredDailyLogStts, stt];
     setIgnoredDailyLogStts(updated);
-    localStorage.setItem('dk_ignored_daily_log_stts', JSON.stringify(updated));
+    safeStorage.setItem('dk_ignored_daily_log_stts', JSON.stringify(updated));
   };
 
   const handleUndoIgnoreDailyLog = (stt: number) => {
     const updated = ignoredDailyLogStts.filter(id => id !== stt);
     setIgnoredDailyLogStts(updated);
-    localStorage.setItem('dk_ignored_daily_log_stts', JSON.stringify(updated));
+    safeStorage.setItem('dk_ignored_daily_log_stts', JSON.stringify(updated));
   };
 
   const [ignoredSqcIqcIds, setIgnoredSqcIqcIds] = useState<string[]>(() => {
@@ -4162,10 +4129,7 @@ export default function QualityInspectionRecords({
     }
     setLocalColorChanges(newChanges);
     safeStorage.setItem('dk_oqc_color_changes', JSON.stringify(newChanges));
-    try {
-      localStorage.setItem('dk_oqc_color_changes', JSON.stringify(newChanges));
-      localStorage.setItem('dk_oqc_color_changes_is_dirty', 'true');
-    } catch (e) { }
+    safeStorage.setItem('dk_oqc_color_changes_is_dirty', 'true');
     if (typeof (window as any).syncToServer === 'function') {
       (window as any).syncToServer('dk_oqc_color_changes', newChanges);
     }
@@ -4457,9 +4421,6 @@ export default function QualityInspectionRecords({
 
     setHandoverScannedList(list);
     safeStorage.setItem('dk_oqc_handover_list_is_dirty', 'true');
-    try {
-      localStorage.setItem('dk_oqc_handover_list_is_dirty', 'true');
-    } catch (e) { }
     if (setOqcHandoverList) {
       setOqcHandoverList(list);
     }
@@ -4467,7 +4428,6 @@ export default function QualityInspectionRecords({
       (window as any).syncToServer('dk_oqc_handover_list', list);
     } else {
       safeStorage.setItem('dk_oqc_handover_list', JSON.stringify(list));
-      try { localStorage.setItem('dk_oqc_handover_list', JSON.stringify(list)); } catch (e) { }
     }
     if (list.length === 0 && typeof (window as any).triggerCloudSynchronization === 'function') {
       (window as any).triggerCloudSynchronization();
@@ -5825,17 +5785,20 @@ const handleStartEditOqc = (record: OQCRecord, groupIds: string[]) => {
 
     const updated = latestOqcRecordsRef.current.map(r => {
       if (r.id === editingOqcRecord.id || editingOqcGroupIds.includes(r.id)) {
+        // Giữ nguyên ngày/tháng/năm/giờ kiểm tra gốc khi sửa bản ghi lịch sử (chỉ điền ngày hiện tại nếu bản ghi gốc chưa có ngày)
+        const hasOriginalDate = Boolean(r.date && String(r.date).trim() && String(r.date).trim() !== '--');
         return {
           ...r,
           status: editOqcStatus,
+          failedCount: editOqcStatus === 'Đạt' ? 0 : (r.failedCount || 1),
           defectDetail: editOqcDefectDetail,
           rootCause: editOqcRootCause,
           evaluation: editOqcEvaluation,
           treatment: editOqcTreatment,
-          checkTime: nowTime,
-          date: nowDate,
-          month: nowMonth,
-          year: nowYear,
+          checkTime: hasOriginalDate && r.checkTime ? r.checkTime : nowTime,
+          date: hasOriginalDate ? r.date : nowDate,
+          month: hasOriginalDate && r.month ? r.month : nowMonth,
+          year: hasOriginalDate && r.year ? r.year : nowYear,
           updatedAt: nowIso
         };
       }
@@ -5846,7 +5809,7 @@ const handleStartEditOqc = (record: OQCRecord, groupIds: string[]) => {
     setShowEditOqcModal(false);
     setEditingOqcRecord(null);
     setEditingOqcGroupIds([]);
-    alert('Cập nhật thông tin & thời gian chỉnh sửa KCS thành công!');
+    alert('Cập nhật thông tin KCS thành công (đã giữ nguyên ngày kiểm tra gốc)!');
   };
 
   const handleClearAllOqcData = () => {
@@ -6040,7 +6003,7 @@ const handleStartEditOqc = (record: OQCRecord, groupIds: string[]) => {
 
     const cleanArrayStorageKey = (storageKey: string) => {
       try {
-        const raw = safeStorage.getItem(storageKey) || localStorage.getItem(storageKey);
+        const raw = safeStorage.getItem(storageKey);
         if (!raw) return;
         const arr = JSON.parse(raw);
         if (Array.isArray(arr)) {
@@ -6048,9 +6011,6 @@ const handleStartEditOqc = (record: OQCRecord, groupIds: string[]) => {
           if (filtered.length !== arr.length) {
             const ser = JSON.stringify(filtered);
             safeStorage.setItem(storageKey, ser);
-            try {
-              localStorage.setItem(storageKey, ser);
-            } catch {}
           }
         }
       } catch {}
@@ -6060,7 +6020,7 @@ const handleStartEditOqc = (record: OQCRecord, groupIds: string[]) => {
     cleanArrayStorageKey('qms_oqc_remote_deleted_ids');
 
     try {
-      const rawMap = safeStorage.getItem('qms_oqc_deleted_tombstones') || localStorage.getItem('qms_oqc_deleted_tombstones');
+      const rawMap = safeStorage.getItem('qms_oqc_deleted_tombstones');
       if (rawMap) {
         const parsedMap = JSON.parse(rawMap);
         if (parsedMap && typeof parsedMap === 'object' && !Array.isArray(parsedMap)) {
@@ -6074,9 +6034,6 @@ const handleStartEditOqc = (record: OQCRecord, groupIds: string[]) => {
           if (changed) {
             const ser = JSON.stringify(parsedMap);
             safeStorage.setItem('qms_oqc_deleted_tombstones', ser);
-            try {
-              localStorage.setItem('qms_oqc_deleted_tombstones', ser);
-            } catch {}
           }
         }
       }

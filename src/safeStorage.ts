@@ -101,6 +101,97 @@ function deleteIDB(key: string): void {
   trackIdbPromise(deletePromise);
 }
 
+// Clear all keys asynchronously from IndexedDB (prevents stale session resurrection after logout)
+function clearIDB(): void {
+  const clearPromise = getIDBDatabase()
+    .then((db) => {
+      if (!db) return;
+      return new Promise<void>((resolve) => {
+        try {
+          const tx = db.transaction(IDB_STORE, 'readwrite');
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+          tx.onabort = () => resolve();
+          const store = tx.objectStore(IDB_STORE);
+          store.clear();
+        } catch (err) {
+          resolve();
+        }
+      });
+    })
+    .catch(() => {});
+  trackIdbPromise(clearPromise);
+}
+
+// ==================== MULTI-TAB COHERENCE (BroadcastChannel + storage event) ====================
+const TAB_ID = `tab_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+const STRIPPED_KEYS_MARKER = '__dk_stripped_ls_keys__';
+let storageChannel: BroadcastChannel | null = null;
+
+function broadcastStorageOp(op: 'set' | 'remove' | 'clear', key?: string, value?: string): void {
+  if (!storageChannel) return;
+  try {
+    // Avoid broadcasting multi-MB payloads over BroadcastChannel; let receiving tabs reload from IDB if needed
+    if (op === 'set' && value && value.length > 500000) {
+      storageChannel.postMessage({ tabId: TAB_ID, op: 'reload_idb', key });
+    } else {
+      storageChannel.postMessage({ tabId: TAB_ID, op, key, value });
+    }
+  } catch (e) {}
+}
+
+if (typeof window !== 'undefined') {
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      storageChannel = new BroadcastChannel('dk_qms_storage_sync');
+      storageChannel.onmessage = (event) => {
+        const msg = event.data;
+        if (!msg || msg.tabId === TAB_ID) return;
+        if (msg.op === 'set' && typeof msg.key === 'string' && typeof msg.value === 'string') {
+          memoryStore[msg.key] = msg.value;
+          try {
+            window.dispatchEvent(new CustomEvent('dk_storage_cross_tab_sync', { detail: { key: msg.key } }));
+          } catch (e) {}
+        } else if (msg.op === 'reload_idb' && typeof msg.key === 'string') {
+          getIDBDatabase().then((db) => {
+            if (!db) return;
+            try {
+              const tx = db.transaction(IDB_STORE, 'readonly');
+              const req = tx.objectStore(IDB_STORE).get(msg.key);
+              req.onsuccess = () => {
+                if (req.result !== undefined && req.result !== null) {
+                  memoryStore[msg.key] = String(req.result);
+                  try {
+                    window.dispatchEvent(new CustomEvent('dk_storage_cross_tab_sync', { detail: { key: msg.key } }));
+                  } catch (e) {}
+                }
+              };
+            } catch (e) {}
+          });
+        } else if (msg.op === 'remove' && typeof msg.key === 'string') {
+          delete memoryStore[msg.key];
+        } else if (msg.op === 'clear') {
+          for (const k in memoryStore) delete memoryStore[k];
+        }
+      };
+    }
+  } catch (e) {}
+
+  try {
+    window.addEventListener('storage', (e) => {
+      if (!e.key) {
+        for (const k in memoryStore) delete memoryStore[k];
+        return;
+      }
+      if (e.newValue === null) {
+        delete memoryStore[e.key];
+      } else {
+        memoryStore[e.key] = e.newValue;
+      }
+    });
+  } catch (e) {}
+}
+
 let isSafeStorageReady = false;
 const readyCallbacks: (() => void)[] = [];
 
@@ -184,10 +275,18 @@ try {
     window.localStorage.setItem(testKey, testKey);
     window.localStorage.removeItem(testKey);
     
-    // Initial sync from localStorage to memoryStore
+    // Initial sync from localStorage to memoryStore (skip keys previously stripped of base64 so IDB preload supplies full data)
+    let strippedKeysSet = new Set<string>();
+    try {
+      const markerRaw = window.localStorage.getItem(STRIPPED_KEYS_MARKER);
+      if (markerRaw) {
+        const arr = JSON.parse(markerRaw);
+        if (Array.isArray(arr)) strippedKeysSet = new Set(arr.map(String));
+      }
+    } catch (e) {}
     for (let i = 0; i < window.localStorage.length; i++) {
       const k = window.localStorage.key(i);
-      if (k) {
+      if (k && k !== STRIPPED_KEYS_MARKER && !strippedKeysSet.has(k)) {
         const v = window.localStorage.getItem(k);
         if (v !== null) {
           memoryStore[k] = v;
@@ -233,6 +332,29 @@ function stripBase64Images(obj: any): any {
 
 let isCleaningInProgress = false;
 const rawSetItem = typeof window !== 'undefined' && window.localStorage ? window.localStorage.setItem : null;
+const rawRemoveItem = typeof window !== 'undefined' && window.localStorage ? window.localStorage.removeItem : null;
+
+function markKeyStrippedInLocalStorage(key: string): void {
+  if (!rawSetItem || typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const raw = window.localStorage.getItem(STRIPPED_KEYS_MARKER);
+    const set = new Set<string>(raw ? JSON.parse(raw) : []);
+    set.add(key);
+    rawSetItem.call(window.localStorage, STRIPPED_KEYS_MARKER, JSON.stringify(Array.from(set)));
+  } catch (e) {}
+}
+
+function unmarkKeyStrippedInLocalStorage(key: string): void {
+  if (!rawSetItem || typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const raw = window.localStorage.getItem(STRIPPED_KEYS_MARKER);
+    if (!raw) return;
+    const set = new Set<string>(JSON.parse(raw));
+    if (set.delete(key)) {
+      rawSetItem.call(window.localStorage, STRIPPED_KEYS_MARKER, JSON.stringify(Array.from(set)));
+    }
+  } catch (e) {}
+}
 
 // Global function to sweep all other keys in localStorage and remove their base64 images to free up space
 function freeUpLocalStorageSpace(currentKey: string): boolean {
@@ -274,6 +396,7 @@ function freeUpLocalStorageSpace(currentKey: string): boolean {
           if (cleanedValue.length < rawValue.length) {
             try {
               rawSetItem.call(window.localStorage, otherKey, cleanedValue);
+              markKeyStrippedInLocalStorage(otherKey);
               spaceFreed = true;
             } catch (e) {}
           }
@@ -353,39 +476,55 @@ try {
   // Safe guard
 }
 
-// Global monkey-patch for window.localStorage.setItem to safely intercept QuotaExceededError from third-party SDKs like Firestore
+// Global monkey-patch for window.localStorage.setItem/removeItem/getItem to keep memoryStore & IndexedDB coherent
 if (typeof window !== 'undefined' && window.localStorage && rawSetItem) {
   try {
     window.localStorage.setItem = function (key: string, value: string) {
       const strVal = String(value);
+      // ALWAYS update memoryStore & IndexedDB so direct localStorage.setItem never desyncs with safeStorage.getItem!
+      writtenDuringStartup.add(key);
+      memoryStore[key] = strVal;
+      writeIDB(key, strVal);
+      broadcastStorageOp('set', key, strVal);
+
       // For large datasets, keep purely in memoryStore & IndexedDB to avoid freezing the browser
       if (strVal.length > 1000000 || key === 'dk_oqc_records') {
-        writtenDuringStartup.add(key);
-    memoryStore[key] = strVal;
-        writeIDB(key, strVal);
+        try {
+          if (rawRemoveItem) rawRemoveItem.call(window.localStorage, key);
+        } catch (e) {}
         return;
       }
 
       try {
-        rawSetItem.call(window.localStorage, key, value);
+        rawSetItem.call(window.localStorage, key, strVal);
+        unmarkKeyStrippedInLocalStorage(key);
       } catch (err: any) {
-        writtenDuringStartup.add(key);
-    memoryStore[key] = strVal;
         if (!isCleaningInProgress) {
-          isCleaningInProgress = true;
+          let freed = freeUpLocalStorageSpace(key);
+          if (!freed) {
+            purgeNonEssentialLocalStorage(key);
+          }
           try {
-            freeUpLocalStorageSpace(key);
-            try {
-              rawSetItem.call(window.localStorage, key, value);
-            } catch (retryErr) {
-              // Silently stored in memoryStore & IndexedDB
-            }
-          } finally {
-            isCleaningInProgress = false;
+            rawSetItem.call(window.localStorage, key, strVal);
+            unmarkKeyStrippedInLocalStorage(key);
+          } catch (retryErr) {
+            // Safely persisted in memoryStore & IndexedDB
           }
         }
       }
     };
+
+    if (rawRemoveItem) {
+      window.localStorage.removeItem = function (key: string) {
+        writtenDuringStartup.add(key);
+        delete memoryStore[key];
+        deleteIDB(key);
+        broadcastStorageOp('remove', key);
+        try {
+          rawRemoveItem.call(window.localStorage, key);
+        } catch (e) {}
+      };
+    }
 
     // CRITICAL FIX: Monkey-patch localStorage.getItem to intercept reads for all keys
     // Nếu dữ liệu đã có trong memoryStore (preload từ IndexedDB hoặc lưu trong phiên) → trả về ngay
@@ -467,6 +606,7 @@ export const safeStorage = {
     
     // Always persist to IndexedDB asynchronously (no 5MB quota limit!)
     writeIDB(key, strVal);
+    broadcastStorageOp('set', key, strVal);
 
     if (isInMemory) return;
 
@@ -475,8 +615,8 @@ export const safeStorage = {
     if (strVal.length > 1000000 || key === 'dk_oqc_records') {
       try {
         // Clean out any old truncated copies from localStorage
-        if (rawSetItem) {
-          window.localStorage.removeItem(key);
+        if (rawRemoveItem) {
+          rawRemoveItem.call(window.localStorage, key);
         }
       } catch (e) {}
       return;
@@ -485,21 +625,23 @@ export const safeStorage = {
     try {
       if (rawSetItem) {
         rawSetItem.call(window.localStorage, key, strVal);
+        unmarkKeyStrippedInLocalStorage(key);
       } else {
         window.localStorage.setItem(key, strVal);
       }
     } catch (e) {
       if (!isCleaningInProgress) {
-        isCleaningInProgress = true;
-        try {
-          const spaceFreed = freeUpLocalStorageSpace(key);
-          if (spaceFreed && rawSetItem) {
-            try {
-              rawSetItem.call(window.localStorage, key, strVal);
-            } catch (retryErr) {}
+        const spaceFreed = freeUpLocalStorageSpace(key);
+        if (!spaceFreed) {
+          purgeNonEssentialLocalStorage(key);
+        }
+        if (rawSetItem) {
+          try {
+            rawSetItem.call(window.localStorage, key, strVal);
+            unmarkKeyStrippedInLocalStorage(key);
+          } catch (retryErr) {
+            // Safely stored in memoryStore & IndexedDB
           }
-        } finally {
-          isCleaningInProgress = false;
         }
       }
     }
@@ -509,11 +651,16 @@ export const safeStorage = {
     writtenDuringStartup.add(key);
     delete memoryStore[key];
     deleteIDB(key);
+    broadcastStorageOp('remove', key);
     if (isInMemory) {
       return;
     }
     try {
-      window.localStorage.removeItem(key);
+      if (rawRemoveItem) {
+        rawRemoveItem.call(window.localStorage, key);
+      } else {
+        window.localStorage.removeItem(key);
+      }
     } catch (e) {
       // Ignore
     }
@@ -523,6 +670,8 @@ export const safeStorage = {
     for (const key in memoryStore) {
       delete memoryStore[key];
     }
+    clearIDB();
+    broadcastStorageOp('clear');
     if (isInMemory) {
       return;
     }

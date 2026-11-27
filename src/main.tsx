@@ -1,6 +1,7 @@
 import React, { Component, ReactNode, StrictMode, Suspense, ErrorInfo, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
+import { safeStorage } from './safeStorage';
 
 const App = lazy(() => import('./App.tsx'));
 const StandaloneLkApp = lazy(() => import('./components/StandaloneLkApp.tsx'));
@@ -53,8 +54,8 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
   handleHardReset = () => {
     try {
-      localStorage.removeItem('dk_firebase_quota_exceeded');
-      localStorage.removeItem('dk_current_user');
+      safeStorage.removeItem('dk_firebase_quota_exceeded');
+      safeStorage.removeItem('dk_current_user');
     } catch (e) {}
     window.location.reload();
   };

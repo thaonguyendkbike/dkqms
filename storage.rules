@@ -2,8 +2,18 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     match /dk_bom_images/{allPaths=**} {
+      // Giữ quyền đọc ảnh cho đường dẫn /lk không cần đăng nhập Google
       allow read: if true;
-      allow write: if request.auth != null;
+      // Chỉ tài khoản đã đăng nhập mới được ghi/xóa; giới hạn ảnh < 2MB
+      allow write: if request.auth != null
+                   && request.auth.token.email != null
+                   && (
+                     request.resource == null ||
+                     (
+                       request.resource.size < 2 * 1024 * 1024 &&
+                       request.resource.contentType.matches('image/.*')
+                     )
+                   );
     }
   }
 }

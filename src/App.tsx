@@ -9,12 +9,6 @@ import { calculateAQLSample } from './utils/aqlUtils';
 import { exportIqcRecordToExcel, getAqlGroupName } from './utils/iqcLineItems';
 import { getLocalYmd, parseFlexibleDate, getWeekAndMonthFromDate as getWeekAndMonthFromDateUtil } from './utils/dateUtils';
 import { ReportsHub } from './reports/ReportsHub';
-import { RECOVERED_OQC_NOV2026_RECORDS, RECOVERED_OQC_NOV2026_VERSION } from './data/oqcRecoveredNov2026';
-import { RECOVERED_OQC_LATE_NOV2026_RECORDS, RECOVERED_OQC_LATE_NOV2026_VERSION } from './data/oqcRecoveredLateNov2026';
-import { RECOVERED_OQC_AUG_SEP_2026_RECORDS, RECOVERED_OQC_AUG_SEP_2026_VERSION } from './data/oqcRecoveredAugSep2026';
-import { RECOVERED_OQC_JUN_SEP_2026_RECORDS, RECOVERED_OQC_JUN_SEP_2026_VERSION } from './data/oqcRecoveredJunSep2026';
-import { RECOVERED_OQC_FULL_CSV_2026_RECORDS, RECOVERED_OQC_FULL_CSV_2026_VERSION } from './data/oqcRecoveredFullCsv2026';
-import { RECOVERED_OQC_NOV25_2026_RECORDS, RECOVERED_OQC_NOV25_2026_VERSION } from './data/oqcRecoveredNov25_2026';
 import XLSXStyle from 'xlsx-js-style';
 import {
   BarChart,
@@ -2051,12 +2045,17 @@ export function App() {
 
   const [lastSyncErrorMsg, setLastSyncErrorMsg] = useState('');
   const isFirebaseQuotaExceeded = useRef(false);
-  try { localStorage.removeItem('dk_firebase_quota_exceeded'); } catch (e) { }
+  useEffect(() => {
+    try { safeStorage.removeItem('dk_firebase_quota_exceeded'); } catch (e) { }
+  }, []);
   const unsubscribes = useRef<(() => void)[]>([]);
 
   // Buffer and timer references for highly-efficient 800ms debounced Cloud synchronization
   const pendingSyncBuffer = useRef<{ [key: string]: any }>({});
   const syncDebounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const syncGenerationRef = useRef<Record<string, number>>({});
+  const inFlightSyncKeysRef = useRef<Set<string>>(new Set());
+  const lastRemotePayloadRef = useRef<Record<string, string>>({});
   const lastSyncedValues = useRef<Record<string, string>>({});
   const lastSeenValues = useRef<Record<string, string>>({});
   const initialStateValues = useRef<Record<string, string>>({});
@@ -2432,20 +2431,13 @@ export function App() {
           : Date.now();
       let changed = false;
 
-      // Guard against poisoned bulk deletedIds (> 500 entries) from concurrent-sync bugs
-      if (Array.isArray(serverDeletedIds) && serverDeletedIds.length <= 500) {
-        serverDeletedIds.forEach((delId) => {
+      // Accept up to 2000 most-recent OQC deletedIds tombstones (FIFO) instead of dropping the entire list past 500
+      if (Array.isArray(serverDeletedIds) && serverDeletedIds.length > 0) {
+        const boundedDeletedIds = serverDeletedIds.slice(-2000);
+        boundedDeletedIds.forEach((delId) => {
           const s = String(delId || '').trim();
           if (s && (!tombstoneMap[s] || effectiveDeletedAtMs > tombstoneMap[s])) {
             tombstoneMap[s] = effectiveDeletedAtMs;
-            changed = true;
-          }
-        });
-      } else if (Array.isArray(serverDeletedIds) && serverDeletedIds.length > 500) {
-        // Scrub any previously poisoned tombstones if a >500 poisoned deletedIds list was detected
-        Object.keys(tombstoneMap).forEach((k) => {
-          if (tombstoneMap[k] <= Date.parse('2026-11-23T16:30:00.000Z')) {
-            delete tombstoneMap[k];
             changed = true;
           }
         });
@@ -2530,17 +2522,15 @@ export function App() {
         }
       });
 
-      // Only broadcast explicit user deletions (never dump >500 poisoned snapshot-diff tombstones to Cloud)
+      // Keep up to 2000 most-recent explicit deletion tombstones (sorted newest first) so deletions keep syncing reliably
       const deletedSet = new Set<string>();
-      const tombstoneKeys = Object.keys(tombstoneMap);
-      if (tombstoneKeys.length <= 500) {
-        tombstoneKeys.forEach((k) => deletedSet.add(k));
-      }
-      if (lastKnownOqcCloudDeletedIds.current.length <= 500) {
-        lastKnownOqcCloudDeletedIds.current.forEach((d) => {
-          if (d) deletedSet.add(String(d));
-        });
-      }
+      const sortedTombstoneKeys = Object.keys(tombstoneMap)
+        .sort((a, b) => (tombstoneMap[a] || 0) - (tombstoneMap[b] || 0))
+        .slice(-2000);
+      sortedTombstoneKeys.forEach((k) => deletedSet.add(k));
+      lastKnownOqcCloudDeletedIds.current.slice(-2000).forEach((d) => {
+        if (d) deletedSet.add(String(d));
+      });
       try {
         const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
         const localDelArr = localDelRaw ? JSON.parse(localDelRaw) : [];
@@ -2561,304 +2551,14 @@ export function App() {
       if (tombstoneChanged) {
         writeOqcTombstoneMap(tombstoneMap);
       }
-      return Array.from(deletedSet).filter((id) => !currentIdsSet.has(id)).slice(-6000);
+      return Array.from(deletedSet).filter((id) => !currentIdsSet.has(id)).slice(-2000);
     } catch (e) {
       return [];
     }
   };
 
-  // =========================================================================
-  // KHÔI PHỤC TỰ ĐỘNG DỮ LIỆU OQC / KCS TỪ BÁO CÁO BACKUP CỦA ANH THAO
-  // (2,742 xe đợt 1 + 656 bản ghi đợt 2 + 1,292 xe 20 lệnh tháng 8-9/2026)
-  // =========================================================================
-  const RECOVERED_OQC_NOV2026_APPLIED_KEY = 'dk_oqc_recovered_nov2026_applied';
-  const RECOVERED_OQC_LATE_NOV2026_APPLIED_KEY = 'dk_oqc_recovered_late_nov2026_applied';
-  const RECOVERED_OQC_AUG_SEP_2026_APPLIED_KEY = 'dk_oqc_recovered_aug_sep_2026_applied';
-  const RECOVERED_OQC_JUN_SEP_2026_APPLIED_KEY = 'dk_oqc_recovered_jun_sep_2026_applied';
-  const RECOVERED_OQC_FULL_CSV_2026_APPLIED_KEY = 'dk_oqc_recovered_full_csv_2026_applied';
-  const RECOVERED_OQC_NOV25_2026_APPLIED_KEY = 'dk_oqc_recovered_nov25_2026_applied';
-
-  const mergeRecoveredOqcNov2026Records = (
-    currentList: OQCRecord[]
-  ): { list: OQCRecord[]; changed: boolean } => {
-    const baseBatch = Array.isArray(RECOVERED_OQC_NOV2026_RECORDS) ? RECOVERED_OQC_NOV2026_RECORDS : [];
-    const lateBatch = Array.isArray(RECOVERED_OQC_LATE_NOV2026_RECORDS) ? RECOVERED_OQC_LATE_NOV2026_RECORDS : [];
-    const augSepBatch = Array.isArray(RECOVERED_OQC_AUG_SEP_2026_RECORDS) ? RECOVERED_OQC_AUG_SEP_2026_RECORDS : [];
-    const junSepBatch = Array.isArray(RECOVERED_OQC_JUN_SEP_2026_RECORDS) ? RECOVERED_OQC_JUN_SEP_2026_RECORDS : [];
-    const fullCsvBatch = Array.isArray(RECOVERED_OQC_FULL_CSV_2026_RECORDS) ? RECOVERED_OQC_FULL_CSV_2026_RECORDS : [];
-    const nov25Batch = Array.isArray(RECOVERED_OQC_NOV25_2026_RECORDS) ? RECOVERED_OQC_NOV25_2026_RECORDS : [];
-    const combinedRecovered: OQCRecord[] = [...nov25Batch, ...fullCsvBatch, ...junSepBatch, ...augSepBatch, ...lateBatch, ...baseBatch];
-    if (combinedRecovered.length === 0) {
-      return { list: Array.isArray(currentList) ? currentList : [], changed: false };
-    }
-
-    const alreadyAppliedBase = safeStorage.getItem(RECOVERED_OQC_NOV2026_APPLIED_KEY) === RECOVERED_OQC_NOV2026_VERSION;
-    const alreadyAppliedLate = safeStorage.getItem(RECOVERED_OQC_LATE_NOV2026_APPLIED_KEY) === RECOVERED_OQC_LATE_NOV2026_VERSION;
-    const alreadyAppliedAugSep = safeStorage.getItem(RECOVERED_OQC_AUG_SEP_2026_APPLIED_KEY) === RECOVERED_OQC_AUG_SEP_2026_VERSION;
-    const alreadyAppliedJunSep = safeStorage.getItem(RECOVERED_OQC_JUN_SEP_2026_APPLIED_KEY) === RECOVERED_OQC_JUN_SEP_2026_VERSION;
-    const alreadyAppliedFullCsv = safeStorage.getItem(RECOVERED_OQC_FULL_CSV_2026_APPLIED_KEY) === RECOVERED_OQC_FULL_CSV_2026_VERSION;
-    const alreadyAppliedNov25 = safeStorage.getItem(RECOVERED_OQC_NOV25_2026_APPLIED_KEY) === RECOVERED_OQC_NOV25_2026_VERSION;
-
-    const collectBatchIds = (batch: OQCRecord[]) => {
-      const ids = new Set<string>();
-      batch.forEach((rec) => {
-        if (!rec) return;
-        if (rec.id) ids.add(String(rec.id).trim());
-        const cid = getOqcCanonicalId(rec);
-        if (cid) ids.add(cid);
-        const rawSerial = String(rec.serialNo || '').trim().toUpperCase();
-        if (rawSerial) ids.add(rawSerial);
-      });
-      return ids;
-    };
-
-    const baseIdsSet = collectBatchIds(baseBatch);
-    const lateIdsSet = collectBatchIds(lateBatch);
-    const augSepIdsSet = collectBatchIds(augSepBatch);
-    const junSepIdsSet = collectBatchIds(junSepBatch);
-    const fullCsvIdsSet = collectBatchIds(fullCsvBatch);
-    const nov25IdsSet = collectBatchIds(nov25Batch);
-    const RECOVERED_BASE_TS_MS = Date.parse('2026-11-23T16:00:00.000Z') || 1795449600000;
-    const RECOVERED_LATE_TS_MS = Date.parse('2026-11-23T16:00:00.000Z') || 1795449600000;
-    const RECOVERED_AUG_SEP_TS_MS = Date.parse('2026-11-23T16:00:00.000Z') || 1795449600000;
-    const RECOVERED_JUN_SEP_TS_MS = Date.parse('2026-11-23T16:10:00.000Z') || 1795450200000;
-    const RECOVERED_FULL_CSV_TS_MS = Date.parse('2026-11-23T17:10:00.000Z') || 1795453800000;
-    const RECOVERED_NOV25_TS_MS = Date.parse('2026-11-25T12:00:00.000Z') || 1795608000000;
-
-    const getBatchCutoffForId = (id: string): number => {
-      if (nov25IdsSet.has(id)) return RECOVERED_NOV25_TS_MS;
-      if (fullCsvIdsSet.has(id)) return RECOVERED_FULL_CSV_TS_MS;
-      if (junSepIdsSet.has(id)) return RECOVERED_JUN_SEP_TS_MS;
-      if (augSepIdsSet.has(id)) return RECOVERED_AUG_SEP_TS_MS;
-      if (lateIdsSet.has(id)) return RECOVERED_LATE_TS_MS;
-      if (baseIdsSet.has(id)) return RECOVERED_BASE_TS_MS;
-      return 0;
-    };
-
-    try {
-      const tombstoneMap = readOqcTombstoneMap();
-      let tombstoneModified = false;
-      const checkAndScrub = (ids: Set<string>, cutoffMs: number) => {
-        ids.forEach((id) => {
-          if (tombstoneMap[id] !== undefined && tombstoneMap[id] <= cutoffMs + 5000) {
-            delete tombstoneMap[id];
-            tombstoneModified = true;
-          }
-        });
-      };
-      checkAndScrub(baseIdsSet, RECOVERED_BASE_TS_MS);
-      checkAndScrub(lateIdsSet, RECOVERED_LATE_TS_MS);
-      checkAndScrub(augSepIdsSet, RECOVERED_AUG_SEP_TS_MS);
-      checkAndScrub(junSepIdsSet, RECOVERED_JUN_SEP_TS_MS);
-      checkAndScrub(fullCsvIdsSet, RECOVERED_FULL_CSV_TS_MS);
-      checkAndScrub(nov25IdsSet, RECOVERED_NOV25_TS_MS);
-      if (tombstoneModified) {
-        writeOqcTombstoneMap(tombstoneMap);
-      }
-
-      if (!alreadyAppliedBase || !alreadyAppliedLate || !alreadyAppliedAugSep || !alreadyAppliedJunSep || !alreadyAppliedFullCsv || !alreadyAppliedNov25) {
-        const remoteDel = readOqcIdSet(OQC_REMOTE_DELETED_IDS_KEY);
-        let remoteModified = false;
-        if (!alreadyAppliedNov25) {
-          nov25IdsSet.forEach((id) => {
-            if (remoteDel.delete(id)) remoteModified = true;
-          });
-        }
-        if (!alreadyAppliedFullCsv) {
-          fullCsvIdsSet.forEach((id) => {
-            if (remoteDel.delete(id)) remoteModified = true;
-          });
-        }
-        if (!alreadyAppliedBase) {
-          baseIdsSet.forEach((id) => {
-            if (remoteDel.delete(id)) remoteModified = true;
-          });
-        }
-        if (!alreadyAppliedLate) {
-          lateIdsSet.forEach((id) => {
-            if (remoteDel.delete(id)) remoteModified = true;
-          });
-        }
-        if (!alreadyAppliedAugSep) {
-          augSepIdsSet.forEach((id) => {
-            if (remoteDel.delete(id)) remoteModified = true;
-          });
-        }
-        if (!alreadyAppliedJunSep) {
-          junSepIdsSet.forEach((id) => {
-            if (remoteDel.delete(id)) remoteModified = true;
-          });
-        }
-        if (remoteModified) {
-          safeStorage.setItem(OQC_REMOTE_DELETED_IDS_KEY, JSON.stringify(Array.from(remoteDel)));
-        }
-      }
-
-      const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
-      if (localDelRaw) {
-        const localDelArr = JSON.parse(localDelRaw);
-        if (Array.isArray(localDelArr)) {
-          const filteredLocalDel = localDelArr.filter((x: any) => {
-            const s = String(x || '').trim();
-            const cutoff = getBatchCutoffForId(s);
-            if (!cutoff) return true;
-            return Boolean(tombstoneMap[s] && tombstoneMap[s] > cutoff + 5000);
-          });
-          if (filteredLocalDel.length !== localDelArr.length) {
-            localStorage.setItem('dk_oqc_records_deleted_ids', JSON.stringify(filteredLocalDel));
-          }
-        }
-      }
-      if (lastKnownOqcCloudDeletedIds.current.length > 0) {
-        lastKnownOqcCloudDeletedIds.current = lastKnownOqcCloudDeletedIds.current.filter((id) => {
-          const s = String(id || '').trim();
-          const cutoff = getBatchCutoffForId(s);
-          if (!cutoff) return true;
-          return Boolean(tombstoneMap[s] && tombstoneMap[s] > cutoff + 5000);
-        });
-      }
-    } catch (e) {
-      console.warn('[OQC Recovery Tombstone Cleanup Warning]:', e);
-    }
-
-    const tombstoneMap = readOqcTombstoneMap();
-    const baseList: OQCRecord[] = Array.isArray(currentList) ? [...currentList] : [];
-    const serialToIndex = new Map<string, number>();
-    baseList.forEach((item, idx) => {
-      const s = String(item?.serialNo || '').trim().toUpperCase();
-      if (s && !serialToIndex.has(s)) {
-        serialToIndex.set(s, idx);
-      }
-    });
-
-    let changed = false;
-    const newlyRecovered: OQCRecord[] = [];
-
-    const applyBatch = (batch: OQCRecord[], isBatchAlreadyApplied: boolean, allowDefectUpgradeFromPass: boolean) => {
-      batch.forEach((rec) => {
-        if (!rec || !rec.serialNo) return;
-        const normSerial = rec.serialNo.trim().toUpperCase();
-        if (!normSerial) return;
-
-        const existingIdx = serialToIndex.get(normSerial);
-        if (existingIdx === undefined) {
-          if (isBatchAlreadyApplied && isOqcRecordTombstoned(rec, tombstoneMap)) {
-            return;
-          }
-          serialToIndex.set(normSerial, -1 - newlyRecovered.length);
-          newlyRecovered.push({ ...rec });
-          changed = true;
-        } else {
-          const existing = existingIdx >= 0 ? baseList[existingIdx] : newlyRecovered[-1 - existingIdx];
-          if (!existing) return;
-
-          let itemChanged = false;
-          const nextItem: OQCRecord = { ...existing };
-
-          const fillStringField = (field: keyof OQCRecord, badValues: string[] = ['--', '--:--', 'Chưa có LSX']) => {
-            const recVal = String((rec as any)[field] || '').trim();
-            const curVal = String((nextItem as any)[field] || '').trim();
-            if (recVal && (!curVal || badValues.includes(curVal))) {
-              (nextItem as any)[field] = (rec as any)[field];
-              itemChanged = true;
-            }
-          };
-
-          fillStringField('chassisNo');
-          fillStringField('engineNo');
-          fillStringField('checkedBy');
-          fillStringField('defectDetail');
-          fillStringField('rootCause');
-          fillStringField('treatment');
-          fillStringField('lsx');
-          fillStringField('partCode');
-          fillStringField('model');
-          fillStringField('color');
-          fillStringField('checkTime');
-          fillStringField('date');
-
-          const curStatus = String(nextItem.status || '').trim();
-          const recStatus = String(rec.status || '').trim();
-          const shouldUpgradePending =
-            (curStatus === '' || curStatus === 'Chưa kiểm tra') &&
-            (recStatus === 'Đạt' || recStatus === 'Lỗi');
-          const shouldUpgradeDefect =
-            allowDefectUpgradeFromPass &&
-            recStatus === 'Lỗi' &&
-            Boolean(rec.defectDetail) &&
-            (curStatus !== 'Lỗi' || !String(nextItem.defectDetail || '').trim());
-
-          if (shouldUpgradePending || shouldUpgradeDefect) {
-            nextItem.status = rec.status;
-            nextItem.passFlag = rec.passFlag;
-            nextItem.failedCount = rec.failedCount;
-            nextItem.totalLlr = rec.totalLlr;
-            if (rec.defectDetail) nextItem.defectDetail = rec.defectDetail;
-            if (rec.rootCause) nextItem.rootCause = rec.rootCause;
-            if (rec.treatment) nextItem.treatment = rec.treatment;
-            if (rec.checkedBy) nextItem.checkedBy = rec.checkedBy;
-            if (rec.checkTime) nextItem.checkTime = rec.checkTime;
-            if (rec.date) {
-              nextItem.date = rec.date;
-              nextItem.month = rec.month;
-              nextItem.year = rec.year;
-            }
-            itemChanged = true;
-          }
-
-          if (itemChanged) {
-            nextItem.updatedAt = rec.updatedAt || nextItem.updatedAt || new Date().toISOString();
-            if (existingIdx >= 0) {
-              baseList[existingIdx] = nextItem;
-            } else {
-              newlyRecovered[-1 - existingIdx] = nextItem;
-            }
-            changed = true;
-          }
-        }
-      });
-    };
-
-    // Nạp đợt 1-5 và đợt 6 (6,179 xe còn thiếu từ danhsachsserri.csv)
-    applyBatch(baseBatch, alreadyAppliedBase, false);
-    applyBatch(lateBatch, alreadyAppliedLate, false);
-    applyBatch(augSepBatch, alreadyAppliedAugSep, false);
-    applyBatch(junSepBatch, alreadyAppliedJunSep, false);
-    applyBatch(fullCsvBatch, alreadyAppliedFullCsv, false);
-    applyBatch(nov25Batch, alreadyAppliedNov25, false);
-
-    if (safeStorage.isReady() || baseList.length > 500) {
-      if (!alreadyAppliedBase) {
-        safeStorage.setItem(RECOVERED_OQC_NOV2026_APPLIED_KEY, RECOVERED_OQC_NOV2026_VERSION);
-      }
-      if (!alreadyAppliedLate) {
-        safeStorage.setItem(RECOVERED_OQC_LATE_NOV2026_APPLIED_KEY, RECOVERED_OQC_LATE_NOV2026_VERSION);
-      }
-      if (!alreadyAppliedAugSep) {
-        safeStorage.setItem(RECOVERED_OQC_AUG_SEP_2026_APPLIED_KEY, RECOVERED_OQC_AUG_SEP_2026_VERSION);
-      }
-      if (!alreadyAppliedJunSep) {
-        safeStorage.setItem(RECOVERED_OQC_JUN_SEP_2026_APPLIED_KEY, RECOVERED_OQC_JUN_SEP_2026_VERSION);
-      }
-      if (!alreadyAppliedFullCsv) {
-        safeStorage.setItem(RECOVERED_OQC_FULL_CSV_2026_APPLIED_KEY, RECOVERED_OQC_FULL_CSV_2026_VERSION);
-      }
-      if (!alreadyAppliedNov25) {
-        safeStorage.setItem(RECOVERED_OQC_NOV25_2026_APPLIED_KEY, RECOVERED_OQC_NOV25_2026_VERSION);
-      }
-    }
-
-    if (newlyRecovered.length > 0) {
-      const mergedList = deduplicateOqcRecords([...newlyRecovered, ...baseList]);
-      console.log(`[OQC Recovery]: Đã khôi phục ${newlyRecovered.length} xe thiếu và làm giàu dữ liệu -> tổng ${mergedList.length} xe.`);
-      return { list: mergedList, changed: true };
-    }
-    if (changed) {
-      const mergedList = deduplicateOqcRecords(baseList);
-      return { list: mergedList, changed: true };
-    }
-    return { list: baseList, changed: false };
-  };
+  // (Đã gỡ bỏ 6 gói tự động nhồi OQC tĩnh ~9.5MB sau khi xác nhận dữ liệu OQC tháng 6-11/2026 trên Firestore đã đầy đủ,
+  //  tránh làm hồi sinh xe OQC đã xóa trên thiết bị mới và giảm ~9.5MB dung lượng tải trang)
 
   const cleanAndSortObject = (obj: any): any => {
     if (obj === null || obj === undefined) return null;
@@ -3429,12 +3129,22 @@ export function App() {
   };
 
   const triggerCloudSynchronization = async () => {
-    const dirtyItems = { ...pendingSyncBuffer.current };
-    const dirtyKeys = Object.keys(dirtyItems);
-    if (dirtyKeys.length === 0) return;
+    const allQueuedKeys = Object.keys(pendingSyncBuffer.current);
+    const dirtyItems: { [key: string]: any } = {};
+    const dirtyKeys: string[] = [];
+    const capturedGenerations: Record<string, number> = {};
 
-    // Clear the buffer immediately before the network operations so future modifications can be queued properly
-    pendingSyncBuffer.current = {};
+    allQueuedKeys.forEach((key) => {
+      // Mutex per key: nếu key đang gửi dở lên Cloud, giữ lại trong pendingSyncBuffer để gửi tiếp ngay sau khi gói hiện tại xong
+      if (inFlightSyncKeysRef.current.has(key)) {
+        return;
+      }
+      dirtyItems[key] = pendingSyncBuffer.current[key];
+      dirtyKeys.push(key);
+      capturedGenerations[key] = syncGenerationRef.current[key] || 0;
+      delete pendingSyncBuffer.current[key];
+    });
+    if (dirtyKeys.length === 0) return;
 
     // EXCEEDED QUOTA OFFLINE SANDBOX FALLBACK: Keep things extremely safe and silent. No Firebase write attempts to avoid console errors & lag
     if (isFirebaseQuotaExceeded.current) {
@@ -3537,7 +3247,9 @@ export function App() {
       const failedKeys: { key: string; err: any }[] = [];
 
       for (const key of dirtyKeys) {
+        inFlightSyncKeysRef.current.add(key);
         const val = dirtyItems[key];
+        const capturedGen = capturedGenerations[key] || 0;
         const docRef = doc(db, 'dk_db_sync', key);
         const keyOps: { type: 'set' | 'delete'; ref: any; data?: any; chunkHashEntry?: { chunkKey: string; chunkHash: string } }[] = [];
         let totalChunksForKey = 0;
@@ -3688,55 +3400,61 @@ export function App() {
 
           lastKnownChunkCounts.current[key] = totalChunksForKey;
 
-          // CẬP NHẬT LOGIC SAFE STORAGE & LOCALSTORAGE: Đã ghi thành công lên Firestore Server -> giải phóng cờ bẩn an toàn
+          // CẬP NHẬT LOGIC SAFE STORAGE & LOCALSTORAGE: Chỉ giải phóng cờ bẩn khi KHÔNG có bản sửa mới hơn phát sinh trong lúc đang gửi mạng!
+          const hasNewerLocalEdit = (syncGenerationRef.current[key] || 0) !== capturedGen;
           try {
-            localStorage.setItem(`${key}_is_dirty`, 'false');
-            if (key === 'dk_oqc_records' && Array.isArray(val)) {
-              const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
-              const localDelArr = localDelRaw ? JSON.parse(localDelRaw) : [];
-              registerOqcServerSnapshot(val, Array.isArray(localDelArr) ? localDelArr : []);
-            }
-            if (SUBCOLLECTION_KEYS.includes(key) && Array.isArray(val)) {
-              registerSubcollectionKnownServerIds(key, val);
-              if (key === 'dk_daily_logs') {
-                registerDailyLogsServerSnapshot(val);
-              }
-            }
-            localStorage.setItem(`${key}_deleted_ids`, JSON.stringify([]));
-            if (localDirtyKeys.current) {
-              localDirtyKeys.current.delete(key);
-            }
-
+            const committedVal = finalVal;
+            const serializedCommitted = JSON.stringify(committedVal);
             const isMetadataKey = key === 'dk_current_user' || key === 'dk_ecount_config';
-            const serializedVal = JSON.stringify(val);
-            if (!isMetadataKey) {
-              safeStorage.setItem(key, serializedVal);
-              localStorage.setItem(`${key}_last_synced_at`, timestamp);
-              serverTimestamps.current[key] = timestamp;
-              lastLocalWriteTimestamps.current[key] = timestamp;
-              if (key === 'dk_capas') {
-                const relationalCapas = (val || []).map((c: any) => ({
-                  CAPAID: c.CAPAID || c.id,
-                  Issue: c.title || c.Issue || c.issue || '',
-                  RootCause: c.rootCause || c.RootCause || '',
-                  Correction: c.actions || c.Correction || c.correction || '',
-                  CorrectiveAction: c.actions || c.CorrectiveAction || c.correctiveAction || '',
-                  PreventiveAction: c.actions || c.PreventiveAction || c.preventiveAction || '',
-                  Owner: c.assignee || c.Owner || c.owner || '',
-                  DueDate: c.targetDate || c.DueDate || c.dueDate || '',
-                  Status: c.status === 'Đóng' || c.status === 'Đã đóng' ? 'Đã đóng' : (c.status || c.Status || 'Mở'),
-                  Effectiveness: c.effectiveness || c.Effectiveness || 'Chưa đánh giá',
-                  isRepeated: !!c.isRepeated,
-                  supplierName: c.supplierName || '',
-                  modelName: c.modelName || '',
-                  imageUrl: c.imageUrl || ''
-                }));
-                localStorage.setItem('dk_qms_capas', JSON.stringify(relationalCapas));
+
+            if (!hasNewerLocalEdit) {
+              localStorage.setItem(`${key}_is_dirty`, 'false');
+              if (key === 'dk_oqc_records' && Array.isArray(committedVal)) {
+                const localDelRaw = localStorage.getItem('dk_oqc_records_deleted_ids');
+                const localDelArr = localDelRaw ? JSON.parse(localDelRaw) : [];
+                registerOqcServerSnapshot(committedVal, Array.isArray(localDelArr) ? localDelArr : []);
               }
+              if (SUBCOLLECTION_KEYS.includes(key) && Array.isArray(committedVal)) {
+                registerSubcollectionKnownServerIds(key, committedVal);
+                if (key === 'dk_daily_logs') {
+                  registerDailyLogsServerSnapshot(committedVal);
+                }
+              }
+              localStorage.setItem(`${key}_deleted_ids`, JSON.stringify([]));
+              if (localDirtyKeys.current) {
+                localDirtyKeys.current.delete(key);
+              }
+              if (!isMetadataKey) {
+                safeStorage.setItem(key, serializedCommitted);
+                localStorage.setItem(`${key}_last_synced_at`, timestamp);
+                serverTimestamps.current[key] = timestamp;
+                lastLocalWriteTimestamps.current[key] = timestamp;
+                if (key === 'dk_capas') {
+                  const relationalCapas = (committedVal || []).map((c: any) => ({
+                    CAPAID: c.CAPAID || c.id,
+                    Issue: c.title || c.Issue || c.issue || '',
+                    RootCause: c.rootCause || c.RootCause || '',
+                    Correction: c.actions || c.Correction || c.correction || '',
+                    CorrectiveAction: c.actions || c.CorrectiveAction || c.correctiveAction || '',
+                    PreventiveAction: c.actions || c.PreventiveAction || c.preventiveAction || '',
+                    Owner: c.assignee || c.Owner || c.owner || '',
+                    DueDate: c.targetDate || c.DueDate || c.dueDate || '',
+                    Status: c.status === 'Đóng' || c.status === 'Đã đóng' ? 'Đã đóng' : (c.status || c.Status || 'Mở'),
+                    Effectiveness: c.effectiveness || c.Effectiveness || 'Chưa đánh giá',
+                    isRepeated: !!c.isRepeated,
+                    supplierName: c.supplierName || '',
+                    modelName: c.modelName || '',
+                    imageUrl: c.imageUrl || ''
+                  }));
+                  localStorage.setItem('dk_qms_capas', JSON.stringify(relationalCapas));
+                }
+              }
+              lastSeenValues.current[key] = serializedCommitted;
+            } else {
+              console.log(`[Cloud Sync Generation Guard]: Phát hiện chỉnh sửa mới hơn cho ${key} trong lúc đang đồng bộ. Giữ cờ dirty để đẩy tiếp bản mới nhất.`);
             }
-            // Update baseline after successful sync
-            lastSyncedValues.current[key] = serializedVal;
-            lastSeenValues.current[key] = serializedVal;
+            // Luôn cập nhật baseline server bằng dữ liệu đã thực sự ghi thành công lên Firestore
+            lastSyncedValues.current[key] = serializedCommitted;
           } catch (postSyncErr) {
             console.warn(`[Post-Sync Local Cleanup Warning for ${key}]:`, postSyncErr);
           }
@@ -3752,6 +3470,8 @@ export function App() {
           if (localDirtyKeys.current) {
             localDirtyKeys.current.add(key);
           }
+        } finally {
+          inFlightSyncKeysRef.current.delete(key);
         }
       }
 
@@ -3794,6 +3514,13 @@ export function App() {
         setTimeout(() => {
           setSyncStatus('idle');
         }, 1800);
+
+        // Nếu trong lúc đang gửi mạng có bản chỉnh sửa mới hơn được xếp hàng, tự động đẩy tiếp ngay sau 250ms
+        if (Object.keys(pendingSyncBuffer.current).length > 0 && !isFirebaseQuotaExceeded.current) {
+          setTimeout(() => {
+            triggerCloudSynchronization();
+          }, 250);
+        }
       }
     } catch (err: any) {
       clearTimeout(safetyTimeout);
@@ -4038,6 +3765,7 @@ export function App() {
     }
 
     // 2. Queue for 800ms debounced cloud sync (extremely fast and responsive!)
+    syncGenerationRef.current[key] = (syncGenerationRef.current[key] || 0) + 1;
     pendingSyncBuffer.current[key] = data;
 
     if (syncDebounceTimer.current) {
@@ -5255,18 +4983,29 @@ export function App() {
         try { localParsed = localSaved ? JSON.parse(localSaved) : []; } catch (e) { }
         const isDailyLogsDirty = localStorage.getItem('dk_daily_logs_is_dirty') === 'true';
 
+        // Ghi nhận snapshot server và loại bỏ các báo cáo ngày đã bị thiết bị khác xóa trước khi hợp nhất
+        registerDailyLogsServerSnapshot(serverData.dk_daily_logs);
+        const prunedLocal = pruneRemotelyDeletedDailyLogs(localParsed, serverData.dk_daily_logs);
+
         let mergedDailyLogs: any[] = serverData.dk_daily_logs;
-        if (localParsed.length > 0) {
-          mergedDailyLogs = smartMergeArrays(serverData.dk_daily_logs, localParsed, 'dk_daily_logs');
+        if (isDailyLogsDirty && prunedLocal.length > 0) {
+          mergedDailyLogs = pruneRemotelyDeletedDailyLogs(
+            smartMergeArrays(serverData.dk_daily_logs, prunedLocal, 'dk_daily_logs'),
+            serverData.dk_daily_logs
+          );
         }
         const sanitized = sanitizeDailyLogs(mergedDailyLogs);
         setDailyLogs(sanitized);
         safeStorage.setItem('dk_daily_logs', JSON.stringify(sanitized));
 
-        if (isDailyLogsDirty || (localParsed.length > serverData.dk_daily_logs.length)) {
+        if (isDailyLogsDirty) {
           localStorage.setItem('dk_daily_logs_is_dirty', 'true');
           if (localDirtyKeys.current) localDirtyKeys.current.add('dk_daily_logs');
           syncToServer('dk_daily_logs', sanitized);
+        } else {
+          const sanitizedStr = JSON.stringify(sanitized);
+          lastSyncedValues.current['dk_daily_logs'] = sanitizedStr;
+          lastSeenValues.current['dk_daily_logs'] = sanitizedStr;
         }
       }
       if (serverData.dk_iqc_records !== undefined && Array.isArray(serverData.dk_iqc_records)) {
@@ -5377,24 +5116,8 @@ export function App() {
           : deduplicateOqcRecords(serverData.dk_oqc_records);
         const oqcMetaDoc = rawDocMap['dk_oqc_records'];
         const serverDeletedAtMs = Date.parse(oqcMetaDoc?.updatedAt || '') || Date.now();
-        const recoveredBackupTsMs = Date.parse('2026-11-23T12:25:00.000Z') || 1795436700000;
-        const shouldScrubRecoveredFromServerDeleted =
-          safeStorage.getItem(RECOVERED_OQC_NOV2026_APPLIED_KEY) !== RECOVERED_OQC_NOV2026_VERSION ||
-          serverDeletedAtMs <= recoveredBackupTsMs + 5000;
-        const recoveredIdSetForFilter = shouldScrubRecoveredFromServerDeleted
-          ? new Set<string>(
-            RECOVERED_OQC_NOV2026_RECORDS.flatMap((r) => [
-              String(r.id || '').trim(),
-              getOqcCanonicalId(r.serialNo),
-              String(r.serialNo || '').trim().toUpperCase()
-            ]).filter(Boolean)
-          )
-          : null;
         const rawServerDeletedIds = Array.isArray(oqcMetaDoc?.deletedIds) ? oqcMetaDoc.deletedIds.map(String) : [];
-        const safeServerDeletedIds = rawServerDeletedIds.length > 500 ? [] : rawServerDeletedIds;
-        const serverDeletedIds = recoveredIdSetForFilter
-          ? safeServerDeletedIds.filter((id) => !recoveredIdSetForFilter.has(String(id || '').trim()))
-          : safeServerDeletedIds;
+        const serverDeletedIds = rawServerDeletedIds.slice(-2000);
         lastKnownOqcCloudDeletedIds.current = serverDeletedIds;
         if (rawServerOqcList.length > lastKnownCloudOqcCount.current) {
           lastKnownCloudOqcCount.current = rawServerOqcList.length;
@@ -5415,30 +5138,22 @@ export function App() {
             ? deduplicateOqcRecords(smartMergeArrays(serverOqcList, localOqcParsed, 'dk_oqc_records'))
             : serverOqcList;
           const filteredMergedOqc = filterOqcListWithTombstones(mergedOqc, serverDeletedIds);
-          const { list: recoveredMergedOqc } = mergeRecoveredOqcNov2026Records(filteredMergedOqc);
-          const mergedSerialized = JSON.stringify(recoveredMergedOqc);
+          const mergedSerialized = JSON.stringify(filteredMergedOqc);
           const serverSerialized = JSON.stringify(serverOqcList);
           lastSyncedValues.current['dk_oqc_records'] = serverSerialized;
           lastSeenValues.current['dk_oqc_records'] = mergedSerialized;
           safeStorage.setItem('dk_oqc_records', mergedSerialized);
-          setOqcRecords(recoveredMergedOqc);
+          setOqcRecords(filteredMergedOqc);
           localStorage.setItem('dk_oqc_records_is_dirty', 'true');
-          pendingSyncBuffer.current['dk_oqc_records'] = recoveredMergedOqc;
+          pendingSyncBuffer.current['dk_oqc_records'] = filteredMergedOqc;
           localDirtyKeys.current.add('dk_oqc_records');
-          syncToServer('dk_oqc_records', recoveredMergedOqc);
+          syncToServer('dk_oqc_records', filteredMergedOqc);
         } else {
-          const { list: recoveredServerOqc, changed: recoveredChanged } = mergeRecoveredOqcNov2026Records(serverOqcList);
-          const dedupedSerialized = JSON.stringify(recoveredServerOqc);
-          lastSyncedValues.current['dk_oqc_records'] = JSON.stringify(serverOqcList);
+          const dedupedSerialized = JSON.stringify(serverOqcList);
+          lastSyncedValues.current['dk_oqc_records'] = dedupedSerialized;
           lastSeenValues.current['dk_oqc_records'] = dedupedSerialized;
           safeStorage.setItem('dk_oqc_records', dedupedSerialized);
-          setOqcRecords(recoveredServerOqc);
-          if (recoveredChanged) {
-            localStorage.setItem('dk_oqc_records_is_dirty', 'true');
-            localDirtyKeys.current.add('dk_oqc_records');
-            pendingSyncBuffer.current['dk_oqc_records'] = recoveredServerOqc;
-            syncToServer('dk_oqc_records', recoveredServerOqc);
-          }
+          setOqcRecords(serverOqcList);
         }
       }
       if (serverData.dk_oqc_part_codes !== undefined) {
@@ -5720,8 +5435,9 @@ export function App() {
           }
 
           // Mark state update as remote update from Firestore server BEFORE dispatching reload events to prevent echo loops
+          // Ghi lại chữ ký payload từ Cloud để persistAndSyncStateIfChanged chỉ bỏ qua đúng bản echo này, không chặn thao tác người dùng trong 1.5s
+          lastRemotePayloadRef.current[key] = serialized;
           isRemoteUpdateRef.current[key] = true;
-          setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
 
           // Dispatch reload event for components listening to window storage changes in real-time
           try {
@@ -5889,7 +5605,7 @@ export function App() {
           const rawOqcServerDeletedIds = key === 'dk_oqc_records' && Array.isArray(metaData?.deletedIds)
             ? metaData.deletedIds.map((x: any) => String(x))
             : [];
-          const oqcServerDeletedIds = rawOqcServerDeletedIds.length > 500 ? [] : rawOqcServerDeletedIds;
+          const oqcServerDeletedIds = rawOqcServerDeletedIds.slice(-2000);
           if (key === 'dk_oqc_records') {
             assembledList = deduplicateOqcRecords(assembledList);
             if (assembledList.length > lastKnownCloudOqcCount.current) {
@@ -6015,12 +5731,12 @@ export function App() {
           }
 
           if (key === 'dk_oqc_records') {
+            lastRemotePayloadRef.current[key] = serialized;
             isRemoteUpdateRef.current[key] = true;
-            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
             setOqcRecords(finalDisplayData);
           } else if (key === 'dk_part_evaluations') {
+            lastRemotePayloadRef.current[key] = serialized;
             isRemoteUpdateRef.current[key] = true;
-            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
             setPartEvaluations(finalDisplayData);
           }
 
@@ -6082,28 +5798,47 @@ export function App() {
             return;
           }
 
-          if (localStorage.getItem(`${key}_is_dirty`) === 'true') {
-            console.log(`[Standard Doc onSnapshot Protection]: Local ${key} is dirty. Preserving local state.`);
-            return;
-          }
+          const isLocalDirty = localDirtyKeys.current.has(key) || localStorage.getItem(`${key}_is_dirty`) === 'true';
 
           const assembledRes = await assembleCloudKeyData(key, metaData);
           if (assembledRes.failed) {
             console.warn(`[Standard Doc onSnapshot Fail-Closed]: Bỏ qua cập nhật ${key} vì tải thiếu chunk.`);
             return;
           }
-          const cloudData = assembledRes.data;
+          let cloudData = assembledRes.data;
+
+          // Nếu máy hiện tại cũng đang có chỉnh sửa bẩn (isDirty) -> Hợp nhất thông minh với dữ liệu mới từ Cloud thay vì bỏ qua gây mất bài của máy khác!
+          if (isLocalDirty && cloudData !== null && cloudData !== undefined) {
+            try {
+              const localRaw = safeStorage.getItem(key) || localStorage.getItem(key);
+              if (localRaw) {
+                const parsedLocal = JSON.parse(localRaw);
+                if (Array.isArray(cloudData) && Array.isArray(parsedLocal)) {
+                  cloudData = smartMergeArrays(cloudData, parsedLocal, key);
+                  pendingSyncBuffer.current[key] = cloudData;
+                } else if (
+                  cloudData && typeof cloudData === 'object' && !Array.isArray(cloudData) &&
+                  parsedLocal && typeof parsedLocal === 'object' && !Array.isArray(parsedLocal)
+                ) {
+                  cloudData = { ...cloudData, ...parsedLocal };
+                  pendingSyncBuffer.current[key] = cloudData;
+                }
+              }
+            } catch (mergeErr) {
+              console.warn(`[Standard Doc Merge Notice] for ${key}:`, mergeErr);
+              return;
+            }
+          }
 
           if (COMPONENT_EXTERNAL_SYNC_KEYS.includes(key)) {
             if (cloudData === null || cloudData === undefined) return;
             const serialized = JSON.stringify(cloudData);
             safeStorage.setItem(key, serialized);
-            try { localStorage.setItem(key, serialized); } catch (e) { }
+            lastRemotePayloadRef.current[key] = serialized;
             isRemoteUpdateRef.current[key] = true;
-            lastSyncedValues.current[key] = serialized;
+            lastSyncedValues.current[key] = JSON.stringify(assembledRes.data);
             lastSeenValues.current[key] = serialized;
             if (serverTime) serverTimestamps.current[key] = serverTime;
-            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
             window.dispatchEvent(new CustomEvent('dk_local_module_remote_sync', { detail: { key, data: cloudData } }));
             return;
           }
@@ -6121,12 +5856,11 @@ export function App() {
             if (cloudData === null || cloudData === undefined) return;
             const serialized = JSON.stringify(cloudData);
             safeStorage.setItem(key, serialized);
-            try { localStorage.setItem(key, serialized); } catch (e) { }
+            lastRemotePayloadRef.current[key] = serialized;
             isRemoteUpdateRef.current[key] = true;
-            lastSyncedValues.current[key] = serialized;
+            lastSyncedValues.current[key] = JSON.stringify(assembledRes.data);
             lastSeenValues.current[key] = serialized;
             if (serverTime) serverTimestamps.current[key] = serverTime;
-            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
             window.dispatchEvent(new CustomEvent('dk_planning_reload_state', { detail: { key, value: serialized } }));
             return;
           }
@@ -6137,12 +5871,11 @@ export function App() {
             if (!dict) return;
             const serialized = JSON.stringify(dict);
             safeStorage.setItem(key, serialized);
-            try { localStorage.setItem(key, serialized); } catch (e) { }
+            lastRemotePayloadRef.current[key] = serialized;
             isRemoteUpdateRef.current[key] = true;
-            lastSyncedValues.current[key] = serialized;
+            lastSyncedValues.current[key] = JSON.stringify(assembledRes.data);
             lastSeenValues.current[key] = serialized;
             if (serverTime) serverTimestamps.current[key] = serverTime;
-            setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
             setStaffKpiEvaluations(dict);
             return;
           }
@@ -6172,15 +5905,14 @@ export function App() {
           }
           const finalSerialized = JSON.stringify(finalList);
           safeStorage.setItem(key, finalSerialized);
-          try { localStorage.setItem(key, finalSerialized); } catch (e) { }
-          lastSyncedValues.current[key] = finalSerialized;
+          lastSyncedValues.current[key] = JSON.stringify(assembledRes.data);
           lastSeenValues.current[key] = finalSerialized;
           if (serverTime) {
             serverTimestamps.current[key] = serverTime;
             try { localStorage.setItem(`${key}_last_synced_at`, serverTime); } catch (e) { }
           }
+          lastRemotePayloadRef.current[key] = finalSerialized;
           isRemoteUpdateRef.current[key] = true;
-          setTimeout(() => { isRemoteUpdateRef.current[key] = false; }, 1500);
           if (key === 'dk_staff') {
             setStaff(finalList);
           } else if (key === 'dk_oqc_color_changes') {
@@ -6936,8 +6668,8 @@ export function App() {
           });
         } catch (e) { }
 
-        if (hasDirty) {
-          console.log("[Auto-Sync on Login]: Tự động đồng bộ các bản ghi offline bẩn khi người dùng được phê duyệt trực tuyến...");
+        if (hasDirty && hasCompletedInitialCloudLoad.current) {
+          console.log("[Auto-Sync on Login]: Tự động đồng bộ các bản ghi offline bẩn sau khi đã tải xong Cloud...");
           const timer = setTimeout(() => {
             handleManualSyncRetry();
           }, 1500);
@@ -9268,17 +9000,7 @@ export function App() {
   const [pqcRecords, setPqcRecords] = useState<PQCRecord[]>(() => getSavedState('dk_pqc_records', INITIAL_PQC_DATA));
   const [oqcRecords, setOqcRecords] = useState<OQCRecord[]>(() => {
     const saved = getSavedState('dk_oqc_records', INITIAL_OQC_DATA);
-    const savedArr = Array.isArray(saved) ? saved : [];
-    // Chỉ ghi vào safeStorage nếu IndexedDB đã preload xong hoặc tập dữ liệu đã có sẵn trong RAM, tránh đè lên 30,000+ xe đang nạp từ IndexedDB
-    if (safeStorage.isReady() || savedArr.length > 500) {
-      const { list, changed } = mergeRecoveredOqcNov2026Records(savedArr);
-      if (changed) {
-        safeStorage.setItem('dk_oqc_records', JSON.stringify(list));
-        try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
-      }
-      return list;
-    }
-    return mergeRecoveredOqcNov2026Records(savedArr).list;
+    return Array.isArray(saved) ? saved : [];
   });
   const [oqcColorChanges, setOqcColorChanges] = useState<OqcColorChangeRecord[]>(() => getSavedState('dk_oqc_color_changes', []));
   const [oqcHandoverList, setOqcHandoverList] = useState<any[]>(() => getSavedState('dk_oqc_handover_list', []));
@@ -9314,20 +9036,24 @@ export function App() {
     // 2. Lắng nghe real-time liên tục
     const unsub = onSnapshot(docRef, (snap) => {
       if (!isMounted || !snap.exists()) return;
+      const d = snap.data();
+      const serverTime = d?.updatedAt;
+      if (snap.metadata.hasPendingWrites || (serverTime && serverTime === lastLocalWriteTimestamps.current['dk_oqc_handover_list'])) {
+        if (serverTime) serverTimestamps.current['dk_oqc_handover_list'] = serverTime;
+        return;
+      }
       if (localStorage.getItem('dk_oqc_handover_list_is_dirty') === 'true') {
         console.log("[Handover onSnapshot Protection]: Local handover list is dirty. Preserving local state until sync completes.");
         return;
       }
-      const d = snap.data();
       if (d && Array.isArray(d.data)) {
         const serialized = JSON.stringify(d.data);
         lastSyncedValues.current['dk_oqc_handover_list'] = serialized;
         lastSeenValues.current['dk_oqc_handover_list'] = serialized;
+        lastRemotePayloadRef.current['dk_oqc_handover_list'] = serialized;
         isRemoteUpdateRef.current['dk_oqc_handover_list'] = true;
-        setTimeout(() => { isRemoteUpdateRef.current['dk_oqc_handover_list'] = false; }, 800);
         setOqcHandoverList(d.data);
         safeStorage.setItem('dk_oqc_handover_list', serialized);
-        try { localStorage.setItem('dk_oqc_handover_list', serialized); } catch (e) { }
         try { window.dispatchEvent(new CustomEvent('dk_handover_updated', { detail: d.data })); } catch (e) { }
       }
     }, (err) => {
@@ -9383,11 +9109,16 @@ export function App() {
     // 2. Lắng nghe real-time liên tục
     const unsub = onSnapshot(docRef, (snap) => {
       if (!isMounted || !snap.exists()) return;
+      const d = snap.data();
+      const serverTime = d?.updatedAt;
+      if (snap.metadata.hasPendingWrites || (serverTime && serverTime === lastLocalWriteTimestamps.current['dk_oqc_color_changes'])) {
+        if (serverTime) serverTimestamps.current['dk_oqc_color_changes'] = serverTime;
+        return;
+      }
       if (localStorage.getItem('dk_oqc_color_changes_is_dirty') === 'true') {
         console.log("[Color Change onSnapshot Protection]: Local color changes list is dirty. Preserving local state until sync completes.");
         return;
       }
-      const d = snap.data();
       if (d && Array.isArray(d.data)) {
         if (d.data.length === 0) {
           try {
@@ -9401,11 +9132,10 @@ export function App() {
         const serialized = JSON.stringify(d.data);
         lastSyncedValues.current['dk_oqc_color_changes'] = serialized;
         lastSeenValues.current['dk_oqc_color_changes'] = serialized;
+        lastRemotePayloadRef.current['dk_oqc_color_changes'] = serialized;
         isRemoteUpdateRef.current['dk_oqc_color_changes'] = true;
-        setTimeout(() => { isRemoteUpdateRef.current['dk_oqc_color_changes'] = false; }, 1500);
         setOqcColorChanges(d.data);
         safeStorage.setItem('dk_oqc_color_changes', serialized);
-        try { localStorage.setItem('dk_oqc_color_changes', serialized); } catch (e) { }
         try { window.dispatchEvent(new CustomEvent('dk_color_changes_updated', { detail: d.data })); } catch (e) { }
       }
     }, (err) => {
@@ -9438,13 +9168,7 @@ export function App() {
                 console.log(`[IndexedDB Ready Sync] Merged ${deduplicated.length} IDB records with ${prev.length} in-memory records -> ${merged.length} total.`);
                 combined = deduplicated.length >= merged.length && prev.length === 0 ? deduplicated : merged;
               }
-              const { list: withRecovered, changed } = mergeRecoveredOqcNov2026Records(combined);
-              if (changed) {
-                safeStorage.setItem('dk_oqc_records', JSON.stringify(withRecovered));
-                try { localStorage.setItem('dk_oqc_records_is_dirty', 'true'); } catch (e) { }
-                if (localDirtyKeys.current) localDirtyKeys.current.add('dk_oqc_records');
-              }
-              return withRecovered;
+              return combined;
             });
           }
         } catch (e) { }
@@ -9520,7 +9244,12 @@ export function App() {
       initialStateValues.current[key] = serialized;
     }
     if (isRemoteUpdateRef.current[key]) {
-      return;
+      isRemoteUpdateRef.current[key] = false;
+      const remotePayload = lastRemotePayloadRef.current[key];
+      if (remotePayload !== undefined && serialized === remotePayload) {
+        return;
+      }
+      // Payload khác bản vừa nhận từ Cloud -> Người dùng vừa thao tác thực tế trong <1.5s -> Tuyệt đối không bỏ qua!
     }
     const isExplicitlyDirty = localStorage.getItem(`${key}_is_dirty`) === 'true';
     const baseline = lastSeenValues.current[key] ?? lastSyncedValues.current[key] ?? initialStateValues.current[key];
@@ -9762,84 +9491,60 @@ export function App() {
   }, [oqcHandoverList]);
 
   // Tự động giải phóng dung lượng & nén background các ảnh quá nặng của OQC, IQC, PQC cũ khi khởi chạy ứng dụng
+  // Dùng functional setState(prev => ...) theo từng ID để không bao giờ ghi đè mảng cũ lên dữ liệu Cloud vừa tải!
   useEffect(() => {
-    let oqcChanged = false;
-    let iqcChanged = false;
-    let pqcChanged = false;
+    let isCancelled = false;
+
+    const compressHeavyImagesMap = async <T extends { id?: string; imageUrl?: string }>(
+      sourceList: T[],
+      maxDim: number
+    ): Promise<Map<string, string>> => {
+      const updates = new Map<string, string>();
+      if (!Array.isArray(sourceList) || sourceList.length === 0) return updates;
+      for (const rec of sourceList) {
+        if (isCancelled) break;
+        if (rec?.id && rec.imageUrl && rec.imageUrl.startsWith('data:image/') && rec.imageUrl.length > 80000) {
+          try {
+            const lighter = await compressBase64String(rec.imageUrl, maxDim, maxDim, 0.45);
+            if (lighter && lighter !== rec.imageUrl) {
+              updates.set(rec.id, lighter);
+            }
+          } catch (err) {
+            console.error("[Auto-Compress Err]:", err);
+          }
+        }
+      }
+      return updates;
+    };
 
     const runBackgroundCompression = async () => {
-      // 1. Kiểm tra OQC Records
-      if (oqcRecords && oqcRecords.length > 0) {
-        const compressedOqc = await Promise.all(oqcRecords.map(async (rec) => {
-          if (rec.imageUrl && rec.imageUrl.startsWith('data:image/') && rec.imageUrl.length > 80000) {
-            try {
-              const lighter = await compressBase64String(rec.imageUrl, 800, 800, 0.45);
-              if (lighter !== rec.imageUrl) {
-                oqcChanged = true;
-                return { ...rec, imageUrl: lighter };
-              }
-            } catch (err) {
-              console.error("[Auto-Compress OQC Err]:", err);
-            }
-          }
-          return rec;
-        }));
-        if (oqcChanged) {
-          console.log("[Auto-Shrink Engine]: Đã nén tự động thành công ảnh lỗi OQC quá nặng!");
-          setOqcRecords(compressedOqc);
-        }
+      const oqcUpdates = await compressHeavyImagesMap(oqcRecords, 800);
+      if (!isCancelled && oqcUpdates.size > 0) {
+        console.log(`[Auto-Shrink Engine]: Đã nén tự động ${oqcUpdates.size} ảnh lỗi OQC quá nặng!`);
+        setOqcRecords(prev => prev.map(r => (r.id && oqcUpdates.has(r.id) ? { ...r, imageUrl: oqcUpdates.get(r.id)! } : r)));
       }
 
-      // 2. Kiểm tra IQC Records
-      if (iqcRecords && iqcRecords.length > 0) {
-        const compressedIqc = await Promise.all(iqcRecords.map(async (rec) => {
-          if (rec.imageUrl && rec.imageUrl.startsWith('data:image/') && rec.imageUrl.length > 80000) {
-            try {
-              const lighter = await compressBase64String(rec.imageUrl, 850, 850, 0.45);
-              if (lighter !== rec.imageUrl) {
-                iqcChanged = true;
-                return { ...rec, imageUrl: lighter };
-              }
-            } catch (err) {
-              console.error("[Auto-Compress IQC Err]:", err);
-            }
-          }
-          return rec;
-        }));
-        if (iqcChanged) {
-          console.log("[Auto-Shrink Engine]: Đã nén tự động thành công ảnh lỗi IQC quá nặng!");
-          setIqcRecords(compressedIqc);
-        }
+      const iqcUpdates = await compressHeavyImagesMap(iqcRecords, 850);
+      if (!isCancelled && iqcUpdates.size > 0) {
+        console.log(`[Auto-Shrink Engine]: Đã nén tự động ${iqcUpdates.size} ảnh lỗi IQC quá nặng!`);
+        setIqcRecords(prev => prev.map(r => (r.id && iqcUpdates.has(r.id) ? { ...r, imageUrl: iqcUpdates.get(r.id)! } : r)));
       }
 
-      // 3. Kiểm tra PQC Records
-      if (pqcRecords && pqcRecords.length > 0) {
-        const compressedPqc = await Promise.all(pqcRecords.map(async (rec) => {
-          if (rec.imageUrl && rec.imageUrl.startsWith('data:image/') && rec.imageUrl.length > 80000) {
-            try {
-              const lighter = await compressBase64String(rec.imageUrl, 850, 850, 0.45);
-              if (lighter !== rec.imageUrl) {
-                pqcChanged = true;
-                return { ...rec, imageUrl: lighter };
-              }
-            } catch (err) {
-              console.error("[Auto-Compress PQC Err]:", err);
-            }
-          }
-          return rec;
-        }));
-        if (pqcChanged) {
-          console.log("[Auto-Shrink Engine]: Đã nén tự động thành công ảnh lỗi PQC quá nặng!");
-          setPqcRecords(compressedPqc);
-        }
+      const pqcUpdates = await compressHeavyImagesMap(pqcRecords, 850);
+      if (!isCancelled && pqcUpdates.size > 0) {
+        console.log(`[Auto-Shrink Engine]: Đã nén tự động ${pqcUpdates.size} ảnh lỗi PQC quá nặng!`);
+        setPqcRecords(prev => prev.map(r => (r.id && pqcUpdates.has(r.id) ? { ...r, imageUrl: pqcUpdates.get(r.id)! } : r)));
       }
     };
 
     const timer = setTimeout(() => {
       runBackgroundCompression();
-    }, 4500); // Lùi 4.5 giây sau khởi hoạt để dồn tài nguyên render mượt màn hình
+    }, 4500);
 
-    return () => clearTimeout(timer);
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {

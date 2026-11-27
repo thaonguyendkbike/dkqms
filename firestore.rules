@@ -2,12 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // QMS Access Rules - Cho phép tất cả cán bộ đã đăng nhập xác thực được đọc và ghi dữ liệu QMS
-    match /{document=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
-    }
-
     // Allow anyone to read the connection check document to verify connection status
     match /test-connection-placeholder/{docId} {
       allow read: if true;
@@ -15,30 +9,53 @@ service cloud.firestore {
 
     // Security Helpers
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null && request.auth.token.email != null;
     }
 
-    function isStaffMember() {
-      return isSignedIn();
-    }
-
-    function isStaffEditor() {
-      return isSignedIn();
-    }
-
-    function isUserVerified() {
-      return isStaffMember();
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function userEmail() {
+      return request.auth.token.email.lower();
     }
 
     function isAdmin() {
       return isSignedIn() && (
-        request.auth.token.email == 'thaonguyendkbike@gmail.com' ||
+        userEmail() == 'thaonguyendkbike@gmail.com' ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
+    }
+
+    function staffSyncDoc() {
+      return get(/databases/$(database)/documents/dk_db_sync/dk_staff);
+    }
+
+    function isStaffMember() {
+      return isAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/dk_db_sync/dk_staff) &&
+        (
+          ('allowedEmails' in staffSyncDoc().data && userEmail() in staffSyncDoc().data.allowedEmails) ||
+          ('allowedEditorEmails' in staffSyncDoc().data && userEmail() in staffSyncDoc().data.allowedEditorEmails)
+        )
+      );
+    }
+
+    function isStaffEditor() {
+      return isAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/dk_db_sync/dk_staff) &&
+        'allowedEditorEmails' in staffSyncDoc().data &&
+        userEmail() in staffSyncDoc().data.allowedEditorEmails
+      );
+    }
+
+    // Tạm thời giữ quyền đọc không cần đăng nhập Google cho /lk (BOM) và /tv (OQC TV)
+    function isPublicReadKey(key) {
+      return key == 'dk_bom_models' ||
+             key == 'dk_bom_parts' ||
+             key == 'dk_oqc_part_codes' ||
+             key == 'dk_oqc_records' ||
+             key.matches('^dk_oqc_records_chunk_[0-9]+$') ||
+             key == 'dk_oqc_handover_list' ||
+             key == 'dk_oqc_takt_break_minutes';
     }
 
     function isValidId(id) {
@@ -198,13 +215,19 @@ service cloud.firestore {
     }
 
     match /dk_db_sync/{key} {
-      allow read: if true;
+      allow read: if isPublicReadKey(key) || isStaffMember();
       allow write: if isStaffEditor();
 
       match /records/{recId} {
-        allow read: if true;
+        allow read: if isPublicReadKey(key) || isStaffMember();
         allow write: if isStaffEditor();
       }
+    }
+
+    // Automated daily/weekly QMS backup snapshots (Admin / Editor only)
+    match /dk_backups/{backupId} {
+      allow read: if isStaffMember();
+      allow write: if isStaffEditor();
     }
   }
 }

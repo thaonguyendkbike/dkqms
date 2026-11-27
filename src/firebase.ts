@@ -3,6 +3,7 @@ import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, Google
 import { initializeFirestore, memoryLocalCache, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
+import { safeStorage } from './safeStorage';
 
 // Cleanup any legacy firestore cache targets stored in localStorage to free up space
 try {
@@ -33,7 +34,7 @@ try {
         return String(arg);
       }
     }).join(' ');
-    if (msg.includes('Detected an update time that is in the future') || msg.includes('@firebase/firestore')) {
+    if (msg.includes('Detected an update time that is in the future')) {
       return;
     }
     originalConsoleError.apply(console, args);
@@ -48,7 +49,7 @@ try {
         return String(arg);
       }
     }).join(' ');
-    if (msg.includes('Detected an update time that is in the future') || msg.includes('@firebase/firestore')) {
+    if (msg.includes('Detected an update time that is in the future')) {
       return;
     }
     originalConsoleWarn.apply(console, args);
@@ -58,7 +59,7 @@ try {
 }
 
 try {
-  setLogLevel('silent');
+  setLogLevel('error');
 } catch (e) {
   // Safe guard
 }
@@ -130,7 +131,7 @@ export async function testConnection() {
   try {
     await getDocFromServer(doc(db, 'test-connection-placeholder', 'connection-check'));
     console.log("Firebase connection test performed successfully.");
-    localStorage.setItem('dk_firebase_quota_exceeded', 'false');
+    safeStorage.setItem('dk_firebase_quota_exceeded', 'false');
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     const isOffline = errorMsg.toLowerCase().includes('offline') || errorMsg.toLowerCase().includes('could not reach');
@@ -139,7 +140,7 @@ export async function testConnection() {
                     errorMsg.toLowerCase().includes('resource has been exhausted') || 
                     errorMsg.toLowerCase().includes('daily limit exceeded');
     if (isQuota) {
-      localStorage.setItem('dk_firebase_quota_exceeded', 'true');
+      safeStorage.setItem('dk_firebase_quota_exceeded', 'true');
     }
     if (isOffline) {
       console.warn("Please check your Firebase configuration. Client is offline. App will use localStorage fallback safely.");
