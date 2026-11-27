@@ -131,6 +131,8 @@ export default function GmailManager({
     setSelectedThread(trimmed);
     safeStorage.setItem('dk_planning_threads', JSON.stringify(updated));
     safeStorage.setItem('dk_selected_planning_thread', trimmed);
+    (window as any).syncToServer?.('dk_planning_threads', updated);
+    (window as any).syncToServer?.('dk_selected_planning_thread', trimmed);
     setNewThreadInput('');
     setShowAddThreadInput(false);
     // Reset old thread context to prevent sending to old thread
@@ -156,8 +158,10 @@ export default function GmailManager({
       const nextThread = updated[updated.length - 1];
       setSelectedThread(nextThread);
       safeStorage.setItem('dk_selected_planning_thread', nextThread);
+      (window as any).syncToServer?.('dk_selected_planning_thread', nextThread);
     }
     safeStorage.setItem('dk_planning_threads', JSON.stringify(updated));
+    (window as any).syncToServer?.('dk_planning_threads', updated);
     setSuccessMessage(`Đã xóa luồng: "${title}"`);
     setTimeout(() => setSuccessMessage(''), 4000);
   };

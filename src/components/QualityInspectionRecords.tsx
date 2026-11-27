@@ -2635,12 +2635,14 @@ export default function QualityInspectionRecords({
     const updated = [...ignoredDailyLogStts, stt];
     setIgnoredDailyLogStts(updated);
     safeStorage.setItem('dk_ignored_daily_log_stts', JSON.stringify(updated));
+    (window as any).syncToServer?.('dk_ignored_daily_log_stts', updated);
   };
 
   const handleUndoIgnoreDailyLog = (stt: number) => {
     const updated = ignoredDailyLogStts.filter(id => id !== stt);
     setIgnoredDailyLogStts(updated);
     safeStorage.setItem('dk_ignored_daily_log_stts', JSON.stringify(updated));
+    (window as any).syncToServer?.('dk_ignored_daily_log_stts', updated);
   };
 
   const [ignoredSqcIqcIds, setIgnoredSqcIqcIds] = useState<string[]>(() => {
@@ -2657,6 +2659,7 @@ export default function QualityInspectionRecords({
     const updated = [...ignoredSqcIqcIds, iqcId];
     setIgnoredSqcIqcIds(updated);
     safeStorage.setItem('dk_ignored_sqc_iqc_ids', JSON.stringify(updated));
+    (window as any).syncToServer?.('dk_ignored_sqc_iqc_ids', updated);
   };
 
   const renderActivePlanTargetsBanner = (_category: string) => {

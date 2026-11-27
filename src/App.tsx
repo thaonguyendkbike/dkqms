@@ -9,6 +9,26 @@ import { calculateAQLSample } from './utils/aqlUtils';
 import { exportIqcRecordToExcel, getAqlGroupName } from './utils/iqcLineItems';
 import { getLocalYmd, parseFlexibleDate, getWeekAndMonthFromDate as getWeekAndMonthFromDateUtil } from './utils/dateUtils';
 import { ReportsHub } from './reports/ReportsHub';
+import {
+  CHUNKED_KEYS,
+  SUBCOLLECTION_KEYS,
+  EQUIPMENT_SYNC_KEYS,
+  COMPONENT_EXTERNAL_SYNC_KEYS,
+  OPERATIONAL_SETTINGS_SYNC_KEYS,
+  STANDARD_DOC_SYNC_KEYS,
+  ALL_SYNC_KEYS,
+  SYNCABLE_STARTUP_KEYS_SET,
+  SYNC_KEY_LABELS,
+} from './syncRegistry';
+import {
+  exportFullQmsBackup,
+  restoreFullQmsBackupFromFile,
+  runDailyAutoBackupIfNeeded,
+  listAutoBackups,
+  restoreFromAutoBackup,
+  type AutoBackupSummary,
+} from './services/fullBackupService';
+import { uploadQmsImage } from './services/qmsImageService';
 import XLSXStyle from 'xlsx-js-style';
 import {
   BarChart,
@@ -932,6 +952,7 @@ export function sanitizeDailyLogs(raw: any[]): DailyLogRecord[] {
     const id = (log && log.id) || (stt > 0 ? `LOG-${stt}` : `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`);
 
     return {
+      ...(log && typeof log === 'object' ? log : {}),
       id,
       stt,
       date: standardizedDateStr,
@@ -2063,7 +2084,24 @@ export function App() {
   const lastLocalWriteTimestamps = useRef<Record<string, string>>({});
   const isRemoteUpdateRef = useRef<Record<string, boolean>>({});
   const lastSyncedChunkHashes = useRef<Record<string, string>>({});
+  const lastLoadedChunkDataRef = useRef<Record<string, any[]>>({});
+  const lastLoadedChunkFingerprintsRef = useRef<Record<string, string>>({});
+  const isAuthoritativeRestoreRef = useRef<boolean>(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupStatusText, setBackupStatusText] = useState('');
+  const [autoBackups, setAutoBackups] = useState<AutoBackupSummary[]>([]);
+  const [loadingAutoBackups, setLoadingAutoBackups] = useState(false);
   const lastKnownChunkCounts = useRef<Record<string, number>>({});
+
+  // Hàm băm nhanh (FNV-1a 32-bit) để tạo chữ ký chunk gọn nhẹ (~12 ký tự) lưu vào meta doc -> Thiết bị B chỉ đọc đúng chunk thay đổi!
+  const fastChunkFingerprint = (str: string): string => {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return `${str.length}_${(h >>> 0).toString(36)}`;
+  };
   const lastKnownOqcCloudDeletedIds = useRef<string[]>([]);
   const lastKnownCloudOqcCount = useRef<number>(0);
   const hasCompletedInitialCloudLoad = useRef<boolean>(false);
@@ -2221,14 +2259,14 @@ export function App() {
     if (r.isColorChanged) clean.isColorChanged = true;
     if (r.isStatusChanged) clean.isStatusChanged = true;
     if (r.colorChangeDate) clean.colorChangeDate = r.colorChangeDate;
-    if (r.failedCount && r.failedCount > 0) clean.failedCount = r.failedCount;
+    if (r.failedCount !== undefined && r.failedCount !== null) clean.failedCount = r.failedCount;
     if (r.defectDetail && String(r.defectDetail).trim()) clean.defectDetail = String(r.defectDetail).trim();
     if (r.rootCause && String(r.rootCause).trim()) clean.rootCause = String(r.rootCause).trim();
     if (r.defectCauseDetail && String(r.defectCauseDetail).trim()) clean.defectCauseDetail = String(r.defectCauseDetail).trim();
     if (r.evaluation && String(r.evaluation).trim()) clean.evaluation = String(r.evaluation).trim();
     if (r.treatment && String(r.treatment).trim()) clean.treatment = String(r.treatment).trim();
-    if (r.checkTime && r.checkTime !== '08:30') clean.checkTime = r.checkTime;
-    if (r.totalLlr && r.totalLlr !== 1) clean.totalLlr = r.totalLlr;
+    if (r.checkTime) clean.checkTime = r.checkTime;
+    if (r.totalLlr !== undefined && r.totalLlr !== null) clean.totalLlr = r.totalLlr;
     if (r.totalLsr) clean.totalLsr = r.totalLsr;
     return clean;
   };
@@ -2250,46 +2288,8 @@ export function App() {
     localDirtyKeys.current = s;
   }
 
-  // Massive datasets stored as high-efficiency document chunks to optimize Firestore reads & bypass 1MB single-doc limit
-  const CHUNKED_KEYS = [
-    'dk_oqc_records',
-    'dk_part_evaluations'
-  ];
-
-  // Large and relational transaction data to be stored as independent subcollections
-  const SUBCOLLECTION_KEYS = [
-    'dk_iqc_records',
-    'dk_pqc_records',
-    'dk_daily_logs',
-    'dk_tasks',
-    'dk_weekly_plans',
-    'dk_monthly_plans',
-    'dk_ptsp_tasks',
-    'dk_capas',
-    'dk_ecos',
-    'dk_defects',
-    'dk_report_notes',
-    'dk_qms_bm_records',
-    'dk_fmea',
-    'dk_improvement_actions',
-    'dk_qms_quality_planning_tasks'
-  ];
-
-  const EQUIPMENT_SYNC_KEYS = [
-    'dk_equipments',
-    'dk_maintenance_logs',
-    'dk_equipment_incidents',
-    'dk_fabrication_jobs'
-  ];
-
-  const COMPONENT_EXTERNAL_SYNC_KEYS = [
-    'dk_qms_app_showcase_v1',
-    'dk_qms_products_v2',
-    'dk_qms_standards_custom_v1',
-    'dk_qms_component_standards_link',
-    'dk_qms_flow_steps_v2',
-    'dk_custom_defect_analyses'
-  ];
+  // Danh sách khóa đồng bộ tập trung 1 nguồn duy nhất tại src/syncRegistry.ts
+  // (CHUNKED_KEYS, SUBCOLLECTION_KEYS, EQUIPMENT_SYNC_KEYS, COMPONENT_EXTERNAL_SYNC_KEYS, STANDARD_DOC_SYNC_KEYS, ALL_SYNC_KEYS)
 
   const getItemId = (item: any, key: string, index: number): string => {
     if (!item) return `idx_${index}`;
@@ -2662,7 +2662,8 @@ export function App() {
       const serverVal = serverItem[field];
 
       if (localVal === undefined || localVal === null || localVal === '') {
-        if (isEquipmentSyncKey && localTime > serverTime) {
+        // Khi bản cục bộ mới hơn bản trên server (localTime > serverTime), tôn trọng thao tác cố ý xóa trắng ô dữ liệu trên MỌI phân hệ
+        if (localTime > serverTime) {
           if (localVal === undefined) {
             delete mergedItem[field];
           } else {
@@ -3284,9 +3285,12 @@ export function App() {
           const totalChunks = chunks.length || 1;
           totalChunksForKey = totalChunks;
 
+          const chunkFingerprints: string[] = [];
           for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
             const chunkData = chunks[cIdx] || [];
             const chunkHash = JSON.stringify(chunkData);
+            const chunkFp = fastChunkFingerprint(chunkHash);
+            chunkFingerprints.push(chunkFp);
             const chunkKey = `${key}_chunk_${cIdx}`;
 
             // Diff protection: Only push chunk document if data inside this chunk actually changed!
@@ -3300,6 +3304,7 @@ export function App() {
                   chunkIndex: cIdx,
                   parentKey: key,
                   data: chunkData,
+                  chunkHash: chunkFp,
                   updatedAt: timestamp
                 },
                 chunkHashEntry: { chunkKey, chunkHash }
@@ -3324,13 +3329,14 @@ export function App() {
             lastKnownOqcCloudDeletedIds.current = mergedDeletedIds;
           }
 
-          // Meta document tracking chunks & cross-device deleted tombstones (pushed LAST after all chunks)
+          // Meta document tracking chunks, per-chunk fingerprints & cross-device deleted tombstones (pushed LAST after all chunks)
           keyOps.push({
             type: 'set',
             ref: docRef,
             data: {
               isChunked: true,
               chunkCount: totalChunks,
+              chunkHashes: chunkFingerprints,
               totalRecords: currentList.length,
               deletedIds: mergedDeletedIds,
               updatedBy: email,
@@ -3557,26 +3563,24 @@ export function App() {
     }
   };
 
+  useEffect(() => {
+    if (showSyncErrorModal && auth.currentUser) {
+      setLoadingAutoBackups(true);
+      listAutoBackups()
+        .then((items) => setAutoBackups(items))
+        .catch(() => {})
+        .finally(() => setLoadingAutoBackups(false));
+    }
+  }, [showSyncErrorModal]);
+
   // Consolidated startup & login synchronization effect
   // This automatically runs once when database load is complete and the user is authenticated,
   // pushing any offline changes securely to the cloud, excluding active conflict keys.
   useEffect(() => {
     if (syncLoaded && auth.currentUser) {
-      const SYNCABLE_STARTUP_KEYS = new Set([
-        'dk_tasks', 'dk_kpis', 'dk_suppliers', 'dk_capas', 'dk_projects', 'dk_ptsp_tasks',
-        'dk_defects', 'dk_ecos', 'dk_copqs', 'dk_fmea', 'dk_custom_forms', 'dk_staff',
-        'dk_models', 'dk_dealers', 'dk_daily_logs', 'dk_equipments', 'dk_maintenance_logs',
-        'dk_equipment_incidents', 'dk_fabrication_jobs', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
-        'dk_oqc_handover_list', 'dk_oqc_color_changes', 'dk_oqc_part_codes', 'dk_supplier_production_audits',
-        'dk_weekly_plans', 'dk_monthly_plans', 'dk_weekly_assemblies_all', 'dk_monthly_assemblies_all',
-        'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
-        'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
-        'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-        'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions',
-        'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records', 'dk_ptsp_models',
-        'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations',
-        ...COMPONENT_EXTERNAL_SYNC_KEYS
-      ]);
+      const SYNCABLE_STARTUP_KEYS = SYNCABLE_STARTUP_KEYS_SET;
+      // Tự động chụp 1 bản Snapshot dự phòng ngày lên Firestore (xoay vòng giữ 7 bản gần nhất)
+      runDailyAutoBackupIfNeeded(auth.currentUser.email || currentUser?.email || 'system').catch(() => {});
       const dirtyKeysList: string[] = [];
       try {
         safeStorage.getAllKeys().forEach((key) => {
@@ -3789,34 +3793,7 @@ export function App() {
       console.error(e);
     }
 
-    const keyLabels: Record<string, string> = {
-      'dk_defects': 'Sự cố lỗi thị trường (Market Defects)',
-      'dk_part_evaluations': 'Tổng hợp đánh giá linh kiện lỗi (BM-KTTD-01)',
-      'dk_report_notes': 'Nhận xét báo cáo Tuần / Tháng',
-      'dk_qms_bm_records': 'Biểu mẫu & Hồ sơ QMS (/bm)',
-      'dk_improvement_actions': 'Hành động cải tiến ECO (Improvement Actions)',
-      'dk_fmea': 'Phân tích FMEA',
-      'dk_capas': 'Hồ sơ khắc phục CAPA',
-      'dk_ecos': 'Đề xuất cải tiến ECO',
-      'dk_iqc_records': 'Kiểm soát đầu vào IQC',
-      'dk_pqc_records': 'Kiểm soát công đoạn PQC',
-      'dk_oqc_records': 'Kiểm soát đầu ra KCS/OQC',
-      'dk_daily_logs': 'Nhật trình công việc Daily Logs',
-      'dk_weekly_tasks': 'Kế hoạch tuần Weekly Tasks',
-      'dk_monthly_plans': 'Kế hoạch tháng Monthly Plans',
-      'dk_ptsp_tasks': 'Dự án phát triển sản phẩm PTSP',
-      'dk_copqs': 'Chi phí kém chất lượng COPQ',
-      'dk_kpis': 'Chỉ tiêu chất lượng KPIs',
-      'dk_suppliers': 'Danh sách Nhà cung cấp',
-      'dk_dealers': 'Danh sách Đại lý',
-      'dk_models': 'Danh mục Dòng xe / Model',
-      'dk_oqc_part_codes': 'Bảng mã xe & Màu sắc OQC',
-      'dk_equipments': 'Danh mục Thiết bị & CCDC (BM-KTTD-02)',
-      'dk_maintenance_logs': 'Nhật ký Hiệu chuẩn & Bảo dưỡng thiết bị',
-      'dk_equipment_incidents': 'Sự cố & Đình chỉ Thiết bị',
-      'dk_fabrication_jobs': 'Gia công Đồ gá, Mẫu & Sửa chữa (NV-KTTĐ-05)',
-      'dk_staff': 'Nhân sự Ban QMS',
-    };
+    const keyLabels: Record<string, string> = SYNC_KEY_LABELS;
 
     return dirtyKeysList.map((key) => {
       const label = keyLabels[key] || key;
@@ -4034,56 +4011,12 @@ export function App() {
       const email = auth.currentUser?.email || currentUser?.email || 'thaonguyendkbike@gmail.com';
       const timestamp = new Date().toISOString();
 
-      // 1. Xác định danh sách khóa cần xử lý
+      // 1. Xác định danh sách khóa cần xử lý (chỉ lấy đúng danh sách chuẩn ALL_SYNC_KEYS, không đẩy key UI/cache rác lên Cloud)
       let localKeys: string[] = [];
       if (!forceAll && dirtyKeys.length > 0) {
-        localKeys = dirtyKeys;
+        localKeys = dirtyKeys.filter((k) => SYNCABLE_STARTUP_KEYS_SET.has(k));
       } else {
-        try {
-          safeStorage.getAllKeys().forEach((k) => {
-            if (
-              k &&
-              k.startsWith('dk_') &&
-              !k.endsWith('_is_dirty') &&
-              !k.endsWith('_last_synced_at') &&
-              !k.endsWith('_last_synced') &&
-              !k.endsWith('_deleted_ids') &&
-              k !== 'dk_current_user' &&
-              k !== 'dk_firebase_quota_exceeded' &&
-              k !== 'dk_last_synced_global_time' &&
-              k !== 'dk_active_tab' &&
-              k !== 'dk_master_sub_tab' &&
-              k !== 'dk_weekly_sub_tab' &&
-              k !== 'dk_monthly_sub_tab' &&
-              k !== 'dk_qms_bm_unlocked_v1' &&
-              k !== 'dk_oqc_pending_overrides' &&
-              k !== 'dk_qms_capas' &&
-              !k.startsWith('dk_qms_filled_form_')
-            ) {
-              localKeys.push(k);
-            }
-          });
-        } catch (err) {
-          console.warn("Không thể quét động toàn bộ safeStorage:", err);
-        }
-        const defaultKeys = [
-          'dk_tasks', 'dk_kpis', 'dk_suppliers', 'dk_capas', 'dk_projects', 'dk_ptsp_tasks',
-          'dk_defects', 'dk_ecos', 'dk_copqs', 'dk_fmea', 'dk_custom_forms', 'dk_staff',
-          'dk_models', 'dk_dealers', 'dk_daily_logs', 'dk_equipments', 'dk_maintenance_logs',
-          'dk_equipment_incidents', 'dk_fabrication_jobs', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
-          'dk_oqc_handover_list', 'dk_oqc_color_changes', 'dk_oqc_part_codes', 'dk_supplier_production_audits',
-          'dk_weekly_plans', 'dk_monthly_plans', 'dk_weekly_assemblies_all', 'dk_monthly_assemblies_all',
-          'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
-          'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
-          'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions',
-          'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records', 'dk_ptsp_models',
-          'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations',
-          ...COMPONENT_EXTERNAL_SYNC_KEYS
-        ];
-        defaultKeys.forEach(dk => {
-          if (!localKeys.includes(dk)) localKeys.push(dk);
-        });
+        localKeys = [...ALL_SYNC_KEYS];
       }
 
       // 2. Chuyển đổi dữ liệu và đóng gói thao tác theo từng khóa để cách ly lỗi
@@ -4670,23 +4603,8 @@ export function App() {
       const failedCloudReadKeys = new Set<string>();
       let outerFirestoreLoadFailed = false;
 
-      // 2. Tải tất cả các tài liệu cấp cao nhất từ dk_db_sync
+      // 2. Tải tất cả các tài liệu cấp cao nhất từ dk_db_sync (sử dụng danh sách chuẩn ALL_SYNC_KEYS từ src/syncRegistry.ts)
       try {
-        const ALL_SYNC_KEYS = [
-          'dk_tasks', 'dk_kpis', 'dk_suppliers', 'dk_capas', 'dk_projects', 'dk_ptsp_tasks',
-          'dk_defects', 'dk_ecos', 'dk_copqs', 'dk_fmea', 'dk_custom_forms', 'dk_staff',
-          'dk_models', 'dk_dealers', 'dk_daily_logs', 'dk_equipments', 'dk_maintenance_logs',
-          'dk_equipment_incidents', 'dk_fabrication_jobs', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
-          'dk_oqc_handover_list', 'dk_oqc_color_changes', 'dk_oqc_part_codes', 'dk_supplier_production_audits',
-          'dk_weekly_plans', 'dk_monthly_plans', 'dk_weekly_assemblies_all', 'dk_monthly_assemblies_all',
-          'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
-          'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
-          'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-          'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions',
-          'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records',
-          'dk_ptsp_models', 'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations',
-          ...COMPONENT_EXTERNAL_SYNC_KEYS
-        ];
 
         // Thử lấy toàn bộ qua getDocs trước
         let getDocsFailed = false;
@@ -4779,21 +4697,8 @@ export function App() {
         }
       }
 
-      // Reconcile local storage with Firestore server data on startup (cho TẤT CẢ các phân hệ của hệ thống)
-      const ALL_RECONCILE_KEYS = [
-        'dk_tasks', 'dk_kpis', 'dk_suppliers', 'dk_capas', 'dk_projects', 'dk_ptsp_tasks',
-        'dk_defects', 'dk_ecos', 'dk_copqs', 'dk_fmea', 'dk_custom_forms', 'dk_staff',
-        'dk_models', 'dk_dealers', 'dk_daily_logs', 'dk_equipments', 'dk_maintenance_logs',
-        'dk_equipment_incidents', 'dk_fabrication_jobs', 'dk_iqc_records', 'dk_pqc_records', 'dk_oqc_records',
-        'dk_oqc_handover_list', 'dk_oqc_color_changes', 'dk_oqc_part_codes', 'dk_supplier_production_audits',
-        'dk_weekly_plans', 'dk_monthly_plans', 'dk_weekly_assemblies_all', 'dk_monthly_assemblies_all',
-        'dk_weekly_supplies_all', 'dk_monthly_supplies_all', 'dk_weekly_timelines_all',
-        'dk_monthly_timelines_all', 'dk_custom_pqc_items', 'dk_pqc_saved_history_templates',
-        'dk_custom_fpy_targets', 'dk_custom_sqc_items', 'dk_custom_iqc_notes',
-        'dk_iqc_saved_notes', 'dk_qms_quality_planning_tasks', 'dk_improvement_actions',
-        'dk_part_evaluations', 'dk_report_notes', 'dk_qms_bm_records',
-        'dk_ptsp_models', 'dk_qc_detailed_tasks', 'dk_staff_kpi_evaluations'
-      ];
+      // Reconcile local storage with Firestore server data on startup (cho TẤT CẢ các phân hệ trong ALL_SYNC_KEYS, bao gồm cả 6 COMPONENT_EXTERNAL_SYNC_KEYS)
+      const ALL_RECONCILE_KEYS = ALL_SYNC_KEYS;
 
       ALL_RECONCILE_KEYS.forEach((key) => {
         // Tuyệt đối KHÔNG coi Cloud là rỗng nếu quá trình đọc hoặc lắp ráp chunk của khóa này bị lỗi
@@ -5554,6 +5459,11 @@ export function App() {
             return;
           }
 
+          if (isAuthoritativeRestoreRef.current) {
+            markListenerInitialized(key);
+            return;
+          }
+
           if (conflictKeys.includes(key)) {
             console.log(`[Chunked onSnapshot]: Phân hệ '${key}' đang có xung đột chưa giải quyết. Tạm dừng gộp.`);
             markListenerInitialized(key);
@@ -5565,25 +5475,64 @@ export function App() {
 
           if (metaData?.isChunked && metaData?.chunkCount) {
             try {
-              const chunkPromises = [];
+              const incomingHashes: string[] | null = Array.isArray(metaData?.chunkHashes) ? metaData.chunkHashes : null;
+              const chunkSlots: Array<any[] | null> = new Array(metaData.chunkCount).fill(null);
+              const fetchTasks: Array<{ idx: number; chunkKey: string; expectedFp: string | null; promise: Promise<any> }> = [];
+
               for (let i = 0; i < metaData.chunkCount; i++) {
-                chunkPromises.push(getDoc(doc(db, 'dk_db_sync', `${key}_chunk_${i}`)));
+                const chunkKey = `${key}_chunk_${i}`;
+                const expectedFp = incomingHashes ? incomingHashes[i] : null;
+                if (
+                  expectedFp &&
+                  lastLoadedChunkFingerprintsRef.current[chunkKey] === expectedFp &&
+                  Array.isArray(lastLoadedChunkDataRef.current[chunkKey])
+                ) {
+                  // Tái sử dụng chunk không thay đổi trong RAM -> giảm ~98% lượt đọc Firestore!
+                  chunkSlots[i] = lastLoadedChunkDataRef.current[chunkKey];
+                } else {
+                  fetchTasks.push({
+                    idx: i,
+                    chunkKey,
+                    expectedFp,
+                    promise: getDoc(doc(db, 'dk_db_sync', chunkKey))
+                  });
+                }
               }
-              const chunkResults = await Promise.allSettled(chunkPromises);
-              chunkResults.forEach((res, cIdx) => {
-                if (res.status === 'fulfilled' && res.value.exists()) {
-                  const cd = res.value.data();
-                  if (cd && Array.isArray(cd.data)) {
-                    assembledList = assembledList.concat(cd.data);
+
+              if (fetchTasks.length > 0) {
+                const chunkResults = await Promise.allSettled(fetchTasks.map(t => t.promise));
+                chunkResults.forEach((res, tIdx) => {
+                  const task = fetchTasks[tIdx];
+                  if (res.status === 'fulfilled' && res.value.exists()) {
+                    const cd = res.value.data();
+                    if (cd && Array.isArray(cd.data)) {
+                      chunkSlots[task.idx] = cd.data;
+                      lastLoadedChunkDataRef.current[task.chunkKey] = cd.data;
+                      const fp = task.expectedFp || cd.chunkHash || fastChunkFingerprint(JSON.stringify(cd.data));
+                      lastLoadedChunkFingerprintsRef.current[task.chunkKey] = fp;
+                    } else {
+                      chunksComplete = false;
+                      console.error(`[Chunk Fetch Error] Chunk ${task.idx} for ${key} has invalid/missing data array.`);
+                    }
                   } else {
                     chunksComplete = false;
-                    console.error(`[Chunk Fetch Error] Chunk ${cIdx} for ${key} has invalid/missing data array.`);
+                    console.error(`[Chunk Fetch Error] Failed to load chunk ${task.idx} for ${key}:`, res.status === 'rejected' ? res.reason : 'not found');
                   }
-                } else {
-                  chunksComplete = false;
-                  console.error(`[Chunk Fetch Error] Failed to load chunk ${cIdx} for ${key}:`, res.status === 'rejected' ? res.reason : 'not found');
+                });
+              }
+
+              if (chunksComplete) {
+                for (let i = 0; i < chunkSlots.length; i++) {
+                  if (Array.isArray(chunkSlots[i])) {
+                    assembledList = assembledList.concat(chunkSlots[i]!);
+                  } else {
+                    chunksComplete = false;
+                  }
                 }
-              });
+                if (fetchTasks.length < metaData.chunkCount) {
+                  console.log(`[Chunk Delta Sync] ${key}: Chỉ tải ${fetchTasks.length}/${metaData.chunkCount} chunk thay đổi (tiết kiệm ${metaData.chunkCount - fetchTasks.length} lượt đọc Firestore).`);
+                }
+              }
             } catch (err) {
               chunksComplete = false;
               console.error(`[Chunked Fetch Error] for ${key}:`, err);
@@ -5748,44 +5697,11 @@ export function App() {
         unsubscribes.current.push(unsub);
       });
 
-      // Set up real-time onSnapshot listeners for standalone documents (Staff, Part codes, Audits, etc.)
-      // Lưu ý: dk_oqc_color_changes và dk_oqc_handover_list đã có listener chuyên biệt bên dưới, không đăng ký trùng ở đây
-      const STANDARD_DOC_SYNC_KEYS = [
-        'dk_staff',
-        'dk_oqc_part_codes',
-        'dk_supplier_production_audits',
-        'dk_models',
-        'dk_copqs',
-        'dk_ptsp_models',
-        'dk_qc_detailed_tasks',
-        'dk_kpis',
-        'dk_staff_kpi_evaluations',
-        'dk_equipments',
-        'dk_maintenance_logs',
-        'dk_equipment_incidents',
-        'dk_fabrication_jobs',
-        'dk_suppliers',
-        'dk_dealers',
-        'dk_projects',
-        'dk_custom_forms',
-        'dk_custom_pqc_items',
-        'dk_pqc_saved_history_templates',
-        'dk_custom_fpy_targets',
-        'dk_custom_sqc_items',
-        'dk_custom_iqc_notes',
-        'dk_iqc_saved_notes',
-        'dk_weekly_assemblies_all',
-        'dk_monthly_assemblies_all',
-        'dk_weekly_supplies_all',
-        'dk_monthly_supplies_all',
-        'dk_weekly_timelines_all',
-        'dk_monthly_timelines_all',
-        ...COMPONENT_EXTERNAL_SYNC_KEYS
-      ];
-
+      // Set up real-time onSnapshot listeners for standalone documents (từ danh sách chuẩn STANDARD_DOC_SYNC_KEYS trong src/syncRegistry.ts)
       STANDARD_DOC_SYNC_KEYS.forEach((key) => {
         const docRef = doc(db, 'dk_db_sync', key);
         const unsub = onSnapshot(docRef, async (docSnap) => {
+          if (isAuthoritativeRestoreRef.current) return;
           if (!docSnap.exists()) return;
           const metaData = docSnap.data();
           const serverTime = metaData?.updatedAt;
@@ -5830,13 +5746,13 @@ export function App() {
             }
           }
 
-          if (COMPONENT_EXTERNAL_SYNC_KEYS.includes(key)) {
+          if (COMPONENT_EXTERNAL_SYNC_KEYS.includes(key) || OPERATIONAL_SETTINGS_SYNC_KEYS.includes(key)) {
             if (cloudData === null || cloudData === undefined) return;
-            const serialized = JSON.stringify(cloudData);
+            const serialized = typeof cloudData === 'string' ? cloudData : JSON.stringify(cloudData);
             safeStorage.setItem(key, serialized);
             lastRemotePayloadRef.current[key] = serialized;
             isRemoteUpdateRef.current[key] = true;
-            lastSyncedValues.current[key] = JSON.stringify(assembledRes.data);
+            lastSyncedValues.current[key] = typeof assembledRes.data === 'string' ? assembledRes.data : JSON.stringify(assembledRes.data);
             lastSeenValues.current[key] = serialized;
             if (serverTime) serverTimestamps.current[key] = serverTime;
             window.dispatchEvent(new CustomEvent('dk_local_module_remote_sync', { detail: { key, data: cloudData } }));
@@ -5899,9 +5815,9 @@ export function App() {
             ? ensureUniqueIds(list, prefixMap[key])
             : list;
           if (key === 'dk_staff') {
-            finalList = sanitizeMasterStaff(list);
-          } else if (key === 'dk_models' && list.length > 0) {
-            finalList = mergeMasterModels(list, INITIAL_MODELS);
+            finalList = list.length > 0 ? list : sanitizeMasterStaff(list);
+          } else if (key === 'dk_models') {
+            finalList = list.length > 0 ? list : INITIAL_MODELS;
           }
           const finalSerialized = JSON.stringify(finalList);
           safeStorage.setItem(key, finalSerialized);
@@ -23394,20 +23310,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                               for (const file of fileList) {
                                 if (file.type.startsWith('image/')) {
                                   try {
-                                    const compressed = await compressImageFile(file, 500, 500, 0.4);
-                                    if (compressed) {
-                                      newImages.push(compressed);
+                                    const uploadedUrl = await uploadQmsImage(file, 'daily_logs', 'log');
+                                    if (uploadedUrl) {
+                                      newImages.push(uploadedUrl);
                                     }
                                   } catch (err) {
-                                    const reader = new FileReader();
-                                    const p = new Promise<string>((resolve) => {
-                                      reader.onload = (event) => {
-                                        resolve((event.target?.result as string) || "");
-                                      };
-                                      reader.readAsDataURL(file);
-                                    });
-                                    const raw = await p;
-                                    if (raw) newImages.push(raw);
+                                    alert('Không thể xử lý ảnh này. Vui lòng chọn ảnh khác (JPG/PNG).');
                                   }
                                 }
                               }
@@ -23830,20 +23738,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                               for (const file of fileList) {
                                 if (file.type.startsWith('image/')) {
                                   try {
-                                    const compressed = await compressImageFile(file, 500, 500, 0.4);
-                                    if (compressed) {
-                                      updatedImages.push(compressed);
+                                    const uploadedUrl = await uploadQmsImage(file, 'capa', 'capa');
+                                    if (uploadedUrl) {
+                                      updatedImages.push(uploadedUrl);
                                     }
                                   } catch (err) {
-                                    const reader = new FileReader();
-                                    const p = new Promise<string>((resolve) => {
-                                      reader.onload = (event) => {
-                                        resolve((event.target?.result as string) || "");
-                                      };
-                                      reader.readAsDataURL(file);
-                                    });
-                                    const raw = await p;
-                                    if (raw) updatedImages.push(raw);
+                                    alert('Không thể xử lý ảnh này. Vui lòng chọn ảnh khác (JPG/PNG).');
                                   }
                                 }
                               }
@@ -24001,22 +23901,15 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           const file = e.target.files?.[0];
                           if (file) {
                             try {
-                              const compressed = await compressImageFile(file, 500, 500, 0.4);
-                              if (compressed) {
+                              const uploadedUrl = await uploadQmsImage(file, 'fmea', 'fmea');
+                              if (uploadedUrl) {
                                 setGlobalEditModal({
                                   ...globalEditModal,
-                                  data: { ...globalEditModal.data, imageUrl: compressed }
+                                  data: { ...globalEditModal.data, imageUrl: uploadedUrl }
                                 });
                               }
                             } catch (err) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setGlobalEditModal({
-                                  ...globalEditModal,
-                                  data: { ...globalEditModal.data, imageUrl: reader.result as string }
-                                });
-                              };
-                              reader.readAsDataURL(file);
+                              alert('Không thể xử lý ảnh này. Vui lòng chọn ảnh khác (JPG/PNG).');
                             }
                           }
                         }}
@@ -24179,18 +24072,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 const file = e.target.files?.[0];
                                 if (file) {
                                   try {
-                                    const compressed = await compressImageFile(file, 500, 500, 0.4);
-                                    if (compressed) {
-                                      setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, imageUrl: compressed } });
+                                    const uploadedUrl = await uploadQmsImage(file, 'ptsp', 'ptsp');
+                                    if (uploadedUrl) {
+                                      setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, imageUrl: uploadedUrl } });
                                     }
                                   } catch (err) {
-                                    const reader = new FileReader();
-                                    reader.onloadend = () => {
-                                      if (typeof reader.result === 'string') {
-                                        setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, imageUrl: reader.result } });
-                                      }
-                                    };
-                                    reader.readAsDataURL(file);
+                                    alert('Không thể xử lý ảnh này. Vui lòng chọn ảnh khác (JPG/PNG).');
                                   }
                                 }
                               }}
@@ -24725,8 +24612,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                               for (const file of fileList) {
                                 if (file.type.startsWith('image/')) {
                                   try {
-                                    const compressed = await compressImageFile(file, 500, 500, 0.4);
-                                    if (compressed) {
+                                    const uploadedUrl = await uploadQmsImage(file, 'defects', 'defect');
+                                    if (uploadedUrl) {
                                       setGlobalEditModal(prev => {
                                         if (!prev) return prev;
                                         const currentImages = prev.data.images || [];
@@ -24734,29 +24621,13 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                           ...prev,
                                           data: {
                                             ...prev.data,
-                                            images: [...currentImages, compressed]
+                                            images: [...currentImages, uploadedUrl]
                                           }
                                         };
                                       });
                                     }
                                   } catch (err) {
-                                    const reader = new FileReader();
-                                    reader.onload = (event) => {
-                                      if (event.target?.result) {
-                                        setGlobalEditModal(prev => {
-                                          if (!prev) return prev;
-                                          const currentImages = prev.data.images || [];
-                                          return {
-                                            ...prev,
-                                            data: {
-                                              ...prev.data,
-                                              images: [...currentImages, event.target.result as string]
-                                            }
-                                          };
-                                        });
-                                      }
-                                    };
-                                    reader.readAsDataURL(file);
+                                    alert('Không thể xử lý ảnh này. Vui lòng chọn ảnh khác (JPG/PNG).');
                                   }
                                 }
                               }
@@ -24963,16 +24834,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           const file = e.dataTransfer.files?.[0];
                           if (file && file.type.startsWith('image/')) {
                             try {
-                              const compressed = await compressImageFile(file, 500, 500, 0.4);
-                              if (compressed) {
-                                setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, imageUrl: compressed } });
+                              const uploadedUrl = await uploadQmsImage(file, 'eco', 'eco');
+                              if (uploadedUrl) {
+                                setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, imageUrl: uploadedUrl } });
                               }
                             } catch (err) {
-                              const reader = new FileReader();
-                              reader.onload = (event) => {
-                                setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, imageUrl: event.target?.result as string } });
-                              };
-                              reader.readAsDataURL(file);
+                              alert('Không thể xử lý ảnh này. Vui lòng chọn ảnh khác (JPG/PNG).');
                             }
                           }
                         }}
@@ -24987,16 +24854,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             const file = e.target.files?.[0];
                             if (file) {
                               try {
-                                const compressed = await compressImageFile(file, 500, 500, 0.4);
-                                if (compressed) {
-                                  setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, imageUrl: compressed } });
+                                const uploadedUrl = await uploadQmsImage(file, 'eco', 'eco');
+                                if (uploadedUrl) {
+                                  setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, imageUrl: uploadedUrl } });
                                 }
                               } catch (err) {
-                                const reader = new FileReader();
-                                reader.onload = (event) => {
-                                  setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, imageUrl: event.target?.result as string } });
-                                };
-                                reader.readAsDataURL(file);
+                                alert('Không thể xử lý ảnh này. Vui lòng chọn ảnh khác (JPG/PNG).');
                               }
                             }
                           }}
@@ -26171,6 +26034,152 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 );
               })()}
 
+              {/* Full-System Backup & Restore v2 + 7-Day Auto Snapshots */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="font-extrabold text-slate-800 text-xs uppercase tracking-wide flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" /> Sao lưu & Khôi phục Toàn hệ thống (v2)
+                    </h4>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Bao gồm toàn bộ các phân hệ QMS + Danh mục BOM /lk. Khôi phục tự động tạo bản dự phòng trước khi ghi đè lên Cloud.
+                    </p>
+                  </div>
+                </div>
+
+                {backupStatusText && (
+                  <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-xl px-3 py-2 text-[11px] font-semibold">
+                    {backupStatusText}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={backupBusy || forcingSync}
+                    onClick={async () => {
+                      setBackupBusy(true);
+                      setBackupStatusText('Đang tổng hợp toàn bộ dữ liệu QMS & BOM /lk...');
+                      try {
+                        const res = await exportFullQmsBackup(auth.currentUser?.email || currentUser?.email || 'QMS User');
+                        setBackupStatusText(`✓ Đã xuất file Backup thành công (${res.totalKeys} phân hệ, ${res.totalRecords.toLocaleString('vi-VN')} bản ghi, ${res.bomModels} BOM xe / ${res.bomParts} linh kiện, ${res.sizeMB} MB).`);
+                        triggerToast(`Đã xuất Backup toàn hệ thống (${res.sizeMB} MB)`, 'success');
+                      } catch (err: any) {
+                        setBackupStatusText(`Lỗi xuất Backup: ${err?.message || String(err)}`);
+                        alert('Lỗi xuất Backup: ' + (err?.message || String(err)));
+                      } finally {
+                        setBackupBusy(false);
+                      }
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold py-2 px-3.5 rounded-xl text-[11px] transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Sao lưu toàn hệ thống (.json)
+                  </button>
+
+                  <label className={`bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-3.5 rounded-xl text-[11px] transition cursor-pointer flex items-center gap-1.5 ${(backupBusy || forcingSync) ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <Upload className="w-3.5 h-3.5" /> Khôi phục từ file Backup
+                    <input
+                      type="file"
+                      accept=".json,application/json"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = '';
+                        if (!file) return;
+                        if (!confirm(`Kính gửi anh Thao!\n\nXác nhận khôi phục toàn bộ dữ liệu từ file "${file.name}"?\n- Hệ thống sẽ tự động tải về 1 bản sao lưu an toàn trước khi khôi phục.\n- Dữ liệu khôi phục sẽ được đẩy lên Cloud và đồng bộ sang các máy khác.`)) {
+                          return;
+                        }
+                        setBackupBusy(true);
+                        isAuthoritativeRestoreRef.current = true;
+                        try {
+                          const res = await restoreFullQmsBackupFromFile(
+                            file,
+                            auth.currentUser?.email || currentUser?.email || 'QMS User',
+                            (txt) => setBackupStatusText(txt)
+                          );
+                          alert(`Khôi phục thành công ${res.restoredKeys} phân hệ QMS (BOM: ${res.bomModels} dòng xe, ${res.bomParts} linh kiện)!\nTrang sẽ tải lại để cập nhật toàn bộ dữ liệu mới.`);
+                          window.location.reload();
+                        } catch (err: any) {
+                          isAuthoritativeRestoreRef.current = false;
+                          setBackupStatusText(`Lỗi khôi phục: ${err?.message || String(err)}`);
+                          alert('Lỗi khôi phục file Backup: ' + (err?.message || String(err)));
+                        } finally {
+                          setBackupBusy(false);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+
+                {/* 7-Day Automated Firestore Backup Snapshots */}
+                <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                      Snapshot tự động trên Cloud (Giữ 7 bản ngày gần nhất)
+                    </span>
+                    <button
+                      type="button"
+                      disabled={loadingAutoBackups || backupBusy}
+                      onClick={async () => {
+                        setLoadingAutoBackups(true);
+                        try {
+                          await runDailyAutoBackupIfNeeded(auth.currentUser?.email || currentUser?.email || 'QMS User');
+                          const items = await listAutoBackups();
+                          setAutoBackups(items);
+                        } finally {
+                          setLoadingAutoBackups(false);
+                        }
+                      }}
+                      className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                    >
+                      {loadingAutoBackups ? 'Đang tải...' : 'Làm mới'}
+                    </button>
+                  </div>
+                  {autoBackups.length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic">
+                      {loadingAutoBackups ? 'Đang kiểm tra danh sách snapshot...' : 'Chưa có snapshot tự động nào (sẽ tự động tạo khi đăng nhập quyền Editor/Admin).'}
+                    </p>
+                  ) : (
+                    <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                      {autoBackups.map((snap) => (
+                        <div key={snap.id} className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-[10px]">
+                          <div className="truncate">
+                            <span className="font-mono font-extrabold text-slate-800">{snap.id}</span>
+                            <span className="text-slate-500 ml-2">{snap.keyCount} phân hệ • {snap.sizeKB} KB</span>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={backupBusy || forcingSync}
+                            onClick={async () => {
+                              if (!confirm(`Khôi phục các phân hệ từ bản Snapshot ngày ${snap.id}?\n(Hệ thống sẽ tự tải 1 bản dự phòng an toàn trước khi khôi phục.)`)) return;
+                              setBackupBusy(true);
+                              isAuthoritativeRestoreRef.current = true;
+                              try {
+                                const res = await restoreFromAutoBackup(
+                                  snap.id,
+                                  auth.currentUser?.email || currentUser?.email || 'QMS User',
+                                  (txt) => setBackupStatusText(txt)
+                                );
+                                alert(`Đã khôi phục thành công ${res.restoredKeys} phân hệ từ bản Snapshot ${snap.id}! Trang sẽ tải lại.`);
+                                window.location.reload();
+                              } catch (err: any) {
+                                isAuthoritativeRestoreRef.current = false;
+                                alert('Lỗi khôi phục Snapshot: ' + (err?.message || String(err)));
+                              } finally {
+                                setBackupBusy(false);
+                              }
+                            }}
+                            className="text-indigo-600 hover:text-indigo-800 font-bold px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 cursor-pointer shrink-0"
+                          >
+                            Khôi phục
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Control Action Buttons */}
               <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-2.5 justify-end">
                 <button
@@ -26881,18 +26890,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                             const file = e.target.files?.[0];
                             if (file) {
                               try {
-                                const compressed = await compressImageFile(file, 500, 500, 0.4);
-                                if (compressed) {
-                                  setAddPtspImageUrl(compressed);
+                                const uploadedUrl = await uploadQmsImage(file, 'ptsp', 'ptsp');
+                                if (uploadedUrl) {
+                                  setAddPtspImageUrl(uploadedUrl);
                                 }
                               } catch (err) {
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  if (typeof reader.result === 'string') {
-                                    setAddPtspImageUrl(reader.result);
-                                  }
-                                };
-                                reader.readAsDataURL(file);
+                                alert('Không thể xử lý ảnh này. Vui lòng chọn ảnh khác (JPG/PNG).');
                               }
                             }
                           }}
@@ -27111,16 +27114,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       const file = e.dataTransfer.files?.[0];
                       if (file && file.type.startsWith('image/')) {
                         try {
-                          const compressed = await compressImageFile(file, 500, 500, 0.4);
-                          if (compressed) {
-                            setEcoImageUrl(compressed);
+                          const uploadedUrl = await uploadQmsImage(file, 'eco', 'eco');
+                          if (uploadedUrl) {
+                            setEcoImageUrl(uploadedUrl);
                           }
                         } catch (err) {
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            setEcoImageUrl(event.target?.result as string);
-                          };
-                          reader.readAsDataURL(file);
+                          alert('Không thể xử lý ảnh này. Vui lòng chọn ảnh khác (JPG/PNG).');
                         }
                       }
                     }}
@@ -27133,16 +27132,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         const file = e.target.files?.[0];
                         if (file) {
                           try {
-                            const compressed = await compressImageFile(file, 500, 500, 0.4);
-                            if (compressed) {
-                              setEcoImageUrl(compressed);
+                            const uploadedUrl = await uploadQmsImage(file, 'eco', 'eco');
+                            if (uploadedUrl) {
+                              setEcoImageUrl(uploadedUrl);
                             }
                           } catch (err) {
-                            const reader = new FileReader();
-                            reader.onload = (event) => {
-                              setEcoImageUrl(event.target?.result as string);
-                            };
-                            reader.readAsDataURL(file);
+                            alert('Không thể xử lý ảnh này. Vui lòng chọn ảnh khác (JPG/PNG).');
                           }
                         }
                       }}
@@ -28761,18 +28756,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           for (const file of fileList) {
                             if (file.type.startsWith('image/')) {
                               try {
-                                const compressed = await compressImageFile(file, 500, 500, 0.4);
-                                if (compressed) {
-                                  setDefectImages(prev => [...prev, compressed]);
+                                const uploadedUrl = await uploadQmsImage(file, 'defects', 'defect');
+                                if (uploadedUrl) {
+                                  setDefectImages(prev => [...prev, uploadedUrl]);
                                 }
                               } catch (err) {
-                                const reader = new FileReader();
-                                reader.onload = (event) => {
-                                  if (event.target?.result) {
-                                    setDefectImages(prev => [...prev, event.target.result as string]);
-                                  }
-                                };
-                                reader.readAsDataURL(file);
+                                alert('Không thể xử lý ảnh này. Vui lòng chọn ảnh khác (JPG/PNG).');
                               }
                             }
                           }
@@ -29172,18 +29161,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           for (const file of fileList) {
                             if (file.type.startsWith('image/')) {
                               try {
-                                const compressed = await compressImageFile(file, 500, 500, 0.4);
-                                if (compressed) {
-                                  setImprovementImages(prev => [...prev, compressed]);
+                                const uploadedUrl = await uploadQmsImage(file, 'improvements', 'imp');
+                                if (uploadedUrl) {
+                                  setImprovementImages(prev => [...prev, uploadedUrl]);
                                 }
                               } catch (err) {
-                                const reader = new FileReader();
-                                reader.onload = (event) => {
-                                  if (event.target?.result) {
-                                    setImprovementImages(prev => [...prev, event.target.result as string]);
-                                  }
-                                };
-                                reader.readAsDataURL(file);
+                                alert('Không thể xử lý ảnh này. Vui lòng chọn ảnh khác (JPG/PNG).');
                               }
                             }
                           }

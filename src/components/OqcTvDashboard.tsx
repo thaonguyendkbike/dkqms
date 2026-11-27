@@ -81,6 +81,8 @@ export default function OqcTvDashboard({ oqcRecords = [], oqcHandoverList = [] }
     setBreakMinutes(safeVal);
     try {
       safeStorage.setItem('dk_oqc_takt_break_minutes', String(safeVal));
+      safeStorage.setItem('dk_oqc_takt_break_minutes_is_dirty', 'true');
+      (window as any).syncToServer?.('dk_oqc_takt_break_minutes', String(safeVal));
     } catch { }
   };
 

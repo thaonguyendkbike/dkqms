@@ -15,5 +15,19 @@ service firebase.storage {
                      )
                    );
     }
+
+    match /dk_qms_images/{allPaths=**} {
+      // Ảnh nghiệp vụ QMS (CAPA, ECO, Phản ánh KH, IQC/PQC/OQC, Thiết bị...) chất lượng cao chuẩn /lk
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.auth.token.email != null
+                   && (
+                     request.resource == null ||
+                     (
+                       request.resource.size < 2 * 1024 * 1024 &&
+                       request.resource.contentType.matches('image/.*')
+                     )
+                   );
+    }
   }
 }
