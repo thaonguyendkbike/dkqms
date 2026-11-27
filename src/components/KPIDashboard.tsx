@@ -16,6 +16,7 @@ export {
 } from '../initialKpis';
 import { safeStorage } from '../safeStorage';
 import { parseFlexibleDate, getLocalYmd, formatDateStrVi } from '../utils/dateUtils';
+import { resolveCopqVnd } from '../utils/copqUtils';
 import {
   CheckCircle2,
   Plus,
@@ -65,6 +66,7 @@ interface KPIDashboardProps {
   dailyLogs?: any[];
   weeklyPlans?: any[];
   monthlyPlans?: any[];
+  planningTasks?: any[];
   staffList?: any[];
   kpis?: DetailedKPI[];
   setKpis?: React.Dispatch<React.SetStateAction<DetailedKPI[]>> | any;
@@ -273,6 +275,7 @@ export default function KPIDashboard({
   dailyLogs = [],
   weeklyPlans = [],
   monthlyPlans = [],
+  planningTasks = [],
   kpis: propsKpis,
   setKpis: propsSetKpis,
   staffKpiEvaluations: propsStaffEvals,
@@ -477,10 +480,11 @@ export default function KPIDashboard({
       return dStr ? isRecordInDateRange(dStr, start, end) : false;
     });
 
-    // 6. Market Defects in period
-    const curDefects = (defects || []).filter(d =>
-      isRecordInDateRange(d?.defectDate || d?.sourceDate || d?.saleDate || d?.date || d?.createdAt, start, end)
-    );
+    // 6. Market Defects in period (chỉ tính Lỗi xe từ khách hàng, không gộp Đề xuất cải tiến)
+    const curDefects = (defects || []).filter(d => {
+      if (d?.feedbackType && d.feedbackType !== 'Lỗi xe từ khách hàng') return false;
+      return isRecordInDateRange(d?.defectDate || d?.sourceDate || d?.saleDate || d?.date || d?.createdAt, start, end);
+    });
 
     // 7. COPQ in period (matches c.month & c.year OR c.date)
     const curCopqs = (copqs || []).filter(c => {
@@ -509,20 +513,26 @@ export default function KPIDashboard({
       });
       (m?.sampleChecks || []).forEach((chk: any) => {
         if (chk?.status && chk.status !== 'Chưa KT') {
-          curPtspChecks.push({ ...chk, modelCode: m.code, modelName: m.modelName, kind: 'Đánh giá mẫu' });
+          const chkDate = chk?.updatedAt || chk?.checkedDate || m?.updatedAt;
+          if (!chkDate || isRecordInDateRange(chkDate, start, end)) {
+            curPtspChecks.push({ ...chk, modelCode: m.code, modelName: m.modelName, kind: 'Đánh giá mẫu' });
+          }
         }
       });
       (m?.roadTests || []).forEach((rt: any) => {
         if (rt?.result && rt.result !== 'Chưa đo') {
-          curPtspChecks.push({
-            id: rt.id,
-            item: rt.item,
-            standard: rt.standard,
-            status: rt.result,
-            modelCode: m.code,
-            modelName: m.modelName,
-            kind: 'Chạy thử đường trường'
-          });
+          const rtDate = rt?.updatedAt || rt?.testDate || m?.updatedAt;
+          if (!rtDate || isRecordInDateRange(rtDate, start, end)) {
+            curPtspChecks.push({
+              id: rt.id,
+              item: rt.item,
+              standard: rt.standard,
+              status: rt.result,
+              modelCode: m.code,
+              modelName: m.modelName,
+              kind: 'Chạy thử đường trường'
+            });
+          }
         }
       });
     });
@@ -579,6 +589,14 @@ export default function KPIDashboard({
     (monthlyPlans || []).forEach(mp => {
       if (Number(mp?.year) === year && months.includes(Number(mp?.month))) {
         (mp?.targets || []).forEach((t: any) => addPlanTask(t, `KH Tháng ${mp.month}/${mp.year}`));
+      }
+    });
+    // Đồng bộ thêm nguồn tác vụ từ QualityPlanning (dk_qms_quality_planning_tasks) giống ReportsHub
+    (planningTasks || []).forEach((pt: any) => {
+      const inRangeByMeta = pt?.year && pt?.month && Number(pt.year) === year && months.includes(Number(pt.month));
+      const inRangeByDate = pt?.deadline && isRecordInDateRange(pt.deadline, start, end);
+      if (inRangeByMeta || inRangeByDate) {
+        addPlanTask(pt, 'Lập kế hoạch CL');
       }
     });
 
@@ -766,10 +784,10 @@ export default function KPIDashboard({
       isPass: isMarketDefectResolved(d)
     }));
 
-    // 7. COPQ
+    // 7. COPQ (chuẩn hóa đơn vị VNĐ thống nhất qua resolveCopqVnd)
     const copqTotalCount = curCopqs.length;
     const copqTotalCost = curCopqs.reduce(
-      (sum, c) => sum + Number(c?.totalAmount ?? c?.amount ?? c?.cost ?? c?.totalCost ?? 0),
+      (sum, c) => sum + resolveCopqVnd(c),
       0
     );
     const copqClosedCount = curCopqs.filter(c => {
@@ -785,7 +803,7 @@ export default function KPIDashboard({
       date: c.month && c.year ? `T${String(c.month).padStart(2, '0')}/${c.year}` : label,
       title: `${c.category || 'COPQ'} • ${c.title || c.description || c.details || '--'} (${c.model || 'Chung'})`,
       actor: c.costOrigin || 'Phòng QLCL',
-      resultText: `${Number(c.totalAmount ?? c.amount ?? 0).toLocaleString('vi-VN')} VNĐ`,
+      resultText: `${resolveCopqVnd(c).toLocaleString('vi-VN')} VNĐ`,
       isPass: true
     }));
 
@@ -875,7 +893,7 @@ export default function KPIDashboard({
         ? Math.min(
             100,
             Number(
-              ((distinctReportDays / Math.max(1, Math.min(workingDaysElapsed || 1, distinctReportDays))) * 100).toFixed(1)
+              ((distinctReportDays / Math.max(1, workingDaysElapsed)) * 100).toFixed(1)
             )
           )
         : 0;
@@ -1636,21 +1654,22 @@ export default function KPIDashboard({
         const passedOqcCount = curOqc.filter(isOqcRecordPassed).length;
         if (handoverCount > 0 || passedOqcCount > 0) {
           const validScanCount = curHandover.filter(h => h?.status !== 'Lỗi').length;
+          const denominator = passedOqcCount > 0 ? passedOqcCount : handoverCount;
           const rate =
-            handoverCount > 0
-              ? Number(((validScanCount / handoverCount) * 100).toFixed(1))
-              : 100;
+            handoverCount > 0 && denominator > 0
+              ? Math.min(100, Number(((validScanCount / denominator) * 100).toFixed(1)))
+              : 0;
           return {
             actualText:
               handoverCount > 0
-                ? `${handoverCount.toLocaleString('vi-VN')} xe Scan (${rate}%)`
-                : `${passedOqcCount.toLocaleString('vi-VN')} xe PASS`,
+                ? `${handoverCount.toLocaleString('vi-VN')}/${Math.max(handoverCount, passedOqcCount).toLocaleString('vi-VN')} xe Scan (${rate}%)`
+                : `0/${passedOqcCount.toLocaleString('vi-VN')} xe Scan (0%)`,
             numericValue: rate,
             hasData: true,
             evidence:
               handoverCount > 0
-                ? `Đã quét mã Barcode bàn giao Kho thành phẩm ${handoverCount.toLocaleString('vi-VN')} xe PASS (${rate}% hợp lệ, 0 xe lỗi lọt kho)`
-                : `Đã xác nhận ${passedOqcCount.toLocaleString('vi-VN')} xe PASS đủ điều kiện bàn giao Kho thành phẩm`,
+                ? `Đã quét mã Barcode bàn giao Kho thành phẩm ${validScanCount.toLocaleString('vi-VN')}/${denominator.toLocaleString('vi-VN')} xe PASS (${rate}%)`
+                : `Có ${passedOqcCount.toLocaleString('vi-VN')} xe PASS nhưng chưa phát sinh lượt quét bàn giao Kho (0%)`,
             targetTab: 'quality_inspection_records',
             targetTabLabel: 'Nhập liệu OQC & Bàn giao Kho',
             rows: (handoverCount > 0 ? curHandover : curOqc.filter(isOqcRecordPassed)).slice(0, 50).map((h: any) => ({
@@ -1776,7 +1795,7 @@ export default function KPIDashboard({
         });
         const totalChecks = curPtspChecks.length + curPtspIssues.length + myPtspLogs.length;
         if (totalChecks > 0) {
-          const passedChecks = curPtspChecks.filter(c => c.status === 'Đạt' || c.status === 'Không đạt').length;
+          const passedChecks = curPtspChecks.filter(c => c.status === 'Đạt').length;
           const resolvedIssues = curPtspIssues.filter(i => i.status === 'Đã chốt' || i.status === 'Đang xử lý').length;
           const doneLogs = myPtspLogs.filter(isDailyLogCompleted).length;
           const rate = Number((((passedChecks + resolvedIssues + doneLogs) / totalChecks) * 100).toFixed(1));

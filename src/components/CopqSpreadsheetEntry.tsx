@@ -13,6 +13,7 @@ import {
   X
 } from 'lucide-react';
 import { COPQMetric } from '../types';
+import { resolveCopqVnd } from '../utils/copqUtils';
 
 interface CopqDraftRow {
   rowKey: string;
@@ -90,7 +91,7 @@ export const exportCopqListToExcel = (list: COPQMetric[], fileName = `Chi_Phi_CO
     const totalAmt =
       item.quantity !== undefined && item.unitPrice !== undefined
         ? qty * Number(item.unitPrice)
-        : Number(item.totalAmount ?? Number(item.amount || 0) * 1000000);
+        : resolveCopqVnd(item);
     const unitPrice = Number(item.unitPrice ?? (qty > 0 ? totalAmt / qty : totalAmt));
     grandTotal += totalAmt;
     const accCode = item.accountingCode || suggestAccountingCode(item.category, item.details, item.description, item.costOrigin);

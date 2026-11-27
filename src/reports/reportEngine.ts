@@ -21,10 +21,12 @@ import {
   getIsoWeekInfo,
   getIsoWeekRange,
   getIsoWeeksInYear,
+  getWeekAndMonthFromDate,
   getWeekdayIndexMonFirst,
   parseFlexibleDate,
   WEEKDAY_LABELS_MON_FIRST
 } from '../utils/dateUtils';
+import { resolveCopqVnd } from '../utils/copqUtils';
 
 export {
   formatDateShortVi,
@@ -531,7 +533,10 @@ export function buildReportSnapshot(
     getCode: x => x.id || x.lsx || '--',
     getSummary: x => `${x.model || '--'} (LSX: ${x.lsx || '--'})`
   });
-  const curDefects = filterDated(input.defects, x => x.defectDate || x.sourceDate || x.saleDate, start, end, {
+  const onlyCustomerDefects = (input.defects || []).filter(
+    d => !d?.feedbackType || d.feedbackType === 'Lỗi xe từ khách hàng'
+  );
+  const curDefects = filterDated(onlyCustomerDefects, x => x.defectDate || x.sourceDate || x.saleDate, start, end, {
     source: 'Phản ánh thị trường',
     targetTab: 'defects',
     getCode: x => x.id || '--',
@@ -547,7 +552,7 @@ export function buildReportSnapshot(
   const prevIqc = filterDated(input.iqcRecords, x => x.date, prev.start, prev.end);
   const prevPqc = filterDated(input.pqcRecords, x => x.date, prev.start, prev.end);
   const prevOqc = filterDated(input.oqcRecords, x => x.date, prev.start, prev.end);
-  const prevDefects = filterDated(input.defects, x => x.defectDate || x.sourceDate || x.saleDate, prev.start, prev.end);
+  const prevDefects = filterDated(onlyCustomerDefects, x => x.defectDate || x.sourceDate || x.saleDate, prev.start, prev.end);
   const prevPartEvals = filterDated(input.partEvaluations, x => x.receivedDate, prev.start, prev.end);
 
   // --- 1. IQC ---
@@ -823,14 +828,25 @@ export function buildReportSnapshot(
     .map(([assignee, items]) => ({ assignee, count: items.length, items }))
     .sort((a, b) => b.count - a.count);
 
-  const ptspTotal = input.ptspTasks.length;
-  const ptspCompleted = input.ptspTasks.filter(t => t.progress >= 100).length;
+  const activePtspModels = input.ptspModels || [];
+  const ptspTotal = activePtspModels.length > 0 ? activePtspModels.length : input.ptspTasks.length;
+  const ptspCompleted = activePtspModels.length > 0
+    ? activePtspModels.filter(m => m.status === 'Đã SOP' || m.status === 'Sẵn sàng SOP').length
+    : input.ptspTasks.filter(t => t.progress >= 100).length;
   const ptspOverdue = input.ptspTasks.filter(t => {
     if (t.progress >= 100) return false;
     const d = parseFlexibleDate(t.endDate);
     return d ? d.getTime() < now.getTime() : false;
   });
-  const ptspAvgProgress = ptspTotal > 0 ? Math.round(input.ptspTasks.reduce((s, t) => s + (t.progress || 0), 0) / ptspTotal) : 0;
+  const ptspAvgProgress = activePtspModels.length > 0
+    ? Math.round(
+        activePtspModels.reduce((sum, m) => {
+          const checks = [...(m.sampleChecks || []), ...(m.roadTests || [])];
+          const done = checks.filter((c: any) => c.status === 'Đạt' || c.result === 'Đạt').length;
+          return sum + (checks.length > 0 ? Math.round((done / checks.length) * 100) : (m.status === 'Đã SOP' ? 100 : 0));
+        }, 0) / activePtspModels.length
+      )
+    : (ptspTotal > 0 ? Math.round(input.ptspTasks.reduce((s, t) => s + (t.progress || 0), 0) / ptspTotal) : 0);
 
   // --- 7B. TÁC VỤ TỪ LẬP KẾ HOẠCH CHẤT LƯỢNG ---
   const allPlanningTasks = input.planningTasks || [];
@@ -971,11 +987,6 @@ export function buildReportSnapshot(
     }
     return false;
   });
-  const resolveCopqVnd = (c: COPQMetric): number => {
-    if (c.totalAmount !== undefined && c.totalAmount !== null) return Number(c.totalAmount) || 0;
-    const raw = Number(c.amount) || 0;
-    return raw > 0 && raw < 1000 ? raw * 1000000 : raw;
-  };
   const copqAmount = curCopqs.reduce((s, c) => s + resolveCopqVnd(c), 0);
   const prevCopqAmount = prevCopqs.reduce((s, c) => s + resolveCopqVnd(c), 0);
   const copqCatMap = new Map<string, number>();
@@ -1052,6 +1063,10 @@ export function buildReportSnapshot(
     if (period.type === 'week') {
       return getWeekdayIndexMonFirst(d);
     }
+    const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const wm = getWeekAndMonthFromDate(ymd);
+    const wNum = Number(String(wm?.week || '').replace(/\D/g, ''));
+    if (wNum >= 1 && wNum <= 5) return wNum - 1;
     return Math.min(4, Math.floor((d.getDate() - 1) / 7));
   };
   const csMap = new Map<string, number[]>();
@@ -1327,7 +1342,7 @@ export function buildReportSnapshot(
       pqcResolveRate: { ...makeDelta(pqcRate, prevPqcRate), total: pqcTotal, resolved: pqcResolved, pending: pqcPending },
       marketResolveRate: { ...makeDelta(mktRate, prevMktRate), total: mktTotal, resolved: mktResolved, pending: mktPending, sevA: mktSevA },
       partEvalQty: { ...makeDelta(partQty, prevPartQty), records: curPartEvals.length, nccPct, sxPct, khPct },
-      capaOpen: { ...makeDelta(openCapas.length, openCapas.length), total: openCapas.length, overdue: overdueCapas.length, closedInPeriod: closedCapasInPeriod.length, effectiveCount: effectiveCapas.length },
+      capaOpen: { ...makeDelta(openCapas.length, openCapas.length + closedCapasInPeriod.length), total: openCapas.length, overdue: overdueCapas.length, closedInPeriod: closedCapasInPeriod.length, effectiveCount: effectiveCapas.length },
       dailyCompliance: { ...makeDelta(dailyRate, prevDailyRate), total: dailyTotal, completed: dailyCompleted, pendingCount: pendingDailyLogs.length },
       copqAmount: { ...makeDelta(copqAmount, prevCopqAmount), byCategory: copqByCategory }
     },

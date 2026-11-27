@@ -8530,6 +8530,8 @@ export function App() {
         images: data.images && data.images.length > 0 ? data.images : (defectImages.length > 0 ? defectImages : (data.imageUrl || defectImageUrl ? [data.imageUrl || defectImageUrl] : [])),
         status: data.status || 'Chưa xử lý',
         capaId: data.capaId || '',
+        improvementActionId: data.improvementActionId || '',
+        supplierName: data.supplierName || '',
         imageUrl: data.imageUrl || defectImages[0] || defectImageUrl
       };
       const updatedDefects = [newDefect, ...defects];
@@ -8633,7 +8635,7 @@ export function App() {
         setActiveTab('defects');
         break;
       case 'capa':
-        setActiveTab('qms_workflow');
+        setActiveTab('tasks');
         break;
       case 'ptsp':
         setActiveTab('ptsp');
@@ -8684,6 +8686,7 @@ export function App() {
       if (window.confirm(`⚠️ BẠN CÓ CHẮC CHẮN MUỐN XÓA BẢN GHI NÀY CỦA PHÂN HỆ [${type.toUpperCase()}] KHÔNG?\nHành động xóa không thể khôi phục tự động.`)) {
         const keyMap: Record<string, string> = {
           task: 'dk_tasks',
+          supplier: 'dk_suppliers',
           capa: 'dk_capas',
           eco: 'dk_ecos',
           copq: 'dk_copqs',
@@ -8701,18 +8704,24 @@ export function App() {
           trackDeletedId(mappedKey, id);
         }
         if (type === 'ptsp') {
-          trackDeletedId('dk_ptsp_tasks', id);
+          ptspTasks.filter(t => t.projectId === id).forEach(t => {
+            if (t.id) trackDeletedId('dk_ptsp_tasks', t.id);
+          });
         }
         switch (type) {
           case 'task': {
             const updated = tasks.filter(t => t.id !== id);
             setTasks(updated);
+            safeStorage.setItem('dk_tasks', JSON.stringify(updated));
+            safeStorage.setItem('dk_tasks_is_dirty', 'true');
             syncToServer('dk_tasks', updated);
             break;
           }
           case 'supplier': {
-            const updated = suppliers.filter(s => s.id !== id);
+            const updated = suppliers.filter(s => s.id !== id && s.SupplierID !== id);
             setSuppliers(updated);
+            safeStorage.setItem('dk_suppliers', JSON.stringify(updated));
+            safeStorage.setItem('dk_suppliers_is_dirty', 'true');
             syncToServer('dk_suppliers', updated);
             break;
           }
@@ -8764,8 +8773,15 @@ export function App() {
             const targetDefectId = actionToDelete?.defectId;
 
             const updatedDefects = defects.map(d => {
-              if ((targetDefectId && d.id === targetDefectId) || (d.capaId && (d.capaId === id || d.capaId === actionToDelete?.id))) {
-                return { ...d, capaId: '', status: 'Chưa xử lý' };
+              const matchedByField = d.improvementActionId === id || (targetDefectId && d.id === targetDefectId);
+              const matchedLegacyCapaSlot = Boolean(d.capaId && d.capaId.startsWith('ACT-') && (d.capaId === id || d.capaId === actionToDelete?.id));
+              if (matchedByField || matchedLegacyCapaSlot) {
+                return {
+                  ...d,
+                  improvementActionId: '',
+                  capaId: matchedLegacyCapaSlot ? '' : d.capaId,
+                  status: (d.capaId && !matchedLegacyCapaSlot) ? d.status : 'Chưa xử lý'
+                };
               }
               return d;
             });
@@ -14992,6 +15008,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 dailyLogs={dailyLogs}
                 weeklyPlans={weeklyPlans}
                 monthlyPlans={monthlyPlans}
+                planningTasks={planningTasks}
                 staffList={staff}
                 kpis={kpis}
                 setKpis={setKpis}
@@ -22521,10 +22538,15 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           <div className="flex items-center gap-4 text-xs">
                             <div className="text-right">
                               <span className="text-[10px] text-slate-400 block font-bold">XẾP HẠNG</span>
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase inline-block mt-0.5 ${(s.status || s.QualityRating) === 'A' ? 'bg-green-100 text-green-700' :
-                                (s.status || s.QualityRating) === 'B' ? 'bg-blue-100 text-blue-700' :
-                                  (s.status || s.QualityRating) === 'C' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700 animate-pulse'
-                                }`}>Hạng {s.status || s.QualityRating || 'B'}</span>
+                              {(() => {
+                                const rating = String(s.QualityRating || s.qualityRating || 'B').trim().toUpperCase();
+                                return (
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase inline-block mt-0.5 ${rating === 'A' ? 'bg-green-100 text-green-700' :
+                                    rating === 'B' ? 'bg-blue-100 text-blue-700' :
+                                      rating === 'C' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700 animate-pulse'
+                                    }`}>Hạng {rating}</span>
+                                );
+                              })()}
                             </div>
                             <div className="flex gap-1">
                               <button
@@ -22963,9 +22985,36 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         return updated;
                       });
                       break;
-                    case 'supplier':
-                      setSuppliers(prev => prev.map(s => s.id === data.id ? data : s));
+                    case 'supplier': {
+                      const totalP = Number(data.totalParts ?? 0);
+                      const faultyP = Number(data.faultyParts ?? 0);
+                      const calcPpm = totalP > 0 ? Math.round((faultyP / totalP) * 1000000) : Number(data.PPM ?? 0);
+                      const calcDefectRate = totalP > 0 ? Number(((faultyP / totalP) * 100).toFixed(2)) : Number(data.defectRate ?? 0);
+                      const ratingVal = data.QualityRating || data.qualityRating || (calcPpm <= 2000 ? 'A' : calcPpm <= 5000 ? 'B' : calcPpm <= 10000 ? 'C' : 'D');
+                      const sanitizedSupplier = {
+                        ...data,
+                        SupplierName: data.name || data.SupplierName,
+                        componentType: data.ComponentType || data.componentType || '',
+                        ComponentType: data.ComponentType || data.componentType || '',
+                        totalParts: totalP,
+                        faultyParts: faultyP,
+                        PPM: calcPpm,
+                        ppm: calcPpm,
+                        defectRate: calcDefectRate,
+                        QualityRating: ratingVal,
+                        qualityRating: ratingVal,
+                        Status: data.Status || data.status || 'Active',
+                        status: data.Status || data.status || 'Active',
+                      };
+                      setSuppliers(prev => {
+                        const updated = prev.map(s => (s.id === data.id || s.SupplierID === data.id) ? sanitizedSupplier : s);
+                        safeStorage.setItem('dk_suppliers', JSON.stringify(updated));
+                        safeStorage.setItem('dk_suppliers_is_dirty', 'true');
+                        syncToServer('dk_suppliers', updated);
+                        return updated;
+                      });
                       break;
+                    }
                     case 'capa': {
                       const idVal = data.id || data.CAPAID;
                       const titleVal = data.title || data.Issue || '';
@@ -23060,6 +23109,25 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         syncToServer('dk_improvement_actions', updated);
                         return updated;
                       });
+                      // Đồng bộ trạng thái hoàn thành Hành động cải tiến sang Phản ánh KH liên kết
+                      if (data.defectId && (data.status === 'Đã hoàn thành' || data.status === 'Hoàn thành')) {
+                        setDefects(prevDefects => {
+                          let changed = false;
+                          const updatedDefects = prevDefects.map(d => {
+                            if (d.id === data.defectId && d.status !== 'Đã xử lý') {
+                              changed = true;
+                              return { ...d, status: 'Đã xử lý' as const };
+                            }
+                            return d;
+                          });
+                          if (changed) {
+                            safeStorage.setItem('dk_defects', JSON.stringify(updatedDefects));
+                            safeStorage.setItem('dk_defects_is_dirty', 'true');
+                            syncToServer('dk_defects', updatedDefects);
+                          }
+                          return updatedDefects;
+                        });
+                      }
                       break;
                     case 'eco':
                       setEcos(prev => {
@@ -23278,7 +23346,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                               const updatedImages = currentImages.filter((_: any, i: number) => i !== idx);
                               setGlobalEditModal({
                                 ...globalEditModal,
-                                data: { ...globalEditModal.data, images: updatedImages }
+                                data: { ...globalEditModal.data, images: updatedImages, imageUrl: updatedImages[0] || '' }
                               });
                             }}
                             className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5 opacity-90 hover:opacity-100 shadow hover:bg-red-700 cursor-pointer"
@@ -23441,6 +23509,42 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       />
                     </div>
                   </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Xếp hạng chất lượng</label>
+                      <select
+                        value={globalEditModal.data.QualityRating || globalEditModal.data.qualityRating || 'B'}
+                        onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, QualityRating: e.target.value, qualityRating: e.target.value } })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-bold"
+                      >
+                        <option value="A">Hạng A (Xuất sắc)</option>
+                        <option value="B">Hạng B (Đạt chuẩn)</option>
+                        <option value="C">Hạng C (Cần cải thiện)</option>
+                        <option value="D">Hạng D (Cảnh báo)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Trạng thái hợp tác</label>
+                      <select
+                        value={globalEditModal.data.Status || globalEditModal.data.status || 'Active'}
+                        onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, Status: e.target.value, status: e.target.value } })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-bold"
+                      >
+                        <option value="Active">Đang hợp tác (Active)</option>
+                        <option value="Warning">Cảnh báo (Warning)</option>
+                        <option value="Suspended">Tạm dừng (Suspended)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Ngày đánh giá gần nhất</label>
+                      <input
+                        type="date"
+                        value={globalEditModal.data.LastAuditDate || globalEditModal.data.lastAuditDate || ''}
+                        onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, LastAuditDate: e.target.value, lastAuditDate: e.target.value } })}
+                        className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-mono"
+                      />
+                    </div>
+                  </div>
                   <div>
                     <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Sự cố lỗi thường trực (phân tách dấu phẩy)</label>
                     <input
@@ -23586,6 +23690,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 text-xs font-bold"
                       >
                         <option value="Khẩn cấp">🚨 Khẩn cấp (Sản xuất dừng chờ)</option>
+                        <option value="Cao">🔴 Cao (Ưu tiên khắc phục ngay)</option>
                         <option value="Trung bình">⚠️ Trung bình (Theo dõi đặc biệt)</option>
                         <option value="Thường">✓ Thường (Cải tiến ISO/QMS)</option>
                       </select>
@@ -23637,6 +23742,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         <option value="">-- Chọn nơi phát sinh --</option>
                         <option value="Phòng QLCL">Phòng QLCL</option>
                         <option value="Kho LK/Xưởng lắp ráp">Kho LK/Xưởng lắp ráp</option>
+                        <option value="Xưởng Lắp ráp / KCS Thành phẩm">Xưởng Lắp ráp / KCS Thành phẩm</option>
                         <option value="Khách hàng/Phòng kinh doanh">Khách hàng/Phòng kinh doanh</option>
                       </select>
                     </div>
@@ -23708,7 +23814,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                               const updatedImages = currentImages.filter((_: any, i: number) => i !== idx);
                               setGlobalEditModal({
                                 ...globalEditModal,
-                                data: { ...globalEditModal.data, images: updatedImages }
+                                data: { ...globalEditModal.data, images: updatedImages, imageUrl: updatedImages[0] || '' }
                               });
                             }}
                             className="absolute top-0.5 right-0.5 bg-red-650 text-white rounded-full p-0.5 opacity-90 hover:opacity-100 cursor-pointer shadow"
@@ -24456,6 +24562,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         <option value="">-- Chọn nơi phát sinh --</option>
                         <option value="Phòng QLCL">Phòng QLCL</option>
                         <option value="Kho LK/Xưởng lắp ráp">Kho LK/Xưởng lắp ráp</option>
+                        <option value="Xưởng Lắp ráp / KCS Thành phẩm">Xưởng Lắp ráp / KCS Thành phẩm</option>
                         <option value="Khách hàng/Phòng kinh doanh">Khách hàng/Phòng kinh doanh</option>
                       </select>
                     </div>
@@ -24667,8 +24774,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                                 ...globalEditModal,
                                 data: {
                                   ...globalEditModal.data,
-                                  model: val + " / Phân xưởng lắp ráp",
-                                  affectedModel: val + " / Phân xưởng lắp ráp"
+                                  model: val,
+                                  affectedModel: val
                                 }
                               });
                             }
@@ -26996,7 +27103,7 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         const val = e.target.value;
                         setAddEcoSelectedMaster(val);
                         if (val) {
-                          setAddEcoModelName(val + " / Phân xưởng lắp ráp");
+                          setAddEcoModelName(val);
                         }
                       }}
                       className="w-full bg-white border border-slate-200 rounded p-2 text-slate-825 text-xs font-bold"
@@ -27340,12 +27447,12 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                 safeStorage.setItem('dk_improvement_actions_is_dirty', 'true');
                 syncToServer('dk_improvement_actions', updated);
 
-                // Mark the defect as having an action (we can store the action ID in d.capaId!)
+                // Lưu ID Hành động cải tiến vào trường riêng `improvementActionId` (KHÔNG ghi đè `capaId` để tránh xung đột với hồ sơ CAPA!)
                 if (defectId) {
                   setDefects(prev => {
                     const updatedDefects = prev.map(d => {
                       if (d.id === defectId) {
-                        return { ...d, capaId: nextImprovementActionId, status: 'Đang xử lý' };
+                        return { ...d, improvementActionId: nextImprovementActionId, status: 'Đang xử lý' };
                       }
                       return d;
                     });

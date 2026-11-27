@@ -75,13 +75,13 @@ export interface Task {
   result: number;
   status: 'Completed' | 'Pending' | 'Overdue';
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
-  
+
   // Custom information fields requested by user
   issueCondition?: string; // Vấn đề/tình trạng
   locationOfOrigin?: string; // Nơi phát sinh
   rootCausePending?: string; // Nguyên nhân gốc rễ
   proposedSolution?: string; // Phương án / nhiệm vụ xử lý
-  
+
   kpiId?: string;
   projectId?: string;
   supplierId?: string;
@@ -113,39 +113,39 @@ export interface KPI {
 export interface CAPA {
   id?: string; // Preferred primary key
   CAPAID?: string; // For backwards compatibility
-  
+
   title?: string;
   Issue?: string; // Alias
   issue?: string; // Unified camelCase
-  
+
   source?: string;
   assignee?: string;
   Owner?: string; // Alias
   owner?: string; // Unified camelCase
-  
+
   targetDate?: string;
   DueDate?: string; // Alias
   dueDate?: string; // Unified camelCase
-  
+
   status?: string;
   Status?: 'Mở' | 'Đã đóng' | 'Quá hạn' | string; // Alias
-  
+
   rootCause?: string;
   RootCause?: string; // Alias
-  
+
   actions?: string | string[];
   Correction?: string; // Alias
   correction?: string; // Unified camelCase
-  
+
   CorrectiveAction?: string; // Alias
   correctiveAction?: string; // Unified camelCase
-  
+
   PreventiveAction?: string; // Alias
   preventiveAction?: string; // Unified camelCase
-  
+
   effectiveness?: 'Chưa đánh giá' | 'Hiệu quả' | 'Kém hiệu quả' | string;
   Effectiveness?: 'Chưa đánh giá' | 'Hiệu quả' | 'Kém hiệu quả' | string; // Alias
-  
+
   isRepeated?: boolean;
   imageUrl?: string;
   supplierName?: string;
@@ -153,6 +153,7 @@ export interface CAPA {
   locationOfOrigin?: string;
   locationDetail?: string;
   priority?: string;
+  defectId?: string;
   images?: string[];
 }
 
@@ -162,25 +163,25 @@ export interface CAPA {
 export interface Supplier {
   id?: string; // Primary key
   SupplierID?: string; // For backwards compatibility
-  
+
   name?: string;
   SupplierName?: string; // Alias
-  
+
   componentType?: string;
   ComponentType?: string; // Alias
-  
+
   ppm?: number;
   PPM?: number; // Alias
-  
+
   qualityRating?: 'A' | 'B' | 'C' | 'D' | string;
   QualityRating?: 'A' | 'B' | 'C' | 'D' | string; // Alias
-  
+
   lastAuditDate?: string;
   LastAuditDate?: string; // Alias
-  
+
   status?: string;
   Status?: 'Active' | 'Under Audit' | 'Suspended' | string; // Alias
-  
+
   defectRate?: string | number;
   totalParts?: number;
   faultyParts?: number;
@@ -462,6 +463,7 @@ export interface MarketDefect {
   severity: 'A' | 'B' | 'C' | 'D' | 'Cao' | 'Nghiêm trọng' | 'Trung bình' | 'Thấp' | string;
   rootCause: string;
   capaId?: string;
+  improvementActionId?: string;
   status: 'Đã xử lý' | 'Đang xử lý' | 'Chưa xử lý' | 'Đề xuất cải tiến' | string;
   imageUrl?: string;
   supplierName?: string;

@@ -379,7 +379,7 @@ export default function QMSWorkflowTab({
       ? (((oqcRecords.length - oqcRecords.filter(r => r.status === 'Lỗi').length) / oqcRecords.length) * 100).toFixed(1)
       : '93.5';
     const unresolvedMarketDefects = defects.filter(d => d.status === 'Chưa xử lý').length;
-    const pendingEcos = ecos.filter(e => e.status === 'Pending').length;
+    const pendingEcos = ecos.filter((e: any) => e.status === 'Đề xuất' || e.status === 'Đang thử nghiệm' || e.status === 'Pending').length;
     
     return {
       totalSuppliers,

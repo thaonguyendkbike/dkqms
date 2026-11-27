@@ -5148,19 +5148,23 @@ export default function QualityInspectionRecords({
       alert('Vui lòng nhập nội dung phiếu nhập kiểm!');
       return;
     }
-    const targetId = newIqcSupplierId || suppliers[0]?.id || 'NCC00174';
-    const selectedSup = suppliers.find(s => s.id === targetId);
+    const targetId = newIqcSupplierId || '';
+    const selectedSup = targetId ? suppliers.find(s => s.id === targetId) : undefined;
+    const totalQ = Number(newIqcTotalQty);
+    const checkedQ = Number(newIqcCheckedQty);
+    const failedQ = Number(newIqcFailedQty);
+    const defectDenom = checkedQ > 0 ? checkedQ : totalQ;
     const baseRecord: IQCRecord = {
       id: `IQC-${Date.now().toString().slice(-4)}`,
         date: newIqcDate,
         supplierId: targetId,
-        supplierName: selectedSup?.name || 'Công ty Cao Su KENDA Việt Nam',
+        supplierName: selectedSup?.name || 'Chưa chọn NCC',
         content: newIqcContent,
-        totalQty: Number(newIqcTotalQty),
-        checkedQty: Number(newIqcCheckedQty),
+        totalQty: totalQ,
+        checkedQty: checkedQ,
         checkedBy: newIqcCheckedBy,
-        failedQty: Number(newIqcFailedQty),
-        defectRate: Number(newIqcTotalQty) > 0 ? Number(((Number(newIqcFailedQty) / Number(newIqcTotalQty)) * 100).toFixed(2)) : 0,
+        failedQty: failedQ,
+        defectRate: defectDenom > 0 ? Number(((failedQ / defectDenom) * 100).toFixed(2)) : 0,
         itemSummary: newIqcItemSummary || newIqcContent,
         result: Number(newIqcFailedQty) > 0 ? 'Lỗi' : 'Đạt',
         defectDetail: newIqcDefectDetail,
@@ -5384,10 +5388,11 @@ export default function QualityInspectionRecords({
         const defectDetailVal = cols[7]?.trim() || '';
         const itemSummaryVal = cols[8]?.trim() || contentVal;
 
-        const defectRateVal = totalQtyVal > 0 ? Number(((failedQtyVal / totalQtyVal) * 100).toFixed(2)) : 0;
+        const defectDenom = checkedQtyVal > 0 ? checkedQtyVal : totalQtyVal;
+        const defectRateVal = defectDenom > 0 ? Number(((failedQtyVal / defectDenom) * 100).toFixed(2)) : 0;
         const resultVal = failedQtyVal > 0 ? 'Lỗi' : 'Đạt';
 
-        // Match supplier from master list to avoid unmatched names or IDs
+        // Match supplier from master list; NEVER assign an unrelated supplier ID (like KENDA) when unmatched
         const matchedSupplier = suppliers.find(s =>
           s.name.toLowerCase().replace(/[\s,.-]/g, '') === supplierNameVal.toLowerCase().replace(/[\s,.-]/g, '') ||
           s.name.toLowerCase().includes(supplierNameVal.toLowerCase()) ||
@@ -5395,7 +5400,7 @@ export default function QualityInspectionRecords({
           s.id.toLowerCase() === supplierNameVal.toLowerCase()
         );
 
-        const finalSupplierId = matchedSupplier ? matchedSupplier.id : (suppliers[0]?.id || 'NCC00174');
+        const finalSupplierId = matchedSupplier ? matchedSupplier.id : '';
         const finalSupplierName = matchedSupplier ? matchedSupplier.name : supplierNameVal;
 
         parsedRecords.push({
@@ -5438,10 +5443,12 @@ export default function QualityInspectionRecords({
     e.preventDefault();
     if (!editingIqcRecord) return;
 
-    // Recalculate result & rate
+    // Recalculate result & rate (standardize denominator: checkedQty when > 0, else totalQty)
     const totalQty = Number(editingIqcRecord.totalQty);
+    const checkedQty = Number(editingIqcRecord.checkedQty);
     const failedQty = Number(editingIqcRecord.failedQty);
-    const defectRate = totalQty > 0 ? Number(((failedQty / totalQty) * 100).toFixed(2)) : 0;
+    const defectDenom = checkedQty > 0 ? checkedQty : totalQty;
+    const defectRate = defectDenom > 0 ? Number(((failedQty / defectDenom) * 100).toFixed(2)) : 0;
     const result = failedQty > 0 ? 'Lỗi' : 'Đạt';
 
     const baseUpdated: IQCRecord = {
