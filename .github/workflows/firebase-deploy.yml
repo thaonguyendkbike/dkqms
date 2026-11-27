@@ -32,7 +32,7 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
-      # Step 5: Deploy directly to Firebase Hosting using CLI Token
+      # Step 5: Deploy directly to Firebase Hosting + Firestore/Storage Rules using CLI Token
       # This uses the token you generated to authenticate with Firebase
-      - name: Deploy to Firebase Hosting
-        run: npx firebase-tools deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}"
+      - name: Deploy to Firebase Hosting & Security Rules
+        run: npx firebase-tools deploy --only hosting,firestore:rules,storage --token "${{ secrets.FIREBASE_TOKEN }}"
