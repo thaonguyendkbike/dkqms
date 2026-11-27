@@ -1212,9 +1212,29 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
           await deleteBomImageFromStorage(img.path);
         }
       }
+      // Dọn sạch các dòng tham chiếu mồ côi khỏi BOM các dòng xe đang dùng mã linh kiện này
+      const upperCode = part.partCode.trim().toUpperCase();
+      const affectedModels = bomModels.filter((m) =>
+        (m.items || []).some((it) => (it.partCode || '').trim().toUpperCase() === upperCode)
+      );
+      for (const m of affectedModels) {
+        const cleanedItems = (m.items || []).filter(
+          (it) => (it.partCode || '').trim().toUpperCase() !== upperCode
+        );
+        await saveBomModelRecord({
+          ...m,
+          items: cleanedItems,
+          updatedAt: new Date().toISOString(),
+        });
+      }
       await deleteBomPartRecord(part.id);
       setPartModalOpen(false);
-      showToast(`Đã xóa linh kiện ${part.partCode}`, 'info');
+      showToast(
+        affectedModels.length > 0
+          ? `Đã xóa linh kiện ${part.partCode} và dọn khỏi BOM ${affectedModels.length} dòng xe`
+          : `Đã xóa linh kiện ${part.partCode}`,
+        'info'
+      );
     } catch (err: any) {
       showToast(`Lỗi xóa linh kiện: ${err?.message || err}`, 'error');
     }

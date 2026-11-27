@@ -1,14 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import {
   Calendar,
+  CheckCircle2,
   ClipboardList,
   Download,
   ExternalLink,
   FileSpreadsheet,
   FileText,
   MapPin,
-  Printer
+  Printer,
+  Save
 } from 'lucide-react';
+import { safeStorage } from '../safeStorage';
 
 type FiveSDocTab = 'standards' | 'schedule' | 'checksheet' | 'floorplan';
 
@@ -409,6 +412,56 @@ export default function Qms5sTab() {
                   className="text-xs font-bold text-slate-900 bg-transparent outline-none cursor-pointer"
                 />
               </div>
+            )}
+
+            {activeDoc === 'checksheet' && (
+              <button
+                type="button"
+                onClick={() => {
+                  const scoreStr = window.prompt(
+                    `Nhập điểm đánh giá 5S trung bình tháng ${selectedMonth} (0 - 100 điểm) để lưu lên Cloud & cập nhật KPI-COM-07:`,
+                    '95'
+                  );
+                  if (scoreStr === null) return;
+                  const score = Math.max(0, Math.min(100, Number(scoreStr) || 0));
+                  const note = window.prompt('Ghi chú kết quả chấm điểm 5S (tùy chọn):', 'Đạt chuẩn 5S Phòng QLCL') || '';
+                  try {
+                    const raw = safeStorage.getItem('dk_qms_bm_records');
+                    const list = raw ? JSON.parse(raw) : [];
+                    const safeList = Array.isArray(list) ? list : [];
+                    const recId = `5S-${selectedMonth}`;
+                    const nowIso = new Date().toISOString();
+                    const newRec = {
+                      id: recId,
+                      kind: '5s',
+                      code: `BM-5S-${selectedMonth}`,
+                      title: `Phiếu kiểm tra 5S tháng ${selectedMonth} (Điểm: ${score}/100)`,
+                      department: 'Quản lý chất lượng',
+                      score,
+                      month: selectedMonth,
+                      status: score >= 85 ? 'Đạt' : 'Cần cải thiện',
+                      note,
+                      updatedAt: nowIso,
+                      createdAt: nowIso,
+                    };
+                    const idx = safeList.findIndex((r: any) => r?.id === recId);
+                    const updated = idx >= 0
+                      ? safeList.map((r: any, i: number) => (i === idx ? { ...r, ...newRec } : r))
+                      : [newRec, ...safeList];
+                    safeStorage.setItem('dk_qms_bm_records', JSON.stringify(updated));
+                    safeStorage.setItem('dk_qms_bm_records_is_dirty', 'true');
+                    (window as any).syncToServer?.('dk_qms_bm_records', updated);
+                    alert(`Đã lưu kết quả 5S tháng ${selectedMonth} (${score}/100 điểm) lên Cloud Firestore và liên kết KPI-COM-07!`);
+                  } catch (err: any) {
+                    alert('Lỗi lưu kết quả 5S: ' + (err?.message || String(err)));
+                  }
+                }}
+                className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs transition cursor-pointer"
+                title="Lưu điểm đánh giá 5S tháng này vào dk_qms_bm_records để tự động cấp số liệu cho KPI-COM-07"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>Lưu điểm 5S ({selectedMonth})</span>
+              </button>
             )}
 
             <a

@@ -35,6 +35,7 @@ interface PartEvaluationsTabProps {
   suppliers: string[];
   defaultInspector?: string;
   triggerToast?: (msg: string, type?: 'success' | 'info' | 'error') => void;
+  onCreateCapaFromEvaluation?: (ev: PartEvaluation) => void;
 }
 
 const COMMON_PARTS_QUICK_LIST = [
@@ -169,7 +170,8 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
   dealers,
   suppliers,
   defaultInspector = 'Nguyễn Văn Diệm',
-  triggerToast
+  triggerToast,
+  onCreateCapaFromEvaluation
 }) => {
   // Form states (giữ tối thiểu trường nhập cho Nguyễn Văn Diệm)
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1800,6 +1802,16 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                           >
                             <FileText className="w-3.5 h-3.5" />
                           </button>
+                          {onCreateCapaFromEvaluation && (ev.rootCauseCategory === 'Lỗi NCC' || ev.rootCauseCategory === 'Lỗi SX') && (
+                            <button
+                              type="button"
+                              onClick={() => onCreateCapaFromEvaluation(ev)}
+                              className="px-1.5 py-1 text-[10px] font-extrabold text-amber-800 bg-amber-50 hover:bg-amber-100 rounded border border-amber-200 cursor-pointer"
+                              title="Tạo nhanh hồ sơ CAPA từ phiếu giám định lỗi này"
+                            >
+                              +CAPA
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleLoadForEdit(ev)}

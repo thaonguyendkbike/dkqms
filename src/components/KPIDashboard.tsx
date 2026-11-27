@@ -276,6 +276,7 @@ export default function KPIDashboard({
   weeklyPlans = [],
   monthlyPlans = [],
   planningTasks = [],
+  staffList = [],
   kpis: propsKpis,
   setKpis: propsSetKpis,
   staffKpiEvaluations: propsStaffEvals,
@@ -2009,8 +2010,48 @@ export default function KPIDashboard({
       };
     };
 
-    // Chỉ đánh giá đúng 8 nhân sự thuộc Phòng QLCL theo 8 Bản giao nhiệm vụ trong /bm
+    // Bắt đầu từ 8 Bản giao nhiệm vụ chuẩn trong /bm và tự động bổ sung nhân sự mới thêm trong dk_staff (nếu có)
     const mergedProfiles: StaffBmKpiProfile[] = [...STAFF_BM_KPI_PROFILES];
+    const existingKeys = new Set(mergedProfiles.map(p => normalizePersonKey(p.staffName)));
+    (staffList || []).forEach((s: any) => {
+      const name = String(s?.name || '').trim();
+      if (!name) return;
+      const nk = normalizePersonKey(name);
+      if (existingKeys.has(nk)) return;
+      existingKeys.add(nk);
+      mergedProfiles.push({
+        staffName: name,
+        aliases: [name],
+        roleTitle: s.role || 'Nhân sự QLCL',
+        bmDocCode: 'BM-QLCL',
+        mtcvCode: 'MTCV-QLCL',
+        summary: `Nhiệm vụ chuyên môn — ${s.role || 'Phòng Quản lý chất lượng'}`,
+        metrics: [
+          {
+            id: `dyn-daily-${nk}`,
+            name: 'Tỷ lệ hoàn thành công việc báo cáo ngày',
+            bmReference: 'BM-QLCL',
+            unit: '%',
+            weight: 30,
+            target: '>= 90%',
+            targetValue: 90,
+            direction: 'higher_is_better',
+            autoMetricKey: 'DAILY_TASK_COMPLETION'
+          },
+          {
+            id: `dyn-capa-${nk}`,
+            name: 'Tỷ lệ đóng CAPA / xử lý sự cố đúng hạn',
+            bmReference: 'BM-QLCL',
+            unit: '%',
+            weight: 20,
+            target: '>= 90%',
+            targetValue: 90,
+            direction: 'higher_is_better',
+            autoMetricKey: 'CAPA_ON_TIME_RATE'
+          }
+        ]
+      });
+    });
 
     return mergedProfiles
       .map(profile => {

@@ -8761,6 +8761,16 @@ export function App() {
             break;
           }
           case 'defect': {
+            const linkedActions = improvementActions.filter(a => a.defectId === id);
+            if (linkedActions.length > 0) {
+              const cleanedActions = improvementActions.map(a =>
+                a.defectId === id ? { ...a, defectId: '' } : a
+              );
+              setImprovementActions(cleanedActions);
+              safeStorage.setItem('dk_improvement_actions', JSON.stringify(cleanedActions));
+              safeStorage.setItem('dk_improvement_actions_is_dirty', 'true');
+              syncToServer('dk_improvement_actions', cleanedActions);
+            }
             const updated = defects.filter(d => d.id !== id);
             setDefects(updated);
             safeStorage.setItem('dk_defects', JSON.stringify(updated));
@@ -20681,6 +20691,52 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   suppliers={suppliers.map(s => s.SupplierName || s.name || '').filter(Boolean)}
                   defaultInspector="Nguyễn Văn Diệm"
                   triggerToast={triggerToast}
+                  onCreateCapaFromEvaluation={(ev) => {
+                    guardAction(() => {
+                      const nextNum = capas.reduce((mx, c) => {
+                        const m = String(c?.id || c?.CAPAID || '').match(/CAPA-2026-(\d+)/);
+                        return m ? Math.max(mx, parseInt(m[1], 10)) : mx;
+                      }, 0) + 1;
+                      const nextId = `CAPA-2026-${String(nextNum).padStart(3, '0')}`;
+                      const title = `[BM-KTTD-01] ${ev.partName || 'Linh kiện lỗi'} (${ev.model || 'Chung'}) - ${ev.rootCauseCategory}`;
+                      const due = getLocalYmd(new Date(Date.now() + 7 * 86400000));
+                      const newCapa: CAPA = {
+                        id: nextId,
+                        CAPAID: nextId,
+                        title,
+                        Issue: title,
+                        issue: title,
+                        source: ev.rootCauseCategory === 'Lỗi NCC' ? 'Nhà cung cấp (IQC)' : 'PQC / Sản xuất',
+                        assignee: ev.inspector || 'Nguyễn Văn Diệm',
+                        Owner: ev.inspector || 'Nguyễn Văn Diệm',
+                        owner: ev.inspector || 'Nguyễn Văn Diệm',
+                        targetDate: due,
+                        DueDate: due,
+                        dueDate: due,
+                        status: 'Mở',
+                        Status: 'Mở',
+                        rootCause: ev.findingNote || ev.defectSymptom || '',
+                        RootCause: ev.findingNote || ev.defectSymptom || '',
+                        actions: ev.resolution || '',
+                        CorrectiveAction: ev.resolution || '',
+                        correctiveAction: ev.resolution || '',
+                        supplierName: ev.supplierName || '',
+                        modelName: ev.model || '',
+                        locationOfOrigin: 'Phòng QLCL',
+                        priority: 'Cao',
+                        Effectiveness: 'Chưa đánh giá',
+                        effectiveness: 'Chưa đánh giá',
+                        images: Array.isArray(ev.images) ? ev.images.slice(0, 3) : [],
+                        imageUrl: Array.isArray(ev.images) && ev.images[0] ? ev.images[0] : ''
+                      };
+                      const updated = [newCapa, ...capas];
+                      setCapas(updated);
+                      safeStorage.setItem('dk_capas', JSON.stringify(updated));
+                      safeStorage.setItem('dk_capas_is_dirty', 'true');
+                      syncToServer('dk_capas', updated);
+                      triggerToast(`Đã tạo nhanh hồ sơ ${nextId} từ BM-KTTD-01!`, 'success');
+                    });
+                  }}
                 />
               )}
             </div>
@@ -23006,6 +23062,10 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         Status: data.Status || data.status || 'Active',
                         status: data.Status || data.status || 'Active',
                       };
+                      const prevSup = suppliers.find(s => s.id === data.id || s.SupplierID === data.id);
+                      const oldSupName = String(prevSup?.name || prevSup?.SupplierName || '').trim();
+                      const newSupName = String(sanitizedSupplier.name || sanitizedSupplier.SupplierName || '').trim();
+
                       setSuppliers(prev => {
                         const updated = prev.map(s => (s.id === data.id || s.SupplierID === data.id) ? sanitizedSupplier : s);
                         safeStorage.setItem('dk_suppliers', JSON.stringify(updated));
@@ -23013,6 +23073,28 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         syncToServer('dk_suppliers', updated);
                         return updated;
                       });
+
+                      // Đồng bộ tên NCC mới sang các phân hệ đang tham chiếu theo tên (tránh lệch chuỗi khi đổi tên NCC)
+                      if (oldSupName && newSupName && oldSupName !== newSupName) {
+                        setCapas(prev => {
+                          let changed = false;
+                          const next = prev.map(c => c.supplierName === oldSupName ? (changed = true, { ...c, supplierName: newSupName }) : c);
+                          if (changed) { safeStorage.setItem('dk_capas', JSON.stringify(next)); safeStorage.setItem('dk_capas_is_dirty', 'true'); syncToServer('dk_capas', next); }
+                          return next;
+                        });
+                        setDefects(prev => {
+                          let changed = false;
+                          const next = prev.map(d => d.supplierName === oldSupName ? (changed = true, { ...d, supplierName: newSupName }) : d);
+                          if (changed) { safeStorage.setItem('dk_defects', JSON.stringify(next)); safeStorage.setItem('dk_defects_is_dirty', 'true'); syncToServer('dk_defects', next); }
+                          return next;
+                        });
+                        setPartEvaluations(prev => {
+                          let changed = false;
+                          const next = prev.map(p => p.supplierName === oldSupName ? (changed = true, { ...p, supplierName: newSupName }) : p);
+                          if (changed) { safeStorage.setItem('dk_part_evaluations', JSON.stringify(next)); safeStorage.setItem('dk_part_evaluations_is_dirty', 'true'); syncToServer('dk_part_evaluations', next); }
+                          return next;
+                        });
+                      }
                       break;
                     }
                     case 'capa': {

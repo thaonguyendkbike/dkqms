@@ -8905,6 +8905,56 @@ return (
                               >
                                 <Pencil className="w-3 h-3 md:w-3.5 md:h-3.5" />
                               </button>
+                              {r.result === 'Lỗi' && setCapas && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const current = Array.isArray(capas) ? capas : [];
+                                    const nextNum = current.reduce((mx, c) => {
+                                      const m = String(c?.id || c?.CAPAID || '').match(/CAPA-2026-(\d+)/);
+                                      return m ? Math.max(mx, parseInt(m[1], 10)) : mx;
+                                    }, 0) + 1;
+                                    const nextId = `CAPA-2026-${String(nextNum).padStart(3, '0')}`;
+                                    const title = `[IQC] Lỗi lô nhập ${r.supplierName || 'NCC'}: ${r.itemSummary || r.content || r.defectDetail || ''}`;
+                                    const due = getLocalYmd(new Date(Date.now() + 7 * 86400000));
+                                    const newCapa: CAPA = {
+                                      id: nextId,
+                                      CAPAID: nextId,
+                                      title,
+                                      Issue: title,
+                                      issue: title,
+                                      source: 'Nhà cung cấp (IQC)',
+                                      assignee: r.checkedBy || 'Đoàn Anh Hùng',
+                                      Owner: r.checkedBy || 'Đoàn Anh Hùng',
+                                      owner: r.checkedBy || 'Đoàn Anh Hùng',
+                                      targetDate: due,
+                                      DueDate: due,
+                                      dueDate: due,
+                                      status: 'Mở',
+                                      Status: 'Mở',
+                                      rootCause: r.defectDetail || 'Phát hiện lỗi kiểm nhập đầu vào IQC',
+                                      RootCause: r.defectDetail || 'Phát hiện lỗi kiểm nhập đầu vào IQC',
+                                      supplierName: r.supplierName || '',
+                                      locationOfOrigin: 'Kho LK/Xưởng lắp ráp',
+                                      priority: 'Cao',
+                                      Effectiveness: 'Chưa đánh giá',
+                                      effectiveness: 'Chưa đánh giá',
+                                      images: r.imageUrls && r.imageUrls.length > 0 ? r.imageUrls.slice(0, 3) : (r.imageUrl ? [r.imageUrl] : []),
+                                      imageUrl: r.imageUrl || (r.imageUrls?.[0] || '')
+                                    };
+                                    const updated = [newCapa, ...current];
+                                    setCapas(updated);
+                                    safeStorage.setItem('dk_capas', JSON.stringify(updated));
+                                    safeStorage.setItem('dk_capas_is_dirty', 'true');
+                                    (window as any).syncToServer?.('dk_capas', updated);
+                                    alert(`Đã tạo nhanh hồ sơ ${nextId} từ phiếu IQC ${r.id} và đồng bộ lên Cloud!`);
+                                  }}
+                                  className="px-1 py-0.5 text-[9px] font-extrabold text-amber-800 bg-amber-50 hover:bg-amber-100 rounded border border-amber-200 cursor-pointer"
+                                  title="Tạo nhanh hồ sơ CAPA / SCAR từ phiếu IQC lỗi này"
+                                >
+                                  +CAPA
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -9242,6 +9292,56 @@ return (
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
+                          {r.status === 'Đang cải tiến' && setCapas && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const current = Array.isArray(capas) ? capas : [];
+                                const nextNum = current.reduce((mx, c) => {
+                                  const m = String(c?.id || c?.CAPAID || '').match(/CAPA-2026-(\d+)/);
+                                  return m ? Math.max(mx, parseInt(m[1], 10)) : mx;
+                                }, 0) + 1;
+                                const nextId = `CAPA-2026-${String(nextNum).padStart(3, '0')}`;
+                                const title = `[PQC] ${r.model || 'Dòng xe'} (${r.stage || 'Công đoạn'}): ${r.findings || ''}`;
+                                const due = getLocalYmd(new Date(Date.now() + 7 * 86400000));
+                                const newCapa: CAPA = {
+                                  id: nextId,
+                                  CAPAID: nextId,
+                                  title,
+                                  Issue: title,
+                                  issue: title,
+                                  source: 'PQC / Sản xuất',
+                                  assignee: r.checkedBy || 'Tổ trưởng QA/QC',
+                                  Owner: r.checkedBy || 'Tổ trưởng QA/QC',
+                                  owner: r.checkedBy || 'Tổ trưởng QA/QC',
+                                  targetDate: due,
+                                  DueDate: due,
+                                  dueDate: due,
+                                  status: 'Mở',
+                                  Status: 'Mở',
+                                  rootCause: r.findings || 'Phát hiện lỗi công đoạn PQC',
+                                  RootCause: r.findings || 'Phát hiện lỗi công đoạn PQC',
+                                  modelName: r.model || '',
+                                  locationOfOrigin: 'Kho LK/Xưởng lắp ráp',
+                                  priority: 'Cao',
+                                  Effectiveness: 'Chưa đánh giá',
+                                  effectiveness: 'Chưa đánh giá',
+                                  images: r.imageUrl ? [r.imageUrl] : [],
+                                  imageUrl: r.imageUrl || ''
+                                };
+                                const updated = [newCapa, ...current];
+                                setCapas(updated);
+                                safeStorage.setItem('dk_capas', JSON.stringify(updated));
+                                safeStorage.setItem('dk_capas_is_dirty', 'true');
+                                (window as any).syncToServer?.('dk_capas', updated);
+                                alert(`Đã tạo nhanh hồ sơ ${nextId} từ phiếu PQC ${r.id} và đồng bộ lên Cloud!`);
+                              }}
+                              className="px-1 py-0.5 text-[9px] font-extrabold text-amber-800 bg-amber-50 hover:bg-amber-100 rounded border border-amber-200 cursor-pointer"
+                              title="Tạo nhanh hồ sơ CAPA từ phiếu PQC đang cải tiến này"
+                            >
+                              +CAPA
+                            </button>
+                          )}
                           <button
                             onClick={() => handleDeletePqcClick(r.id)}
                             className="text-rose-605 hover:text-rose-800 p-1 cursor-pointer"
