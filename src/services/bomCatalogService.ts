@@ -956,3 +956,108 @@ export async function restoreBomBackupPayload(payload: {
     partsCount: (payload.parts || []).length
   };
 }
+
+export interface BomSupplierMasterOption {
+  id: string;
+  name: string;
+  componentType?: string;
+}
+
+/**
+ * Lắng nghe thời gian thực danh mục Nhà cung cấp gốc (`dk_db_sync/dk_suppliers`)
+ * để đồng bộ 1:1 Tên & Mã NCC giữa App chính và phân hệ /lk.
+ */
+export function subscribeSuppliersMaster(
+  callback: (suppliers: BomSupplierMasterOption[]) => void
+): () => void {
+  const normalizeList = (rawList: any[]): BomSupplierMasterOption[] => {
+    const seen = new Set<string>();
+    const out: BomSupplierMasterOption[] = [];
+    (Array.isArray(rawList) ? rawList : []).forEach((s: any) => {
+      if (!s) return;
+      const id = String(s.id || s.SupplierID || '').trim();
+      const name = String(s.name || s.SupplierName || '').trim();
+      if (!name) return;
+      const key = `${id.toLowerCase()}|${name.toLowerCase()}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({
+        id,
+        name,
+        componentType: s.ComponentType || s.componentType || ''
+      });
+    });
+    return out.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  };
+
+  try {
+    const cached = safeStorage.getItem('dk_suppliers');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        callback(normalizeList(parsed));
+      }
+    }
+  } catch {}
+
+  const docRef = doc(db, 'dk_db_sync', 'dk_suppliers');
+  return onSnapshot(
+    docRef,
+    (snap) => {
+      if (!snap.exists()) return;
+      const d = snap.data();
+      if (d && Array.isArray(d.data)) {
+        const list = normalizeList(d.data);
+        callback(list);
+      }
+    },
+    (err) => {
+      console.warn('[BOM Suppliers Sync Notice]:', err?.message || err);
+    }
+  );
+}
+
+/**
+ * Đồng bộ đổi tên Nhà cung cấp từ App chính sang các linh kiện tương ứng trong /lk (`dk_bom_parts`).
+ */
+export async function syncSupplierRenameToBomParts(
+  supplierId: string,
+  oldName: string,
+  newName: string
+): Promise<number> {
+  if (!newName.trim()) return 0;
+  try {
+    const snap = await getDocs(collection(db, 'dk_db_sync', BOM_PARTS_COLLECTION, 'records'));
+    const ops: Array<{ ref: ReturnType<typeof doc>; data: any }> = [];
+    const oldNorm = oldName.trim().toLowerCase();
+    const idNorm = supplierId.trim().toLowerCase();
+
+    snap.docs.forEach((docSnap) => {
+      const data = docSnap.data() as BomPartMasterItem;
+      const partSupId = String(data.supplierId || '').trim().toLowerCase();
+      const partSupName = String(data.supplierName || '').trim().toLowerCase();
+      const matched =
+        (idNorm && partSupId === idNorm) ||
+        (oldNorm && partSupName === oldNorm);
+      if (matched && (data.supplierName !== newName || (supplierId && data.supplierId !== supplierId))) {
+        ops.push({
+          ref: doc(db, 'dk_db_sync', BOM_PARTS_COLLECTION, 'records', docSnap.id),
+          data: {
+            ...data,
+            supplierId: supplierId || data.supplierId || '',
+            supplierName: newName,
+            updatedAt: new Date().toISOString()
+          }
+        });
+      }
+    });
+
+    if (ops.length > 0) {
+      await commitWriteBatches(ops);
+    }
+    return ops.length;
+  } catch (err) {
+    console.warn('[BOM Supplier Rename Sync Warning]:', err);
+    return 0;
+  }
+}

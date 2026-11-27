@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ClipboardPaste, Plus, Trash2, Zap, ImagePlus, X, Layers } from 'lucide-react';
 import { IQCLineItem } from '../qualityTestData';
 import { compressImageFile } from '../imageCompressor';
+import { safeStorage } from '../safeStorage';
 import {
   parseEcountVoucherDetail,
   recalcIqcItemsAql,
@@ -32,6 +33,17 @@ const IqcLineItemsEditor: React.FC<IqcLineItemsEditorProps> = ({ items, onChange
   const totalImages = items.reduce((s, it) => s + (it.imageUrls?.length || 0), 0);
   const sum = summarizeIqcItems(items);
   const groups = getIqcAqlGroups(items);
+
+  const bomPartsCache = React.useMemo<Array<{ partCode: string; partName: string; unit?: string }>>(() => {
+    try {
+      const raw = safeStorage.getItem('qms_bom_parts_cache_v1');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, []);
 
   const applyPaste = (mode: 'replace' | 'append') => {
     const parsed = parseEcountVoucherDetail(pasteText);
@@ -180,7 +192,27 @@ const IqcLineItemsEditor: React.FC<IqcLineItemsEditorProps> = ({ items, onChange
                   return (
                     <tr key={idx} className={isFail ? 'bg-red-50/60' : ''}>
                       <td className="p-1 text-center text-slate-400 font-mono">{idx + 1}</td>
-                      <td className="p-1"><input className={`${inputCls} font-mono`} value={it.partCode} onChange={e => updateLine(idx, { partCode: e.target.value })} /></td>
+                      <td className="p-1">
+                        <input
+                          list="iqc_bom_parts_datalist"
+                          className={`${inputCls} font-mono`}
+                          value={it.partCode}
+                          onChange={e => {
+                            const code = e.target.value;
+                            const found = bomPartsCache.find(p => p.partCode?.trim().toUpperCase() === code.trim().toUpperCase());
+                            if (found) {
+                              updateLine(idx, {
+                                partCode: found.partCode,
+                                partName: found.partName,
+                                unit: found.unit || it.unit,
+                                aqlGroup: getAqlGroupName(found.partName)
+                              }, true);
+                            } else {
+                              updateLine(idx, { partCode: code });
+                            }
+                          }}
+                        />
+                      </td>
                       <td className="p-1">
                         <input
                           className={inputCls}
@@ -253,6 +285,11 @@ const IqcLineItemsEditor: React.FC<IqcLineItemsEditorProps> = ({ items, onChange
             </table>
             <datalist id="iqc_defect_type_list">
               {IQC_DEFECT_TYPES.map(t => <option key={t} value={t} />)}
+            </datalist>
+            <datalist id="iqc_bom_parts_datalist">
+              {bomPartsCache.slice(0, 1500).map((p) => (
+                <option key={p.partCode} value={p.partCode}>{`${p.partCode} — ${p.partName}`}</option>
+              ))}
             </datalist>
           </div>
 

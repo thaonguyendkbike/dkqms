@@ -25,6 +25,7 @@ import {
   PartEvaluationRootCause
 } from '../types';
 import { compressImageFile } from '../imageCompressor';
+import { safeStorage } from '../safeStorage';
 
 interface PartEvaluationsTabProps {
   evaluations: PartEvaluation[];
@@ -178,6 +179,17 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
   const [receivedDate, setReceivedDate] = useState<string>(getTodayIso);
   const [customId, setCustomId] = useState<string>('');
   const [inspector, setInspector] = useState<string>(defaultInspector);
+  const bomPartsCache = useMemo<Array<{ partCode: string; partName: string; supplierName?: string }>>(() => {
+    try {
+      const raw = safeStorage.getItem('qms_bom_parts_cache_v1');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, []);
+
   const [partName, setPartName] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
   const [model, setModel] = useState<string>('');
@@ -1050,11 +1062,35 @@ export const PartEvaluationsTab: React.FC<PartEvaluationsTabProps> = ({
                       required
                       list="dkqms_part_eval_parts"
                       value={partName}
-                      onChange={(e) => setPartName(e.target.value)}
-                      placeholder="Bấm chọn nhanh ở trên hoặc nhập tên linh kiện..."
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const matchByCombo = bomPartsCache.find(
+                          (bp) => `${bp.partCode} — ${bp.partName}` === val || bp.partCode.toUpperCase() === val.trim().toUpperCase()
+                        );
+                        if (matchByCombo) {
+                          setPartCode(matchByCombo.partCode);
+                          setPartName(matchByCombo.partName);
+                          if (!supplierName && matchByCombo.supplierName) {
+                            setSupplierName(matchByCombo.supplierName);
+                          }
+                        } else {
+                          setPartName(val);
+                          const matchByName = bomPartsCache.find((bp) => bp.partName.trim().toLowerCase() === val.trim().toLowerCase());
+                          if (matchByName) {
+                            setPartCode(matchByName.partCode);
+                            if (!supplierName && matchByName.supplierName) setSupplierName(matchByName.supplierName);
+                          }
+                        }
+                      }}
+                      placeholder="Chọn từ danh mục /lk hoặc nhập tên linh kiện..."
                       className="w-full h-10 border border-slate-300 rounded-lg px-3.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-600 bg-white"
                     />
                     <datalist id="dkqms_part_eval_parts">
+                      {bomPartsCache.slice(0, 1200).map((bp) => (
+                        <option key={bp.partCode} value={`${bp.partCode} — ${bp.partName}`}>
+                          {bp.supplierName ? `NCC: ${bp.supplierName}` : bp.partName}
+                        </option>
+                      ))}
                       {suggestedPartNames.map((p) => (
                         <option key={p} value={p} />
                       ))}

@@ -62,8 +62,15 @@ import {
   saveBomPartRecord,
   subscribeBomCatalog,
   subscribeOqcModelGroups,
-  toSafeDocId
+  subscribeSuppliersMaster,
+  toSafeDocId,
+  type BomSupplierMasterOption
 } from '../services/bomCatalogService';
+import {
+  loadPartQmsHistory,
+  type PartHistoryEvent,
+  type PartHistoryEventType
+} from '../services/partHistoryService';
 import {
   deleteBomImageFromStorage,
   uploadBomImageToStorage
@@ -203,6 +210,7 @@ interface PartFormState {
   specGroup: string;
   unit: string;
   techSpecs: string;
+  supplierId: string;
   supplierName: string;
   stockQty: string;
   purchasePrice: string;
@@ -220,6 +228,7 @@ const EMPTY_PART_FORM: PartFormState = {
   specGroup: 'PT khung',
   unit: 'Cái',
   techSpecs: '',
+  supplierId: '',
   supplierName: '',
   stockQty: '',
   purchasePrice: '',
@@ -333,6 +342,40 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
   const excelInputRef = useRef<HTMLInputElement>(null);
   const backupRestoreInputRef = useRef<HTMLInputElement>(null);
   const partImageInputRef = useRef<HTMLInputElement>(null);
+
+  // Đồng bộ 1:1 Nhà cung cấp từ App chính (dk_suppliers) & Lịch sử chất lượng QMS của linh kiện
+  const [masterSuppliers, setMasterSuppliers] = useState<BomSupplierMasterOption[]>([]);
+  const [partHistory, setPartHistory] = useState<PartHistoryEvent[]>([]);
+  const [partHistoryLoading, setPartHistoryLoading] = useState(false);
+  const [partHistoryFilter, setPartHistoryFilter] = useState<'ALL' | PartHistoryEventType>('ALL');
+
+  useEffect(() => {
+    const unsub = subscribeSuppliersMaster((list) => setMasterSuppliers(list));
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!partModalOpen || partModalMode === 'create' || (!partForm.partCode.trim() && !partForm.partName.trim())) {
+      setPartHistory([]);
+      return;
+    }
+    let cancelled = false;
+    setPartHistoryLoading(true);
+    setPartHistoryFilter('ALL');
+    loadPartQmsHistory(partForm.partCode, partForm.partName)
+      .then((evts) => {
+        if (!cancelled) setPartHistory(evts);
+      })
+      .catch(() => {
+        if (!cancelled) setPartHistory([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPartHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [partModalOpen, partModalMode, partForm.partCode, partForm.partName]);
 
   const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ msg, type });
@@ -857,6 +900,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       specGroup: existing.specGroup || 'PT khung',
       unit: existing.unit || 'Cái',
       techSpecs: existing.techSpecs || '',
+      supplierId: existing.supplierId || '',
       supplierName: existing.supplierName || '',
       stockQty: existing.stockQty !== undefined ? String(existing.stockQty) : '',
       purchasePrice: existing.purchasePrice !== undefined ? String(existing.purchasePrice) : '',
@@ -887,6 +931,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
       specGroup: part.specGroup || 'PT khung',
       unit: part.unit || 'Cái',
       techSpecs: part.techSpecs || '',
+      supplierId: part.supplierId || '',
       supplierName: part.supplierName || '',
       stockQty: part.stockQty !== undefined ? String(part.stockQty) : '',
       purchasePrice: part.purchasePrice !== undefined ? String(part.purchasePrice) : '',
@@ -1143,6 +1188,7 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
         specGroup: partForm.specGroup.trim(),
         unit: partForm.unit.trim() || 'Cái',
         techSpecs: partForm.techSpecs.trim(),
+        supplierId: partForm.supplierId.trim() || undefined,
         supplierName: partForm.supplierName.trim(),
         stockQty: parseNum(partForm.stockQty),
         purchasePrice: showPurchasePrice ? parseNum(partForm.purchasePrice) : existingMaster?.purchasePrice,
@@ -4124,15 +4170,51 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Nhà cung cấp</label>
+                    <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>Nhà cung cấp (Đồng bộ từ App)</span>
+                      {partForm.supplierId && (
+                        <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          Mã: {partForm.supplierId}
+                        </span>
+                      )}
+                    </label>
                     <input
                       type="text"
+                      list="dk_bom_suppliers_master_datalist"
                       disabled={partModalMode === 'view' || readOnly}
                       value={partForm.supplierName}
-                      onChange={(e) => setPartForm((prev) => ({ ...prev, supplierName: e.target.value }))}
-                      placeholder="Tên nhà cung cấp chính..."
+                      onChange={(e) => {
+                        const rawVal = e.target.value;
+                        const matched = masterSuppliers.find(
+                          (s) =>
+                            `${s.id} — ${s.name}` === rawVal ||
+                            s.name.toLowerCase() === rawVal.trim().toLowerCase() ||
+                            (s.id && s.id.toLowerCase() === rawVal.trim().toLowerCase())
+                        );
+                        if (matched) {
+                          setPartForm((prev) => ({
+                            ...prev,
+                            supplierId: matched.id,
+                            supplierName: matched.name
+                          }));
+                        } else {
+                          setPartForm((prev) => ({
+                            ...prev,
+                            supplierId: '',
+                            supplierName: rawVal
+                          }));
+                        }
+                      }}
+                      placeholder="Chọn Nhà cung cấp theo mã/tên từ App..."
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 disabled:bg-slate-100"
                     />
+                    <datalist id="dk_bom_suppliers_master_datalist">
+                      {masterSuppliers.map((s) => (
+                        <option key={`${s.id}_${s.name}`} value={s.id ? `${s.id} — ${s.name}` : s.name}>
+                          {s.componentType ? `Linh kiện: ${s.componentType}` : s.name}
+                        </option>
+                      ))}
+                    </datalist>
                   </div>
 
                   <div>
@@ -4262,6 +4344,106 @@ export const PartsBomCenter: React.FC<PartsBomCenterProps> = ({
                             {entry.modelName} <span className="opacity-75">({entry.qty} {entry.unit})</span>
                           </button>
                         ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* LỊCH SỬ CHẤT LƯỢNG & HOẠT ĐỘNG TRONG APP QMS (CAPA, ECO, Phản ánh KH, Giám định LK, IQC, PQC, OQC) */}
+                {partModalMode !== 'create' && (
+                  <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="text-xs font-black text-slate-900 uppercase flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-600" />
+                        Lịch sử Chất lượng & Nhật ký trong App QMS ({partHistory.length} hoạt động)
+                      </h4>
+                      <div className="flex flex-wrap gap-1">
+                        {(['ALL', 'CAPA', 'ECO', 'DEFECT', 'PART_EVAL', 'IQC', 'PQC', 'OQC'] as const).map((fKey) => {
+                          const count = fKey === 'ALL' ? partHistory.length : partHistory.filter((ev) => ev.type === fKey).length;
+                          if (fKey !== 'ALL' && count === 0) return null;
+                          const labelMap: Record<string, string> = {
+                            ALL: 'Tất cả',
+                            CAPA: 'CAPA',
+                            ECO: 'ECO',
+                            DEFECT: 'Phản ánh KH',
+                            PART_EVAL: 'BM-KTTD-01',
+                            IQC: 'IQC',
+                            PQC: 'PQC',
+                            OQC: 'OQC lỗi',
+                          };
+                          return (
+                            <button
+                              key={fKey}
+                              type="button"
+                              onClick={() => setPartHistoryFilter(fKey)}
+                              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                                partHistoryFilter === fKey
+                                  ? 'bg-slate-900 text-white border-slate-900'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {labelMap[fKey]} ({count})
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {partHistoryLoading ? (
+                      <p className="text-xs text-slate-500 italic">Đang tổng hợp nhật ký hoạt động từ các phân hệ QMS...</p>
+                    ) : partHistory.length === 0 ? (
+                      <p className="text-xs text-slate-500 italic">
+                        Chưa ghi nhận hồ sơ lỗi, CAPA, ECO hay phiếu kiểm nhập nào nhắc đến linh kiện này trong hệ thống.
+                      </p>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        {partHistory
+                          .filter((ev) => partHistoryFilter === 'ALL' || ev.type === partHistoryFilter)
+                          .map((ev) => {
+                            const badgeCls =
+                              ev.type === 'CAPA'
+                                ? 'bg-rose-100 text-rose-800 border-rose-200'
+                                : ev.type === 'ECO'
+                                ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                                : ev.type === 'DEFECT'
+                                ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                : ev.type === 'PART_EVAL'
+                                ? 'bg-purple-100 text-purple-800 border-purple-200'
+                                : ev.type === 'IQC'
+                                ? 'bg-sky-100 text-sky-800 border-sky-200'
+                                : 'bg-slate-100 text-slate-800 border-slate-200';
+                            return (
+                              <div key={ev.uid} className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-1 text-xs">
+                                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase border ${badgeCls}`}>
+                                      {ev.type}
+                                    </span>
+                                    <span className="font-mono font-bold text-slate-700 text-[10px]">{ev.id}</span>
+                                    {ev.date && <span className="text-[10px] text-slate-400 font-mono">• {ev.date}</span>}
+                                  </div>
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      ev.isError
+                                        ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    }`}
+                                  >
+                                    {ev.status || 'Ghi nhận'}
+                                  </span>
+                                </div>
+                                <p className="font-bold text-slate-800 leading-snug">{ev.title}</p>
+                                {ev.detail && <p className="text-[11px] text-slate-600 leading-snug">{ev.detail}</p>}
+                                {(ev.model || ev.supplierName) && (
+                                  <p className="text-[10px] text-slate-400">
+                                    {ev.model ? `Dòng xe: ${ev.model}` : ''}
+                                    {ev.model && ev.supplierName ? ' • ' : ''}
+                                    {ev.supplierName ? `NCC: ${ev.supplierName}` : ''}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
                       </div>
                     )}
                   </div>

@@ -29,6 +29,8 @@ import {
   type AutoBackupSummary,
 } from './services/fullBackupService';
 import { uploadQmsImage } from './services/qmsImageService';
+import { subscribeBomCatalog, syncSupplierRenameToBomParts } from './services/bomCatalogService';
+import type { BomPartMasterItem } from './types/bomCatalog';
 import XLSXStyle from 'xlsx-js-style';
 import {
   BarChart,
@@ -5928,6 +5930,42 @@ export function App() {
   const [newCapaLocationOfOrigin, setNewCapaLocationOfOrigin] = useState('');
   const [newCapaLocationDetail, setNewCapaLocationDetail] = useState('');
   const [newCapaPriority, setNewCapaPriority] = useState('Trung bình');
+  const [newCapaPartCode, setNewCapaPartCode] = useState('');
+  const [newCapaPartName, setNewCapaPartName] = useState('');
+  const [bomPartsMaster, setBomPartsMaster] = useState<BomPartMasterItem[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeBomCatalog(
+      () => {},
+      (parts) => {
+        if (Array.isArray(parts)) setBomPartsMaster(parts);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  const resolveBomPartSelection = (rawVal: string): { partCode: string; partName: string; supplierName?: string } => {
+    const trimmed = String(rawVal || '').trim();
+    if (!trimmed) return { partCode: '', partName: '' };
+    const matched = bomPartsMaster.find(
+      (p) =>
+        `${p.partCode} — ${p.partName}` === trimmed ||
+        p.partCode.toUpperCase() === trimmed.toUpperCase() ||
+        p.partName.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (matched) {
+      return {
+        partCode: matched.partCode,
+        partName: matched.partName,
+        supplierName: matched.supplierName
+      };
+    }
+    if (trimmed.includes(' — ')) {
+      const [c, ...rest] = trimmed.split(' — ');
+      return { partCode: c.trim(), partName: rest.join(' — ').trim() };
+    }
+    return { partCode: '', partName: trimmed };
+  };
   const [newCapaImages, setNewCapaImages] = useState<string[]>([]);
   const [newCapaActions, setNewCapaActions] = useState('');
   const [newCapaTargetDate, setNewCapaTargetDate] = useState('');
@@ -8532,6 +8570,8 @@ export function App() {
         capaId: data.capaId || '',
         improvementActionId: data.improvementActionId || '',
         supplierName: data.supplierName || '',
+        partCode: data.partCode || '',
+        partName: data.partName || '',
         imageUrl: data.imageUrl || defectImages[0] || defectImageUrl
       };
       const updatedDefects = [newDefect, ...defects];
@@ -15202,6 +15242,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           isRepeated: newCapaIsRepeated,
                           supplierName: newCapaSupplier || '',
                           modelName: newCapaModel || '',
+                          partCode: newCapaPartCode || '',
+                          partName: newCapaPartName || '',
                           imageUrl: newCapaImages[0] || newCapaImage || undefined,
                           Effectiveness: newCapaEffectiveness as any,
                           effectiveness: newCapaEffectiveness as any
@@ -15520,6 +15562,24 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center pt-1.5">
+                            <div>
+                              <label className="block text-slate-500 font-bold mb-1">Linh kiện liên quan (Chọn từ /lk)</label>
+                              <input
+                                type="text"
+                                list="dk_bom_parts_master_list"
+                                value={newCapaPartCode ? `${newCapaPartCode} — ${newCapaPartName}` : newCapaPartName}
+                                onChange={(e) => {
+                                  const res = resolveBomPartSelection(e.target.value);
+                                  setNewCapaPartCode(res.partCode);
+                                  setNewCapaPartName(res.partName);
+                                  if (!newCapaSupplier && res.supplierName) {
+                                    setNewCapaSupplier(res.supplierName);
+                                  }
+                                }}
+                                placeholder="Gõ mã hoặc tên linh kiện từ /lk..."
+                                className="w-full bg-white border border-slate-200 rounded p-2 text-xs font-semibold text-slate-800"
+                              />
+                            </div>
                             <div>
                               <label className="block text-slate-500 font-bold mb-1">Mức độ khẩn cấp (Priority)</label>
                               <select
@@ -23074,8 +23134,9 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                         return updated;
                       });
 
-                      // Đồng bộ tên NCC mới sang các phân hệ đang tham chiếu theo tên (tránh lệch chuỗi khi đổi tên NCC)
+                      // Đồng bộ tên NCC mới sang các phân hệ đang tham chiếu theo tên (tránh lệch chuỗi khi đổi tên NCC) & sang /lk dk_bom_parts
                       if (oldSupName && newSupName && oldSupName !== newSupName) {
+                        syncSupplierRenameToBomParts(data.id || '', oldSupName, newSupName).catch(() => {});
                         setCapas(prev => {
                           let changed = false;
                           const next = prev.map(c => c.supplierName === oldSupName ? (changed = true, { ...c, supplierName: newSupName }) : c);
@@ -23763,6 +23824,28 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       )}
                     </div>
                   </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Linh kiện liên quan (Chọn từ /lk)</label>
+                      <input
+                        type="text"
+                        list="dk_bom_parts_master_list"
+                        value={globalEditModal.data.partCode ? `${globalEditModal.data.partCode} — ${globalEditModal.data.partName || ''}` : (globalEditModal.data.partName || '')}
+                        onChange={(e) => {
+                          const res = resolveBomPartSelection(e.target.value);
+                          setGlobalEditModal({
+                            ...globalEditModal,
+                            data: {
+                              ...globalEditModal.data,
+                              partCode: res.partCode,
+                              partName: res.partName,
+                              supplierName: globalEditModal.data.supplierName || res.supplierName || ''
+                            }
+                          });
+                        }}
+                        placeholder="Gõ mã hoặc tên linh kiện từ /lk..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 text-xs font-semibold"
+                      />
+                    </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center pt-1">
                     <div>
                       <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Mức độ khẩn cấp (Priority)</label>
@@ -24716,6 +24799,29 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     />
                   </div>
 
+                    <div>
+                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Linh kiện liên quan (Chọn từ /lk)</label>
+                      <input
+                        type="text"
+                        list="dk_bom_parts_master_list"
+                        value={globalEditModal.data.partCode ? `${globalEditModal.data.partCode} — ${globalEditModal.data.partName || ''}` : (globalEditModal.data.partName || '')}
+                        onChange={(e) => {
+                          const res = resolveBomPartSelection(e.target.value);
+                          setGlobalEditModal({
+                            ...globalEditModal,
+                            data: {
+                              ...globalEditModal.data,
+                              partCode: res.partCode,
+                              partName: res.partName,
+                              supplierName: globalEditModal.data.supplierName || res.supplierName || ''
+                            }
+                          });
+                        }}
+                        placeholder="Chọn linh kiện từ danh mục /lk..."
+                        className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-semibold text-slate-900"
+                      />
+                    </div>
+
                   <div>
                     <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">
                       {globalEditModal.data.feedbackType === 'Đề xuất cải tiến' ? 'III. PHƯƠNG ÁN CHUẨN BỊ THỰC THI (IMPLEMENTATION PREPARATION)' : 'III. HÀNH ĐỘNG KHẮC PHỤC TẠM THỜI (IMMEDIATE CORRECTION)'}
@@ -24893,11 +24999,22 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Cấu kiện thay đổi</label>
+                      <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Cấu kiện thay đổi (Chọn từ /lk)</label>
                       <input
                         type="text"
+                        list="dk_bom_parts_master_list"
                         value={globalEditModal.data.component || ''}
-                        onChange={e => setGlobalEditModal({ ...globalEditModal, data: { ...globalEditModal.data, component: e.target.value } })}
+                        onChange={e => {
+                          const res = resolveBomPartSelection(e.target.value);
+                          setGlobalEditModal({
+                            ...globalEditModal,
+                            data: {
+                              ...globalEditModal.data,
+                              component: res.partName || e.target.value,
+                              partCode: res.partCode || globalEditModal.data.partCode || ''
+                            }
+                          });
+                        }}
                         className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800"
                       />
                     </div>
@@ -26086,6 +26203,15 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
         );
       })()}
 
+      {/* GLOBAL DATALIST: Danh mục Linh kiện đồng bộ từ /lk cho CAPA, ECO, Phản ánh KH */}
+      <datalist id="dk_bom_parts_master_list">
+        {bomPartsMaster.slice(0, 1500).map((p) => (
+          <option key={p.id || p.partCode} value={`${p.partCode} — ${p.partName}`}>
+            {p.supplierName ? `NCC: ${p.supplierName}` : p.specGroup || p.partName}
+          </option>
+        ))}
+      </datalist>
+
       {/* MODAL: CLOUD SYNC CONTROL CENTER & DIAGNOSTICS */}
       {showSyncErrorModal && (
         <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="cloud_sync_modal">
@@ -27212,8 +27338,8 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
               </div>
 
               <div>
-                <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Bộ phận tác động / Máy móc cải tiến</label>
-                <input type="text" name="component" placeholder="Trục phanh sau / Robot hàn gá số 3" className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850" required />
+                <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Bộ phận tác động / Linh kiện từ /lk</label>
+                <input type="text" name="component" list="dk_bom_parts_master_list" placeholder="Chọn từ danh mục /lk hoặc nhập bộ phận tác động..." className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-850" required />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -28597,6 +28723,15 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                   locationOfOrigin: fd.get('locationOfOrigin') as string,
                   status: fd.get('status') as any,
                   capaId: fd.get('capaId') as string,
+                  ...(() => {
+                    const partInput = String(fd.get('partRef') || '');
+                    const res = resolveBomPartSelection(partInput);
+                    return {
+                      partCode: res.partCode,
+                      partName: res.partName,
+                      supplierName: (fd.get('supplierName') as string) || res.supplierName || ''
+                    };
+                  })(),
                   images: defectImages
                 });
                 setShowAddDefectModal(false);
@@ -28631,6 +28766,17 @@ Hãy phân tích và xuất bản báo cáo thiết kế biểu mẫu chi tiết
                     <option value="Khác">Khác</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Linh kiện liên quan (Chọn từ danh mục /lk)</label>
+                <input
+                  type="text"
+                  name="partRef"
+                  list="dk_bom_parts_master_list"
+                  placeholder="Gõ mã hoặc tên linh kiện từ /lk (tự điền NCC nếu có)..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded p-2 text-slate-800 font-semibold text-[11px]"
+                />
               </div>
 
               <div className="grid grid-cols-1 gap-3">

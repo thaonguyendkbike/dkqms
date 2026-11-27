@@ -21,7 +21,8 @@ export interface BomPartMasterItem {
   specGroup: string;          // Cột "Thông số" trên Ecount (VD: Nhựa chung, PT điện, PT khung, PT ốc)
   unit: string;               // Đơn vị (Cái, Bộ, Đôi...)
   techSpecs?: string;         // Thông số kỹ thuật chi tiết
-  supplierName?: string;      // Nhà cung cấp
+  supplierId?: string;        // Mã Nhà cung cấp đồng bộ 1:1 với dk_suppliers (VD: NCC00174)
+  supplierName?: string;      // Tên Nhà cung cấp chuẩn hóa từ dk_suppliers
   stockQty?: number;          // Số lượng tồn kho
   purchasePrice?: number;     // Giá mua (chỉ hiển thị khi đăng nhập Google được cấp quyền)
   sellingPrice?: number;      // Giá bán (hiển thị cả ở chế độ mật khẩu tra cứu)

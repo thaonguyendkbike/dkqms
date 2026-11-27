@@ -150,6 +150,8 @@ export interface CAPA {
   imageUrl?: string;
   supplierName?: string;
   modelName?: string;
+  partCode?: string;
+  partName?: string;
   locationOfOrigin?: string;
   locationDetail?: string;
   priority?: string;
@@ -395,6 +397,7 @@ export interface ECOChange {
   ecrId: string;
   model: string;
   component: string;
+  partCode?: string;
   content: string;
   rootCause: string;
   proposer: string;
@@ -467,6 +470,8 @@ export interface MarketDefect {
   status: 'Đã xử lý' | 'Đang xử lý' | 'Chưa xử lý' | 'Đề xuất cải tiến' | string;
   imageUrl?: string;
   supplierName?: string;
+  partCode?: string;
+  partName?: string;
   correction?: string;
   correctiveAction?: string;
   preventiveAction?: string;
